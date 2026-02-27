@@ -1,0 +1,4764 @@
+{
+  "name": "MBW Chatbot Analysis Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Chatbot Transcript Analysis Pipeline: Upload",
+        "formDescription": "Upload your Excel files for automated QnA generation and analysis",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "Question Bank",
+              "fieldLabel": "Upload the QnA Bank",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".xlsx, .xls, .csv",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Transcript",
+              "fieldLabel": "Upload the transcript",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".xlsx, .xls, .csv",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Email ID",
+              "fieldLabel": "Enter your email ID to receive the analyses output",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Project",
+              "fieldLabel": "Which type of analysis would like to execute now",
+              "fieldType": "dropdown",
+              "defaultValue": "MBW Chatbot Transcript Analysis",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "MBW Chatbot Transcript Analysis"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldName": "Bot",
+              "fieldLabel": "FLW/Mother's Bot? ",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "FLW"
+                  },
+                  {
+                    "option": "Mother"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "57c0ce86-4611-4ead-886b-7ac2991114d3",
+      "name": "Chatbot Analysis Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.4,
+      "position": [
+        -5312,
+        8496
+      ],
+      "webhookId": "33da40ab-a5ea-4a30-9a09-a1e332a53ab1",
+      "retryOnFail": true,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: items[] where each item.json is one transcript row\n\nconst rows = items.map(i => i.json);\n\n// Sort to guarantee order\nrows.sort((a, b) => {\n  if (a[\"Session ID\"] !== b[\"Session ID\"]) {\n    return String(a[\"Session ID\"]).localeCompare(String(b[\"Session ID\"]));\n  }\n  return new Date(a[\"Message Date\"]) - new Date(b[\"Message Date\"]);\n});\n\nlet pairs = [];\nlet pairIndex = 0;\n\nlet currentSession = null;\nlet pendingHuman = null;\n\nfor (const r of rows) {\n  const session = String(r[\"Session ID\"] || \"\").trim();\n  const type = String(r[\"Message Type\"] || \"\").toLowerCase();\n  const text = String(r[\"Message Content\"] || \"\").trim();\n  const ts = r[\"Message Date\"];\n\n  if (!session || !text) continue;\n\n  // reset on session change\n  if (session !== currentSession) {\n    currentSession = session;\n    pendingHuman = null;\n  }\n\n  if (type === \"human\") {\n    if (pendingHuman) {\n      // stitch consecutive human turns\n      pendingHuman.human_text += \"\\n\" + text;\n    } else {\n      pendingHuman = {\n        session_id: session,\n        human_text: text,\n        human_timestamp: ts\n      };\n    }\n  }\n\n  if (type === \"ai\" && pendingHuman) {\n    pairIndex++;\n    pairs.push({\n      pair_index: pairIndex,\n      session_id: session,\n      human_text: pendingHuman.human_text,\n      ai_text: text,\n      human_timestamp: pendingHuman.human_timestamp,\n      ai_timestamp: ts\n    });\n    pendingHuman = null;\n  }\n}\n\n// Return QnA pairs\nreturn pairs.map(p => ({ json: p }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4816,
+        7872
+      ],
+      "id": "0805df80-f41e-4f86-9b17-6c7546b49537",
+      "name": "QnA Pairing",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "=Transcript",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4992,
+        8144
+      ],
+      "id": "128f6476-02d1-4d83-aa3b-2037f30724bc",
+      "name": "Extract from File",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "binary",
+        "options": {
+          "fileName": "KMC_UAT_QnA_Pairs.csv"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4640,
+        7872
+      ],
+      "id": "7db9147c-e426-4239-8bc0-86c1e09fdc17",
+      "name": "Convert to File",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "binary",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4448,
+        7872
+      ],
+      "id": "e7d53683-d652-4d9a-bfff-cbeb331f5eb5",
+      "name": "Extract pair o/ps",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "=Question_Bank",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4992,
+        8416
+      ],
+      "id": "92c7154d-adf2-4912-990e-b93fe7530834",
+      "name": "Extract qna bank o/ps",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ebaabbbb-4b1b-47fb-8e3b-a1aea4447a11",
+              "name": "﻿pair_index",
+              "value": "={{ $json[\"﻿pair_index\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "3c11164f-ceb2-4d7b-8bc3-9b8c11a03e01",
+              "name": "session_id",
+              "value": "={{ $json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "81389e04-0750-46ce-9ee1-ba8cd0913568",
+              "name": "human_text_en",
+              "value": "={{ $json.human_text_en }}",
+              "type": "string"
+            },
+            {
+              "id": "d7cac271-2041-4c6e-a515-ce76fa8b70ce",
+              "name": "ai_text",
+              "value": "={{ $json.ai_text }}",
+              "type": "string"
+            },
+            {
+              "id": "fe223441-71ef-4d7b-b4f5-293d55c3967d",
+              "name": "coverage_main",
+              "value": "={{ $json.coverage_main }}",
+              "type": "string"
+            },
+            {
+              "id": "9cfbb14a-b4f2-4ba4-a00a-7f86ee9154b4",
+              "name": "coverage_subtype",
+              "value": "={{ $json.coverage_subtype }}",
+              "type": "string"
+            },
+            {
+              "id": "463754a0-ccb5-42f5-984f-c09a7b2f6630",
+              "name": "coverage_reason",
+              "value": "={{ $json.coverage_reason }}",
+              "type": "string"
+            },
+            {
+              "id": "b04b93df-1488-44c3-a485-f6b9c171b64e",
+              "name": "matched_qna_id",
+              "value": "={{ $json.matched_qna_id }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3072,
+        7984
+      ],
+      "id": "b4054904-69b6-49d5-bf39-f9629a87183c",
+      "name": "Set Columns",
+      "alwaysOutputData": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "binary",
+        "options": {
+          "fileName": "Coverage Analysis Output [Python vs LLM].csv"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -2624,
+        7520
+      ],
+      "id": "bbc2bb60-6d36-4da3-93e8-c0adab61b0a7",
+      "name": "Coverage Analysis Output [Python vs LLM]",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bef7a3d6-f186-4199-b59d-7fec080f7267",
+              "name": "pair_index",
+              "value": "={{ $json[\"﻿pair_index\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "858b9559-0e81-49c7-b985-abed257169a0",
+              "name": "session_id",
+              "value": "={{ $json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "d16910ee-b5e1-421d-8a74-fcf852d85f55",
+              "name": "human_text_en",
+              "value": "={{ $json.human_text_en }}",
+              "type": "string"
+            },
+            {
+              "id": "273820b9-f87f-42af-b538-a2f40603fbb2",
+              "name": "ai_text",
+              "value": "={{ $json.ai_text }}",
+              "type": "string"
+            },
+            {
+              "id": "5ad0e8e3-9e13-4fa1-8400-962b5181f598",
+              "name": "coverage_main",
+              "value": "={{ $json.coverage_main }}",
+              "type": "string"
+            },
+            {
+              "id": "e2ebbca1-2d44-48a8-add7-03a4ec3f71b2",
+              "name": "coverage_subtype",
+              "value": "={{ $json.coverage_subtype }}",
+              "type": "string"
+            },
+            {
+              "id": "f5c4cff4-d221-4c88-bd96-d7a3efd000ee",
+              "name": "coverage_reason",
+              "value": "={{ $json.coverage_reason }}",
+              "type": "string"
+            },
+            {
+              "id": "83745188-5e4a-4e4e-872b-057540790051",
+              "name": "matched_qna_id",
+              "value": "={{ $json.matched_qna_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2880,
+        7984
+      ],
+      "id": "644de08c-d509-4806-92cd-1cbad1b77a94",
+      "name": "Filter columns - Coverage - Accuracy",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Coverage Analysis",
+        "height": 864,
+        "width": 2336,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -5056,
+        7744
+      ],
+      "typeVersion": 1,
+      "id": "e404923c-7d6e-44fe-bb23-688d9d59cf71",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Accuracy Analysis",
+        "height": 304,
+        "width": 1408
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2688,
+        7744
+      ],
+      "typeVersion": 1,
+      "id": "25ce680a-0002-4b30-93a8-5999501a2dd4",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3440,
+        7904
+      ],
+      "id": "9e8fe3db-c4ae-42ed-8279-29c9a4f9e799",
+      "name": "Wait",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "binary",
+        "options": {
+          "fileName": "JS_Coverage_OP.csv"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -2864,
+        7520
+      ],
+      "id": "73d6f362-fc74-4ddc-8925-794c8ac4576e",
+      "name": "Coverage:Python O/P",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "advanced": true,
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "pair_index",
+              "field2": "﻿pair_index"
+            }
+          ]
+        },
+        "joinMode": "enrichInput1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3136,
+        7520
+      ],
+      "id": "7e29144e-7be2-46a6-9d2f-014fcfcf88b9",
+      "name": "Merge: All Coverage O/Ps",
+      "alwaysOutputData": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-nano",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-NANO"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are performing STRICT CLASSIFICATION for a Kangaroo Mother Care (KMC) chatbot.\n\n––––––––––––––––––––\nEVAL ID (copy exactly):\n{{ $json['﻿pair_index'] }}\n\nUSER MESSAGE:\n{{ $json.human_text }}\n\nREFERENCE CONTEXT (previous bot message, if any):\n{{ $json.prev_ai_text || \"None\" }}\n\nQnA CONTEXT (only if BOTH provided):\nQuestion: {{ $json.qna_question || \"None\" }}\nExpected Answer: {{ $json.expected_answer || \"None\" }}\n\n––––––––––––––––––––\nCOVERAGE TAXONOMY\n\ncoverage_main (choose ONE):\n- non_question\n- matched_question\n- unmatched_question\n\ncoverage_subtype rules:\n- non_question → clarification | niceties | refusal_apology\n- unmatched_question → in_scope | out_of_scope\n- matched_question → MUST be null\n\n––––––––––––––––––––\nRULES (MANDATORY)\n\n- If USER MESSAGE seeks information → NOT non_question\n- Non-KMC health topics → unmatched_question + out_of_scope\n- matched_question ONLY if BOTH QnA Question and Expected Answer exist AND match\n- suggested_qna_topic ONLY if unmatched_question + in_scope\n\n––––––––––––––––––––\nOUTPUT (JSON ONLY)\n\n{\n  \"eval_id\": \"<copy exactly>\",\n  \"human_text\": \"<copy exactly>\",\n  \"ai_text\": \"<copy exactly>\",\n  \"coverage_main\": \"<string>\",\n  \"coverage_subtype\": \"<string or null>\",\n  \"rationale\": \"<one short sentence>\",\n  \"suggested_qna_topic\": \"<string or null>\"\n}\n\nReturn ONLY the JSON. No extra text.\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "include": [],
+          "instructions": "You are evaluating user messages for a Kangaroo Mother Care (KMC) chatbot.\n\nYour task is STRICT CLASSIFICATION ONLY.\n\nYou must:\n- Copy the provided EVAL_ID exactly into the output field \"eval_id\"\n- Classify the USER MESSAGE using the provided taxonomy\n- Decide whether it matches a known QnA entry ONLY when QnA context is explicitly provided\n\nYou must NOT:\n- Answer the user\n- Provide medical or health advice\n- Rewrite or expand the content\n- Add explanations outside the rationale field\n- Invent, alter, or omit the eval_id\n\nSTRICT INTENT RULE:\n- If the USER MESSAGE is phrased as a question or is clearly seeking information, it MUST NOT be classified as non_question.\n\nSCOPE RULE:\n- If it is an information-seeking question but NOT directly about KMC practices, classify as unmatched_question + out_of_scope.\n\nMATCHED QUESTION GUARDRAIL:\n- Do NOT classify a message as matched_question unless BOTH a QnA Question AND an Expected Answer are explicitly provided in the prompt.\n\nRules:\n- You must follow the taxonomy exactly\n- Invalid label combinations are NOT allowed\n- Use ONLY the information provided in the prompt\n- Return ONLY valid JSON\n- Do NOT wrap output in markdown\n- Do NOT add commentary or extra text\n",
+          "maxTokens": 300,
+          "parallelToolCalls": false,
+          "temperature": 0,
+          "topP": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -4368,
+        7504
+      ],
+      "id": "a78abfd7-923e-44f1-bb1f-8286df01c03b",
+      "name": "OpenAI: Coverage check",
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "maxTries": 2,
+      "credentials": {
+        "openAiApi": {
+          "id": "NlMNeW2asr3927HB",
+          "name": "OpenAi account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-nano",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-NANO"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are performing STRICT ACCURACY CLASSIFICATION for a Mother and Baby Wellness (MBW) chatbot used by BOTH Front Line Workers (FLWs) and Mothers.\n\nYour task is to evaluate whether the BOT RESPONSE appropriately answers the USER MESSAGE.\n\nYou must output ONLY valid JSON.\nDo NOT include markdown, explanations, or extra text.\n\nYou must:\n\nCopy all provided input fields EXACTLY into the output\n\nAssign ONE accuracy_main value\n\nAssign accuracy_subtype ONLY IF accuracy_main = non_answer\n\nBase your decision ONLY on the USER MESSAGE and BOT RESPONSE\n\nBe strict for newborn and preterm danger signs\n\nYou must NOT:\n\nAnswer the user\n\nProvide medical or health advice\n\nRewrite, correct, or expand the content\n\nInvent missing information\n\nAlter, omit, or leave blank any provided identifiers\n\nACCURACY TAXONOMY\n\naccuracy_main (choose ONE):\n\naccurate\n\ninaccurate\n\nnon_answer\n\naccuracy_subtype (ONLY when accuracy_main = non_answer):\n\nclarification\n\nniceties\n\nrefusal_apology\n\nlogistics\n\nIf accuracy_main is accurate or inaccurate, accuracy_subtype MUST be null.\n\nDECISION ORDER (CRITICAL – FOLLOW STRICTLY)\n\nFIRST determine whether the BOT RESPONSE contains SUBSTANTIVE HEALTH INFORMATION intended to answer the USER MESSAGE.\n\nONLY IF NO substantive answer exists, classify the response as non_answer.\n\nPoliteness, follow-up questions, or closing phrases MUST NOT override a substantive answer.\n\nCRITICAL TURN RULE (OVERRIDES ALL OTHERS)\n\nIf the USER MESSAGE is NOT an information-seeking question (for example: Yes, No, Okay, Thanks):\n\naccuracy_main MUST be non_answer\naccuracy_subtype MUST be niceties\n\nThis applies REGARDLESS of how helpful or correct the BOT RESPONSE is.\n\nSTEP 1: SUBSTANTIVE ANSWER EVALUATION\n\nIf the BOT RESPONSE provides information intended to answer the USER MESSAGE:\n\nIf the information is medically safe, appropriate, relevant, and directly answers the USER MESSAGE:\naccuracy_main = accurate\naccuracy_subtype = null\n\nIf the BOT RESPONSE is medically incorrect, unsafe, misleading, incomplete, OR addresses a DIFFERENT topic, condition, behavior, or scenario than the USER MESSAGE:\naccuracy_main = inaccurate\naccuracy_subtype = null\n\nIMPORTANT OVERRIDE:\nIf the BOT RESPONSE answers a DIFFERENT topic than what the USER MESSAGE asked, it MUST be classified as inaccurate, NOT non_answer, even if the response is polite or irrelevant.\n\nSTEP 2: NON-ANSWER CLASSIFICATION\n(Apply ONLY if NO substantive answer exists)\n\nIf the BOT RESPONSE contains ONLY greetings, acknowledgements, or politeness:\naccuracy_main = non_answer\naccuracy_subtype = niceties\n\nIf the BOT RESPONSE explicitly apologizes or states inability to help:\naccuracy_main = non_answer\naccuracy_subtype = refusal_apology\n\nIf the BOT RESPONSE provides operational, administrative, or navigation information instead of health guidance:\naccuracy_main = non_answer\naccuracy_subtype = logistics\n\nIf the BOT RESPONSE ONLY asks for clarification and provides NO health information:\naccuracy_main = non_answer\naccuracy_subtype = clarification\n\nDANGER-SIGN STRICTNESS (OVERRIDE)\n\nFor newborn or preterm danger signs:\n\nAny vague, generic, or incomplete attempt to answer MUST be classified as inaccurate\n\nDo NOT classify such cases as non_answer if an answer attempt is made\n\nINPUT (COPY EXACTLY)\n\npair_index: {pair_index}\nsession_id: {session_id}\nhuman_text: {human_text}\nai_text: {ai_text}\n\nOUTPUT JSON FORMAT (STRICT)\n\n{\n\"pair_index\": \"<copy exactly>\",\n\"session_id\": \"<copy exactly or null>\",\n\"human_text\": \"<copy exactly>\",\n\"ai_text\": \"<copy exactly>\",\n\"accuracy_main\": \"<accurate | inaccurate | non_answer>\",\n\"accuracy_subtype\": \"<clarification | niceties | refusal_apology | logistics | null>\",\n\"rationale\": \"<one short sentence>\"\n}\n\nReturn ONLY the JSON object."
+            },
+            {
+              "content": "=Pair Index (copy exactly):\n{{ $json.pair_index }}\n\nUSER MESSAGE:\n{{ $json.human_text_en }}\n\nBOT RESPONSE:\n{{ $json.ai_text }}\n\nSESSION ID:\n{{ $json.session_id }}\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 500,
+          "parallelToolCalls": false,
+          "temperature": 0,
+          "topP": 1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -2208,
+        7856
+      ],
+      "id": "e95ee3ed-e6de-4afa-a638-b383f28851ac",
+      "name": "Message a model",
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "NlMNeW2asr3927HB",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ==================================================\n// 1) Extract ALL OpenAI output_text blocks safely\n// ==================================================\nfunction extractRawText(item) {\n  const outputs = item?.output;\n  if (!Array.isArray(outputs)) return null;\n\n  const texts = [];\n\n  for (const o of outputs) {\n    if (!Array.isArray(o?.content)) continue;\n\n    for (const c of o.content) {\n      if (c?.type === \"output_text\" && typeof c.text === \"string\") {\n        texts.push(c.text);\n      }\n    }\n  }\n\n  return texts.length ? texts.join(\"\\n\").trim() : null;\n}\n\n// ==================================================\n// 2) Normalize raw LLM text\n// ==================================================\nfunction normalizeRaw(raw) {\n  if (typeof raw !== \"string\") return raw;\n\n  let s = raw.replace(/^\\uFEFF/, \"\").trim();\n\n  // Remove markdown fences if present\n  s = s.replace(/^```(?:json)?/i, \"\").replace(/```$/i, \"\").trim();\n\n  // Isolate JSON object if extra text exists\n  const first = s.indexOf(\"{\");\n  const last = s.lastIndexOf(\"}\");\n  if (first !== -1 && last !== -1 && last > first) {\n    s = s.slice(first, last + 1).trim();\n  }\n\n  return s;\n}\n\n// ==================================================\n// 3) Strict JSON parse attempt (primary path)\n// ==================================================\nfunction tryParseJson(s) {\n  if (!s) {\n    return { ok: false, obj: null, error: \"empty_raw_text\" };\n  }\n\n  try {\n    return { ok: true, obj: JSON.parse(s), error: null };\n  } catch (err) {\n    return { ok: false, obj: null, error: err.message };\n  }\n}\n\n// ==================================================\n// 4) SAFE regex fallback (NO JSON.parse)\n// ==================================================\nfunction extractStringField(s, key) {\n  const re = new RegExp(`\"${key}\"\\\\s*:\\\\s*\"([\\\\s\\\\S]*?)\"(?=\\\\s*,|\\\\s*})`, \"m\");\n  const m = s?.match(re);\n  return m ? m[1] : null;\n}\n\nfunction extractNullOrString(s, key) {\n  if (new RegExp(`\"${key}\"\\\\s*:\\\\s*null`).test(s)) return null;\n  return extractStringField(s, key);\n}\n\nfunction regexFallback(s) {\n  return {\n    pair_index: extractStringField(s, \"pair_index\"),\n    session_id: extractStringField(s, \"session_id\"),\n    human_text: extractStringField(s, \"human_text\"),\n    ai_text: extractStringField(s, \"ai_text\"),\n    accuracy_main: extractStringField(s, \"accuracy_main\"),\n    accuracy_subtype: extractNullOrString(s, \"accuracy_subtype\"),\n    rationale: extractStringField(s, \"rationale\")\n  };\n}\n\n// ==================================================\n// 5) Execute parsing pipeline\n// ==================================================\nconst rawText = normalizeRaw(extractRawText($json));\nconst parsed = tryParseJson(rawText);\n\nlet llm = null;\nlet parse_mode = null;\n\nif (parsed.ok) {\n  llm = parsed.obj;\n  parse_mode = \"json\";\n} else {\n  llm = regexFallback(rawText || \"\");\n  parse_mode = \"regex_fallback\";\n}\n\n// ==================================================\n// 6) FINAL NORMALIZED OUTPUT (OBJECT, NOT ARRAY)\n// ==================================================\nreturn {\n  json: {\n    pair_index: String(llm?.pair_index ?? $json.pair_index ?? \"\").trim() || null,\n    session_id: llm?.session_id ?? $json.session_id ?? null,\n    human_text: llm?.human_text ?? $json.human_text ?? null,\n    ai_text: llm?.ai_text ?? $json.ai_text ?? null,\n\n    accuracy_main_llm: llm?.accuracy_main ?? null,\n    accuracy_subtype_llm: llm?.accuracy_subtype ?? null,\n    accuracy_rationale_llm: llm?.rationale ?? null,\n\n    llm_parse_mode: parse_mode,              // \"json\" | \"regex_fallback\"\n    llm_parse_error: parsed.ok ? null : parsed.error,\n    llm_raw_text: rawText\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1904,
+        7856
+      ],
+      "id": "14038ec8-7243-4feb-ad36-6ef34bee0e15",
+      "name": "Code in JavaScript",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "binary",
+        "options": {
+          "fileName": "Accuracy Analysis Output.csv"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1440,
+        7536
+      ],
+      "id": "998c63cc-4787-4a0f-ad16-04aaf9e4319b",
+      "name": "Accuracy Analysis Output",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f44de601-3fdd-4a29-90c9-3e3fbd96f594",
+              "name": "pair_index",
+              "value": "={{ $json.pair_index }}",
+              "type": "string"
+            },
+            {
+              "id": "7c1a3ce5-28cb-4f08-b5a2-7ed64510711f",
+              "name": "session_id",
+              "value": "={{ $json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "e255a1c0-b8b4-4616-b9e6-fd58760becc4",
+              "name": "human_text",
+              "value": "={{ $json.human_text }}",
+              "type": "string"
+            },
+            {
+              "id": "0ceb2b80-6510-4b6c-af8c-7a68e99f6578",
+              "name": "ai_text",
+              "value": "={{ $json.ai_text }}",
+              "type": "string"
+            },
+            {
+              "id": "9efdf5f0-59d6-4ed4-ac77-aff5e554b0f6",
+              "name": "accuracy_main",
+              "value": "={{ $json.accuracy_main_llm }}",
+              "type": "string"
+            },
+            {
+              "id": "fb06ba7e-2817-4b87-bbeb-62b8e95a1cfb",
+              "name": "accuracy_subtype",
+              "value": "={{ $json.accuracy_subtype_llm }}",
+              "type": "string"
+            },
+            {
+              "id": "aecec2ce-fba6-44ac-b3f5-58e28260cabb",
+              "name": "accuracy_rationale",
+              "value": "={{ $json.accuracy_rationale_llm }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1696,
+        7856
+      ],
+      "id": "d6934eec-abae-41d8-8779-fa51cdaf402a",
+      "name": "Edit Fields",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "asidtharthan@dimagi.com",
+        "toEmail": "={{ $items(\"Chatbot Analysis Trigger\")[0].json[\"Email ID\"] }}",
+        "subject": "MBW UAT: Coverage & Accuracy Analysis Results",
+        "html": "=Your Coverage & Accuracy analysis is complete.\n\nGoogle Sheet Url:\n{{ $json.spreadsheetUrl }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        992,
+        8368
+      ],
+      "id": "7a613be0-89ca-4bd8-897d-c80812658202",
+      "name": "Send email: Coverage Analysis O/P",
+      "webhookId": "47c0f65a-adc7-4ad0-8960-3e3ce1f4bc81",
+      "credentials": {
+        "smtp": {
+          "id": "yowrh47YdfSbrKX6",
+          "name": "SMTP account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "37ff0b8a-e414-4bde-acb3-adde598af342",
+              "leftValue": "={{ $json[\"﻿pair_index\"] }}",
+              "rightValue": 20,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            },
+            {
+              "id": "f0b87193-d170-4f5e-bc33-36b162327733",
+              "leftValue": "={{ $json[\"﻿pair_index\"] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        -4608,
+        7504
+      ],
+      "id": "cce20c69-5f64-4bea-b53c-6454b7e49296",
+      "name": "Filter - 20",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "37ff0b8a-e414-4bde-acb3-adde598af342",
+              "leftValue": "={{ $json.pair_index }}",
+              "rightValue": 20,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            },
+            {
+              "id": "310a38d9-f107-4ed5-b5ea-23cfbb84f0a1",
+              "leftValue": "={{ $json.pair_index }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        -2400,
+        7856
+      ],
+      "id": "f0ca3aeb-bdf1-4e12-bc76-bd33870c51be",
+      "name": "Filter: 20",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "title": "=MBW Chatbot - Coverage & Accuracy Analysis - {{ $now }}",
+        "sheetsUi": {
+          "sheetValues": [
+            {
+              "title": "User Engagement Summary"
+            },
+            {
+              "title": "Weekly Activity Summary"
+            },
+            {
+              "title": "Weekly Session Summary"
+            },
+            {
+              "title": "Overall Analysis Summary"
+            },
+            {
+              "title": "Coverage"
+            },
+            {
+              "title": "Accuracy"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -4992,
+        8832
+      ],
+      "id": "88e2d3b6-4f82-49cc-b969-7977d402d07b",
+      "name": "Create spreadsheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Coverage",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "pair_index",
+              "displayName": "pair_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "human_text",
+              "displayName": "human_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_text",
+              "displayName": "ai_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "coverage_main_llm",
+              "displayName": "coverage_main_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "coverage_subtype_llm",
+              "displayName": "coverage_subtype_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "coverage_rationale_llm",
+              "displayName": "coverage_rationale_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "suggested_qna_topic_llm",
+              "displayName": "suggested_qna_topic_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_parse_ok",
+              "displayName": "llm_parse_ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_parse_error",
+              "displayName": "llm_parse_error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_raw_text_on_fail",
+              "displayName": "llm_raw_text_on_fail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -752,
+        8096
+      ],
+      "id": "9fa101a2-da7e-41fc-9ae7-2a58c41a4cf5",
+      "name": "Append row in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Accuracy",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "pair_index",
+              "displayName": "pair_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "human_text",
+              "displayName": "human_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_text",
+              "displayName": "ai_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "accuracy_main_llm",
+              "displayName": "accuracy_main_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "accuracy_subtype_llm",
+              "displayName": "accuracy_subtype_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "accuracy_rationale_llm",
+              "displayName": "accuracy_rationale_llm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_parse_ok",
+              "displayName": "llm_parse_ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_parse_used_regex_fallback",
+              "displayName": "llm_parse_used_regex_fallback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_parse_error",
+              "displayName": "llm_parse_error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "llm_raw_text_on_fail",
+              "displayName": "llm_raw_text_on_fail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -752,
+        7872
+      ],
+      "id": "9a34ee9d-b0dc-4216-957e-0379ff87c3cf",
+      "name": "Append or update row in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3942d077-4113-4dfa-8e48-e2d3276fc94e",
+              "name": "spreadsheetId",
+              "value": "={{ $json.spreadsheetId }}",
+              "type": "string"
+            },
+            {
+              "id": "5f6ba473-0cc2-40fd-acbf-241d05bd9ee6",
+              "name": "spreadsheetUrl",
+              "value": "={{ $json.spreadsheetUrl }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4208,
+        8848
+      ],
+      "id": "e6d4b246-0b0c-4420-b9f2-2e46c860002a",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -976,
+        8096
+      ],
+      "id": "7a29289e-6534-4df5-9c4c-cfcee4870a32",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -976,
+        7872
+      ],
+      "id": "389aa98e-722b-4512-998c-537c4d77fcda",
+      "name": "Merge1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Coverage",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "startIndex": "H",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -528,
+        8096
+      ],
+      "id": "de875e6e-8c0e-47b4-a601-cbc5e10f63b5",
+      "name": "Delete rows or columns from sheet",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Overall Analysis + Google Sheets ",
+        "height": 1584,
+        "width": 2176,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1248,
+        7744
+      ],
+      "typeVersion": 1,
+      "id": "73653110-f96c-453d-870a-b345e7923e57",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Accuracy",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "startIndex": "H",
+        "numberToDelete": 6
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -528,
+        7872
+      ],
+      "id": "44684b0c-3e83-4e88-892b-e850016e2639",
+      "name": "Delete rows or columns from sheet1",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -304,
+        7984
+      ],
+      "id": "b303d0da-4713-441d-8869-a34bbb5b5934",
+      "name": "Wait1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "useDataOfInput": 2
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -96,
+        8016
+      ],
+      "id": "4e93bf77-bad3-4bae-bde7-6c1c2bad4bcb",
+      "name": "Wait2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1kaZjtnNeJGAROGlsmqvg7PrJAIJvIQdE",
+          "mode": "list",
+          "cachedResultName": "MBW Chatbot Analysis",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1kaZjtnNeJGAROGlsmqvg7PrJAIJvIQdE"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -4704,
+        8928
+      ],
+      "id": "24cd26b8-2bb3-4237-b50d-e1e095b7c93a",
+      "name": "Move file",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "kw9B8YDxgJrwqRuU",
+          "name": "Google Drive account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -4416,
+        8848
+      ],
+      "id": "66f4c1d9-3b87-4ff1-80f4-de59ee652f4b",
+      "name": "Wait3",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Activity Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "week_start",
+              "displayName": "week_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_active_users",
+              "displayName": "weekly_active_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_new_users",
+              "displayName": "weekly_new_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_returning_users",
+              "displayName": "weekly_returning_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_sessions",
+              "displayName": "weekly_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_total_messages",
+              "displayName": "weekly_total_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_human_messages",
+              "displayName": "weekly_human_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_ai_messages",
+              "displayName": "weekly_ai_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_total_session_minutes",
+              "displayName": "weekly_total_session_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "avg_session_minutes",
+              "displayName": "avg_session_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -752,
+        8560
+      ],
+      "id": "4de05f06-342e-4e58-a87a-5be4ab439b05",
+      "name": "Append row in sheet1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -976,
+        8560
+      ],
+      "id": "24c88621-ffa7-4650-a1ad-fd9a576b6295",
+      "name": "Merge2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "useDataOfInput": 2
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        112,
+        8112
+      ],
+      "id": "ce14dbdb-921b-47e5-a9e0-ad32fa4bf64f",
+      "name": "Wait4",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Activity Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -528,
+        8560
+      ],
+      "id": "8def4b5c-19b4-4469-908f-bc78f844c64f",
+      "name": "Delete rows or columns from sheet2",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node — WEEKLY_SUMMARY (Minimal, Leadership-Safe)\n *\n * OUTPUT:\n * One row per week with:\n * - Users (active / new / returning)\n * - Sessions (any activity in week)\n * - Messages (human / ai)\n * - Session minutes (week-only contribution)\n */\n\n// ============================\n// CONFIG\n// ============================\nconst INACTIVITY_LIMIT_MINUTES = 30;\nconst INACTIVITY_MS = INACTIVITY_LIMIT_MINUTES * 60 * 1000;\n\n// ============================\n// FIELD MAPPING\n// ============================\nconst FIELDS = {\n  timestamp: \"Message Date\",\n  messageType: \"Message Type\", // human | ai\n  sessionId: \"Session ID\",\n  userIdPrimary: \"Participant Public ID\",\n  userIdFallback1: \"Participant Identifier\",\n  userIdFallback2: \"Participant Name\",\n};\n\n// ============================\n// HELPERS\n// ============================\nfunction toDate(v) {\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d;\n}\n\nfunction round1(n) {\n  return Math.round(n * 10) / 10;\n}\n\nfunction getUserId(row) {\n  return (\n    row[FIELDS.userIdPrimary] ??\n    row[FIELDS.userIdFallback1] ??\n    row[FIELDS.userIdFallback2] ??\n    \"UNKNOWN_USER\"\n  );\n}\n\nfunction getWeekStartISO(date) {\n  const d = new Date(Date.UTC(\n    date.getUTCFullYear(),\n    date.getUTCMonth(),\n    date.getUTCDate(), 0, 0, 0, 0\n  ));\n  const day = d.getUTCDay() || 7; // Sunday=7\n  d.setUTCDate(d.getUTCDate() - (day - 1));\n  return d.toISOString().slice(0, 10);\n}\n\nfunction weekRange(weekStartISO) {\n  const start = new Date(weekStartISO + \"T00:00:00.000Z\");\n  const end = new Date(start);\n  end.setUTCDate(end.getUTCDate() + 7);\n  return { start, end };\n}\n\n// ============================\n// 1) COLLECT MESSAGE EVENTS\n// ============================\nconst messages = [];\nconst sessions = {};\nconst userFirstSeenWeek = {};\n\nfor (const item of items) {\n  const row = item.json || {};\n  const ts = toDate(row[FIELDS.timestamp]);\n  const sessionId = row[FIELDS.sessionId];\n  if (!ts || !sessionId) continue;\n\n  const userId = String(getUserId(row));\n  const msgType = (row[FIELDS.messageType] || \"\").toLowerCase();\n  const weekStart = getWeekStartISO(ts);\n\n  messages.push({\n    timestamp: ts,\n    week_start: weekStart,\n    user_id: userId,\n    message_type: msgType,\n    session_id: sessionId,\n  });\n\n  if (!userFirstSeenWeek[userId] || weekStart < userFirstSeenWeek[userId]) {\n    userFirstSeenWeek[userId] = weekStart;\n  }\n\n  if (!sessions[sessionId]) sessions[sessionId] = [];\n  sessions[sessionId].push({ timestamp: ts });\n}\n\n// ============================\n// 2) BUILD WEEKLY CONTAINERS\n// ============================\nconst weekly = {};\n\nfunction ensureWeek(week) {\n  if (!weekly[week]) {\n    weekly[week] = {\n      users: new Set(),\n      newUsers: new Set(),\n      sessions: new Set(),\n      totalMessages: 0,\n      humanMessages: 0,\n      aiMessages: 0,\n      sessionMinutes: 0,\n    };\n  }\n}\n\n// ============================\n// 3) MESSAGE-LEVEL METRICS\n// ============================\nfor (const m of messages) {\n  ensureWeek(m.week_start);\n  const w = weekly[m.week_start];\n\n  w.users.add(m.user_id);\n  w.totalMessages += 1;\n  if (m.message_type === \"human\") w.humanMessages += 1;\n  if (m.message_type === \"ai\") w.aiMessages += 1;\n\n  if (userFirstSeenWeek[m.user_id] === m.week_start) {\n    w.newUsers.add(m.user_id);\n  }\n}\n\n// ============================\n// 4) SESSION MINUTES (WEEK-AWARE SPLIT)\n// ============================\nfor (const [sessionId, events] of Object.entries(sessions)) {\n  const sorted = events.sort((a, b) => a.timestamp - b.timestamp);\n\n  for (let i = 1; i < sorted.length; i++) {\n    const prev = sorted[i - 1].timestamp;\n    const curr = sorted[i].timestamp;\n    const gap = curr - prev;\n    if (gap > INACTIVITY_MS) continue;\n\n    const startWeek = getWeekStartISO(prev);\n    const endWeek = getWeekStartISO(curr);\n\n    if (startWeek === endWeek) {\n      ensureWeek(startWeek);\n      weekly[startWeek].sessions.add(sessionId);\n      weekly[startWeek].sessionMinutes += gap / (1000 * 60);\n    } else {\n      // Split across week boundary\n      const { end: weekEnd } = weekRange(startWeek);\n      const firstPart = weekEnd - prev;\n      const secondPart = curr - weekEnd;\n\n      ensureWeek(startWeek);\n      weekly[startWeek].sessions.add(sessionId);\n      weekly[startWeek].sessionMinutes += firstPart / (1000 * 60);\n\n      ensureWeek(endWeek);\n      weekly[endWeek].sessions.add(sessionId);\n      weekly[endWeek].sessionMinutes += secondPart / (1000 * 60);\n    }\n  }\n}\n\n// ============================\n// 5) FINAL WEEKLY OUTPUT\n// ============================\nconst output = Object.entries(weekly)\n  .sort((a, b) => a[0].localeCompare(b[0]))\n  .map(([week, w]) => {\n    const sessionsCount = w.sessions.size;\n    return {\n      section: \"WEEKLY_SUMMARY\",\n      week_start: week,\n      weekly_active_users: w.users.size,\n      weekly_new_users: w.newUsers.size,\n      weekly_returning_users: w.users.size - w.newUsers.size,\n      weekly_sessions: sessionsCount,\n      weekly_total_messages: w.totalMessages,\n      weekly_human_messages: w.humanMessages,\n      weekly_ai_messages: w.aiMessages,\n      weekly_total_session_minutes: round1(w.sessionMinutes),\n      avg_session_minutes:\n        sessionsCount > 0 ? round1(w.sessionMinutes / sessionsCount) : 0,\n    };\n  });\n\nreturn output.map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        8544
+      ],
+      "id": "c498fb88-5f59-4cb4-aa72-88d4d0cff551",
+      "name": "Weekly Activity Summary Generator",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Session Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_start",
+              "displayName": "session_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_end",
+              "displayName": "session_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_created_week",
+              "displayName": "session_created_week",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_last_active_week",
+              "displayName": "session_last_active_week",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_messages",
+              "displayName": "total_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "human_messages",
+              "displayName": "human_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_messages",
+              "displayName": "ai_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_duration_minutes",
+              "displayName": "session_duration_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "messages_per_minute",
+              "displayName": "messages_per_minute",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sub_sessions",
+              "displayName": "sub_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -752,
+        8848
+      ],
+      "id": "ff3ea0fe-3ed8-4e96-ae63-fd25a632be4e",
+      "name": "Append row in sheet2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -976,
+        8848
+      ],
+      "id": "96d7fcd4-9135-4b49-bf73-9ca43a4dcbe5",
+      "name": "Merge3",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Session Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -528,
+        8848
+      ],
+      "id": "ef911e91-2e93-49d4-a108-1e86a8e0bdbf",
+      "name": "Delete rows or columns from sheet3",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node — SESSION_DETAILS (Final with bottom notes)\n *\n * - One row per session\n * - Sorted earliest → latest\n * - Adds a spacer row and explanatory notes at the bottom\n */\n\n// ============================\n// CONFIG\n// ============================\nconst INACTIVITY_LIMIT_MINUTES = 30;\nconst INACTIVITY_MS = INACTIVITY_LIMIT_MINUTES * 60 * 1000;\n\n// ============================\n// FIELD MAPPING\n// ============================\nconst FIELDS = {\n  timestamp: \"Message Date\",\n  messageType: \"Message Type\",\n  sessionId: \"Session ID\",\n  userIdPrimary: \"Participant Public ID\",\n  userIdFallback1: \"Participant Identifier\",\n  userIdFallback2: \"Participant Name\",\n};\n\n// ============================\n// HELPERS\n// ============================\nfunction toDate(v) {\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d;\n}\nfunction round1(n) {\n  return Math.round(n * 10) / 10;\n}\nfunction getUserId(row) {\n  return (\n    row[FIELDS.userIdPrimary] ??\n    row[FIELDS.userIdFallback1] ??\n    row[FIELDS.userIdFallback2] ??\n    \"UNKNOWN_USER\"\n  );\n}\nfunction getWeekStartISO(date) {\n  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));\n  const day = d.getUTCDay() || 7;\n  d.setUTCDate(d.getUTCDate() - (day - 1));\n  return d.toISOString().slice(0, 10);\n}\n\n// ============================\n// 1) GROUP BY SESSION\n// ============================\nconst sessions = {};\n\nfor (const item of items) {\n  const row = item.json || {};\n  const ts = toDate(row[FIELDS.timestamp]);\n  const sessionId = row[FIELDS.sessionId];\n  if (!ts || !sessionId) continue;\n\n  if (!sessions[sessionId]) {\n    sessions[sessionId] = {\n      session_id: sessionId,\n      user_id: getUserId(row),\n      messages: [],\n    };\n  }\n\n  sessions[sessionId].messages.push({\n    timestamp: ts,\n    message_type: (row[FIELDS.messageType] || \"\").toLowerCase(),\n  });\n}\n\n// ============================\n// 2) BUILD SESSION ROWS\n// ============================\nconst rows = [];\n\nfor (const s of Object.values(sessions)) {\n  const msgs = s.messages.sort((a, b) => a.timestamp - b.timestamp);\n  if (!msgs.length) continue;\n\n  let activeMs = 0;\n  let subSessions = 1;\n\n  for (let i = 1; i < msgs.length; i++) {\n    const gap = msgs[i].timestamp - msgs[i - 1].timestamp;\n    if (gap <= INACTIVITY_MS) activeMs += gap;\n    else subSessions += 1;\n  }\n\n  const durationMin = round1(activeMs / (1000 * 60));\n  const total = msgs.length;\n  const human = msgs.filter(m => m.message_type === \"human\").length;\n  const ai = msgs.filter(m => m.message_type === \"ai\").length;\n\n  const start = msgs[0].timestamp;\n  const end = msgs[msgs.length - 1].timestamp;\n\n  rows.push({\n    section: \"SESSION_DETAILS\",\n    session_id: s.session_id,\n    user_id: s.user_id,\n    session_start: start.toISOString(),\n    session_end: end.toISOString(),\n    session_created_week: getWeekStartISO(start),\n    session_last_active_week: getWeekStartISO(end),\n    total_messages: total,\n    human_messages: human,\n    ai_messages: ai,\n    session_duration_minutes: durationMin,\n    messages_per_minute: durationMin > 0 ? round1(total / durationMin) : 0,\n    sub_sessions: subSessions,\n  });\n}\n\n// ============================\n// 3) SORT\n// ============================\nrows.sort((a, b) =>\n  a.session_created_week.localeCompare(b.session_created_week) ||\n  a.session_start.localeCompare(b.session_start)\n);\n\n// ============================\n// 4) APPEND SPACER + NOTES\n// ============================\nrows.push(\n  { section: \"***\" },\n\n  { section: \"SESSION_NOTE\", session_id: \"Notes:\" },\n\n  {\n    section: \"SESSION_NOTE\",\n    session_id: \"• Each row represents one unique session.\",\n  },\n  {\n    section: \"SESSION_NOTE\",\n    session_id:\n      \"• Sessions may span multiple weeks. Weekly Summary counts sessions active in a given week; this tab shows when each session was created and last active.\",\n  },\n  {\n    section: \"SESSION_NOTE\",\n    session_id:\n      \"• sub_sessions = number of continuous activity blocks within a session. A new sub-session is counted whenever there is an inactivity gap greater than 30 minutes.\",\n  }\n);\n\n// ============================\n// 5) OUTPUT\n// ============================\nreturn rows.map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        8752
+      ],
+      "id": "c43eeff9-0fb1-4195-8e88-2f51af0b38bc",
+      "name": "Weekly Session Summary Generator",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        320,
+        8176
+      ],
+      "id": "2db74ebe-efc0-4c25-ad56-483f6f3157bf",
+      "name": "Wait5",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ==========================================\n// Overall Analysis Summary (Robust)\n// - Dedupes by pair_index so total is correct\n// - Supports either python fields (coverage_main) or LLM fields (coverage_main_llm)\n// - Computes accuracy with primary + secondary KPIs\n// ==========================================\n\nconst raw = items.map(i => i.json || {});\n\n// ---------- Helpers ----------\nconst round1 = (n) => Math.round(n * 10) / 10;\n\nconst pct = (count, denom) => {\n  if (!denom || denom === 0) return 0;\n  return round1((count / denom) * 100);\n};\n\nconst norm = (v) => (v ?? \"\").toString().trim().toLowerCase();\n\nconst pickFirst = (obj, keys) => {\n  for (const k of keys) {\n    if (obj[k] !== null && obj[k] !== undefined && obj[k] !== \"\") return obj[k];\n  }\n  return null;\n};\n\n// Canonicalize coverage values coming from either python or LLM naming\nfunction canonCoverageMain(v) {\n  const x = norm(v);\n  // python: \"Matched question\" | \"Unmatched question\" | \"Non-question\"\n  if (x === \"matched question\" || x === \"matched_question\") return \"matched_question\";\n  if (x === \"unmatched question\" || x === \"unmatched_question\") return \"unmatched_question\";\n  if (x === \"non-question\" || x === \"non_question\" || x === \"non question\") return \"non_question\";\n  return x || \"\";\n}\n\nfunction canonCoverageSubtype(v) {\n  const x = norm(v);\n  // python uses: out_of_scope / in_scope_unmatched / clarification / nicety / etc\n  // LLM version in older code used: in_scope / out_of_scope\n  if (x === \"in_scope_unmatched\" || x === \"in scope\" || x === \"in_scope\") return \"in_scope\";\n  if (x === \"out_of_scope\" || x === \"out of scope\") return \"out_of_scope\";\n  return x || \"\";\n}\n\n// Canonicalize accuracy values\nfunction canonAccuracyMain(v) {\n  const x = norm(v);\n\n  // Already canonical\n  if (x === \"accurate\" || x === \"inaccurate\" || x === \"non_answer\") return x;\n\n  // If any older long labels ever appear, map them safely:\n  if (x.includes(\"accurate\")) return \"accurate\";\n  if (x.includes(\"inaccurate\")) return \"inaccurate\";\n  if (x.includes(\"non-answer\") || x.includes(\"non answer\")) return \"non_answer\";\n\n  return x || \"\";\n}\n\nfunction canonAccuracySubtype(v) {\n  const x = norm(v);\n  if (!x) return \"\";\n  // keep taxonomy as-is\n  if (x === \"refusal\" || x === \"apology\") return \"refusal_apology\";\n  return x;\n}\n\n// ---------- 1) Merge rows by pair_index ----------\nconst byPair = new Map();\n\nfor (const r of raw) {\n  // Some inputs have BOM in pair_index (\"﻿pair_index\") so include it too:\n  const key =\n    r.pair_index ??\n    r[\"﻿pair_index\"] ??\n    r.pairIndex ??\n    r.pair ??\n    null;\n\n  if (key === null || key === undefined || key === \"\") continue;\n\n  const k = String(key).trim();\n  if (!byPair.has(k)) byPair.set(k, { pair_index: k });\n\n  const cur = byPair.get(k);\n\n  // Merge fields (prefer non-null / non-empty)\n  for (const [field, value] of Object.entries(r)) {\n    if (value === null || value === undefined || value === \"\") continue;\n    cur[field] = value;\n  }\n}\n\nconst rows = Array.from(byPair.values());\nconst totalPairs = rows.length;\n\n// ---------- 2) Pull canonical fields per row ----------\nconst enriched = rows.map(r => {\n  const coverageMainRaw = pickFirst(r, [\"coverage_main_llm\", \"coverage_main\"]);\n  const coverageSubtypeRaw = pickFirst(r, [\"coverage_subtype_llm\", \"coverage_subtype\"]);\n\n  const accuracyMainRaw = pickFirst(r, [\"accuracy_main_llm\", \"accuracy_main\"]);\n  const accuracySubtypeRaw = pickFirst(r, [\"accuracy_subtype_llm\", \"accuracy_subtype\"]);\n\n  return {\n    ...r,\n    _coverage_main: canonCoverageMain(coverageMainRaw),\n    _coverage_subtype: canonCoverageSubtype(coverageSubtypeRaw),\n    _accuracy_main: canonAccuracyMain(accuracyMainRaw),\n    _accuracy_subtype: canonAccuracySubtype(accuracySubtypeRaw),\n  };\n});\n\n// ---------- 3) Counting helpers ----------\nconst countWhere = (fn) => enriched.filter(fn).length;\n\n// ---------- 4) Compute Coverage ----------\nconst covered = countWhere(r => r._coverage_main === \"matched_question\");\nconst uncovered = totalPairs - covered;\n\nconst cov_non_question = countWhere(r => r._coverage_main === \"non_question\");\n\n// Keep your original breakdown intent: in-scope vs out-of-scope among unmatched\nconst cov_unmatched_in = countWhere(r =>\n  r._coverage_main === \"unmatched_question\" && r._coverage_subtype === \"in_scope\"\n);\nconst cov_unmatched_out = countWhere(r =>\n  r._coverage_main === \"unmatched_question\" && r._coverage_subtype === \"out_of_scope\"\n);\n\n// ---------- 5) Compute Accuracy (ONLY over matched questions) ----------\nconst accuracyUniverse = enriched.filter(r => r._coverage_main === \"matched_question\");\nconst totalMatched = accuracyUniverse.length;\n\n// Accuracy categories within matched universe\nconst accurate = accuracyUniverse.filter(r => r._accuracy_main === \"accurate\").length;\nconst inaccurate = accuracyUniverse.filter(r => r._accuracy_main === \"inaccurate\").length;\nconst nonAnswer = accuracyUniverse.filter(r => r._accuracy_main === \"non_answer\").length;\n\n// Subtypes (still within matched universe)\nconst acc_clarification = accuracyUniverse.filter(r => r._accuracy_subtype === \"clarification\").length;\nconst acc_niceties = accuracyUniverse.filter(r => r._accuracy_subtype === \"niceties\").length;\nconst acc_refusal = accuracyUniverse.filter(r => r._accuracy_subtype === \"refusal_apology\").length;\nconst acc_logistics = accuracyUniverse.filter(r => r._accuracy_subtype === \"logistics\").length;\n\n// Attempted answers = accurate + inaccurate (primary KPI denominator)\nconst attempted = accurate + inaccurate;\n\n// Primary KPI: \"When the bot answers, is it correct?\"\nconst primaryAccuracyPct = pct(accurate, attempted);\n\n// Secondary KPI: \"Out of questions we claim to cover, how often do users get a correct answer?\"\nconst secondaryAccuracyPct = pct(accurate, totalMatched);\n\n// ---------- 6) Build Output ----------\nconst output = [];\n\n// Context\noutput.push({ section: \"Context\", metric: \"Total pairs (coverage universe)\", value: totalPairs, unit: \"count\" });\noutput.push({ section: \"Context\", metric: \"Total matched questions (accuracy universe)\", value: totalMatched, unit: \"count\" });\n\noutput.push({ section: \"***\", metric: \"***\", value: \"***\", unit: \"***\" });\n\n// Coverage Summary\noutput.push({ section: \"Coverage Summary\", metric: \"Covered (matched questions)\", value: covered, unit: \"count\" });\noutput.push({ section: \"Coverage Summary\", metric: \"Coverage percentage\", value: pct(covered, totalPairs), unit: \"%\" });\noutput.push({ section: \"Coverage Summary\", metric: \"Uncovered questions\", value: uncovered, unit: \"count\" });\n\noutput.push({ section: \"***\", metric: \"***\", value: \"***\", unit: \"***\" });\n\n// Coverage Breakdown\nconst covRows = [\n  [\"Matched question (in-scope, has QnA)\", covered],\n  [\"Non-question\", cov_non_question],\n  [\"Unmatched question – in scope\", cov_unmatched_in],\n  [\"Unmatched question – out of scope\", cov_unmatched_out],\n];\n\nfor (const [label, c] of covRows) {\n  output.push({\n    section: \"Coverage Breakdown\",\n    metric: label,\n    value: `${c} (${pct(c, totalPairs)}%)`,\n    unit: \"\",\n  });\n}\n\noutput.push({ section: \"***\", metric: \"***\", value: \"***\", unit: \"***\" });\n\n// Accuracy Summary (over matched only)\noutput.push({ section: \"Accuracy Summary\", metric: \"Total matched questions (accuracy universe)\", value: totalMatched, unit: \"count\" });\noutput.push({ section: \"Accuracy Summary\", metric: \"Attempted answers (accurate + inaccurate)\", value: attempted, unit: \"count\" });\n\noutput.push({ section: \"Accuracy Summary\", metric: \"Accurate answers\", value: accurate, unit: \"count\" });\noutput.push({ section: \"Accuracy Summary\", metric: \"Inaccurate answers\", value: inaccurate, unit: \"count\" });\noutput.push({ section: \"Accuracy Summary\", metric: \"Non-answers\", value: nonAnswer, unit: \"count\" });\n\noutput.push({ section: \"Accuracy Summary\", metric: \"Primary accuracy percentage (attempted answers)\", value: primaryAccuracyPct, unit: \"%\" });\noutput.push({ section: \"Accuracy Summary\", metric: \"Secondary accuracy percentage (over matched questions)\", value: secondaryAccuracyPct, unit: \"%\" });\n\n// Call out refusals explicitly (your “accuracy taking a hit” insight)\noutput.push({ section: \"Accuracy Summary\", metric: \"Matched questions marked as Refusal / Apology\", value: acc_refusal, unit: \"count\" });\n\noutput.push({ section: \"***\", metric: \"***\", value: \"***\", unit: \"***\" });\n\n// Accuracy Breakdown (within matched universe)\nconst accRows = [\n  [\"Accurate answer\", accurate],\n  [\"Inaccurate answer\", inaccurate],\n  [\"Non-answer\", nonAnswer],\n  [\"Clarification\", acc_clarification],\n  [\"Niceties / Greetings\", acc_niceties],\n  [\"Refusal / Apology\", acc_refusal],\n  [\"Logistics\", acc_logistics],\n];\n\nfor (const [label, c] of accRows) {\n  output.push({\n    section: \"Accuracy Breakdown\",\n    metric: label,\n    value: `${c} (${pct(c, totalMatched)}%)`,\n    unit: \"\",\n  });\n}\n\noutput.push({ section: \"***\", metric: \"***\", value: \"***\", unit: \"***\" });\n\n// Notes (as requested)\noutput.push({\n  section: \"Notes\",\n  metric: \"Primary accuracy KPI\",\n  value: \"Answers: “When the bot answers, is it correct?” Calculated over attempted answers only (accurate + inaccurate).\",\n  unit: \"\",\n});\noutput.push({\n  section: \"Notes\",\n  metric: \"Secondary accuracy KPI\",\n  value: \"Answers: “Out of questions we claim to cover, how often do users actually get a correct answer?” Calculated over all matched questions (includes non-answers like refusals).\",\n  unit: \"\",\n});\noutput.push({\n  section: \"Notes\",\n  metric: \"Coverage definition\",\n  value: \"Coverage evaluates whether the user’s message maps to a known QnA entry.\",\n  unit: \"\",\n});\noutput.push({\n  section: \"Notes\",\n  metric: \"Accuracy definition\",\n  value: \"Accuracy evaluates the chatbot’s response quality for matched questions only.\",\n  unit: \"\",\n});\noutput.push({\n  section: \"Notes\",\n  metric: \"Percentages\",\n  value: \"Coverage % is over total pairs in this node. Accuracy breakdown % is over matched questions. Primary accuracy % is over attempted answers.\",\n  unit: \"\",\n});\n\n// Extra safety hint if the node is accidentally fed only matched rows\nif (totalPairs > 0 && covered === totalPairs && (cov_non_question + cov_unmatched_in + cov_unmatched_out) === 0) {\n  output.push({\n    section: \"Notes\",\n    metric: \"Pipeline check\",\n    value: \"If you are filtering to only matched questions before this node, coverage will show 100% by design. Feed all pairs into the summary node to get a true coverage denominator.\",\n    unit: \"\",\n  });\n}\n\nreturn output.map(o => ({ json: o }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        8320
+      ],
+      "id": "778262cc-f9e5-4789-a1fc-a5469fee1243",
+      "name": "Overall C+A Summary generator"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Overall Analysis Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_start",
+              "displayName": "session_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_end",
+              "displayName": "session_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_created_week",
+              "displayName": "session_created_week",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_last_active_week",
+              "displayName": "session_last_active_week",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_messages",
+              "displayName": "total_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "human_messages",
+              "displayName": "human_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_messages",
+              "displayName": "ai_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_duration_minutes",
+              "displayName": "session_duration_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "messages_per_minute",
+              "displayName": "messages_per_minute",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sub_sessions",
+              "displayName": "sub_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -304,
+        8320
+      ],
+      "id": "7329422f-c7d7-463c-8d09-d60358770cb8",
+      "name": "Append row in sheet3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -528,
+        8320
+      ],
+      "id": "95db7644-aace-4bc6-a22b-e84acc603765",
+      "name": "Merge4",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Overall Analysis Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -96,
+        8320
+      ],
+      "id": "1883861b-2ac0-4f09-aa6b-b748c73b1c17",
+      "name": "Delete rows or columns from sheet4",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        544,
+        8240
+      ],
+      "id": "1e64910e-eaae-4fae-9706-901d4e6216df",
+      "name": "Wait6",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## 2nd Validation through OpenAId ",
+        "height": 304,
+        "width": 960,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4736,
+        7392
+      ],
+      "typeVersion": 1,
+      "id": "2bbd6907-7510-4082-a5f7-2e42e2912c4b",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// -------------------------------\n// 1) Grab OpenAI output text safely\n// -------------------------------\nfunction getRawText(item) {\n  const content = item?.output?.[0]?.content;\n  if (!Array.isArray(content)) return null;\n\n  const texts = content\n    .map(c => (typeof c?.text === \"string\" ? c.text : null))\n    .filter(Boolean);\n\n  return texts.length ? texts.join(\"\\n\") : null;\n}\n\n// -------------------------------\n// 2) Try to parse JSON with fallbacks\n// -------------------------------\nfunction cleanAndExtractJson(raw) {\n  if (!raw || typeof raw !== \"string\") {\n    return { ok: false, error: \"rawText missing\", obj: null, raw };\n  }\n\n  let s = raw.replace(/^\\uFEFF/, \"\").trim();\n  s = s.replace(/^```(?:json)?/i, \"\").replace(/```$/i, \"\").trim();\n\n  try {\n    return { ok: true, error: null, obj: JSON.parse(s), raw: s };\n  } catch (e1) {\n    const firstBrace = s.indexOf(\"{\");\n    const lastBrace = s.lastIndexOf(\"}\");\n    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {\n      const candidate = s.slice(firstBrace, lastBrace + 1).trim();\n      try {\n        return { ok: true, error: null, obj: JSON.parse(candidate), raw: candidate };\n      } catch (e2) {\n        return {\n          ok: false,\n          error: `JSON.parse failed (direct + extracted). direct=${e1.message}; extracted=${e2.message}`,\n          obj: null,\n          raw: s\n        };\n      }\n    }\n    return {\n      ok: false,\n      error: `JSON.parse failed and no JSON braces found. ${e1.message}`,\n      obj: null,\n      raw: s\n    };\n  }\n}\n\n// -------------------------------\n// 3) Run\n// -------------------------------\nconst rawText = getRawText($json);\nconst parsed = cleanAndExtractJson(rawText);\nconst llm = parsed.obj || {};\n\n// Normalize identifier\nconst pairIndex = String(\n  llm.eval_id || llm.pair_index || $json.pair_index || \"\"\n).trim() || null;\n\n// IMPORTANT: do NOT throw. Keep pipeline alive.\nreturn {\n  json: {\n    // IDs\n    pair_index: pairIndex,\n\n    // Conversation (prefer upstream, fallback to LLM echo)\n    human_text: $json.human_text ?? llm.human_text ?? null,\n    ai_text: $json.ai_text ?? llm.ai_text ?? null,\n\n    // LLM outputs\n    coverage_main_llm: parsed.ok ? (llm.coverage_main ?? null) : null,\n    coverage_subtype_llm: parsed.ok ? (llm.coverage_subtype ?? null) : null,\n    coverage_rationale_llm: parsed.ok ? (llm.rationale ?? null) : null,\n    suggested_qna_topic_llm: parsed.ok ? (llm.suggested_qna_topic ?? null) : null,\n\n    // Debug\n    llm_parse_ok: parsed.ok,\n    llm_parse_error: parsed.ok ? null : parsed.error,\n    llm_raw_text_on_fail: parsed.ok ? null : parsed.raw\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4016,
+        7504
+      ],
+      "id": "1c4c08bd-e9c6-4f7b-9d78-718a9d3e5ed5",
+      "name": "Clean OpenAI O/P",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "content": "## Overall Analysis + Google Sheets ",
+        "height": 544,
+        "width": 3776,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -5056,
+        8640
+      ],
+      "typeVersion": 1,
+      "id": "1bd14c2c-5f3c-4700-a3df-7b8f3b8f31a8",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f791a3ad-b6c3-4398-a34a-2d20496a0ee5",
+              "leftValue": "={{ $json.coverage_main }}",
+              "rightValue": "Matched question",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2624,
+        7856
+      ],
+      "id": "474c9b5c-e96f-4a26-9630-fae54acefe4f",
+      "name": "If",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "advanced": true,
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "pair_index",
+              "field2": "pair_index"
+            }
+          ]
+        },
+        "joinMode": "enrichInput2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1472,
+        7872
+      ],
+      "id": "1eb6a9a9-e6ce-49dd-af4c-d4a5567b6e31",
+      "name": "Merge5",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2d39457d-c013-4d80-92c2-aa71d5c3d216",
+              "name": "pair_index",
+              "value": "={{ $json.pair_index }}",
+              "type": "string"
+            },
+            {
+              "id": "b040634a-8685-4f3c-9e44-b3ca8b0b470e",
+              "name": "session_id",
+              "value": "={{ $json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "3c81ca04-b7c5-4def-bf8c-cf63eac71e97",
+              "name": "human_text",
+              "value": "={{ $json.human_text }}",
+              "type": "string"
+            },
+            {
+              "id": "42dc3ad0-88a4-4d14-abab-3d8470b7d2ff",
+              "name": "ai_text",
+              "value": "={{ $json.ai_text }}",
+              "type": "string"
+            },
+            {
+              "id": "856dae35-0f83-4222-b3fb-78b8938edde1",
+              "name": "coverage_main",
+              "value": "={{ $json.coverage_main }}",
+              "type": "string"
+            },
+            {
+              "id": "8008ae32-6af8-4fc3-b4cf-0958045570cb",
+              "name": "coverage_subtype",
+              "value": "={{ $json.coverage_subtype }}",
+              "type": "string"
+            },
+            {
+              "id": "a13b7263-326b-4f29-8762-cf3216ee6dea",
+              "name": "coverage_reason",
+              "value": "={{ $json.coverage_reason }}",
+              "type": "string"
+            },
+            {
+              "id": "3b9d059d-cb3d-4226-aace-6e081774c4cf",
+              "name": "accuracy_main",
+              "value": "={{ $json.accuracy_main }}",
+              "type": "string"
+            },
+            {
+              "id": "3acb6f7a-68fb-4995-b196-0bdb1210c716",
+              "name": "accuracy_subtype",
+              "value": "={{ $json.accuracy_subtype }}",
+              "type": "string"
+            },
+            {
+              "id": "c444f088-601d-4f43-850b-81a97486b8ac",
+              "name": "accuracy_rationale",
+              "value": "={{ $json.accuracy_rationale }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -976,
+        8320
+      ],
+      "id": "0984f5d9-ff6c-4d1c-be40-46149594e51c",
+      "name": "Combined Coverage + Accuracy Output",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "188f6cac-4fa8-4483-bdcd-04dfefed17ae",
+              "name": "﻿pair_index",
+              "value": "={{ $json[\"﻿pair_index\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "09d5aca9-4b48-49ba-bccb-f2ce64934c5b",
+              "name": "session_id",
+              "value": "={{ $json.session_id }}",
+              "type": "string"
+            },
+            {
+              "id": "c4841eb0-980d-4b38-8338-50dd4941a014",
+              "name": "human_text_en",
+              "value": "={{ $json.human_text_en }}",
+              "type": "string"
+            },
+            {
+              "id": "5c58fe1c-71a3-4a13-87fa-aadf4f1f2a9f",
+              "name": "ai_text",
+              "value": "={{ $json.ai_text }}",
+              "type": "string"
+            },
+            {
+              "id": "39ea95e4-0c67-4a45-9ec9-c9b207f19a15",
+              "name": "human_timestamp",
+              "value": "={{ $json.human_timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "4badb611-10d9-4fc3-90fc-fb8af92204b0",
+              "name": "ai_timestamp",
+              "value": "={{ $json.ai_timestamp }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3824,
+        7808
+      ],
+      "id": "e0e2cc6d-5990-4e9a-bd00-486d19ca8bc6",
+      "name": "Edit Fields2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "text": "={{ $json[\"﻿pair_index\"] }} - {{ $json.human_text }}",
+        "translateTo": "en"
+      },
+      "type": "n8n-nodes-base.googleTranslate",
+      "typeVersion": 2,
+      "position": [
+        -4272,
+        7968
+      ],
+      "id": "ce1209d1-fce9-493e-bcf7-1398a30e248f",
+      "name": "Translate a language",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleTranslateOAuth2Api": {
+          "id": "b33ZFkpwhGaLZsKn",
+          "name": "Google Translate account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n// Cleans translatedText, splits \"pair_index - message\", decodes HTML entities,\n// removes invisible chars, normalizes whitespace.\n\nfunction decodeHtmlEntities(str) {\n  // Handles common named entities + numeric decimal/hex entities\n  if (!str) return \"\";\n\n  // Named entities minimal map (extend if needed)\n  const named = {\n    \"&amp;\": \"&\",\n    \"&lt;\": \"<\",\n    \"&gt;\": \">\",\n    \"&quot;\": '\"',\n    \"&#39;\": \"'\",\n    \"&apos;\": \"'\",\n    \"&nbsp;\": \" \",\n  };\n\n  // Replace named entities first\n  let s = String(str);\n  for (const [k, v] of Object.entries(named)) {\n    s = s.split(k).join(v);\n  }\n\n  // Replace numeric entities: &#123; and &#x1F44D;\n  s = s.replace(/&#(\\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));\n  s = s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));\n\n  return s;\n}\n\nfunction cleanText(str) {\n  if (str == null) return \"\";\n\n  let s = String(str);\n\n  // Decode HTML entities from translation node output\n  s = decodeHtmlEntities(s);\n\n  // Remove BOM and zero-width chars (common invisible troublemakers)\n  s = s.replace(/[\\uFEFF\\u200B\\u200C\\u200D\\u2060]/g, \"\");\n\n  // Convert NBSP to normal space (just in case it came through as char, not entity)\n  s = s.replace(/\\u00A0/g, \" \");\n\n  // Normalize whitespace (spaces, tabs, newlines)\n  s = s.replace(/\\s+/g, \" \").trim();\n\n  return s;\n}\n\nfunction extractPairIndexAndText(text) {\n  const cleaned = cleanText(text);\n\n  // Split only on first occurrence of \" - \"\n  const splitIndex = cleaned.indexOf(\" - \");\n\n  let pair_index = null;\n  let human_text_en = cleaned;\n\n  if (splitIndex !== -1) {\n    const left = cleaned.slice(0, splitIndex).trim();\n    const right = cleaned.slice(splitIndex + 3).trim();\n\n    // Only accept pair_index if it looks like an integer (protects against accidental splits)\n    if (/^\\d+$/.test(left)) {\n      pair_index = left;\n      human_text_en = right;\n    } else {\n      // Not a real pair index; keep full text as human_text_en\n      pair_index = null;\n      human_text_en = cleaned;\n    }\n  }\n\n  return { pair_index, human_text_en };\n}\n\nreturn items.map(item => {\n  const raw = item.json.translatedText ?? \"\";\n  const { pair_index, human_text_en } = extractPairIndexAndText(raw);\n\n  return {\n    json: {\n      ...item.json,\n      // Optional: keep raw for debugging; remove later if you don't want it\n      raw_translatedText: raw,\n\n      pair_index,\n      human_text_en,\n\n      // Keep language, but normalize empty / undefined\n      human_lang: item.json.detectedSourceLanguage ?? null\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4112,
+        7968
+      ],
+      "id": "3a76d37e-7c98-4b02-911a-f6671d3afe02",
+      "name": "Code in JavaScript1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "advanced": true,
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "﻿pair_index",
+              "field2": "pair_index"
+            }
+          ]
+        },
+        "joinMode": "enrichInput1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3968,
+        7808
+      ],
+      "id": "de6992f2-11c1-45a3-94e1-476f1f3b00a0",
+      "name": "Merge7",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// =======================================================\n// COVERAGE EVALUATION — FINAL REFINED VERSION (n8n SAFE)\n// Supports Mother + FLW with minimal FLW normalization\n// =======================================================\n\n// ---------- CONFIG ----------\nconst QNA_NODE = \"Extract qna bank o/ps\";\nconst MATCH_THRESHOLD = 0.20;\n\n// ---------- LOAD DATA ----------\nconst messages = $input.all();\nconst qnaItems = $items(QNA_NODE).map((i, idx) => ({\n  id: i.json.qna_id ?? i.json.id ?? idx,\n  question: (i.json.question || i.json.Question || \"\").trim()\n}));\n\n// ---------- TEXT HELPERS ----------\nfunction normalize(t) {\n  return String(t || \"\")\n    .toLowerCase()\n    .replace(/[^a-z0-9\\s]/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\n// Remove FLW “teaching wrappers” without changing meaning\nfunction normalizeFLWTeaching(t) {\n  return t.replace(\n    /^(if a mother asks me|how do i explain|what should i tell a mother|how can i explain to a mother|what is the best way to explain)\\b/i,\n    \"\"\n  ).trim();\n}\n\n// ---------- SIMILARITY ----------\nfunction jaccard(a, b) {\n  const A = new Set(a.split(\" \").filter(w => w.length > 2));\n  const B = new Set(b.split(\" \").filter(w => w.length > 2));\n  if (!A.size || !B.size) return 0;\n\n  let inter = 0;\n  for (const w of A) if (B.has(w)) inter++;\n  return inter / (A.size + B.size - inter || 1);\n}\n\n// ---------- INTENT HELPERS ----------\nfunction isGreeting(t) {\n  return /^(hi|hello|hey|hey there|good morning|good evening|good afternoon|bye|goodbye|thanks|thank you|thank you very much|thanks a lot|i am very satisfied|i appreciate|amen|amin|peace be upon you|🙏|👍)$/i\n    .test(t);\n}\n\nfunction isLanguageChoice(t) {\n  return /^(hausa|english|pidgin|yoruba|igbo|swahili)$/i.test(t);\n}\n\nfunction isAcknowledgement(t) {\n  return /^(ok|okay|yes|no|eh|ehh|i understand|very good|ya kk)$/i.test(t);\n}\n\nfunction isQuestionLike(t) {\n  return (\n    t.includes(\"?\") ||\n    /^(what|why|how|when|where|who|can|should|is|are|do|does|did|will)\\b/i.test(t)\n  );\n}\n\nfunction isHealthStatement(t) {\n  return /(i am|i have|i feel|my baby|my child|pregnan|postpartum|dilation|cm|pain|swelling|urinate|bleeding|movement|stool|cry|fever|breast|breastfeeding)/i\n    .test(t);\n}\n\nfunction inScope(t) {\n  return /(baby|child|infant|newborn|mother|pregnan|postpartum|breast|breastfeeding|milk|labor|labour|delivery|dilation|pain|fever|stool|cry|health|illness|kmc|kangaroo)/i\n    .test(t);\n}\n\n// =======================================================\n// MAIN PROCESS\n// =======================================================\nreturn messages.map(item => {\n  const text = (item.json.human_text_en || \"\").trim();\n  let norm = normalize(text);\n\n  const base = {\n    ...item.json,\n    coverage_text_used: text || null,\n    coverage_text_source: \"human_text_en\",\n    matched_qna_id: null\n  };\n\n  // 1. Empty input\n  if (!text) {\n    return {\n      json: {\n        ...base,\n        coverage_main: \"Non-question\",\n        coverage_subtype: \"clarification\",\n        coverage_reason: \"Missing or empty message\"\n      }\n    };\n  }\n\n  // 2. Greetings / niceties\n  if (isGreeting(norm)) {\n    return {\n      json: {\n        ...base,\n        coverage_main: \"Non-question\",\n        coverage_subtype: \"niceties_greetings\",\n        coverage_reason: \"Greeting, gratitude, or social response\"\n      }\n    };\n  }\n\n  // 3. Language selection\n  if (isLanguageChoice(norm)) {\n    return {\n      json: {\n        ...base,\n        coverage_main: \"Non-question\",\n        coverage_subtype: \"language_selection\",\n        coverage_reason: \"Language choice / conversation control\"\n      }\n    };\n  }\n\n  // 4. Acknowledgements\n  if (isAcknowledgement(norm)) {\n    return {\n      json: {\n        ...base,\n        coverage_main: \"Non-question\",\n        coverage_subtype: \"clarification\",\n        coverage_reason: \"Acknowledgement / continuation\"\n      }\n    };\n  }\n\n  // 5. Question intent\n  if (isQuestionLike(norm)) {\n\n    if (!inScope(norm)) {\n      return {\n        json: {\n          ...base,\n          coverage_main: \"Unmatched question\",\n          coverage_subtype: \"out_of_scope\",\n          coverage_reason: \"Question not related to MBW / KMC topics\"\n        }\n      };\n    }\n\n    // 🔹 FLW-only normalization (safe, non-destructive)\n    if (item.json.Bot === \"FLW\") {\n      norm = normalizeFLWTeaching(norm);\n    }\n\n    let bestScore = 0;\n    let bestMatch = null;\n\n    for (const q of qnaItems) {\n      if (!q.question) continue;\n      const score = jaccard(norm, normalize(q.question));\n      if (score > bestScore) {\n        bestScore = score;\n        bestMatch = q;\n      }\n    }\n\n    if (bestMatch && bestScore >= MATCH_THRESHOLD) {\n      return {\n        json: {\n          ...base,\n          coverage_main: \"Matched question\",\n          matched_qna_id: bestMatch.id,\n          match_score: Number(bestScore.toFixed(2)),\n          coverage_reason: `Matched QnA Bank (${Math.round(bestScore * 100)}%)`\n        }\n      };\n    }\n\n    return {\n      json: {\n        ...base,\n        coverage_main: \"Unmatched question\",\n        coverage_subtype: \"in_scope\",\n        coverage_reason: \"In-scope question not found in QnA Bank\"\n      }\n    };\n  }\n\n  // 6. Health statement (not a question)\n  if (isHealthStatement(norm)) {\n    return {\n      json: {\n        ...base,\n        coverage_main: \"Non-question\",\n        coverage_subtype: \"health_statement\",\n        coverage_reason: \"Health statement without question intent\"\n      }\n    };\n  }\n\n  // 7. Fallback\n  return {\n    json: {\n      ...base,\n      coverage_main: \"Unmatched question\",\n      coverage_subtype: \"out_of_scope\",\n      coverage_reason: \"Not related to MBW / KMC topics\"\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3264,
+        7904
+      ],
+      "id": "92018c42-048a-4442-a617-613661fa0500",
+      "name": "Coverage Analysis: JS",
+      "alwaysOutputData": true,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5ce407e1-3d8d-4c25-a0f3-03b8b2eb0d31",
+              "name": "Bot",
+              "value": "={{ $json.Bot }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4640,
+        8224
+      ],
+      "id": "080a583d-cea8-4dfb-b720-e05c31286517",
+      "name": "Edit Fields3",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3648,
+        7888
+      ],
+      "id": "03d3de93-6a39-4ac2-a5c4-24bc7d195d55",
+      "name": "Merge6",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "User Engagement Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_active_users",
+              "displayName": "total_active_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "core_users_2plus_weeks",
+              "displayName": "core_users_2plus_weeks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_1_week_active",
+              "displayName": "users_1_week_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_2_weeks_active",
+              "displayName": "users_2_weeks_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_3_weeks_active",
+              "displayName": "users_3_weeks_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_4plus_weeks_active",
+              "displayName": "users_4plus_weeks_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "top_10pct_users",
+              "displayName": "top_10pct_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pct_sessions_by_top_10pct_users",
+              "displayName": "pct_sessions_by_top_10pct_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "active_sessions",
+              "displayName": "active_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "active_weeks",
+              "displayName": "active_weeks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "active_months",
+              "displayName": "active_months",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "last_active_month",
+              "displayName": "last_active_month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -752,
+        9104
+      ],
+      "id": "4c490bd3-9f1f-45e6-a8aa-509b9eb09edc",
+      "name": "Append row in sheet4",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -976,
+        9104
+      ],
+      "id": "4e314a11-9cfe-4f2a-be6c-2160c0583406",
+      "name": "Merge8",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "User Engagement Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -528,
+        9104
+      ],
+      "id": "2dfd9694-ef35-4285-9282-51b3b7b638a5",
+      "name": "Delete rows or columns from sheet5",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node — USER_ENGAGEMENT_ACTIVITY (REFINED)\n *\n * Adds 1-line notes next to section headers.\n * No logic, schema, or ordering changes.\n */\n\n// ============================\n// CONFIG\n// ============================\nconst TOP_PCT = 0.10;\n\n// ============================\n// FIELD MAPPING\n// ============================\nconst FIELDS = {\n  timestamp: \"Message Date\",\n  sessionId: \"Session ID\",\n  userIdPrimary: \"Participant Public ID\",\n  userIdFallback1: \"Participant Identifier\",\n  userIdFallback2: \"Participant Name\",\n};\n\n// ============================\n// HELPERS\n// ============================\nfunction toDate(v) {\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d;\n}\n\nfunction getUserId(row) {\n  return (\n    row[FIELDS.userIdPrimary] ??\n    row[FIELDS.userIdFallback1] ??\n    row[FIELDS.userIdFallback2] ??\n    \"UNKNOWN_USER\"\n  );\n}\n\nfunction pad2(n) {\n  return String(n).padStart(2, \"0\");\n}\n\nfunction getMonthKeyUTC(date) {\n  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}`;\n}\n\nfunction getWeekStartISO(date) {\n  const d = new Date(Date.UTC(\n    date.getUTCFullYear(),\n    date.getUTCMonth(),\n    date.getUTCDate()\n  ));\n  const day = d.getUTCDay() || 7;\n  d.setUTCDate(d.getUTCDate() - (day - 1));\n  return d.toISOString().slice(0, 10);\n}\n\nfunction round1(n) {\n  return Math.round(n * 10) / 10;\n}\n\n// ============================\n// 1) COLLECT EVENTS\n// ============================\nconst monthUser = {};\nconst monthUsers = {};\nconst monthSessions = {};\nconst userOverall = {};\nconst userMonth = {};\n\nfor (const item of items) {\n  const row = item.json || {};\n  const ts = toDate(row[FIELDS.timestamp]);\n  const sessionId = row[FIELDS.sessionId];\n  if (!ts || !sessionId) continue;\n\n  const userId = String(getUserId(row));\n  const monthKey = getMonthKeyUTC(ts);\n  const weekKey = getWeekStartISO(ts);\n\n  monthUsers[monthKey] ??= new Set();\n  monthUsers[monthKey].add(userId);\n\n  monthSessions[monthKey] ??= new Set();\n  monthSessions[monthKey].add(sessionId);\n\n  monthUser[monthKey] ??= {};\n  monthUser[monthKey][userId] ??= { weeks: new Set(), sessions: new Set() };\n  monthUser[monthKey][userId].weeks.add(weekKey);\n  monthUser[monthKey][userId].sessions.add(sessionId);\n\n  userOverall[userId] ??= {\n    weeks: new Set(),\n    months: new Set(),\n    sessions: new Set(),\n    lastMonth: monthKey,\n  };\n  userOverall[userId].weeks.add(weekKey);\n  userOverall[userId].months.add(monthKey);\n  userOverall[userId].sessions.add(sessionId);\n  if (monthKey > userOverall[userId].lastMonth) {\n    userOverall[userId].lastMonth = monthKey;\n  }\n\n  userMonth[userId] ??= {};\n  userMonth[userId][monthKey] ??= { weeks: new Set(), sessions: new Set() };\n  userMonth[userId][monthKey].weeks.add(weekKey);\n  userMonth[userId][monthKey].sessions.add(sessionId);\n}\n\n// ============================\n// 2) SECTION 1 — MONTHLY ENGAGEMENT\n// ============================\nconst months = Object.keys(monthUsers).sort();\n\nconst section1 = [\n  {\n    section: \"USER_ENGAGEMENT_MONTHLY_HEADER\",\n    section_note: \"Monthly view of how many users were active and how consistently they engaged across weeks.\",\n  },\n  {\n    section: \"USER_ENGAGEMENT_MONTHLY_COLUMNS\",\n    month: \"Month\",\n    total_active_users: \"Total Active Users\",\n    core_users_2plus_weeks: \"Core Users (≥2 weeks)\",\n    users_1_week_active: \"1 Week\",\n    users_2_weeks_active: \"2 Weeks\",\n    users_3_weeks_active: \"3 Weeks\",\n    users_4plus_weeks_active: \"4+ Weeks\",\n  },\n];\n\nfor (const m of months) {\n  let w1 = 0, w2 = 0, w3 = 0, w4p = 0;\n  for (const u of monthUsers[m]) {\n    const aw = monthUser[m][u].weeks.size;\n    if (aw === 1) w1++;\n    else if (aw === 2) w2++;\n    else if (aw === 3) w3++;\n    else if (aw >= 4) w4p++;\n  }\n  section1.push({\n    section: \"USER_ENGAGEMENT_MONTHLY\",\n    month: m,\n    total_active_users: monthUsers[m].size,\n    core_users_2plus_weeks: w2 + w3 + w4p,\n    users_1_week_active: w1,\n    users_2_weeks_active: w2,\n    users_3_weeks_active: w3,\n    users_4plus_weeks_active: w4p,\n  });\n}\n\n// ============================\n// 3) SECTION 2 — TOP 10% CONCENTRATION\n// ============================\nconst section2 = [\n  {\n    section: \"USER_CONCENTRATION_TOP10_HEADER\",\n    section_note: \"Shows whether engagement is evenly distributed or dominated by a small group of heavy users.\",\n  },\n  {\n    section: \"USER_CONCENTRATION_TOP10_COLUMNS\",\n    month: \"Month\",\n    top_10pct_users: \"Top 10% Users\",\n    pct_sessions_by_top_10pct_users: \"% Sessions by Top 10%\",\n  },\n];\n\nfor (const m of months) {\n  const users = [...monthUsers[m]];\n  const totalSessions = monthSessions[m].size;\n\n  const ranked = users\n    .map(u => ({ u, c: monthUser[m][u].sessions.size }))\n    .sort((a, b) => b.c - a.c);\n\n  const topN = Math.max(1, Math.ceil(users.length * TOP_PCT));\n  const topSessions = ranked.slice(0, topN).reduce((s, r) => s + r.c, 0);\n\n  section2.push({\n    section: \"USER_CONCENTRATION_TOP10\",\n    month: m,\n    top_10pct_users: topN,\n    pct_sessions_by_top_10pct_users: totalSessions\n      ? round1((topSessions / totalSessions) * 100)\n      : 0,\n  });\n}\n\n// ============================\n// 4) SECTION 3 — USER DRILLDOWN (OVERALL)\n// ============================\nconst section3 = [\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_HEADER\",\n    section_note: \"User-level lifetime engagement summary across sessions, weeks, and months.\",\n  },\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_COLUMNS\",\n    user_id: \"User ID\",\n    active_sessions: \"Active Sessions\",\n    active_weeks: \"Active Weeks\",\n    active_months: \"Active Months\",\n    last_active_month: \"Last Active Month\",\n  },\n];\n\nObject.entries(userOverall)\n  .sort((a, b) => b[1].months.size - a[1].months.size)\n  .forEach(([u, d]) => {\n    section3.push({\n      section: \"USER_ENGAGEMENT_DRILLDOWN\",\n      user_id: u,\n      active_sessions: d.sessions.size,\n      active_weeks: d.weeks.size,\n      active_months: d.months.size,\n      last_active_month: d.lastMonth,\n    });\n  });\n\n// ============================\n// 5) SECTION 4 — USER DRILLDOWN (MONTHLY)\n// ============================\nconst section4 = [\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_MONTHLY_HEADER\",\n    section_note: \"Month-by-month activity for each user to understand engagement timing and drop-offs.\",\n  },\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_MONTHLY_COLUMNS\",\n    user_id: \"User ID\",\n    month: \"Month\",\n    active_weeks: \"Active Weeks\",\n    active_sessions: \"Active Sessions\",\n  },\n];\n\nObject.entries(userMonth).forEach(([u, monthsObj]) => {\n  Object.entries(monthsObj).forEach(([m, d]) => {\n    section4.push({\n      section: \"USER_ENGAGEMENT_DRILLDOWN_MONTHLY\",\n      user_id: u,\n      month: m,\n      active_weeks: d.weeks.size,\n      active_sessions: d.sessions.size,\n    });\n  });\n});\n\n// ============================\n// OUTPUT\n// ============================\nreturn [\n  ...section1,\n  { section: \"***\" },\n  ...section2,\n  { section: \"***\" },\n  ...section3,\n  { section: \"***\" },\n  ...section4,\n].map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        9008
+      ],
+      "id": "fdf75882-6a51-4cdc-bec3-4d8eb4913b78",
+      "name": "User Engagement Summary Generator",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        752,
+        8368
+      ],
+      "id": "9f78c046-1c3e-470d-bc74-989edba41c8b",
+      "name": "Wait7",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "=Transcript",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -4976,
+        10064
+      ],
+      "id": "cc96a43e-3043-4014-b989-9b864f8e43ee",
+      "name": "Extract from File1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "asidtharthan@dimagi.com",
+        "toEmail": "={{ $items(\"Overall Bot Summary Analysis\")[0].json[\"Email ID\"] }}",
+        "subject": "MBW UAT: Coverage & Accuracy Analysis Results",
+        "html": "=Your Coverage & Accuracy analysis is complete.\n\nGoogle Sheet Url:\n{{ $json.spreadsheetUrl }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        -1984,
+        10080
+      ],
+      "id": "28a4d157-1a43-4790-80b2-516e0d2f15d0",
+      "name": "Send email: Coverage Analysis O/P1",
+      "webhookId": "47c0f65a-adc7-4ad0-8960-3e3ce1f4bc81",
+      "credentials": {
+        "smtp": {
+          "id": "yowrh47YdfSbrKX6",
+          "name": "SMTP account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "title": "=MBW Chatbot - Coverage & Accuracy Analysis - {{ $now }}",
+        "sheetsUi": {
+          "sheetValues": [
+            {
+              "title": "User Engagement Summary"
+            },
+            {
+              "title": "Weekly Activity Summary"
+            },
+            {
+              "title": "Weekly Session Summary"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -4976,
+        10400
+      ],
+      "id": "94b0b02a-c8f1-4be7-bb26-f6b316a7906e",
+      "name": "Create spreadsheet1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3942d077-4113-4dfa-8e48-e2d3276fc94e",
+              "name": "spreadsheetId",
+              "value": "={{ $json.spreadsheetId }}",
+              "type": "string"
+            },
+            {
+              "id": "5f6ba473-0cc2-40fd-acbf-241d05bd9ee6",
+              "name": "spreadsheetUrl",
+              "value": "={{ $json.spreadsheetUrl }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4192,
+        10416
+      ],
+      "id": "01f695a1-6b83-447d-8f87-0b67729c900f",
+      "name": "Edit Fields4"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1kaZjtnNeJGAROGlsmqvg7PrJAIJvIQdE",
+          "mode": "list",
+          "cachedResultName": "MBW Chatbot Analysis",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1kaZjtnNeJGAROGlsmqvg7PrJAIJvIQdE"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -4688,
+        10496
+      ],
+      "id": "b7deb030-791c-4933-9355-3f819cb83806",
+      "name": "Move file1",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "kw9B8YDxgJrwqRuU",
+          "name": "Google Drive account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -4400,
+        10416
+      ],
+      "id": "6e39adff-bc3f-4ba7-b927-afea9c6a1cb3",
+      "name": "Wait9",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Activity Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "week_start",
+              "displayName": "week_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_active_users",
+              "displayName": "weekly_active_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_new_users",
+              "displayName": "weekly_new_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_returning_users",
+              "displayName": "weekly_returning_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_sessions",
+              "displayName": "weekly_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_total_messages",
+              "displayName": "weekly_total_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_human_messages",
+              "displayName": "weekly_human_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_ai_messages",
+              "displayName": "weekly_ai_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "weekly_total_session_minutes",
+              "displayName": "weekly_total_session_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "avg_session_minutes",
+              "displayName": "avg_session_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3424,
+        9888
+      ],
+      "id": "e3b3a81d-8eb5-48e1-9f96-5d1fd0660349",
+      "name": "Append row in sheet5",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3648,
+        9888
+      ],
+      "id": "0067ec50-e9c4-4166-8008-04f71ddd02d3",
+      "name": "Merge9",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "useDataOfInput": 2
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2816,
+        9904
+      ],
+      "id": "fe202086-99bc-4125-8fb2-4f8e287fd856",
+      "name": "Wait10",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Activity Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3200,
+        9888
+      ],
+      "id": "78259cdc-09bc-47db-982b-66133298b96e",
+      "name": "Delete rows or columns from sheet6",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node — WEEKLY_SUMMARY (Minimal, Leadership-Safe)\n *\n * OUTPUT:\n * One row per week with:\n * - Users (active / new / returning)\n * - Sessions (any activity in week)\n * - Messages (human / ai)\n * - Session minutes (week-only contribution)\n */\n\n// ============================\n// CONFIG\n// ============================\nconst INACTIVITY_LIMIT_MINUTES = 30;\nconst INACTIVITY_MS = INACTIVITY_LIMIT_MINUTES * 60 * 1000;\n\n// ============================\n// FIELD MAPPING\n// ============================\nconst FIELDS = {\n  timestamp: \"Message Date\",\n  messageType: \"Message Type\", // human | ai\n  sessionId: \"Session ID\",\n  userIdPrimary: \"Participant Public ID\",\n  userIdFallback1: \"Participant Identifier\",\n  userIdFallback2: \"Participant Name\",\n};\n\n// ============================\n// HELPERS\n// ============================\nfunction toDate(v) {\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d;\n}\n\nfunction round1(n) {\n  return Math.round(n * 10) / 10;\n}\n\nfunction getUserId(row) {\n  return (\n    row[FIELDS.userIdPrimary] ??\n    row[FIELDS.userIdFallback1] ??\n    row[FIELDS.userIdFallback2] ??\n    \"UNKNOWN_USER\"\n  );\n}\n\nfunction getWeekStartISO(date) {\n  const d = new Date(Date.UTC(\n    date.getUTCFullYear(),\n    date.getUTCMonth(),\n    date.getUTCDate(), 0, 0, 0, 0\n  ));\n  const day = d.getUTCDay() || 7; // Sunday=7\n  d.setUTCDate(d.getUTCDate() - (day - 1));\n  return d.toISOString().slice(0, 10);\n}\n\nfunction weekRange(weekStartISO) {\n  const start = new Date(weekStartISO + \"T00:00:00.000Z\");\n  const end = new Date(start);\n  end.setUTCDate(end.getUTCDate() + 7);\n  return { start, end };\n}\n\n// ============================\n// 1) COLLECT MESSAGE EVENTS\n// ============================\nconst messages = [];\nconst sessions = {};\nconst userFirstSeenWeek = {};\n\nfor (const item of items) {\n  const row = item.json || {};\n  const ts = toDate(row[FIELDS.timestamp]);\n  const sessionId = row[FIELDS.sessionId];\n  if (!ts || !sessionId) continue;\n\n  const userId = String(getUserId(row));\n  const msgType = (row[FIELDS.messageType] || \"\").toLowerCase();\n  const weekStart = getWeekStartISO(ts);\n\n  messages.push({\n    timestamp: ts,\n    week_start: weekStart,\n    user_id: userId,\n    message_type: msgType,\n    session_id: sessionId,\n  });\n\n  if (!userFirstSeenWeek[userId] || weekStart < userFirstSeenWeek[userId]) {\n    userFirstSeenWeek[userId] = weekStart;\n  }\n\n  if (!sessions[sessionId]) sessions[sessionId] = [];\n  sessions[sessionId].push({ timestamp: ts });\n}\n\n// ============================\n// 2) BUILD WEEKLY CONTAINERS\n// ============================\nconst weekly = {};\n\nfunction ensureWeek(week) {\n  if (!weekly[week]) {\n    weekly[week] = {\n      users: new Set(),\n      newUsers: new Set(),\n      sessions: new Set(),\n      totalMessages: 0,\n      humanMessages: 0,\n      aiMessages: 0,\n      sessionMinutes: 0,\n    };\n  }\n}\n\n// ============================\n// 3) MESSAGE-LEVEL METRICS\n// ============================\nfor (const m of messages) {\n  ensureWeek(m.week_start);\n  const w = weekly[m.week_start];\n\n  w.users.add(m.user_id);\n  w.totalMessages += 1;\n  if (m.message_type === \"human\") w.humanMessages += 1;\n  if (m.message_type === \"ai\") w.aiMessages += 1;\n\n  if (userFirstSeenWeek[m.user_id] === m.week_start) {\n    w.newUsers.add(m.user_id);\n  }\n}\n\n// ============================\n// 4) SESSION MINUTES (WEEK-AWARE SPLIT)\n// ============================\nfor (const [sessionId, events] of Object.entries(sessions)) {\n  const sorted = events.sort((a, b) => a.timestamp - b.timestamp);\n\n  for (let i = 1; i < sorted.length; i++) {\n    const prev = sorted[i - 1].timestamp;\n    const curr = sorted[i].timestamp;\n    const gap = curr - prev;\n    if (gap > INACTIVITY_MS) continue;\n\n    const startWeek = getWeekStartISO(prev);\n    const endWeek = getWeekStartISO(curr);\n\n    if (startWeek === endWeek) {\n      ensureWeek(startWeek);\n      weekly[startWeek].sessions.add(sessionId);\n      weekly[startWeek].sessionMinutes += gap / (1000 * 60);\n    } else {\n      // Split across week boundary\n      const { end: weekEnd } = weekRange(startWeek);\n      const firstPart = weekEnd - prev;\n      const secondPart = curr - weekEnd;\n\n      ensureWeek(startWeek);\n      weekly[startWeek].sessions.add(sessionId);\n      weekly[startWeek].sessionMinutes += firstPart / (1000 * 60);\n\n      ensureWeek(endWeek);\n      weekly[endWeek].sessions.add(sessionId);\n      weekly[endWeek].sessionMinutes += secondPart / (1000 * 60);\n    }\n  }\n}\n\n// ============================\n// 5) FINAL WEEKLY OUTPUT\n// ============================\nconst output = Object.entries(weekly)\n  .sort((a, b) => a[0].localeCompare(b[0]))\n  .map(([week, w]) => {\n    const sessionsCount = w.sessions.size;\n    return {\n      section: \"WEEKLY_SUMMARY\",\n      week_start: week,\n      weekly_active_users: w.users.size,\n      weekly_new_users: w.newUsers.size,\n      weekly_returning_users: w.users.size - w.newUsers.size,\n      weekly_sessions: sessionsCount,\n      weekly_total_messages: w.totalMessages,\n      weekly_human_messages: w.humanMessages,\n      weekly_ai_messages: w.aiMessages,\n      weekly_total_session_minutes: round1(w.sessionMinutes),\n      avg_session_minutes:\n        sessionsCount > 0 ? round1(w.sessionMinutes / sessionsCount) : 0,\n    };\n  });\n\nreturn output.map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3872,
+        9872
+      ],
+      "id": "2f07b4bb-6bdb-4933-a804-ac68f61686b1",
+      "name": "Weekly Activity Summary Generator1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Session Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "spreadsheetId",
+              "displayName": "spreadsheetId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "spreadsheetUrl",
+              "displayName": "spreadsheetUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_start",
+              "displayName": "session_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_end",
+              "displayName": "session_end",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_created_week",
+              "displayName": "session_created_week",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_last_active_week",
+              "displayName": "session_last_active_week",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_messages",
+              "displayName": "total_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "human_messages",
+              "displayName": "human_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ai_messages",
+              "displayName": "ai_messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_duration_minutes",
+              "displayName": "session_duration_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "messages_per_minute",
+              "displayName": "messages_per_minute",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sub_sessions",
+              "displayName": "sub_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3424,
+        10176
+      ],
+      "id": "93694227-f4cf-4136-949e-7b8aa66a2458",
+      "name": "Append row in sheet6",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3648,
+        10176
+      ],
+      "id": "2c834615-f5b3-492e-81b1-914292f5dde5",
+      "name": "Merge10",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Weekly Session Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3200,
+        10176
+      ],
+      "id": "d80b2c7f-78d1-4bc0-97ab-dff7309737de",
+      "name": "Delete rows or columns from sheet7",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node — SESSION_DETAILS (Final with bottom notes)\n *\n * - One row per session\n * - Sorted earliest → latest\n * - Adds a spacer row and explanatory notes at the bottom\n */\n\n// ============================\n// CONFIG\n// ============================\nconst INACTIVITY_LIMIT_MINUTES = 30;\nconst INACTIVITY_MS = INACTIVITY_LIMIT_MINUTES * 60 * 1000;\n\n// ============================\n// FIELD MAPPING\n// ============================\nconst FIELDS = {\n  timestamp: \"Message Date\",\n  messageType: \"Message Type\",\n  sessionId: \"Session ID\",\n  userIdPrimary: \"Participant Public ID\",\n  userIdFallback1: \"Participant Identifier\",\n  userIdFallback2: \"Participant Name\",\n};\n\n// ============================\n// HELPERS\n// ============================\nfunction toDate(v) {\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d;\n}\nfunction round1(n) {\n  return Math.round(n * 10) / 10;\n}\nfunction getUserId(row) {\n  return (\n    row[FIELDS.userIdPrimary] ??\n    row[FIELDS.userIdFallback1] ??\n    row[FIELDS.userIdFallback2] ??\n    \"UNKNOWN_USER\"\n  );\n}\nfunction getWeekStartISO(date) {\n  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));\n  const day = d.getUTCDay() || 7;\n  d.setUTCDate(d.getUTCDate() - (day - 1));\n  return d.toISOString().slice(0, 10);\n}\n\n// ============================\n// 1) GROUP BY SESSION\n// ============================\nconst sessions = {};\n\nfor (const item of items) {\n  const row = item.json || {};\n  const ts = toDate(row[FIELDS.timestamp]);\n  const sessionId = row[FIELDS.sessionId];\n  if (!ts || !sessionId) continue;\n\n  if (!sessions[sessionId]) {\n    sessions[sessionId] = {\n      session_id: sessionId,\n      user_id: getUserId(row),\n      messages: [],\n    };\n  }\n\n  sessions[sessionId].messages.push({\n    timestamp: ts,\n    message_type: (row[FIELDS.messageType] || \"\").toLowerCase(),\n  });\n}\n\n// ============================\n// 2) BUILD SESSION ROWS\n// ============================\nconst rows = [];\n\nfor (const s of Object.values(sessions)) {\n  const msgs = s.messages.sort((a, b) => a.timestamp - b.timestamp);\n  if (!msgs.length) continue;\n\n  let activeMs = 0;\n  let subSessions = 1;\n\n  for (let i = 1; i < msgs.length; i++) {\n    const gap = msgs[i].timestamp - msgs[i - 1].timestamp;\n    if (gap <= INACTIVITY_MS) activeMs += gap;\n    else subSessions += 1;\n  }\n\n  const durationMin = round1(activeMs / (1000 * 60));\n  const total = msgs.length;\n  const human = msgs.filter(m => m.message_type === \"human\").length;\n  const ai = msgs.filter(m => m.message_type === \"ai\").length;\n\n  const start = msgs[0].timestamp;\n  const end = msgs[msgs.length - 1].timestamp;\n\n  rows.push({\n    section: \"SESSION_DETAILS\",\n    session_id: s.session_id,\n    user_id: s.user_id,\n    session_start: start.toISOString(),\n    session_end: end.toISOString(),\n    session_created_week: getWeekStartISO(start),\n    session_last_active_week: getWeekStartISO(end),\n    total_messages: total,\n    human_messages: human,\n    ai_messages: ai,\n    session_duration_minutes: durationMin,\n    messages_per_minute: durationMin > 0 ? round1(total / durationMin) : 0,\n    sub_sessions: subSessions,\n  });\n}\n\n// ============================\n// 3) SORT\n// ============================\nrows.sort((a, b) =>\n  a.session_created_week.localeCompare(b.session_created_week) ||\n  a.session_start.localeCompare(b.session_start)\n);\n\n// ============================\n// 4) APPEND SPACER + NOTES\n// ============================\nrows.push(\n  { section: \"***\" },\n\n  { section: \"SESSION_NOTE\", session_id: \"Notes:\" },\n\n  {\n    section: \"SESSION_NOTE\",\n    session_id: \"• Each row represents one unique session.\",\n  },\n  {\n    section: \"SESSION_NOTE\",\n    session_id:\n      \"• Sessions may span multiple weeks. Weekly Summary counts sessions active in a given week; this tab shows when each session was created and last active.\",\n  },\n  {\n    section: \"SESSION_NOTE\",\n    session_id:\n      \"• sub_sessions = number of continuous activity blocks within a session. A new sub-session is counted whenever there is an inactivity gap greater than 30 minutes.\",\n  }\n);\n\n// ============================\n// 5) OUTPUT\n// ============================\nreturn rows.map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3872,
+        10080
+      ],
+      "id": "8c132019-ae81-4df6-ac52-8477f4c8dd26",
+      "name": "Weekly Session Summary Generator1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2432,
+        9952
+      ],
+      "id": "f0dffb36-674e-451a-a1d8-2e3b978b2bce",
+      "name": "Wait11",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "User Engagement Summary",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "section",
+              "displayName": "section",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "total_active_users",
+              "displayName": "total_active_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "core_users_2plus_weeks",
+              "displayName": "core_users_2plus_weeks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_1_week_active",
+              "displayName": "users_1_week_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_2_weeks_active",
+              "displayName": "users_2_weeks_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_3_weeks_active",
+              "displayName": "users_3_weeks_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "users_4plus_weeks_active",
+              "displayName": "users_4plus_weeks_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "top_10pct_users",
+              "displayName": "top_10pct_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pct_sessions_by_top_10pct_users",
+              "displayName": "pct_sessions_by_top_10pct_users",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "active_sessions",
+              "displayName": "active_sessions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "active_weeks",
+              "displayName": "active_weeks",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "active_months",
+              "displayName": "active_months",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "last_active_month",
+              "displayName": "last_active_month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3424,
+        10432
+      ],
+      "id": "17990a9a-5377-4471-9c9d-1baf1889f3d5",
+      "name": "Append row in sheet7",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3648,
+        10432
+      ],
+      "id": "b4ad3d04-61ac-48d3-946b-cc01a0f8bd6d",
+      "name": "Merge11",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "User Engagement Summary",
+          "mode": "name"
+        },
+        "toDelete": "columns",
+        "numberToDelete": 2
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3200,
+        10432
+      ],
+      "id": "a3fd11b0-278f-46d6-9a26-60f0d84f2cec",
+      "name": "Delete rows or columns from sheet8",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CrMeoJ0WG3eh6d4r",
+          "name": "Google Sheets account - Dimagi"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node — USER_ENGAGEMENT_ACTIVITY (REFINED)\n *\n * Adds 1-line notes next to section headers.\n * No logic, schema, or ordering changes.\n */\n\n// ============================\n// CONFIG\n// ============================\nconst TOP_PCT = 0.10;\n\n// ============================\n// FIELD MAPPING\n// ============================\nconst FIELDS = {\n  timestamp: \"Message Date\",\n  sessionId: \"Session ID\",\n  userIdPrimary: \"Participant Public ID\",\n  userIdFallback1: \"Participant Identifier\",\n  userIdFallback2: \"Participant Name\",\n};\n\n// ============================\n// HELPERS\n// ============================\nfunction toDate(v) {\n  const d = new Date(v);\n  return Number.isNaN(d.getTime()) ? null : d;\n}\n\nfunction getUserId(row) {\n  return (\n    row[FIELDS.userIdPrimary] ??\n    row[FIELDS.userIdFallback1] ??\n    row[FIELDS.userIdFallback2] ??\n    \"UNKNOWN_USER\"\n  );\n}\n\nfunction pad2(n) {\n  return String(n).padStart(2, \"0\");\n}\n\nfunction getMonthKeyUTC(date) {\n  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}`;\n}\n\nfunction getWeekStartISO(date) {\n  const d = new Date(Date.UTC(\n    date.getUTCFullYear(),\n    date.getUTCMonth(),\n    date.getUTCDate()\n  ));\n  const day = d.getUTCDay() || 7;\n  d.setUTCDate(d.getUTCDate() - (day - 1));\n  return d.toISOString().slice(0, 10);\n}\n\nfunction round1(n) {\n  return Math.round(n * 10) / 10;\n}\n\n// ============================\n// 1) COLLECT EVENTS\n// ============================\nconst monthUser = {};\nconst monthUsers = {};\nconst monthSessions = {};\nconst userOverall = {};\nconst userMonth = {};\n\nfor (const item of items) {\n  const row = item.json || {};\n  const ts = toDate(row[FIELDS.timestamp]);\n  const sessionId = row[FIELDS.sessionId];\n  if (!ts || !sessionId) continue;\n\n  const userId = String(getUserId(row));\n  const monthKey = getMonthKeyUTC(ts);\n  const weekKey = getWeekStartISO(ts);\n\n  monthUsers[monthKey] ??= new Set();\n  monthUsers[monthKey].add(userId);\n\n  monthSessions[monthKey] ??= new Set();\n  monthSessions[monthKey].add(sessionId);\n\n  monthUser[monthKey] ??= {};\n  monthUser[monthKey][userId] ??= { weeks: new Set(), sessions: new Set() };\n  monthUser[monthKey][userId].weeks.add(weekKey);\n  monthUser[monthKey][userId].sessions.add(sessionId);\n\n  userOverall[userId] ??= {\n    weeks: new Set(),\n    months: new Set(),\n    sessions: new Set(),\n    lastMonth: monthKey,\n  };\n  userOverall[userId].weeks.add(weekKey);\n  userOverall[userId].months.add(monthKey);\n  userOverall[userId].sessions.add(sessionId);\n  if (monthKey > userOverall[userId].lastMonth) {\n    userOverall[userId].lastMonth = monthKey;\n  }\n\n  userMonth[userId] ??= {};\n  userMonth[userId][monthKey] ??= { weeks: new Set(), sessions: new Set() };\n  userMonth[userId][monthKey].weeks.add(weekKey);\n  userMonth[userId][monthKey].sessions.add(sessionId);\n}\n\n// ============================\n// 2) SECTION 1 — MONTHLY ENGAGEMENT\n// ============================\nconst months = Object.keys(monthUsers).sort();\n\nconst section1 = [\n  {\n    section: \"USER_ENGAGEMENT_MONTHLY_HEADER\",\n    section_note: \"Monthly view of how many users were active and how consistently they engaged across weeks.\",\n  },\n  {\n    section: \"USER_ENGAGEMENT_MONTHLY_COLUMNS\",\n    month: \"Month\",\n    total_active_users: \"Total Active Users\",\n    core_users_2plus_weeks: \"Core Users (≥2 weeks)\",\n    users_1_week_active: \"1 Week\",\n    users_2_weeks_active: \"2 Weeks\",\n    users_3_weeks_active: \"3 Weeks\",\n    users_4plus_weeks_active: \"4+ Weeks\",\n  },\n];\n\nfor (const m of months) {\n  let w1 = 0, w2 = 0, w3 = 0, w4p = 0;\n  for (const u of monthUsers[m]) {\n    const aw = monthUser[m][u].weeks.size;\n    if (aw === 1) w1++;\n    else if (aw === 2) w2++;\n    else if (aw === 3) w3++;\n    else if (aw >= 4) w4p++;\n  }\n  section1.push({\n    section: \"USER_ENGAGEMENT_MONTHLY\",\n    month: m,\n    total_active_users: monthUsers[m].size,\n    core_users_2plus_weeks: w2 + w3 + w4p,\n    users_1_week_active: w1,\n    users_2_weeks_active: w2,\n    users_3_weeks_active: w3,\n    users_4plus_weeks_active: w4p,\n  });\n}\n\n// ============================\n// 3) SECTION 2 — TOP 10% CONCENTRATION\n// ============================\nconst section2 = [\n  {\n    section: \"USER_CONCENTRATION_TOP10_HEADER\",\n    section_note: \"Shows whether engagement is evenly distributed or dominated by a small group of heavy users.\",\n  },\n  {\n    section: \"USER_CONCENTRATION_TOP10_COLUMNS\",\n    month: \"Month\",\n    top_10pct_users: \"Top 10% Users\",\n    pct_sessions_by_top_10pct_users: \"% Sessions by Top 10%\",\n  },\n];\n\nfor (const m of months) {\n  const users = [...monthUsers[m]];\n  const totalSessions = monthSessions[m].size;\n\n  const ranked = users\n    .map(u => ({ u, c: monthUser[m][u].sessions.size }))\n    .sort((a, b) => b.c - a.c);\n\n  const topN = Math.max(1, Math.ceil(users.length * TOP_PCT));\n  const topSessions = ranked.slice(0, topN).reduce((s, r) => s + r.c, 0);\n\n  section2.push({\n    section: \"USER_CONCENTRATION_TOP10\",\n    month: m,\n    top_10pct_users: topN,\n    pct_sessions_by_top_10pct_users: totalSessions\n      ? round1((topSessions / totalSessions) * 100)\n      : 0,\n  });\n}\n\n// ============================\n// 4) SECTION 3 — USER DRILLDOWN (OVERALL)\n// ============================\nconst section3 = [\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_HEADER\",\n    section_note: \"User-level lifetime engagement summary across sessions, weeks, and months.\",\n  },\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_COLUMNS\",\n    user_id: \"User ID\",\n    active_sessions: \"Active Sessions\",\n    active_weeks: \"Active Weeks\",\n    active_months: \"Active Months\",\n    last_active_month: \"Last Active Month\",\n  },\n];\n\nObject.entries(userOverall)\n  .sort((a, b) => b[1].months.size - a[1].months.size)\n  .forEach(([u, d]) => {\n    section3.push({\n      section: \"USER_ENGAGEMENT_DRILLDOWN\",\n      user_id: u,\n      active_sessions: d.sessions.size,\n      active_weeks: d.weeks.size,\n      active_months: d.months.size,\n      last_active_month: d.lastMonth,\n    });\n  });\n\n// ============================\n// 5) SECTION 4 — USER DRILLDOWN (MONTHLY)\n// ============================\nconst section4 = [\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_MONTHLY_HEADER\",\n    section_note: \"Month-by-month activity for each user to understand engagement timing and drop-offs.\",\n  },\n  {\n    section: \"USER_ENGAGEMENT_DRILLDOWN_MONTHLY_COLUMNS\",\n    user_id: \"User ID\",\n    month: \"Month\",\n    active_weeks: \"Active Weeks\",\n    active_sessions: \"Active Sessions\",\n  },\n];\n\nObject.entries(userMonth).forEach(([u, monthsObj]) => {\n  Object.entries(monthsObj).forEach(([m, d]) => {\n    section4.push({\n      section: \"USER_ENGAGEMENT_DRILLDOWN_MONTHLY\",\n      user_id: u,\n      month: m,\n      active_weeks: d.weeks.size,\n      active_sessions: d.sessions.size,\n    });\n  });\n});\n\n// ============================\n// OUTPUT\n// ============================\nreturn [\n  ...section1,\n  { section: \"***\" },\n  ...section2,\n  { section: \"***\" },\n  ...section3,\n  { section: \"***\" },\n  ...section4,\n].map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3872,
+        10336
+      ],
+      "id": "d1fd170e-6795-47f2-aa6c-71f2b072ef21",
+      "name": "User Engagement Summary Generator1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2224,
+        10080
+      ],
+      "id": "8bc8d79e-161d-4c00-a147-45f865964bb0",
+      "name": "Wait12",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Overall Metrics Generator",
+        "height": 928,
+        "width": 2992,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -5056,
+        9776
+      ],
+      "typeVersion": 1,
+      "id": "0a99c6f9-38a0-42ab-9e05-e73eff1b37c6",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "formTitle": "Chatbot Engagement Analysis Pipeline: Upload",
+        "formDescription": "Upload your Excel files for automated QnA generation and analysis",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "Question Bank",
+              "fieldLabel": "Upload the QnA Bank",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".xlsx, .xls, .csv",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Transcript",
+              "fieldLabel": "Upload the transcript",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".xlsx, .xls, .csv",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Email ID",
+              "fieldLabel": "Enter your email ID to receive the analyses output",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldName": "Project",
+              "fieldLabel": "Which type of analysis would like to execute now",
+              "fieldType": "dropdown",
+              "defaultValue": "Weekly Overview Generation",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Weekly Overview Generation"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldName": "Bot",
+              "fieldLabel": "FLW/Mother's Bot? ",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "FLW"
+                  },
+                  {
+                    "option": "Mother"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "bb7931db-dddc-40c7-8d63-6c3ba5c1f673",
+      "name": "Overall Bot Summary Analysis",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.4,
+      "position": [
+        -5296,
+        10064
+      ],
+      "webhookId": "76fe4b91-f0be-45ee-8608-a18c2924e1f3",
+      "retryOnFail": true,
+      "executeOnce": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chatbot Analysis Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create spreadsheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract qna bank o/ps",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Edit Fields3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QnA Pairing": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "QnA Pairing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Weekly Activity Summary Generator",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Weekly Session Summary Generator",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "User Engagement Summary Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Extract pair o/ps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract pair o/ps": {
+      "main": [
+        [
+          {
+            "node": "Translate a language",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract qna bank o/ps": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Set Columns": {
+      "main": [
+        [
+          {
+            "node": "Filter columns - Coverage - Accuracy",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter - 20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter columns - Coverage - Accuracy": {
+      "main": [
+        [
+          {
+            "node": "Coverage Analysis Output [Python vs LLM]",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Coverage Analysis: JS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI: Coverage check": {
+      "main": [
+        [
+          {
+            "node": "Clean OpenAI O/P",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Accuracy Analysis Output",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - 20": {
+      "main": [
+        [
+          {
+            "node": "OpenAI: Coverage check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: 20": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Move file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait4",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet1": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "Wait4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move file": {
+      "main": [
+        [
+          {
+            "node": "Wait3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait3": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait4": {
+      "main": [
+        [
+          {
+            "node": "Wait5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet2": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Weekly Activity Summary Generator": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Append row in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Session Summary Generator": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait5": {
+      "main": [
+        [
+          {
+            "node": "Wait6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet3": {
+      "main": [
+        [
+          {
+            "node": "Wait5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Append row in sheet3": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Overall C+A Summary generator": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait6": {
+      "main": [
+        [
+          {
+            "node": "Wait7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet4": {
+      "main": [
+        [
+          {
+            "node": "Wait6",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Clean OpenAI O/P": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Coverage O/Ps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Filter: 20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge5": {
+      "main": [
+        [
+          {
+            "node": "Combined Coverage + Accuracy Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combined Coverage + Accuracy Output": {
+      "main": [
+        [
+          {
+            "node": "Overall C+A Summary generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Merge6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate a language": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Merge7",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge7": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coverage Analysis: JS": {
+      "main": [
+        [
+          {
+            "node": "Coverage:Python O/P",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Columns",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: All Coverage O/Ps",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge6": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields3": {
+      "main": [
+        [
+          {
+            "node": "Merge6",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Append row in sheet4": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge8": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Engagement Summary Generator": {
+      "main": [
+        [
+          {
+            "node": "Merge8",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet5": {
+      "main": [
+        [
+          {
+            "node": "Wait7",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait7": {
+      "main": [
+        [
+          {
+            "node": "Send email: Coverage Analysis O/P",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Weekly Activity Summary Generator1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Weekly Session Summary Generator1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "User Engagement Summary Generator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create spreadsheet1": {
+      "main": [
+        [
+          {
+            "node": "Move file1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields4": {
+      "main": [
+        [
+          {
+            "node": "Merge9",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait10",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Merge10",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move file1": {
+      "main": [
+        [
+          {
+            "node": "Wait9",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait9": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet5": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge9": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet6": {
+      "main": [
+        [
+          {
+            "node": "Wait10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Activity Summary Generator1": {
+      "main": [
+        [
+          {
+            "node": "Merge9",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Append row in sheet6": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge10": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Session Summary Generator1": {
+      "main": [
+        [
+          {
+            "node": "Merge10",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait11": {
+      "main": [
+        [
+          {
+            "node": "Wait12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet7": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge11": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet8": {
+      "main": [
+        [
+          {
+            "node": "Wait12",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "User Engagement Summary Generator1": {
+      "main": [
+        [
+          {
+            "node": "Merge11",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait12": {
+      "main": [
+        [
+          {
+            "node": "Send email: Coverage Analysis O/P1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet7": {
+      "main": [
+        [
+          {
+            "node": "Wait11",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait10": {
+      "main": [
+        [
+          {
+            "node": "Wait11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Overall Bot Summary Analysis": {
+      "main": [
+        [
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create spreadsheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "binaryMode": "separate",
+    "timeSavedPerExecution": 1
+  },
+  "versionId": "122cd767-b8e7-4b30-bcec-90a4ca8adb7c",
+  "meta": {
+    "templateId": "ready-to-run-ai-workflow",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3408d68671f1544120066f86e72bbc654d5124df7b7ad995d6417b3a5b9c1f37"
+  },
+  "id": "tyjkSksaoJ9i6DbD",
+  "tags": [
+    {
+      "updatedAt": "2026-01-27T16:13:23.290Z",
+      "createdAt": "2026-01-27T16:13:23.290Z",
+      "id": "lJCu8A8pbupjh4fp",
+      "name": "Dimagi: MBW"
+    }
+  ]
+}
