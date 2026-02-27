@@ -335,37 +335,44 @@ def main(input, **kwargs):
     assert node_output.update["messages"][-1] == "Number of schedules: 1"  # ty: ignore[not-subscriptable]
 
 
-@pytest.mark.django_db()
-def test_get_participant_schedules_empty(experiment_session):
+def test_get_participant_schedules_empty():
     """
     Test that the get_participant_schedules function returns an empty list
-    when there are no active scheduled messages.
+    when there are no active scheduled messages. No DB access needed.
     """
     code = """
 def main(input, **kwargs):
     schedules = get_participant_schedules()
     return f"Number of schedules: {len(schedules)}, Empty list: {schedules == []}"
 """
+    repo = InMemoryPipelineRepository()
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    config = {"configurable": {"repo": ORMRepository()}}
+    state = PipelineState(
+        messages=["hi"], outputs={}, experiment_session=ExperimentSessionFactory.build(), temp_state={}
+    )
+    config = {"configurable": {"repo": repo}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"  # ty: ignore[not-subscriptable]
 
 
-@pytest.mark.django_db()
-def test_get_and_set_session_state(experiment_session):
+def test_get_and_set_session_state():
+    """No DB access needed — session state is purely in-memory state manipulation."""
     code = """
 def main(input, **kwargs):
     msg_count = get_session_state_key("message_count") or 1
     set_session_state_key("message_count", msg_count + 1)
     return input
     """
+    repo = InMemoryPipelineRepository()
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(
-        messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={}, session_state={}
+        messages=["hi"],
+        outputs={},
+        experiment_session=ExperimentSessionFactory.build(),
+        temp_state={},
+        session_state={},
     )
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": repo}}
     output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert output.update["session_state"] == {"message_count": 2}  # ty: ignore[not-subscriptable]
 

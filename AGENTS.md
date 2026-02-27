@@ -71,3 +71,4 @@ Consult these guides when working in the relevant area:
 * `docs/agents/django_performance.md` — when optimizing queries or addressing N+1 issues
 * `docs/agents/django_view_security.md` — when adding or modifying views (permissions, auth)
 * `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
+* `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
