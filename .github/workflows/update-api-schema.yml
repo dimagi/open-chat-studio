@@ -55,28 +55,28 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.head_ref }}
-      
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      
+
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      
+
       - name: Install Dependencies
         run: |
           uv venv
           uv sync --locked --dev
-      
+
       - name: Generate API Schema
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
         run: uv run python manage.py spectacular --file api-schema.yml
-      
+
       - name: Check for changes
         id: verify-changed-files
         run: |
@@ -85,7 +85,7 @@ jobs:
           else
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Commit API schema changes
         if: steps.verify-changed-files.outputs.changed == 'true'
         run: |

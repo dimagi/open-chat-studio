@@ -52,6 +52,10 @@ repos:
     hooks:
       # Run the type checker.
       - id: ty-check
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.11
+    hooks:
+      - id: actionlint
   - repo: local
     hooks:
       - id: waf-allow-not-first
