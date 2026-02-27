@@ -8,7 +8,7 @@ Feature flags in Open Chat Studio are:
 - **Team-scoped**: Flags can be enabled/disabled per team
 - **Database-driven**: Stored in the database and configurable via a [custom admin page](../admin_guides/feature_flags.md)
 - **Cached**: Uses Redis for performance
-- **Convention-based**: New flags must follow naming conventions
+- **Convention-based**: New flags must follow naming conventions and be registered in `apps/teams/flags.py`
 
 ## Custom Flag Model
 
@@ -31,6 +31,35 @@ flag.is_active_for_team(my_team)
 
     Flags are created automatically in the database when referenced in code or templates so it is not necessary to create them manually.
 
+## Registering a Flag
+
+All flags must be declared in `apps/teams/flags.py` as entries in the `Flags` enum before use:
+
+```python
+from apps.teams.flags import Flags
+
+class Flags(FlagInfo, Enum):
+    MY_FEATURE = (
+        "flag_my_feature",   # slug — must start with "flag_"
+        "Short description", # shown in admin and team settings UI
+        "docs-slug",         # key into settings.DOCUMENTATION_LINKS (use "" if none)
+        [],                  # other flag slugs this flag requires (auto-enabled together)
+        True,                # teams_can_manage: whether team admins can toggle this themselves
+    )
+```
+
+This registry drives the team settings UI (`teams_can_manage=True` flags appear there) and the `check_flag_usage` audit command. Flags are created in the database automatically on first use — no migration needed.
+
+When referencing a flag in Python code, prefer the enum to avoid string typos:
+
+```python
+from apps.teams.flags import Flags
+from waffle import flag_is_active
+
+if flag_is_active(request, Flags.MY_FEATURE.slug):
+    ...
+```
+
 ## Naming Convention
 
 **All new feature flags MUST be prefixed with `flag_`**
@@ -38,7 +67,7 @@ flag.is_active_for_team(my_team)
 ```python
 # ✅ Correct
 "flag_new_dashboard"
-"flag_enhanced_chat" 
+"flag_enhanced_chat"
 
 # ❌ Incorrect - will raise ValidationError
 "new_dashboard"
@@ -87,6 +116,24 @@ flag.is_active_for_user(user)
     </div>
 {% endflag %}
 ```
+
+### Pipeline node fields
+
+For pipeline node fields that should only be visible in the UI when a flag is active, use `flag_required`:
+
+```python
+my_field: str = Field(..., flag_required="flag_my_feature")
+```
+
+## Removing a Flag (Rolling Out to Everyone)
+
+When a feature is stable and should be on for all users, remove the flag entirely rather than leaving dead code:
+
+1. Run `check_flag_usage` to find every reference.
+2. Remove all `flag_is_active` / `{% flag %}` / `override_flag` guards, keeping the guarded code.
+3. Delete the `Flags` enum entry from `apps/teams/flags.py`.
+4. Update or remove tests that used `override_flag` for this flag — test the behaviour unconditionally.
+5. The flag row in the database becomes orphaned and can be deleted via the Django admin.
 
 ## Management Commands
 
@@ -151,7 +198,7 @@ def complex_view(request):
 
 ### Documentation
 - Document the purpose of each flag
-- Include rollout plans in PR descriptions  
+- Include rollout plans in PR descriptions
 - Update team documentation when adding user-facing features
 
 ### Testing
