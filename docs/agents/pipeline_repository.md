@@ -77,6 +77,5 @@ def test_my_integration(experiment_session):
 ```
 
 ## Out of scope
-* **Field validators** — run at deserialization time before `process()`, before repo is set
 * **`bots.py` finalization** — runs after pipeline execution, outside the node boundary
 * **`AssistantAdapter` FK traversals** — deprecated node, deferred

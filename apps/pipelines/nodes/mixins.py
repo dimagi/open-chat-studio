@@ -1,7 +1,6 @@
 import json
 import logging
 import unicodedata
-from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
@@ -35,13 +34,12 @@ from apps.pipelines.nodes.history_middleware import (
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
-from apps.pipelines.repository import RepositoryLookupError
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
-from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 
 if TYPE_CHECKING:
@@ -50,22 +48,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.pipelines.nodes")
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
-
-
-@lru_cache
-def get_llm_provider_model(llm_provider_model_id: int):
-    try:
-        return LlmProviderModel.objects.get(id=llm_provider_model_id)
-    except LlmProviderModel.DoesNotExist:
-        raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
-
-
-@lru_cache
-def get_llm_provider(llm_provider_id: int):
-    try:
-        return LlmProvider.objects.get(id=llm_provider_id)
-    except LlmProvider.DoesNotExist:
-        return None
 
 
 class OutputMessageTagMixin(BaseModel):
@@ -96,7 +78,12 @@ class LLMResponseMixin(BaseModel):
     @classmethod
     def ensure_default_parameters(cls, data) -> Self:
         if llm_provider_model_id := data.get("llm_provider_model_id"):
-            model = get_llm_provider_model(llm_provider_model_id)
+            try:
+                model = ORMRepository().get_llm_provider_model(llm_provider_model_id)
+            except RepositoryLookupError:
+                raise PipelineNodeBuildError(
+                    f"LLM provider model with id {llm_provider_model_id} does not exist"
+                ) from None
             params_cls = LLM_MODEL_PARAMETERS.get(model.name, BasicParameters)
             # Handle None explicitly by treating it as empty dict
             param_value = data.get("llm_model_parameters") or {}
@@ -109,8 +96,8 @@ class LLMResponseMixin(BaseModel):
     def validate_llm_model(self):
         # Ensure model is not deprecated
         try:
-            model = get_llm_provider_model(self.llm_provider_model_id)
-        except PipelineNodeBuildError as e:
+            model = ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
+        except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",
                 str(e),

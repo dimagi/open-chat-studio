@@ -140,6 +140,10 @@ class ORMRepository:
         except Collection.DoesNotExist:
             raise RepositoryLookupError(f"Collection with id {collection_id} not found") from None
 
+    def get_collections_in_bulk(self, collection_ids: list[int]) -> dict[int, Collection]:
+        """Fetch multiple collections by IDs. Returns {id: Collection} dict."""
+        return Collection.objects.in_bulk(collection_ids)
+
     def get_collections_for_search(self, collection_ids: list[int]) -> list[Collection]:
         """Fetch indexed collections by IDs for search tools. Returns materialized list."""
         return list(Collection.objects.filter(id__in=collection_ids, is_index=True))
@@ -264,6 +268,9 @@ class InMemoryPipelineRepository(ORMRepository):
         if collection_id not in self.collections:
             raise RepositoryLookupError(f"Collection with id {collection_id} not found")
         return self.collections[collection_id]
+
+    def get_collections_in_bulk(self, collection_ids):
+        return {cid: self.collections[cid] for cid in collection_ids if cid in self.collections}
 
     def get_collections_for_search(self, collection_ids):
         return [

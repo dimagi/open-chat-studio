@@ -92,8 +92,8 @@ class HistoryNodeStub(HistoryMixin):
 
 @pytest.fixture(autouse=True)
 def mock_llm_provider_model():
-    # Mock get_llm_provider_model for all tests
-    with patch("apps.pipelines.nodes.mixins.get_llm_provider_model") as get_llm_provider_model:
+    # Mock ORMRepository.get_llm_provider_model for all tests
+    with patch("apps.pipelines.repository.ORMRepository.get_llm_provider_model") as get_llm_provider_model:
         get_llm_provider_model.return_value = Mock(name="non-existing-model", max_token_limit=1000, deprecated=False)
         yield get_llm_provider_model
 

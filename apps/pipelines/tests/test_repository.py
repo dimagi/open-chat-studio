@@ -74,6 +74,11 @@ class TestSharedRepositoryContract:
         result = repo.get_collection_index_summaries([999999])
         assert result == []
 
+    def test_get_collections_in_bulk_missing_ids(self, factory):
+        repo = factory()
+        result = repo.get_collections_in_bulk([999999])
+        assert result == {}
+
 
 class TestInMemoryRepository:
     """Tests for InMemoryPipelineRepository — no DB access required."""
@@ -90,6 +95,14 @@ class TestInMemoryRepository:
         self.repo.provider_models[1] = model
         result = self.repo.get_llm_provider_model(1)
         assert result is model
+
+    def test_get_collections_in_bulk(self):
+        c1 = SimpleNamespace(id=1, name="Col1")
+        c2 = SimpleNamespace(id=2, name="Col2")
+        self.repo.collections[1] = c1
+        self.repo.collections[2] = c2
+        result = self.repo.get_collections_in_bulk([1, 2, 3])
+        assert result == {1: c1, 2: c2}
 
     def test_get_collections_for_search_partial(self):
         c1 = SimpleNamespace(is_index=True)
@@ -183,6 +196,14 @@ class TestORMRepository:
         result = self.repo.get_collection_index_summaries([col.id])
         assert len(result) == 1
         assert result[0] == CollectionIndexSummary(id=col.id, name="My Collection", summary="A summary")
+
+    def test_get_collections_in_bulk(self):
+        col1 = CollectionFactory(name="Col1")
+        col2 = CollectionFactory(name="Col2")
+        result = self.repo.get_collections_in_bulk([col1.id, col2.id])
+        assert set(result.keys()) == {col1.id, col2.id}
+        assert result[col1.id].name == "Col1"
+        assert result[col2.id].name == "Col2"
 
     def test_get_pipeline_chat_history_creates(self):
         session = ExperimentSessionFactory()

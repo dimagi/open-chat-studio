@@ -24,7 +24,6 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
 from apps.files.models import FilePurpose
 from apps.pipelines.exceptions import (
@@ -51,7 +50,7 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
-from apps.pipelines.repository import RepositoryLookupError
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
@@ -76,7 +75,6 @@ from .mixins import (
     OutputMessageTagMixin,
     RouterMixin,
     StructuredDataSchemaValidatorMixin,
-    get_llm_provider,
 )
 
 if TYPE_CHECKING:
@@ -346,7 +344,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return value
 
         # Bulk fetch all collections to avoid N+1 queries
-        collections = Collection.objects.in_bulk(value)
+        repo = ORMRepository()
+        collections = repo.get_collections_in_bulk(value)
 
         # Check for non-existent collections
         missing_ids = set(value) - set(collections.keys())
@@ -390,7 +389,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 )
 
             # Check if provider has a limit on number of vector stores
-            llm_provider = get_llm_provider(llm_provider_id)
+            try:
+                llm_provider = repo.get_llm_provider(llm_provider_id)
+            except RepositoryLookupError:
+                llm_provider = None
             if llm_provider:
                 max_vector_stores = llm_provider.type_enum.max_vector_stores
                 if max_vector_stores and len(collections) > max_vector_stores:
