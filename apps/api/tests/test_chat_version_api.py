@@ -50,7 +50,7 @@ def experiment_with_version(experiment):
 
 @pytest.mark.django_db()
 def test_start_session_with_version_number_authenticated(authed_user, authed_client, experiment_with_version):
-    """Authenticated users can create sessions for specific published versions."""
+    """Authenticated users can create sessions for specific versions."""
     url = reverse("api:chat:start-session")
     version = experiment_with_version.versions.first()
     data = {
