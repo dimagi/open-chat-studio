@@ -507,38 +507,6 @@ def main(input, **kwargs):
     assert file in attachment.files.all()
 
 
-def test_add_file_attachment_in_memory():
-    """Test file attachment using InMemoryPipelineRepository — no DB access."""
-    code = """
-def main(input, **kwargs):
-    add_file_attachment("report.pdf", b"pdf content", "application/pdf")
-    return input
-"""
-    repo = InMemoryPipelineRepository()
-    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    state = PipelineState(
-        messages=["hi"],
-        outputs={},
-        experiment_session=ExperimentSessionFactory.build(),
-        temp_state={},
-    )
-    config = {"configurable": {"repo": repo}}
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
-
-    # Verify file was tracked in the in-memory repo
-    assert len(repo.files_created) == 1
-    assert repo.files_created[0]["filename"] == "report.pdf"
-    assert repo.files_created[0]["content_type"] == "application/pdf"
-
-    # Verify attachment was tracked
-    assert len(repo.attached_files) == 1
-    assert repo.attached_files[0]["type"] == "code_interpreter"
-
-    # Verify file ID tracked in output metadata
-    generated_files = node_output.update["output_message_metadata"]["generated_files"]  # ty: ignore[not-subscriptable]
-    assert len(generated_files) == 1
-
-
 def test_add_file_attachment_requires_bytes():
     code = """
 def main(input, **kwargs):

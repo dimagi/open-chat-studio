@@ -12,7 +12,8 @@ from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.factories.team import TeamFactory
 
 
-def _run_code_node(code, experiment_session=None, repo=None):
+def _run_code_node(code, experiment_session=None):
+    repo = ORMRepository()
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node._repo = repo or InMemoryPipelineRepository()
     state = PipelineState(
@@ -58,7 +59,7 @@ def main(input, **kwargs):
     return str(response["json"]["message"])
 """
         httpx_mock.add_response(json={"message": "hello"})
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "hello"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -69,7 +70,7 @@ def main(input, **kwargs):
     return str(response["status_code"])
 """
         httpx_mock.add_response(status_code=201, json={"id": 1})
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "201"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -83,7 +84,7 @@ def main(input, **kwargs):
     return "Success"
 """
         httpx_mock.add_response(status_code=404, content=b"not found")
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "Error: 404"
 
 
@@ -109,7 +110,7 @@ def main(input, **kwargs):
     return str(response["json"]["authenticated"])
 """
         httpx_mock.add_response(json={"authenticated": True})
-        result = _run_code_node(code, experiment_session=session, repo=ORMRepository())
+        result = _run_code_node(code, experiment_session=session)
         assert result.update["messages"][-1] == "True"
         request = httpx_mock.get_request()
         assert request.headers.get("x-api-key") == "secret123"
@@ -127,7 +128,7 @@ def main(input, **kwargs):
     return "should not reach here"
 """
         with pytest.raises(CodeNodeRunError, match="not found"):
-            _run_code_node(code, experiment_session=session, repo=ORMRepository())
+            _run_code_node(code, experiment_session=session)
 
 
 @pytest.mark.django_db()
@@ -146,7 +147,7 @@ def main(input, **kwargs):
         httpx_mock.add_response(content=b"ok")
         httpx_mock.add_response(content=b"ok")
         with pytest.raises(CodeNodeRunError, match="Request limit"):
-            _run_code_node(code, repo=ORMRepository())
+            _run_code_node(code)
 
 
 @pytest.mark.django_db()
@@ -166,7 +167,7 @@ def main(input, **kwargs):
         return "caught timeout"
 """
         httpx_mock.add_exception(httpx.ReadTimeout("read timed out"))
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "caught timeout"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -182,7 +183,7 @@ def main(input, **kwargs):
 """
         for _ in range(3):
             httpx_mock.add_exception(httpx.ConnectError("connection refused"))
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "caught connection error"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -198,7 +199,7 @@ def main(input, **kwargs):
         return "response too large"
 """
         httpx_mock.add_response(content=b"x" * 100)
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "response too large"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -215,7 +216,7 @@ def main(input, **kwargs):
         return "limit exceeded"
 """
         httpx_mock.add_response(text="ok")
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "limit exceeded"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -230,7 +231,7 @@ def main(input, **kwargs):
     except http.RequestTooLarge:
         return "request too large"
 """
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "request too large"
 
     def test_catch_invalid_url(self):
@@ -243,7 +244,7 @@ def main(input, **kwargs):
     except http.InvalidURL:
         return "blocked by ssrf"
 """
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "blocked by ssrf"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -257,7 +258,7 @@ def main(input, **kwargs):
     except http.AuthProviderError:
         return "auth provider error"
 """
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "auth provider error"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -272,7 +273,7 @@ def main(input, **kwargs):
         return "caught with base class"
 """
         httpx_mock.add_exception(httpx.ReadTimeout("timed out"))
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "caught with base class"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -288,7 +289,7 @@ def main(input, **kwargs):
         return "generic: error"
 """
         httpx_mock.add_exception(httpx.ReadTimeout("timed out"))
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "specific: timeout"
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -302,7 +303,7 @@ def main(input, **kwargs):
         return f"error: {exc}"
 """
         httpx_mock.add_exception(httpx.ReadTimeout("read timed out"))
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert "read timed out" in result.update["messages"][-1]
 
     @patch("apps.utils.restricted_http.validate_user_input_url")
@@ -321,5 +322,5 @@ def main(input, **kwargs):
         httpx_mock.add_response(content=b"x" * 100)  # first: too large
         settings.RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 1_048_576
         httpx_mock.add_response(text="recovered")  # second: ok
-        result = _run_code_node(code, repo=ORMRepository())
+        result = _run_code_node(code)
         assert result.update["messages"][-1] == "recovered"
