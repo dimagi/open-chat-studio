@@ -212,7 +212,7 @@ paths:
                     participant:
                       identifier: abc
                       remote_id: abc
-                  summary: Session started with specific published version
+                  summary: Session started with specific version
           description: ''
   /api/experiments/:
     get:
