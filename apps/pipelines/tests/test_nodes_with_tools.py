@@ -80,7 +80,9 @@ def test_assistant_node(patched_invoke, disabled_tools):
         messages=["Hi there bot"],
         experiment_session=ExperimentSessionFactory(team=assistant.team),
     )
-    output_state = runnable.invoke(state, config={"configurable": {"disabled_tools": disabled_tools}})
+    output_state = runnable.invoke(
+        state, config={"configurable": {"disabled_tools": disabled_tools, "repo": ORMRepository()}}
+    )
     assert output_state["messages"][-1] == "hello"
     args = patched_invoke.call_args[0]
     assert patched_invoke.call_count == 1

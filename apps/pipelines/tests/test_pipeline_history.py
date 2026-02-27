@@ -6,6 +6,7 @@ from apps.chat.bots import PipelineBot
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import (
@@ -64,7 +65,11 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"]
+    repo = ORMRepository()
+    config = {"configurable": {"repo": repo}}
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)[
+        "messages"
+    ]
     expected_call_messages = [
         [("system", "Node 1:"), ("human", user_input)],
         [("system", "Node 2:"), ("human", f"Node 1: {user_input}")],
@@ -81,9 +86,9 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     assert not PipelineChatHistory.objects.filter(session=experiment_session.id, name=llm_2["id"]).exists()
 
     user_input_2 = "Saying more stuff"
-    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
-        "messages"
-    ][-1]
+    output_2 = runnable.invoke(
+        PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config
+    )["messages"][-1]
 
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
@@ -131,11 +136,13 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     )
     nodes = [start_node(), llm_1, llm_2, end_node()]
     runnable = create_runnable(pipeline, nodes)
+    repo = ORMRepository()
+    config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
-    output_1 = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][
-        -1
-    ]
+    output_1 = runnable.invoke(
+        PipelineState(messages=[user_input], experiment_session=experiment_session), config=config
+    )["messages"][-1]
     expected_output = f"Node 2: Node 1: {user_input}"
     assert output_1 == expected_output
 
@@ -153,9 +160,9 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     ]
 
     user_input_2 = "Saying more stuff"
-    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
-        "messages"
-    ][-1]
+    output_2 = runnable.invoke(
+        PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config
+    )["messages"][-1]
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
 
@@ -303,11 +310,13 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     llm_3 = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), prompt="Node 3:", history_type=None)
     nodes = [start_node(), llm_1, llm_2, llm_3, end_node()]
     runnable = create_runnable(pipeline, nodes)
+    repo = ORMRepository()
+    config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config)
 
     expected_call_messages = [
         # First call to Node 1
@@ -367,11 +376,13 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
     )
     nodes = [start_node(), llm_1, end_node()]
     runnable = create_runnable(pipeline, nodes)
+    repo = ORMRepository()
+    config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config)
 
     expected_call_messages = [
         # First call to Node 1

@@ -217,7 +217,7 @@ class HistoryMixin(LLMResponseMixin):
 
         if self.use_session_history:
             return self.repo.get_session_messages(
-                session.chat, self.get_history_mode(), exclude_message_id=exclude_message_id
+                session, self.get_history_mode(), exclude_message_id=exclude_message_id
             )
         else:
             history = self.repo.get_pipeline_chat_history(session, self.history_type, self._get_history_name())

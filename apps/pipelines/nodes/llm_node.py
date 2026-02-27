@@ -120,9 +120,9 @@ def _process_files(
     by the LLM
     """
     if cited_files:
-        node.repo.attach_files_to_chat(session.chat, attachment_type="file_citation", files=cited_files)
+        node.repo.attach_files_to_chat(session, attachment_type="file_citation", files=cited_files)
     if generated_files:
-        node.repo.attach_files_to_chat(session.chat, attachment_type="code_interpreter", files=generated_files)
+        node.repo.attach_files_to_chat(session, attachment_type="code_interpreter", files=generated_files)
     return {
         "cited_files": [file.id for file in cited_files],
         "generated_files": [file.id for file in generated_files],

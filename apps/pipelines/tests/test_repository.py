@@ -117,7 +117,7 @@ class TestInMemoryRepository:
         from langchain_core.messages import HumanMessage
 
         self.repo.session_messages = [HumanMessage(content="test")]
-        result = self.repo.get_session_messages(chat=None, history_mode="summarize")
+        result = self.repo.get_session_messages(session=None, history_mode="summarize")
         assert len(result) == 1
         assert result[0].content == "test"
 
@@ -139,7 +139,7 @@ class TestInMemoryRepository:
         assert len(self.repo.files_created) == 1
 
     def test_attach_files_to_chat(self):
-        self.repo.attach_files_to_chat(chat="fake_chat", attachment_type="code_interpreter", files=["file1"])
+        self.repo.attach_files_to_chat(session="fake_session", attachment_type="code_interpreter", files=["file1"])
         assert len(self.repo.attached_files) == 1
         assert self.repo.attached_files[0]["type"] == "code_interpreter"
 
@@ -242,7 +242,7 @@ class TestORMRepository:
 
         session = ExperimentSessionFactory()
         # With no messages, should return empty list
-        result = self.repo.get_session_messages(session.chat, "summarize")
+        result = self.repo.get_session_messages(session, "summarize")
         assert result == []
 
     def test_attach_files_to_chat(self):
@@ -250,7 +250,7 @@ class TestORMRepository:
 
         session = ExperimentSessionFactory()
         # Should not raise — attaching empty list
-        self.repo.attach_files_to_chat(session.chat, "code_interpreter", [])
+        self.repo.attach_files_to_chat(session, "code_interpreter", [])
 
     def test_get_participant_global_data(self):
         from apps.utils.factories.experiment import ExperimentSessionFactory

@@ -11,6 +11,7 @@ from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
+from apps.pipelines.repository import InMemoryPipelineRepository, ORMRepository
 from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
@@ -57,6 +58,7 @@ def main(input, **kwargs):
 )
 def test_code_node(code, user_input, output):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
     node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == output  # ty: ignore[not-subscriptable]
@@ -112,31 +114,31 @@ def test_code_node_build_errors(code, error):
 )
 def test_code_node_runtime_errors(code, user_input, error):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(outputs={}, experiment_session=None, last_node_input=user_input, node_inputs=[user_input])
     with pytest.raises(CodeNodeRunError, match=error):
         node._process(state, NodeContext(state))
 
 
-@pytest.mark.django_db()
-def test_get_participant_data(pipeline, experiment_session):
+def test_get_participant_data():
     code = """
 def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["body_type"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(
         last_node_input="hi",
         node_inputs=["hi"],
         outputs={},
-        experiment_session=experiment_session,
+        experiment_session=ExperimentSessionFactory.build(),
         participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
     node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == "robot"  # ty: ignore[not-subscriptable]
 
 
-@pytest.mark.django_db()
-def test_update_participant_data(pipeline, experiment_session):
+def test_update_participant_data():
     output = "moody"
 
     code = f"""
@@ -147,11 +149,12 @@ def main(input, **kwargs):
     return get_participant_data()["fun_facts"]["personality"]
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(
         last_node_input="hi",
         node_inputs=["hi"],
         outputs={},
-        experiment_session=experiment_session,
+        experiment_session=ExperimentSessionFactory.build(),
         participant_data={"fun_facts": {"personality": "fun loving", "body_type": "robot"}},
     )
     node_output = node._process(state, NodeContext(state))
@@ -176,8 +179,10 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
+    config = {"configurable": {"repo": ORMRepository()}}
     node_output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(experiment_session=experiment_session, messages=["hi"])
+        PipelineState(experiment_session=experiment_session, messages=["hi"]),
+        config=config,
     )
     assert node_output["messages"][-1] == "value"
 
@@ -200,8 +205,10 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
+    config = {"configurable": {"repo": ORMRepository()}}
     node_output = create_runnable(pipeline, nodes).invoke(
-        PipelineState(experiment_session=experiment_session, messages=["hi"])
+        PipelineState(experiment_session=experiment_session, messages=["hi"]),
+        config=config,
     )
     assert node_output["messages"][-1] == output
 
@@ -223,8 +230,10 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
+    config = {"configurable": {"repo": ORMRepository()}}
     assert create_runnable(pipeline, nodes).invoke(
-        PipelineState(experiment_session=experiment_session, messages=[input])
+        PipelineState(experiment_session=experiment_session, messages=[input]),
+        config=config,
     )["messages"][-1] == str(
         {
             "start": input,
@@ -241,6 +250,7 @@ def main(input, **kwargs):
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     with pytest.raises(CodeNodeRunError, match="Cannot set the 'outputs' key of the temporary state"):
         node._process(state, NodeContext(state))
@@ -256,7 +266,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_get)
     state = PipelineState(messages=[user_input], outputs={}, experiment_session=None, temp_state={})
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": InMemoryPipelineRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == user_input  # ty: ignore[not-subscriptable]
 
 
@@ -277,7 +288,8 @@ def main(input, **kwargs):
         attachments=[Attachment.from_file(file, "code_interpreter", experiment_session.id)],
         temp_state={},
     )
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "content from file"  # ty: ignore[not-subscriptable]
 
 
@@ -318,7 +330,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "Number of schedules: 1"  # ty: ignore[not-subscriptable]
 
 
@@ -335,7 +348,8 @@ def main(input, **kwargs):
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "Number of schedules: 0, Empty list: True"  # ty: ignore[not-subscriptable]
 
 
@@ -351,7 +365,8 @@ def main(input, **kwargs):
     state = PipelineState(
         messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={}, session_state={}
     )
-    output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository()}}
+    output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert output.update["session_state"] == {"message_count": 2}  # ty: ignore[not-subscriptable]
 
 
@@ -363,6 +378,7 @@ def main(input, **kwargs):
     return input
     """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     output = node._process(state, NodeContext(state))
     assert output.update["output_message_tags"] == [("message-tag", "")]  # ty: ignore[not-subscriptable]
@@ -389,6 +405,7 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     node_output = node._process(state, NodeContext(state))
     assert node_output.update["messages"][-1] == "3,4 - {1, 2}"  # ty: ignore[not-subscriptable]
@@ -406,6 +423,7 @@ def main(input, **kwargs):
     """
 
     node = CodeNode(name="test", node_id="123", django_node=None, code=code_set)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     with pytest.raises(CodeNodeRunError) as exc_info:
         node._process(state, NodeContext(state))
@@ -463,7 +481,8 @@ def main(input, **kwargs):
         experiment_session=experiment_session,
         temp_state={},
     )
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 
     # Verify file was created
     file = File.objects.latest("id")
@@ -481,17 +500,49 @@ def main(input, **kwargs):
     assert file in attachment.files.all()
 
 
-@pytest.mark.django_db()
-def test_add_file_attachment_requires_bytes(experiment_session):
+def test_add_file_attachment_in_memory():
+    """Test file attachment using InMemoryPipelineRepository — no DB access."""
+    code = """
+def main(input, **kwargs):
+    add_file_attachment("report.pdf", b"pdf content", "application/pdf")
+    return input
+"""
+    repo = InMemoryPipelineRepository()
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    state = PipelineState(
+        messages=["hi"],
+        outputs={},
+        experiment_session=ExperimentSessionFactory.build(),
+        temp_state={},
+    )
+    config = {"configurable": {"repo": repo}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+
+    # Verify file was tracked in the in-memory repo
+    assert len(repo.files_created) == 1
+    assert repo.files_created[0]["filename"] == "report.pdf"
+    assert repo.files_created[0]["content_type"] == "application/pdf"
+
+    # Verify attachment was tracked
+    assert len(repo.attached_files) == 1
+    assert repo.attached_files[0]["type"] == "code_interpreter"
+
+    # Verify file ID tracked in output metadata
+    generated_files = node_output.update["output_message_metadata"]["generated_files"]  # ty: ignore[not-subscriptable]
+    assert len(generated_files) == 1
+
+
+def test_add_file_attachment_requires_bytes():
     code = """
 def main(input, **kwargs):
     add_file_attachment("test.txt", "not bytes", "text/plain")
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
     state = PipelineState(
         outputs={},
-        experiment_session=experiment_session,
+        experiment_session=ExperimentSessionFactory.build(),
         last_node_input="hi",
         node_inputs=["hi"],
     )

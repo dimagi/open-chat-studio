@@ -3,6 +3,7 @@ import pytest
 from apps.experiments.models import Participant
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import RenderTemplate
+from apps.pipelines.repository import InMemoryPipelineRepository, ORMRepository
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 
@@ -41,10 +42,30 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         "input_message_url: {{input_message_url}} "
     )
     node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository()}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output["messages"][-1] == (
         "input: Cycling, inputs: ['Cycling'], temp_state.my_key: example_key, "
         "participant_id: participant_123, "
         "participant_data: custom_value, "
         "input_message_url: https://example.com/ "
     )
+
+
+def test_render_template_with_schedules_in_memory():
+    """Test RenderTemplate schedule access using InMemoryPipelineRepository — no DB access."""
+    repo = InMemoryPipelineRepository()
+    repo.participant_schedules = [{"name": "Daily reminder", "next_trigger_date": "2025-01-01"}]
+
+    session = ExperimentSessionFactory.build()
+    state = PipelineState(
+        experiment_session=session,
+        messages=["hello"],
+        temp_state={},
+        outputs={},
+    )
+    template = "schedules: {{participant_schedules}}"
+    node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
+    config = {"configurable": {"repo": repo}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+    assert "Daily reminder" in node_output["messages"][-1]

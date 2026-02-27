@@ -133,7 +133,7 @@ class TestHistoryMixin:
 
         assert result == ["session-history"]
         mock_repo.get_session_messages.assert_called_once_with(
-            session.chat, node.get_history_mode(), exclude_message_id=None
+            session, node.get_history_mode(), exclude_message_id=None
         )
         mock_repo.get_pipeline_chat_history.assert_not_called()
 

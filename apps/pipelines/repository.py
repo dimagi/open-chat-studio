@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from langchain_core.messages import BaseMessage
 
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
@@ -61,7 +61,7 @@ class PipelineRepository(ABC):
 
     @abstractmethod
     def get_session_messages(
-        self, chat: Chat, history_mode: str, exclude_message_id: int | None = None
+        self, session: ExperimentSession, history_mode: str, exclude_message_id: int | None = None
     ) -> list[BaseMessage]:
         """Get session-level chat history as LangChain messages."""
         ...
@@ -136,8 +136,10 @@ class PipelineRepository(ABC):
         ...
 
     @abstractmethod
-    def attach_files_to_chat(self, chat: Chat, attachment_type: str, files: list[File] | set[File]) -> None:
-        """Attach files to a chat. Covers both CodeNode and llm_node _process_files."""
+    def attach_files_to_chat(
+        self, session: ExperimentSession, attachment_type: str, files: list[File] | set[File]
+    ) -> None:
+        """Attach files to a chat via the session. Covers both CodeNode and llm_node _process_files."""
         ...
 
     # --- Participant ---
@@ -150,6 +152,18 @@ class PipelineRepository(ABC):
     @abstractmethod
     def get_participant_schedules(self, participant, experiment_id, **kwargs) -> list:
         """Get scheduled messages for a participant."""
+        ...
+
+    # --- Session accessors ---
+
+    @abstractmethod
+    def get_session_team(self, session: ExperimentSession):
+        """Get the team for a session (avoids FK traversal on session.team)."""
+        ...
+
+    @abstractmethod
+    def get_session_participant(self, session: ExperimentSession):
+        """Get the participant for a session (avoids FK traversal on session.participant)."""
         ...
 
     # --- Assistants (deprecated node support) ---
@@ -184,8 +198,8 @@ class ORMRepository(PipelineRepository):
             node_id=node_id,
         )
 
-    def get_session_messages(self, chat, history_mode, exclude_message_id=None):
-        return chat.get_langchain_messages_until_marker(history_mode, exclude_message_id=exclude_message_id)
+    def get_session_messages(self, session, history_mode, exclude_message_id=None):
+        return session.chat.get_langchain_messages_until_marker(history_mode, exclude_message_id=exclude_message_id)
 
     def save_compression_checkpoint(self, checkpoint_message_id, history_type, compression_marker, history_mode):
         from apps.chat.conversation import COMPRESSION_MARKER
@@ -251,8 +265,8 @@ class ORMRepository(PipelineRepository):
             purpose=purpose,
         )
 
-    def attach_files_to_chat(self, chat, attachment_type, files):
-        chat.attach_files(attachment_type=attachment_type, files=files)
+    def attach_files_to_chat(self, session, attachment_type, files):
+        session.chat.attach_files(attachment_type=attachment_type, files=files)
 
     def get_participant_global_data(self, participant):
         return participant.global_data
@@ -267,6 +281,12 @@ class ORMRepository(PipelineRepository):
             return OpenAiAssistant.objects.get(id=assistant_id)
         except OpenAiAssistant.DoesNotExist:
             raise RepositoryLookupError(f"Assistant with id {assistant_id} not found") from None
+
+    def get_session_team(self, session):
+        return session.team
+
+    def get_session_participant(self, session):
+        return session.participant
 
 
 class InMemoryPipelineRepository(PipelineRepository):
@@ -354,7 +374,7 @@ class InMemoryPipelineRepository(PipelineRepository):
             node_id=node_id,
         )
 
-    def get_session_messages(self, chat, history_mode, exclude_message_id=None):
+    def get_session_messages(self, session, history_mode, exclude_message_id=None):
         return list(self.session_messages)
 
     def save_compression_checkpoint(self, checkpoint_message_id, history_type, compression_marker, history_mode):
@@ -379,14 +399,20 @@ class InMemoryPipelineRepository(PipelineRepository):
 
         return FileFactory.build(id=len(self.files_created), name=filename, content_type=content_type or "")
 
-    def attach_files_to_chat(self, chat, attachment_type, files):
-        self.attached_files.append({"chat": chat, "type": attachment_type, "files": files})
+    def attach_files_to_chat(self, session, attachment_type, files):
+        self.attached_files.append({"session": session, "type": attachment_type, "files": files})
 
     def get_participant_global_data(self, participant):
         return dict(self.participant_global_data)
 
     def get_participant_schedules(self, participant, experiment_id, **kwargs):
         return list(self.participant_schedules)
+
+    def get_session_team(self, session):
+        return getattr(session, "team", None)
+
+    def get_session_participant(self, session):
+        return getattr(session, "participant", None)
 
     def get_assistant(self, assistant_id):
         if assistant_id not in self.assistants:

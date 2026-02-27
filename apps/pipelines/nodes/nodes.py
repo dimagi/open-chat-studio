@@ -26,6 +26,7 @@ from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
+from apps.files.models import FilePurpose
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -50,6 +51,7 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.repository import RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
@@ -124,7 +126,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
 
             session = context.session
             if session:
-                participant = getattr(session, "participant", None)
+                participant = self.repo.get_session_participant(session)
                 if participant:
                     content.update(
                         {
@@ -132,8 +134,10 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                                 "identifier": getattr(participant, "identifier", None),
                                 "platform": getattr(participant, "platform", None),
                             },
-                            "participant_schedules": participant.get_schedules_for_experiment(
-                                session.experiment,
+                            "participant_schedules": self.repo.get_participant_schedules(
+                                participant,
+                                # TODO: Move to repo
+                                session.experiment_id,
                                 as_dict=True,
                                 include_inactive=True,
                             )
@@ -756,8 +760,8 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         try:
-            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
-        except OpenAiAssistant.DoesNotExist:
+            assistant = self.repo.get_assistant(self.assistant_id)
+        except RepositoryLookupError:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
         session = context.session
@@ -866,7 +870,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
         session = context.session
-        team = session.team if session else None
+        team = self.repo.get_session_team(session) if session else None
 
         http_client = RestrictedHttpClient(team=team)
 
@@ -911,8 +915,6 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             """
             from io import BytesIO
 
-            from apps.files.models import File, FilePurpose
-
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
 
@@ -921,15 +923,15 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
             file_obj = BytesIO(content)
-            file = File.create(
+            file = self.repo.create_file(
                 filename=filename,
                 file_obj=file_obj,
-                team_id=session.team_id,
+                team_id=self.repo.get_session_team(session).id,
                 content_type=content_type,
                 purpose=FilePurpose.MESSAGE_MEDIA,
             )
 
-            session.chat.attach_files(attachment_type="code_interpreter", files=[file])
+            self.repo.attach_files_to_chat(session=session, attachment_type="code_interpreter", files=[file])
 
             metadata = output_state.setdefault("output_message_metadata", {})
             generated_files = metadata.setdefault("generated_files", [])
