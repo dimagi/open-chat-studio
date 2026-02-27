@@ -14,6 +14,7 @@ if [ "$CURRENT_PATH" != "$ROOT_WORKTREE_PATH" ]; then
 
     [ -f "$ROOT_WORKTREE_PATH/.env" ]   && [ ! -f ".env" ]   && cp "$ROOT_WORKTREE_PATH/.env"   .env
     [ -f "$ROOT_WORKTREE_PATH/.envrc" ] && [ ! -f ".envrc" ] && cp "$ROOT_WORKTREE_PATH/.envrc" .envrc
+    [ -f "$ROOT_WORKTREE_PATH/.python-version" ] && [ ! -f ".python-version" ] && cp "$ROOT_WORKTREE_PATH/.python-version" .python-version
     command -v direnv &>/dev/null        && direnv allow
 fi
 
