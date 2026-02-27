@@ -1,9 +1,5 @@
 {
   "setup-worktree": [
-    "cp $ROOT_WORKTREE_PATH/.env .env 2>/dev/null || echo 'No .env found in main worktree; skipping'",
-    "cp $ROOT_WORKTREE_PATH/.envrc .envrc 2>/dev/null || true",
-    "cp $ROOT_WORKTREE_PATH/.python-version .python-version 2>/dev/null || true",
-    "command -v direnv &> /dev/null && direnv allow",
-    "bash scripts/bootstrap.sh --force -y"
+    "bash .claude/hooks/setup-env.sh"
   ]
 }
