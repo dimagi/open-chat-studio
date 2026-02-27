@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-ROOT_WORKTREE_PATH=$(git worktree list --porcelain | awk '/^worktree/{print $2; exit}')
+ROOT_WORKTREE_PATH=$(git worktree list --porcelain | awk '/^worktree/{sub(/^worktree /, ""); print; exit}')
 CURRENT_PATH=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 if [ "$CURRENT_PATH" != "$ROOT_WORKTREE_PATH" ]; then
