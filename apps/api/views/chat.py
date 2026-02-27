@@ -177,8 +177,8 @@ def chat_upload_file(request, session_id):
     # auth=["{}"],
     examples=[
         OpenApiExample(
-            name="StartSessionWorkingVersion",
-            summary="Start session with working (unreleased) version",
+            name="StartSessionPublishedVersion",
+            summary="Start session with published version",
             value={
                 "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
                 "session_data": {"source": "widget", "page_url": "https://example.com"},
@@ -199,7 +199,7 @@ def chat_upload_file(request, session_id):
             request_only=True,
         ),
         OpenApiExample(
-            name="StartSessionWorkingVersionResponse",
+            name="StartSessionPublishedVersionResponse",
             summary="Session started with published version",
             value={
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
