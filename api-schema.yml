@@ -199,7 +199,7 @@ paths:
                     participant:
                       identifier: abc
                       remote_id: abc
-                  summary: Session started with working version
+                  summary: Session started with published version
                 StartSessionSpecificVersionResponse:
                   value:
                     session_id: 123e4567-e89b-12d3-a456-426614174000
