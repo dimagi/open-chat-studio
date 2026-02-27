@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from langchain_core.messages import BaseMessage
+
 from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
@@ -13,8 +15,6 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.models import LlmProvider
 
 if TYPE_CHECKING:
-    from langchain_core.messages import BaseMessage
-
     from apps.assistants.models import OpenAiAssistant
 
 
