@@ -1,5 +1,11 @@
+from io import BytesIO
+from types import SimpleNamespace
+from unittest.mock import patch
+
 import pytest
 
+from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.nodes import Passthrough
 from apps.pipelines.repository import (
     CollectionFileInfo,
     CollectionIndexSummary,
@@ -8,6 +14,8 @@ from apps.pipelines.repository import (
     PipelineRepository,
     RepositoryLookupError,
 )
+from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
 def _make_in_memory():
@@ -80,8 +88,6 @@ class TestInMemoryRepository:
         assert result == [c1]
 
     def test_get_collection_index_summaries(self):
-        from types import SimpleNamespace
-
         c = SimpleNamespace(id=1, name="Test", summary="A summary")
         self.repo.collections[1] = c
         result = self.repo.get_collection_index_summaries([1])
@@ -116,13 +122,31 @@ class TestInMemoryRepository:
         assert len(self.repo.history_messages) == 1
 
     def test_create_file(self):
-        from io import BytesIO
-
         file = self.repo.create_file(
             filename="test.txt", file_obj=BytesIO(b"content"), team_id=1, content_type="text/plain", purpose="test"
         )
         assert file.name == "test.txt"
         assert len(self.repo.files_created) == 1
+
+
+class TestInjectionWiring:
+    """Verify that PipelineNode.process() extracts repo from LangGraph config."""
+
+    def test_node_receives_repo_from_config(self):
+        node = Passthrough(node_id="test-node", name="test", django_node=None)
+        repo = ORMRepository()
+        config = {"configurable": {"repo": repo}}
+        state = PipelineState(messages=["hello"])
+
+        # Mock _prepare_state and _process to isolate the wiring test
+        with (
+            patch.object(node, "_prepare_state", return_value=state),
+            patch.object(node, "_process", return_value=None),
+        ):
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+
+        assert node._repo is repo
+        assert isinstance(node._repo, ORMRepository)
 
 
 @pytest.mark.django_db()
@@ -133,24 +157,18 @@ class TestORMRepository:
         self.repo = ORMRepository()
 
     def test_get_collection_index_summaries(self):
-        from apps.utils.factories.documents import CollectionFactory
-
         col = CollectionFactory(name="My Collection", summary="A summary")
         result = self.repo.get_collection_index_summaries([col.id])
         assert len(result) == 1
         assert result[0] == CollectionIndexSummary(id=col.id, name="My Collection", summary="A summary")
 
     def test_get_pipeline_chat_history_creates(self):
-        from apps.utils.factories.experiment import ExperimentSessionFactory
-
         session = ExperimentSessionFactory()
         history = self.repo.get_pipeline_chat_history(session, "node", "test-node")
         assert history.type == "node"
         assert history.name == "test-node"
 
     def test_save_pipeline_chat_message(self):
-        from apps.utils.factories.experiment import ExperimentSessionFactory
-
         session = ExperimentSessionFactory()
         history = self.repo.get_pipeline_chat_history(session, "node", "test-node")
         msg = self.repo.save_pipeline_chat_message(history, "Hello", "Hi", "node-1")
