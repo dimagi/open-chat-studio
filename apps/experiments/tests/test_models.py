@@ -872,7 +872,7 @@ class TestExperimentTrends:
     def test_get_experiment_trend_data_with_no_errors(self, experiment):
         """Test that the function returns an array of zeros when there are no error traces"""
         success, errors = experiment.get_trend_data()
-        empty_data = [0] * 49
+        empty_data = [0] * 25
         assert errors == empty_data
         assert success == empty_data
 
@@ -925,6 +925,55 @@ class TestExperimentTrends:
             assert sum(error) == 2
             assert experiment.traces.filter(status=TraceStatus.ERROR).count() == 3
             assert sum(success) == 0
+
+    def test_get_bulk_trend_data_returns_data_for_each_experiment(self, experiment):
+        """get_bulk_trend_data returns a mapping of experiment_id -> (successes, errors) for all given IDs."""
+        experiment2 = ExperimentFactory(team=experiment.team)
+        curr_time = timezone.now()
+
+        Trace.objects.create(
+            experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+        )
+        Trace.objects.create(
+            experiment=experiment2, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+
+        result = Experiment.get_bulk_trend_data([experiment.id, experiment2.id])
+
+        assert set(result.keys()) == {experiment.id, experiment2.id}
+        successes1, errors1 = result[experiment.id]
+        assert sum(successes1) == 1
+        assert sum(errors1) == 0
+        successes2, errors2 = result[experiment2.id]
+        assert sum(successes2) == 0
+        assert sum(errors2) == 1
+
+    def test_get_bulk_trend_data_returns_zeros_for_experiments_with_no_traces(self, experiment):
+        """get_bulk_trend_data returns lists of zeros for experiments with no traces."""
+        result = Experiment.get_bulk_trend_data([experiment.id])
+
+        successes, errors = result[experiment.id]
+        assert all(v == 0 for v in successes)
+        assert all(v == 0 for v in errors)
+        assert len(successes) == len(errors)
+
+    def test_get_bulk_trend_data_aggregates_all_versions(self, experiment):
+        """get_bulk_trend_data aggregates traces from all versions of an experiment."""
+        version1 = experiment.create_new_version()
+        curr_time = timezone.now()
+
+        Trace.objects.create(
+            experiment=experiment, team=experiment.team, status=TraceStatus.SUCCESS, timestamp=curr_time, duration=1
+        )
+        Trace.objects.create(
+            experiment=version1, team=experiment.team, status=TraceStatus.ERROR, timestamp=curr_time, duration=1
+        )
+
+        result = Experiment.get_bulk_trend_data([experiment.id])
+
+        successes, errors = result[experiment.id]
+        assert sum(successes) == 1
+        assert sum(errors) == 1
 
 
 def _compare_models(original, new, expected_changed_fields: list) -> None:
