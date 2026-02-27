@@ -2,11 +2,6 @@
 
 All DB access during pipeline execution goes through `ORMRepository` (`apps/pipelines/repository.py`).
 
-## Why
-* **Testability** — node logic tests use `InMemoryPipelineRepository` with no `@pytest.mark.django_db`
-* **Auditability** — single file lists every DB operation a pipeline can perform
-* **Optimization** — caching/batching can be added in one place (`ORMRepository`)
-
 ## Architecture
 
 ```text
