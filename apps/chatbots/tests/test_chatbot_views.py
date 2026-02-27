@@ -7,6 +7,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
@@ -441,3 +442,29 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
     assert response.status_code == 302
     session.refresh_from_db()
     assert session.status == SessionStatus.ACTIVE  # Session should remain active
+
+
+@pytest.mark.django_db()
+def test_chatbot_table_view_embeds_trend_data_inline_when_flag_active(client, team_with_users):
+    """When flag_tracing is active, the chatbot table embeds trend JSON directly in the HTML
+    instead of generating per-experiment fetch URLs."""
+    team = team_with_users
+    user = team.members.first()
+    Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
+    Experiment.objects.create(
+        name="Test Chatbot",
+        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
+        owner=user,
+        team=team,
+    )
+
+    client.force_login(user)
+    url = reverse("chatbots:table", args=[team.slug])
+    with override_flag("flag_tracing", active=True):
+        response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # Inline data attribute should be present, not a per-experiment fetch URL
+    assert "data-trends=" in content
+    assert "trends_data" not in content
