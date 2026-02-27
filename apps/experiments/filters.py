@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q, Subquery
@@ -162,7 +162,7 @@ class ChannelsFilter(ChoiceColumnFilter):
     def prepare(self, team, **_):
         self.options = ChannelPlatform.for_filter(team)  # ty: ignore[invalid-assignment]
 
-    def parse_query_value(self, query_value) -> any:
+    def parse_query_value(self, query_value) -> Any:
         selected_display_names = self.values_list(query_value)
         if not selected_display_names:
             return None

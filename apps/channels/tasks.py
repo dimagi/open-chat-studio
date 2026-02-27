@@ -27,7 +27,7 @@ log = get_task_logger("ocs.channels")
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
+def handle_telegram_message(self, message_data: str, channel_external_id: uuid.UUID):
     experiment_channel = get_experiment_channel(ChannelPlatform.TELEGRAM, external_id=channel_external_id)
     if not experiment_channel:
         log.info(f"No experiment channel found for external_id: {channel_external_id}")
@@ -107,7 +107,7 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_turn_message(self, experiment_id: uuid, message_data: dict):
+def handle_turn_message(self, experiment_id: uuid.UUID, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
     experiment_channel = get_experiment_channel(
         ChannelPlatform.WHATSAPP,

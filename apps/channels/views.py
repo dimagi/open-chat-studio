@@ -51,7 +51,7 @@ log = logging.getLogger("ocs.channels")
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
-def new_telegram_message(request, channel_external_id: uuid):
+def new_telegram_message(request, channel_external_id: uuid.UUID):
     token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if token != settings.TELEGRAM_SECRET_TOKEN:
         return HttpResponseBadRequest("Invalid request.")
@@ -121,7 +121,7 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
 
 @csrf_exempt
-def new_turn_message(request, experiment_id: uuid):
+def new_turn_message(request, experiment_id: uuid.UUID):
     channel = tasks.get_experiment_channel(
         ChannelPlatform.WHATSAPP,
         experiment__public_id=experiment_id,
@@ -179,7 +179,7 @@ class NewApiMessageView(APIView):
     required_scopes = ("chatbots:interact",)
 
     @new_api_message_schema(versioned=False)
-    def post(self, request, experiment_id: uuid):
+    def post(self, request, experiment_id: uuid.UUID):
         return _new_api_message(request, experiment_id)
 
 
@@ -187,11 +187,11 @@ class NewApiMessageVersionedView(APIView):
     required_scopes = ("chatbots:interact",)
 
     @new_api_message_schema(versioned=True)
-    def post(self, request, experiment_id: uuid, version=None):
+    def post(self, request, experiment_id: uuid.UUID, version=None):
         return _new_api_message(request, experiment_id, version)
 
 
-def _new_api_message(request, experiment_id: uuid, version=None):
+def _new_api_message(request, experiment_id: uuid.UUID, version=None):
     """Chat with an experiment."""
     message_data = request.data.copy()
     participant_id = request.user.email

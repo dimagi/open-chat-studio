@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
@@ -221,7 +221,7 @@ def _get_date_param(request, param_name, default):
     return default
 
 
-def _string_to_date(date_str: str) -> datetime.date:
+def _string_to_date(date_str: str) -> date:
     date_format = "%Y-%m-%d"
     return datetime.strptime(date_str, date_format).date()
 

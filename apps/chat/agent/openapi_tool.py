@@ -16,6 +16,7 @@ from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field, create_model
+from pydantic.fields import FieldInfo
 
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
@@ -280,7 +281,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
     return _create_model(name, properties)
 
 
-def _schema_to_pydantic(spec: OpenAPISpec, schema: Schema | Reference) -> tuple[type, Field]:
+def _schema_to_pydantic(spec: OpenAPISpec, schema: Schema | Reference) -> tuple[type, FieldInfo]:
     """
     Converts an OpenAPI schema to a Pydantic field type.
 
@@ -333,7 +334,7 @@ def _schema_to_pydantic_field_type(spec: OpenAPISpec, schema: Schema) -> type:
     elif schema.type == DataType.ARRAY:
         if not schema.items.title:
             schema.items.title = f"{schema.title}Items"  # ty: ignore[invalid-assignment]
-        return list[_schema_to_pydantic(spec, schema.items)]
+        return list[_schema_to_pydantic(spec, schema.items)]  # ty: ignore[invalid-type-form]
     elif schema.enum:
         return _get_enum_type(schema)
     else:

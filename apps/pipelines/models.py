@@ -39,7 +39,7 @@ class ModelParamSpec:
         return self.model_cls.objects.get(id=id)
 
 
-def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
+def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):  # ty: ignore[invalid-type-form]
     """
     Handles parameters referencing versioned models with the following logic:
     - If the referenced model has changes compared to its latest version, a new version is created, and the
@@ -57,7 +57,7 @@ def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
                 node_version.params[param_name] = str(param_instance.latest_version.id)
 
 
-def _set_versioned_param_list_values(node_version: Self, param_name: str, param_cls):
+def _set_versioned_param_list_values(node_version: Self, param_name: str, param_cls):  # ty: ignore[invalid-type-form]
     """
     Handles list parameters referencing versioned models with the same logic as _set_versioned_param_value
     but for a list of IDs.
