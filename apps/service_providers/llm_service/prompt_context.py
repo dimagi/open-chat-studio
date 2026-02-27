@@ -30,7 +30,7 @@ class PromptTemplateContext:
         if participant_data is None:
             participant_data = session.participant_data_from_experiment
         self.participant_data_proxy = PipelineParticipantDataProxy(
-            {"participant_data": participant_data}, self.session, repo=repo
+            {"participant_data": participant_data}, self.session, repo=self.repo
         )
 
     @property
