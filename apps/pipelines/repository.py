@@ -4,8 +4,6 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from langchain_core.messages import BaseMessage
-
 from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
@@ -15,6 +13,8 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.models import LlmProvider
 
 if TYPE_CHECKING:
+    from langchain_core.messages import BaseMessage
+
     from apps.assistants.models import OpenAiAssistant
 
 
@@ -334,7 +334,11 @@ class InMemoryPipelineRepository(PipelineRepository):
         return self.collections[collection_id]
 
     def get_collections_for_search(self, collection_ids):
-        return [self.collections[cid] for cid in collection_ids if cid in self.collections]
+        return [
+            collection
+            for cid in collection_ids
+            if (collection := self.collections.get(cid)) and getattr(collection, "is_index", False)
+        ]
 
     def get_collection_index_summaries(self, collection_ids):
         results = []
@@ -345,9 +349,9 @@ class InMemoryPipelineRepository(PipelineRepository):
         return results
 
     def get_collection_file_info(self, collection_id):
-        if collection_id not in self.collection_files:
+        if collection_id not in self.collections:
             raise RepositoryLookupError(f"Collection with id {collection_id} not found")
-        return self.collection_files[collection_id]
+        return list(self.collection_files.get(collection_id, []))
 
     def get_pipeline_chat_history(self, session, history_type, name):
         key = f"{history_type}:{name}"

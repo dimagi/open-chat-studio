@@ -82,10 +82,16 @@ class TestInMemoryRepository:
             self.repo.get_llm_service(999)
 
     def test_get_collections_for_search_partial(self):
-        c1 = object()
+        c1 = SimpleNamespace(is_index=True)
         self.repo.collections[1] = c1
         result = self.repo.get_collections_for_search([1, 2])
         assert result == [c1]
+
+    def test_get_collections_for_search_excludes_non_index(self):
+        c1 = SimpleNamespace(is_index=False)
+        self.repo.collections[1] = c1
+        result = self.repo.get_collections_for_search([1])
+        assert result == []
 
     def test_get_collection_index_summaries(self):
         c = SimpleNamespace(id=1, name="Test", summary="A summary")
@@ -95,12 +101,18 @@ class TestInMemoryRepository:
         assert result[0] == CollectionIndexSummary(id=1, name="Test", summary="A summary")
 
     def test_get_collection_file_info_found(self):
+        self.repo.collections[1] = SimpleNamespace(id=1)
         self.repo.collection_files[1] = [
             CollectionFileInfo(id=10, summary="sum", content_type="text/plain"),
         ]
         result = self.repo.get_collection_file_info(1)
         assert len(result) == 1
         assert result[0].id == 10
+
+    def test_get_collection_file_info_empty_for_existing_collection(self):
+        self.repo.collections[1] = SimpleNamespace(id=1)
+        result = self.repo.get_collection_file_info(1)
+        assert result == []
 
     def test_get_pipeline_chat_history_creates_on_first_call(self):
         history = self.repo.get_pipeline_chat_history(session=None, history_type="node", name="test-node")

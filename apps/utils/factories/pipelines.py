@@ -63,6 +63,7 @@ class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):
         model = PipelineChatHistory
 
     id = factory.Sequence(lambda n: n + 1)
+    session = factory.SubFactory("apps.utils.factories.experiment.ExperimentSessionFactory")
     type = PipelineChatHistoryTypes.NAMED
     name = "name"
 

@@ -9,14 +9,14 @@ All DB access during pipeline execution goes through `PipelineRepository` (`apps
 
 ## Architecture
 
-```
+```text
 bots.py  →  LangGraph config  →  base.py extracts repo  →  node.repo
             {"configurable":       self._repo = config     self.repo.get_llm_service(...)
               {"repo": ORMRepository()}}
 ```
 
 * `ORMRepository` — production, wraps Django ORM
-* `InMemoryPipelineRepository` — tests, backed by dicts and `factory_boy .build()`
+* `InMemoryPipelineRepository` — tests, backed by dicts and `factory_boy.build()`
 
 ## Using `self.repo` in nodes
 

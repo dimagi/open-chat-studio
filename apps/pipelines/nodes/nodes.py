@@ -923,10 +923,14 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
             file_obj = BytesIO(content)
+            team = self.repo.get_session_team(session)
+            if not team:
+                raise CodeNodeRunError("Cannot attach files without a valid session team")
+
             file = self.repo.create_file(
                 filename=filename,
                 file_obj=file_obj,
-                team_id=self.repo.get_session_team(session).id,
+                team_id=team.id,
                 content_type=content_type,
                 purpose=FilePurpose.MESSAGE_MEDIA,
             )
