@@ -81,7 +81,7 @@ def custom_parse_ai_message(message) -> list[AgentAction] | AgentFinish:
 
 
 def parse_output_for_anthropic(
-    output: AIMessage | dict | str | list, session: ExperimentSession, include_citations: bool = True
+    output: AIMessage | dict | str | list | None, session: ExperimentSession | None, include_citations: bool = True
 ) -> LlmChatResponse:
     """Parse Anthropic's output and append inline URL references to the text.
 

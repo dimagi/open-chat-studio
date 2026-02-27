@@ -221,7 +221,7 @@ class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
         EventUser.objects.filter(
             user=self.request.user, team=self.request.team, event_type=self.event_type, read=False
         ).update(read=True, read_at=timezone.now())
-        bust_unread_notification_cache(user_id=self.request.user.id, team_slug=self.kwargs["team_slug"])
+        bust_unread_notification_cache(user_id=self.request.user.id, team_slug=self.kwargs["team_slug"])  # ty: ignore[invalid-argument-type]
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):

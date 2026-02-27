@@ -53,7 +53,7 @@ class FakeLlm(FakeListChatModel):
             yield ChatGenerationChunk(message=response)
         else:
             for c in response:
-                yield ChatGenerationChunk(message=AIMessageChunk(content=c))
+                yield ChatGenerationChunk(message=AIMessageChunk(content=c))  # ty: ignore[invalid-argument-type]
 
     def get_num_tokens(self, text: str) -> int:
         raise NotImplementedError

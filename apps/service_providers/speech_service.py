@@ -128,7 +128,7 @@ class AzureSpeechService(SpeechService):
             speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
 
             # Create a speech synthesizer
-            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)  # ty: ignore[invalid-argument-type]
 
             # Synthesize the text
             result = synthesizer.speak_text(text)

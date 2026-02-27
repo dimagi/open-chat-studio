@@ -37,6 +37,7 @@ class StateSchema(AgentState):
 def execute_sub_agent(node: PipelineNode, context: NodeContext):
     user_input = context.input
     session = context.session
+    assert session is not None, "execute_sub_agent requires an active session"
     tool_callbacks = ToolCallbacks()
     agent = build_node_agent(node, context, session, tool_callbacks)
 

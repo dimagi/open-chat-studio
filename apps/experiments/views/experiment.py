@@ -298,7 +298,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
             session = WebChannel.start_new_session(
                 working_experiment=experiment,
                 participant_user=user,
-                participant_identifier=identifier,
+                participant_identifier=identifier,  # ty: ignore[invalid-argument-type]
                 timezone=request.session.get("detected_tz", None),
             )
             if verify_user and consent.identifier_type == "email":

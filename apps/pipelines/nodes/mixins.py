@@ -116,13 +116,13 @@ class LLMResponseMixin(BaseModel):
         except PipelineNodeBuildError as e:
             raise PydanticCustomError(
                 "invalid_model",
-                str(e),
+                str(e),  # ty: ignore[invalid-argument-type]
                 {"field": "llm_provider_id"},
             ) from None
         if model.deprecated:
             raise PydanticCustomError(
                 "deprecated_model",
-                f"LLM provider model '{model.name}' is deprecated.",
+                f"LLM provider model '{model.name}' is deprecated.",  # ty: ignore[invalid-argument-type]
                 {"field": "llm_provider_id"},
             )
 

@@ -125,9 +125,9 @@ def get_action_params_form(data=None, instance=None, team_id=None, experiment_id
     return EventActionTypeSelectForm(
         primary=EventActionForm(data=data, instance=instance),
         secondary={
-            "log": EmptyForm(**form_kwargs),
-            "send_message_to_bot": SendMessageToBotForm(**form_kwargs),
-            "end_conversation": EmptyForm(**form_kwargs),
+            "log": EmptyForm(**form_kwargs),  # ty: ignore[invalid-argument-type]
+            "send_message_to_bot": SendMessageToBotForm(**form_kwargs),  # ty: ignore[invalid-argument-type]
+            "end_conversation": EmptyForm(**form_kwargs),  # ty: ignore[invalid-argument-type]
             "schedule_trigger": ScheduledMessageConfigForm(experiment_id=experiment_id, **form_kwargs),
             "pipeline_start": PipelineStartForm(team_id=team_id, **form_kwargs),
         },

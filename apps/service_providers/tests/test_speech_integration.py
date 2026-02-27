@@ -7,6 +7,7 @@ import pytest
 from django.conf import settings
 from pydub import AudioSegment
 
+from apps.experiments.models import SyntheticVoice
 from apps.service_providers.speech_service import (
     AWSSpeechService,
     AzureSpeechService,
@@ -33,7 +34,7 @@ def openai_credentials():
     """Get real OpenAI credentials from environment using django-environ"""
     api_key = env.str("OPENAI_API_KEY", default=None)
     if not api_key:
-        pytest.skip("OPENAI_API_KEY not set")
+        pytest.skip("OPENAI_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {
         "api_key": api_key,
         "api_base": env.str("OPENAI_API_BASE", default=None),
@@ -49,7 +50,7 @@ def aws_credentials():
     region = env.str("AWS_REGION", default="us-east-1")
 
     if not (access_key and secret_key):
-        pytest.skip("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY not set")
+        pytest.skip("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY not set")  # ty: ignore[invalid-argument-type]
 
     return {
         "access_key_id": access_key,
@@ -65,7 +66,7 @@ def azure_credentials():
     region = env.str("AZURE_SPEECH_REGION", default="eastus")
 
     if not subscription_key:
-        pytest.skip("AZURE_SPEECH_KEY not set")
+        pytest.skip("AZURE_SPEECH_KEY not set")  # ty: ignore[invalid-argument-type]
 
     return {
         "subscription_key": subscription_key,
@@ -80,7 +81,7 @@ class TestOpenAISpeechIntegration:
     def test_synthesize_voice_with_real_api(self, openai_credentials, team_with_users):
         """Test synthesis with real OpenAI API"""
         provider = VoiceProviderFactory(team=team_with_users, type="openai")
-        voice = SyntheticVoiceFactory(
+        voice: SyntheticVoice = SyntheticVoiceFactory(  # ty: ignore[invalid-assignment]
             service="OpenAI",
             name="alloy",  # Valid OpenAI voice
             voice_provider=provider,
@@ -123,7 +124,7 @@ class TestAWSSpeechIntegration:
     def test_synthesize_voice_with_real_api(self, aws_credentials, team_with_users):
         """Test synthesis with real AWS Polly API"""
         provider = VoiceProviderFactory(team=team_with_users, type="aws")
-        voice = SyntheticVoiceFactory(
+        voice: SyntheticVoice = SyntheticVoiceFactory(  # ty: ignore[invalid-assignment]
             service="AWS",
             name="Joanna",  # Valid AWS Polly voice
             neural=True,
@@ -152,7 +153,7 @@ class TestAzureSpeechIntegration:
     def test_synthesize_voice_with_real_api(self, azure_credentials, team_with_users):
         """Test synthesis with real Azure API"""
         provider = VoiceProviderFactory(team=team_with_users, type="azure")
-        voice = SyntheticVoiceFactory(
+        voice: SyntheticVoice = SyntheticVoiceFactory(  # ty: ignore[invalid-assignment]
             service="Azure",
             name="JennyNeural",  # Valid Azure voice
             language_code="en-US",

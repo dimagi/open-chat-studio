@@ -78,7 +78,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             if with_summaries and message.summary:
                 yield message.get_summary_message()
 
-    def attach_files(self, attachment_type: str, files: list[File]):
+    def attach_files(self, attachment_type: str, files: list[File] | set[File]):
         resource, _created = self.attachments.get_or_create(tool_type=attachment_type)
         resource.files.add(*files)
 

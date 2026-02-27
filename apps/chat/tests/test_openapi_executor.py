@@ -119,7 +119,7 @@ def test_openapi_tool_response_content_disposition_attachment(httpx_mock, filena
 
 def _test_tool_call(spec_dict, call_args: dict, path=None):
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    path = path or list(spec.paths)[0]
+    path = path or list(spec.paths)[0]  # ty: ignore[invalid-argument-type]
     function_def = openapi_spec_op_to_function_def(spec, path, "get")
     tool = function_def.build_tool(auth_service=anonymous_auth_service, custom_action=Mock())
     return tool.run(call_args, tool_call_id="123")

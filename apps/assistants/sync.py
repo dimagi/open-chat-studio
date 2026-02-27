@@ -96,7 +96,7 @@ def wrap_openai_errors(fn):
             message = e.message
             if isinstance(e.body, dict):
                 with contextlib.suppress(KeyError, AttributeError):
-                    message = e.body["message"]
+                    message = e.body["message"]  # ty: ignore[invalid-argument-type]
 
             raise OpenAiSyncError(message) from e
         except ValidationError as e:

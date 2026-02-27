@@ -76,7 +76,7 @@ class BaseTypeSelectFormView(views.View):
 
     def get_object(self):
         if self.kwargs.get("pk") and not self._object:
-            self._object = get_object_or_404(self.model, team=self.request.team, pk=self.kwargs["pk"])
+            self._object = get_object_or_404(self.model, team=self.request.team, pk=self.kwargs["pk"])  # ty: ignore[invalid-argument-type]
         return self._object
 
     def get_title(self):

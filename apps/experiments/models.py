@@ -425,7 +425,7 @@ class SyntheticVoice(BaseModel):
         return display_str
 
     @staticmethod
-    def get_for_team(team: Team, exclude_services=None) -> list[SyntheticVoice]:
+    def get_for_team(team: Team | None, exclude_services=None) -> list[SyntheticVoice]:
         """Returns a queryset for this team comprising of all general synthetic voice records and those exclusive
         to this team. Any services specified by `exclude_services` will be excluded from the final result"""
         exclude_services = exclude_services or []
@@ -1370,7 +1370,7 @@ class ExperimentSession(BaseTeamModel):
     """
 
     objects = ExperimentSessionObjectManager()
-    external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
+    external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)  # ty: ignore[invalid-argument-type]
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)

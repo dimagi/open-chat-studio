@@ -96,5 +96,7 @@ class TestEmbeddedWidgetChannelModel:
         # Should raise exception for duplicate token usage
         with pytest.raises(ChannelAlreadyUtilizedException):
             ExperimentChannel.check_usage_by_another_experiment(
-                ChannelPlatform.EMBEDDED_WIDGET, "existing_token_123456789012345678", new_experiment
+                ChannelPlatform.EMBEDDED_WIDGET,
+                "existing_token_123456789012345678",
+                new_experiment,  # ty: ignore[invalid-argument-type]
             )

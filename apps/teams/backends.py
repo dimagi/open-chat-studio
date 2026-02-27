@@ -154,7 +154,7 @@ class CustomPermissionSetDef:
 @dataclasses.dataclass
 class GroupDef:
     name: str
-    permission_defs: list[ModelPermSetDef | AppPermSetDef]
+    permission_defs: list[ModelPermSetDef | AppPermSetDef | CustomPermissionSetDef]
 
     def update_or_create(self):
         group, _ = Group.objects.get_or_create(name=self.name)

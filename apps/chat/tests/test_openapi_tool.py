@@ -382,7 +382,7 @@ def _get_openai_function_from_openapi_spec(spec: dict, path: str, method: str):
     to validate the pydantic model that's produced by `openapi_spec_op_to_function_def`.
     """
     spec = OpenAPISpec.from_spec_dict(spec)  # ty: ignore[invalid-assignment]
-    function_def = openapi_spec_op_to_function_def(spec, path, method)
+    function_def = openapi_spec_op_to_function_def(spec, path, method)  # ty: ignore[invalid-argument-type]
     tool = Tool(
         name=function_def.name,
         description=function_def.description,

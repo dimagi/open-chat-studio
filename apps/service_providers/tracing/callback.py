@@ -31,7 +31,7 @@ class CallbackWrapper(Proxy):
 
 
 def wrap_callback(
-    callback: BaseCallbackHandler, run_name_map: dict[str, str], filter_patterns: list[str]
+    callback: BaseCallbackHandler, run_name_map: dict[str, str] | None, filter_patterns: list[str] | None
 ) -> BaseCallbackHandler:
     """Wrap a callback handler to ensure that dict values are serializable.
 

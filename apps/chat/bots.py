@@ -104,7 +104,7 @@ class PipelineBot:
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return ai_message
 
-    def _get_input_state(self, attachments: list[Attachment], user_input: str):
+    def _get_input_state(self, attachments: list[Attachment] | None, user_input: str):
         state = PipelineState(
             messages=[user_input],
             experiment_session=self.session,
@@ -120,7 +120,7 @@ class PipelineBot:
         state["participant_data"] = data
         return state
 
-    def _updates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment]):
+    def _updates_state_with_attachments(self, state: PipelineState, attachments: list[Attachment] | None):
         attachments = attachments or []
         state["input_message_metadata"] = {}
         if attachments:

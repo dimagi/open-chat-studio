@@ -218,7 +218,10 @@ class GithubDocumentSourceForm(DocumentSourceForm):
 
         try:
             github_config = GitHubSourceConfig(
-                repo_url=repo_url, branch=branch, file_pattern=file_pattern, path_filter=path_filter
+                repo_url=repo_url,  # ty: ignore[invalid-argument-type]
+                branch=branch,
+                file_pattern=file_pattern,
+                path_filter=path_filter,
             )
         except pydantic.ValidationError:
             raise forms.ValidationError("Invalid config") from None
@@ -324,7 +327,7 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
 
         try:
             config = ConfluenceSourceConfig(
-                base_url=base_url,
+                base_url=base_url,  # ty: ignore[invalid-argument-type]
                 space_key=space_key,
                 label=label,
                 cql=cql,

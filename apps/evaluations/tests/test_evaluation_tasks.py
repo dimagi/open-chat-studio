@@ -5,7 +5,7 @@ import pytest
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
 from apps.evaluations.tasks import evaluate_single_message_task, run_bot_generation
-from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -25,8 +25,8 @@ def team_with_users():
 
 
 @pytest.fixture()
-def experiment(team_with_users, db):
-    experiment = ChatbotFactory()
+def experiment(team_with_users, db) -> Experiment:
+    experiment: Experiment = ChatbotFactory()  # ty: ignore[invalid-assignment]
     template_node = render_template_node("I heard: {{input}}")
     create_pipeline_model([start_node(), template_node, end_node()], pipeline=experiment.pipeline)
     experiment.pipeline.save()
@@ -82,7 +82,7 @@ def test_run_bot_generation(experiment, evaluation_message, team_with_users):
 @pytest.mark.django_db()
 def test_run_bot_generation_with_participant_data_session_state(evaluation_message, team_with_users):
     """Test that _run_bot_generation calls the bot correctly"""
-    experiment = ChatbotFactory()
+    experiment: Experiment = ChatbotFactory()  # ty: ignore[invalid-assignment]
     template_node = render_template_node("{{participant_data}}:{{session_state}}")
     create_pipeline_model([start_node(), template_node, end_node()], pipeline=experiment.pipeline)
     experiment.pipeline.save()

@@ -224,7 +224,7 @@ class AnthropicReasoningParameters(AnthropicBaseParameters):
         if value >= info.data.get("max_tokens", 0):
             raise PydanticCustomError(
                 "invalid_model_parameters",
-                f"Tokens must be less than the model's max output token limit of {info.data.get('max_tokens')}",
+                f"Tokens must be less than the model's max output token limit of {info.data.get('max_tokens')}",  # ty: ignore[invalid-argument-type]
             )
         return value
 

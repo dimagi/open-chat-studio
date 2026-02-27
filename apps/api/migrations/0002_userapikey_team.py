@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='userapikey',
             name='team',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, related_name='api_keys', to='teams.team'),
+            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, related_name='api_keys', to='teams.team'),  # ty: ignore[invalid-argument-type]
             preserve_default=False,
         ),
     ]

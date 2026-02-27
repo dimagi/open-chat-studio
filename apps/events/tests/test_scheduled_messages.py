@@ -22,7 +22,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.time import timedelta_to_relative_delta
 
 
-def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
+def _construct_event_action(time_period: str | TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
     params = {
         "name": "Test",
         "time_period": time_period,

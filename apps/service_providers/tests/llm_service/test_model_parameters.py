@@ -10,29 +10,29 @@ class TestGPT52ParametersNoneEffort:
     this — it should apply sensible defaults so the save succeeds."""
 
     def test_temperature_defaults_when_effort_is_none_and_temperature_is_null(self):
-        params = GPT52Parameters(effort="none", temperature=None, top_p=1.0)
+        params = GPT52Parameters(effort="none", temperature=None, top_p=1.0)  # ty: ignore[invalid-argument-type]
         assert params.temperature == 0.7
 
     def test_top_p_defaults_when_effort_is_none_and_top_p_is_null(self):
-        params = GPT52Parameters(effort="none", temperature=0.7, top_p=None)
+        params = GPT52Parameters(effort="none", temperature=0.7, top_p=None)  # ty: ignore[invalid-argument-type]
         assert params.top_p == 1.0
 
     def test_both_default_when_effort_is_none_and_both_are_null(self):
-        params = GPT52Parameters(effort="none", temperature=None, top_p=None)
+        params = GPT52Parameters(effort="none", temperature=None, top_p=None)  # ty: ignore[invalid-argument-type]
         assert params.temperature == 0.7
         assert params.top_p == 1.0
 
     def test_explicit_values_are_preserved_when_effort_is_none(self):
-        params = GPT52Parameters(effort="none", temperature=0.5, top_p=0.9)
+        params = GPT52Parameters(effort="none", temperature=0.5, top_p=0.9)  # ty: ignore[invalid-argument-type]
         assert params.temperature == 0.5
         assert params.top_p == 0.9
 
     def test_temperature_and_top_p_must_be_null_when_effort_is_not_none(self):
         with pytest.raises(ValidationError):
-            GPT52Parameters(effort="medium", temperature=0.7, top_p=None)
+            GPT52Parameters(effort="medium", temperature=0.7, top_p=None)  # ty: ignore[invalid-argument-type]
 
     def test_temperature_and_top_p_are_null_when_effort_is_medium(self):
-        params = GPT52Parameters(effort="medium")
+        params = GPT52Parameters(effort="medium")  # ty: ignore[invalid-argument-type]
         assert params.temperature is None
         assert params.top_p is None
 

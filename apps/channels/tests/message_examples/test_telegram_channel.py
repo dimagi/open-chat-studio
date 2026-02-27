@@ -3,9 +3,11 @@ from unittest.mock import Mock, patch
 import pytest
 from telebot.apihelper import ApiTelegramException
 
+from apps.channels.models import ExperimentChannel
 from apps.chat.channels import TelegramChannel
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import (
+    Experiment,
     ExperimentSession,
     Participant,
     ParticipantData,
@@ -37,8 +39,10 @@ def make_mock_file(name, content_type, size, file_data="file_data"):
 
 @pytest.mark.django_db()
 def test_handle_telegram_block_updates_consent():
-    experiment = ExperimentFactory()
-    exp_channel = ExperimentChannelFactory(experiment=experiment, extra_data={"bot_token": "fake_token"})
+    experiment: Experiment = ExperimentFactory()  # ty: ignore[invalid-assignment]
+    exp_channel: ExperimentChannel = ExperimentChannelFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, extra_data={"bot_token": "fake_token"}
+    )
     participant_identifier = "test_telegram_user_id_for_error_test"
     participant = Participant.objects.create(
         identifier=participant_identifier,
@@ -72,8 +76,10 @@ def test_handle_telegram_block_updates_consent():
 
 @pytest.mark.django_db()
 def test_handle_telegram_block_participant_data_does_not_exist():
-    experiment = ExperimentFactory()
-    exp_channel = ExperimentChannelFactory(experiment=experiment, extra_data={"bot_token": "fake_token"})
+    experiment: Experiment = ExperimentFactory()  # ty: ignore[invalid-assignment]
+    exp_channel: ExperimentChannel = ExperimentChannelFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, extra_data={"bot_token": "fake_token"}
+    )
     channel = TelegramChannel(experiment=experiment, experiment_channel=exp_channel)
     channel.telegram_bot = Mock()
 
@@ -91,7 +97,9 @@ def test_handle_telegram_block_participant_data_does_not_exist():
 @patch("apps.chat.channels.TeleBot", Mock)
 def test_handle_telegram_api_error_other_errors():
     experiment = ExperimentFactory()
-    exp_channel = ExperimentChannelFactory(experiment=experiment, extra_data={"bot_token": "fake_token"})
+    exp_channel: ExperimentChannel = ExperimentChannelFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, extra_data={"bot_token": "fake_token"}
+    )
     channel = TelegramChannel(experiment=exp_channel.experiment, experiment_channel=exp_channel)
     channel.telegram_bot = Mock()
     error_description = "Internal Server Error: something went wrong on Telegram's side"

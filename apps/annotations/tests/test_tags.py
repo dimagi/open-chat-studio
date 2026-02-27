@@ -77,8 +77,8 @@ def test_tags_with_same_name_can_be_used_in_different_teams(client):
     tag1 = Tag.objects.create(name="testing", created_by=user1, team=team1)
     tag2 = Tag.objects.create(name="testing", created_by=user2, team=team2)
 
-    _link_tag_to_item(client, tag=tag1, chat=chat1)
-    _link_tag_to_item(client, tag=tag2, chat=chat2)
+    _link_tag_to_item(client, tag=tag1, chat=chat1)  # ty: ignore[invalid-argument-type]
+    _link_tag_to_item(client, tag=tag2, chat=chat2)  # ty: ignore[invalid-argument-type]
     chat1.tags.get(name=tag1)
     chat2.tags.get(name=tag1)
 

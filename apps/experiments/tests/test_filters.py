@@ -9,7 +9,7 @@ from time_machine import travel
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.filters import ExperimentSessionFilter
-from apps.experiments.models import SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.teams.models import Team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -24,7 +24,7 @@ def _get_querydict(params: dict) -> QueryDict:
     return query_dict
 
 
-def _get_tag(team: Team, name: str, tag_category: TagCategories | None = None) -> Tag:
+def _get_tag(team: Team, name: str, tag_category: str | TagCategories | None = None) -> Tag:
     tag, _ = Tag.objects.get_or_create(
         name=name,
         team=team,
@@ -43,19 +43,19 @@ class TestExperimentSessionFilters:
     @pytest.fixture()
     def sessions_with_tags(self):
         """Create sessions with different tag combinations"""
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
+        session2: ExperimentSession = ExperimentSessionFactory(experiment=session1.experiment)  # ty: ignore[invalid-assignment]
         tag1 = _get_tag(team=session1.team, name="important")
         tag2 = _get_tag(team=session1.team, name="follow-up")
 
         session1.chat.add_tag(tag1, team=session1.team, added_by=None)
-        session2.chat.add_tags([tag1, tag2], team=session2.team, added_by=None)
+        session2.chat.add_tags([tag1, tag2], team=session2.team, added_by=None)  # ty: ignore[invalid-argument-type]
         return [session1, session2], [tag1, tag2]
 
     @pytest.fixture()
     def sessions_with_messages_tags(self):
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
+        session2: ExperimentSession = ExperimentSessionFactory(experiment=session1.experiment)  # ty: ignore[invalid-assignment]
 
         tag1 = _get_tag(team=session1.team, name="important")
         tag2 = _get_tag(team=session1.team, name="follow-up")
@@ -75,8 +75,8 @@ class TestExperimentSessionFilters:
     @pytest.fixture()
     def sessions_with_versions(self):
         """Create sessions with different version tags on messages"""
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
+        session2: ExperimentSession = ExperimentSessionFactory(experiment=session1.experiment)  # ty: ignore[invalid-assignment]
 
         v1_tag = _get_tag(team=session1.team, name="v1", tag_category=Chat.MetadataKeys.EXPERIMENT_VERSION)
         v2_tag = _get_tag(team=session1.team, name="v2", tag_category=Chat.MetadataKeys.EXPERIMENT_VERSION)

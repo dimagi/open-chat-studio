@@ -12,7 +12,10 @@ from apps.documents.source_loaders.github import GitHubDocumentLoader
 @pytest.fixture()
 def github_config():
     return GitHubSourceConfig(
-        repo_url="https://github.com/test/repo", branch="main", file_pattern="*.md", path_filter=""
+        repo_url="https://github.com/test/repo",  # ty: ignore[invalid-argument-type]
+        branch="main",
+        file_pattern="*.md",
+        path_filter="",
     )
 
 
@@ -32,7 +35,7 @@ class TestGitHubDocumentLoader:
 
     def test_matches_multiple_patterns_and_exclude(self):
         config = GitHubSourceConfig(
-            repo_url="https://github.com/test/repo",
+            repo_url="https://github.com/test/repo",  # ty: ignore[invalid-argument-type]
             branch="main",
             file_pattern="!*_test.py, *.md, *.txt, *.py, !test.py",
         )

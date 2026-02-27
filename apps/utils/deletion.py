@@ -163,7 +163,7 @@ def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list
         ][0]
 
         field = related.field
-        qs = collector.related_objects(through_model, [field], objs)
+        qs = collector.related_objects(through_model, [field], objs)  # ty: ignore[invalid-argument-type]
         if exclude:
             exclude_instances = [instance for instance in exclude if isinstance(instance, related_model)]
             qs = qs.exclude(**{f"{related_field.name}__in": exclude_instances})

@@ -63,7 +63,7 @@ def test_converts_custom_models_to_global_models_pipelines():
     # no custom model should exist
     assert not LlmProviderModel.objects.filter(team=None, type=custom_model.type, name=custom_model.name).exists()
 
-    defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}
+    defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}  # ty: ignore[invalid-argument-type]
     with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
         update_llm_provider_models()
 

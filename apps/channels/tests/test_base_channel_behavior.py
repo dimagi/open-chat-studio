@@ -289,7 +289,7 @@ def test_pre_conversation_flow(_send_seed_message):
 
     def _user_message(message: str):
         message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
-        return channel.new_user_message(message)
+        return channel.new_user_message(message)  # ty: ignore[invalid-argument-type]
 
     experiment = channel.experiment
     experiment.seed_message = "Hi human"
@@ -536,7 +536,7 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     messenging provider.
     """
     if platform == ChannelPlatform.EVALUATIONS:
-        pytest.skip("Evaluations channel can't be instantiated from a session")
+        pytest.skip("Evaluations channel can't be instantiated from a session")  # ty: ignore[invalid-argument-type]
     session = ExperimentSessionFactory(experiment_channel__platform=platform)
     ParticipantData.objects.create(
         team=session.team,
@@ -545,7 +545,7 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
         participant=session.participant,
         system_metadata={"consent": True},
     )
-    channel = ChannelBase.from_experiment_session(session)
+    channel = ChannelBase.from_experiment_session(session)  # ty: ignore[invalid-argument-type]
     assert type(channel) in ChannelBase.__subclasses__()
 
 
@@ -558,7 +558,7 @@ def test_missing_channel_raises_error(twilio_provider):
     session = ExperimentSessionFactory(experiment_channel=experiment_channel)
     session.experiment_channel.platform = "snail_mail"  # ty: ignore[invalid-assignment]
     with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
-        ChannelBase.from_experiment_session(session)
+        ChannelBase.from_experiment_session(session)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.django_db()
@@ -832,7 +832,7 @@ def test_new_sessions_are_linked_to_the_working_experiment(experiment):
 def test_can_start_a_session_with_working_experiment(experiment):
     assert experiment.is_a_version is False
     channel = ExperimentChannelFactory(experiment=experiment)
-    session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
+    session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")  # ty: ignore[invalid-argument-type]
     assert session.experiment == experiment
 
 
@@ -841,7 +841,7 @@ def test_cannot_start_a_session_with_an_experiment_version(experiment):
     new_version = experiment.create_new_version()
     assert new_version.is_a_version is True
     with pytest.raises(VersionedExperimentSessionsNotAllowedException):
-        ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
+        ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("new_session", [True, False])
@@ -887,7 +887,7 @@ def test_supported_and_unsupported_attachments(experiment):
         spec=File, name="f3", content_type="image/jpeg", download_link=lambda *args, **kwargs: "https://example.com"
     )
 
-    channel.send_message_to_user("Hi there", files=[file1, file2, file3])
+    channel.send_message_to_user("Hi there", files=[file1, file2, file3])  # ty: ignore[invalid-argument-type]
 
     assert channel.send_text_to_user.call_args[0][0] == f"Hi there\n\n{file3.name}\nhttps://example.com\n"
     assert channel.send_file_to_user.mock_calls[0].args[0] == file1
@@ -900,7 +900,7 @@ def test_chat_message_returned_for_cancelled_generate():
     channel = TestChannel(session.experiment, None, session)
     channel._add_message = Mock()  # ty: ignore[invalid-assignment]
     channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
-    channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
+    channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")  # ty: ignore[invalid-argument-type]
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
 

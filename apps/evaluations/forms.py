@@ -243,7 +243,7 @@ class EvaluatorForm(forms.ModelForm):
             evaluators_module = importlib.import_module("apps.evaluations.evaluators")
             evaluator_class = getattr(evaluators_module, evaluator_type)
 
-            evaluator_class(**params)
+            evaluator_class(**params)  # ty: ignore[invalid-argument-type]
 
         except AttributeError as err:
             raise forms.ValidationError(f"Unknown evaluator type: {evaluator_type}") from err

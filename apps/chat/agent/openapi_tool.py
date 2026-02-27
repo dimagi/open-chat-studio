@@ -40,7 +40,7 @@ class ToolArtifact(BaseModel):
     def get_content(self):
         if self.content:
             return self.content
-        return pathlib.Path(self.path).read_bytes()
+        return pathlib.Path(self.path).read_bytes()  # ty: ignore[invalid-argument-type]
 
 
 class FunctionDef(BaseModel):
@@ -227,7 +227,7 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
     request_body = spec.get_request_body_for_operation(op)
     if request_body and request_body.content:
         if "application/json" in request_body.content:
-            schema = spec.get_schema(request_body.content["application/json"].media_type_schema)
+            schema = spec.get_schema(request_body.content["application/json"].media_type_schema)  # ty: ignore[invalid-argument-type]
             # note: This was changed from 'data' because it seems to work better :shrug:
             schema.title = "body_data"
             request_args["body_data"] = _schema_to_pydantic_field_type(spec, schema)
@@ -244,7 +244,7 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
     url = urljoin(api_op.base_url, api_op.path)
     return FunctionDef(
         name=function_name,
-        description=api_op.description,
+        description=api_op.description or "",
         method=method,
         url=url,
         args_schema=args_schema,
@@ -270,7 +270,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
             schema = spec.get_schema(p.param_schema)
         else:
             media_type_schema = list(p.content.values())[0].media_type_schema
-            schema = spec.get_schema(media_type_schema)
+            schema = spec.get_schema(media_type_schema)  # ty: ignore[invalid-argument-type]
         if p.name and not schema.title:
             schema.title = p.name
         if p.description and not schema.description:
@@ -334,11 +334,11 @@ def _schema_to_pydantic_field_type(spec: OpenAPISpec, schema: Schema) -> type:
     elif schema.type == DataType.ARRAY:
         if not schema.items.title:
             schema.items.title = f"{schema.title}Items"  # ty: ignore[invalid-assignment]
-        return list[_schema_to_pydantic(spec, schema.items)]  # ty: ignore[invalid-type-form]
+        return list[_schema_to_pydantic(spec, schema.items)]  # ty: ignore[invalid-type-form, invalid-argument-type]
     elif schema.enum:
         return _get_enum_type(schema)
     else:
-        return _get_basic_type(schema.type)
+        return _get_basic_type(schema.type)  # ty: ignore[invalid-argument-type]
 
 
 def _get_enum_type(schema) -> type[enum.Enum]:

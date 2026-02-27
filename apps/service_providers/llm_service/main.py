@@ -97,12 +97,12 @@ class LlmService(pydantic.BaseModel):
             annotation_entries = content_block.get("annotations", [])
             if include_citations:
                 # Cited files
-                external_ids = self.get_cited_file_ids(annotation_entries)
+                external_ids = self.get_cited_file_ids(annotation_entries)  # ty: ignore[invalid-argument-type]
                 cited_file_ids_remote.extend(external_ids)
 
             # Generated files
             generated_files.extend(
-                self.retrieve_generated_files_from_service_provider(annotation_entries, session.team_id)
+                self.retrieve_generated_files_from_service_provider(annotation_entries, session.team_id)  # ty: ignore[invalid-argument-type]
             )
 
             # Replace generated file links with actual file download links
@@ -327,7 +327,7 @@ class OpenAILlmService(OpenAIGenericService):
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         file_ids_param = NOT_GIVEN if file_ids is None else file_ids
-        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)  # ty: ignore[invalid-argument-type]
         return vector_store.id
 
 
@@ -342,7 +342,7 @@ class AzureLlmService(LlmService):
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
-            openai_api_key=self.openai_api_key,
+            openai_api_key=self.openai_api_key,  # ty: ignore[invalid-argument-type]
             deployment_name=llm_model,
             **kwargs,
         )
@@ -362,7 +362,7 @@ class AnthropicLlmService(LlmService):
         from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(
-            anthropic_api_key=self.anthropic_api_key,
+            anthropic_api_key=self.anthropic_api_key,  # ty: ignore[invalid-argument-type]
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             **self._get_model_kwargs(**kwargs),
@@ -416,7 +416,10 @@ class DeepSeekLlmService(LlmService):
         from langchain_openai.chat_models import ChatOpenAI
 
         return ChatOpenAI(
-            model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
+            model=llm_model,
+            openai_api_key=self.deepseek_api_key,  # ty: ignore[invalid-argument-type]
+            openai_api_base=self.deepseek_api_base,
+            **kwargs,
         )
 
     def get_callback_handler(self, model: str) -> BaseCallbackHandler:

@@ -130,7 +130,7 @@ def _assert_participant_joined_event_fired(experiment, expected_events):
     with mock.patch("apps.events.tasks.enqueue_static_triggers.run") as mock_fire_trigger:
         session = _start_experiment_session(
             working_experiment=experiment,
-            experiment_channel=ExperimentChannelFactory(team=experiment.team, experiment=experiment),
+            experiment_channel=ExperimentChannelFactory(team=experiment.team, experiment=experiment),  # ty: ignore[invalid-argument-type]
             participant_identifier="test_participant",
         )
 

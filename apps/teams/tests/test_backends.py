@@ -44,7 +44,7 @@ def test_team_backend_no_current_team(group1, group2):
     if there is no team set in the 'current_team' context."""
     membership = MembershipFactory(groups=[group1, group2])
     user = membership.user
-    assert TeamBackend().get_group_permissions(user) == set()
+    assert TeamBackend().get_group_permissions(user) == set()  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.django_db()
@@ -52,7 +52,7 @@ def test_team_backend(group1, group2):
     membership = MembershipFactory(groups=[group1, group2])
     user = membership.user
     with current_team(membership.team):
-        assert TeamBackend().get_group_permissions(user) == {
+        assert TeamBackend().get_group_permissions(user) == {  # ty: ignore[invalid-argument-type]
             "experiments.add_experiment",
             "experiments.change_experiment",
             "experiments.view_experiment",
