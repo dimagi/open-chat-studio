@@ -138,7 +138,7 @@ class LLMResponseMixin(BaseModel):
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
     def get_chat_model(self):
-        model_name = get_llm_provider_model(self.llm_provider_model_id).name
+        model_name = self.repo.get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
@@ -257,7 +257,7 @@ class HistoryMixin(LLMResponseMixin):
         specified_token_limit = (
             self.user_max_token_limit
             if self.user_max_token_limit is not None
-            else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
+            else self.repo.get_llm_provider_model(self.llm_provider_model_id).max_token_limit
         )
 
         # Reserve space for the system message so trigger/keep thresholds reflect usable context
@@ -397,7 +397,7 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        llm_provider_model = get_llm_provider_model(self.llm_provider_model_id)
+        llm_provider_model = self.repo.get_llm_provider_model(self.llm_provider_model_id)
         model_token_limit = llm_provider_model.max_token_limit
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count

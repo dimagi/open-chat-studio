@@ -12,7 +12,7 @@ from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
 from apps.service_providers.llm_service import LlmService
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 if TYPE_CHECKING:
     from apps.assistants.models import OpenAiAssistant
@@ -93,6 +93,11 @@ class PipelineRepository(ABC):
         all DB access is captured by the repository.
         Raises RepositoryLookupError if provider not found.
         """
+        ...
+
+    @abstractmethod
+    def get_llm_provider_model(self, model_id: int) -> LlmProviderModel:
+        """Fetch an LLM provider model by ID. Raises RepositoryLookupError if not found."""
         ...
 
     # --- Source materials & collections ---
@@ -228,6 +233,12 @@ class ORMRepository(PipelineRepository):
         provider = self.get_llm_provider(provider_id)
         return provider.get_llm_service()
 
+    def get_llm_provider_model(self, model_id):
+        try:
+            return LlmProviderModel.objects.get(id=model_id)
+        except LlmProviderModel.DoesNotExist:
+            raise RepositoryLookupError(f"LLM provider model with id {model_id} not found") from None
+
     def get_source_material(self, material_id):
         try:
             return SourceMaterial.objects.get(id=material_id)
@@ -312,6 +323,7 @@ class InMemoryPipelineRepository(PipelineRepository):
         self.participant_schedules: list = []
         self.participant_global_data: dict = {}
         self.compression_checkpoints: list[dict] = []
+        self.provider_models: dict[int, Any] = {}
 
     def get_llm_provider(self, provider_id):
         if provider_id not in self.providers:
@@ -322,6 +334,11 @@ class InMemoryPipelineRepository(PipelineRepository):
         if provider_id not in self.llm_services:
             raise RepositoryLookupError(f"LLM service for provider {provider_id} not configured")
         return self.llm_services[provider_id]
+
+    def get_llm_provider_model(self, model_id):
+        if model_id not in self.provider_models:
+            raise RepositoryLookupError(f"LLM provider model with id {model_id} not found")
+        return self.provider_models[model_id]
 
     def get_source_material(self, material_id):
         if material_id not in self.source_materials:

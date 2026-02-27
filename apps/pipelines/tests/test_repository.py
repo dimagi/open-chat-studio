@@ -55,6 +55,11 @@ class TestSharedRepositoryContract:
         with pytest.raises(RepositoryLookupError, match="Assistant"):
             repo.get_assistant(999999)
 
+    def test_get_llm_provider_model_not_found(self, factory):
+        repo = factory()
+        with pytest.raises(RepositoryLookupError, match="LLM provider model"):
+            repo.get_llm_provider_model(999999)
+
     def test_get_collection_file_info_not_found(self, factory):
         repo = factory()
         with pytest.raises(RepositoryLookupError, match="Collection"):
@@ -80,6 +85,12 @@ class TestInMemoryRepository:
     def test_get_llm_service_not_found(self):
         with pytest.raises(RepositoryLookupError, match="LLM service for provider 999"):
             self.repo.get_llm_service(999)
+
+    def test_get_llm_provider_model(self):
+        model = SimpleNamespace(id=1, name="gpt-4", max_token_limit=8192)
+        self.repo.provider_models[1] = model
+        result = self.repo.get_llm_provider_model(1)
+        assert result is model
 
     def test_get_collections_for_search_partial(self):
         c1 = SimpleNamespace(is_index=True)

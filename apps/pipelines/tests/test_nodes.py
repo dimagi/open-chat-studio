@@ -259,9 +259,12 @@ class TestHistoryMixin:
         get_chat_model.return_value = Mock()
         count_tokens.return_value = 50
 
+        mock_repo = Mock()
+        mock_repo.get_llm_provider_model.return_value = Mock(max_token_limit=8192)
         node = history_node_factory(
             history_type=PipelineChatHistoryTypes.NODE,
             history_mode=PipelineChatHistoryModes.SUMMARIZE,
+            repo=mock_repo,
         )
 
         session = Mock()
