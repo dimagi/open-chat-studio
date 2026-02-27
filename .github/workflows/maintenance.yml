@@ -1,0 +1,36 @@
+name: Maintenance
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install pre-commit
+        run: uv tool install prek
+
+      - name: Update pre-commit hooks
+        run: prek auto-update
+
+      - name: Create PR if hooks changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "Update pre-commit hooks"
+          title: "Update pre-commit hooks"
+          body: |
+            Automated update of pre-commit hook versions.
+          branch: maintenance/update-pre-commit
+          delete-branch: true
+          labels: maintenance
