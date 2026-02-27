@@ -216,7 +216,7 @@ def chat_upload_file(request, session_id):
         ),
         OpenApiExample(
             name="StartSessionSpecificVersionResponse",
-            summary="Session started with specific published version",
+            summary="Session started with specific version",
             value={
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
                 "chatbot": {
