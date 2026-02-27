@@ -1250,6 +1250,33 @@ class ApiChannel(ChannelBase):
         if not self.user and not self.experiment_session:
             raise ChannelException("ApiChannel requires either an existing session or a user")
 
+    @classmethod
+    def start_new_session(
+        cls,
+        working_experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user=None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+        session_external_id: str | None = None,
+        metadata: dict | None = None,
+        version: int = Experiment.DEFAULT_VERSION_NUMBER,
+    ):
+        session = super().start_new_session(
+            working_experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            session_external_id,
+            metadata,
+        )
+        if version != Experiment.DEFAULT_VERSION_NUMBER:
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
+        return session
+
     @property
     def participant_user(self):
         return super().participant_user or self.user

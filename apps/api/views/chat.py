@@ -177,14 +177,58 @@ def chat_upload_file(request, session_id):
     # auth=["{}"],
     examples=[
         OpenApiExample(
-            name="StartChatSession",
-            summary="Start a new chat session for an experiment",
+            name="StartSessionPublishedVersion",
+            summary="Start session with published version",
             value={
                 "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
                 "session_data": {"source": "widget", "page_url": "https://example.com"},
                 "participant_remote_id": "abc",
                 "participant_name": "participant_name",
             },
+            request_only=True,
+        ),
+        OpenApiExample(
+            name="StartSessionSpecificVersion",
+            summary="Start session with specific version (requires auth)",
+            value={
+                "chatbot_id": "123e4567-e89b-12d3-a456-426614174000",
+                "version_number": 2,
+                "participant_remote_id": "abc",
+                "participant_name": "participant_name",
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            name="StartSessionPublishedVersionResponse",
+            summary="Session started with published version",
+            value={
+                "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "chatbot": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "name": "Example Bot",
+                    "version_number": 0,
+                    "versions": [],
+                    "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+                },
+                "participant": {"identifier": "abc", "remote_id": "abc"},
+            },
+            response_only=True,
+        ),
+        OpenApiExample(
+            name="StartSessionSpecificVersionResponse",
+            summary="Session started with specific version",
+            value={
+                "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "chatbot": {
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "name": "Example Bot",
+                    "version_number": 2,
+                    "versions": [],
+                    "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+                },
+                "participant": {"identifier": "abc", "remote_id": "abc"},
+            },
+            response_only=True,
         ),
     ],
 )
@@ -198,16 +242,32 @@ def chat_start_session(request):
 
     data = serializer.validated_data
     experiment_id = data["chatbot_id"]
+    version_number = data.get("version_number")
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
 
-    # Get experiment
-    experiment = get_object_or_404(Experiment, public_id=experiment_id)
-    if not experiment.is_working_version:
+    # Security check: Only authenticated users can specify version numbers
+    if version_number is not None and not request.user.is_authenticated:
         return Response(
-            {"error": "Chatbot ID must reference the unreleased version of an chatbot"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"error": "Version number requires authentication"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Always look up the working version by public_id
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
+
+    experiment_version = None
+    if version_number is not None:
+        # Verify the authenticated user belongs to the experiment's team
+        if not experiment.team.members.filter(id=request.user.id).exists():
+            return Response(
+                {"error": "You do not have access to this chatbot"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        experiment_version = get_object_or_404(
+            Experiment, working_version_id=experiment.id, version_number=version_number
         )
 
     team = experiment.team
@@ -261,7 +321,9 @@ def chat_start_session(request):
         participant_identifier=participant.identifier,
         participant_user=user,
         metadata=metadata,
+        version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
     )
+
     if user is not None and session_data:
         session.state = session_data
         session.save(update_fields=["state"])
@@ -269,7 +331,7 @@ def chat_start_session(request):
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
-        "chatbot": experiment,
+        "chatbot": experiment_version or experiment,
         "participant": participant,
     }
 
@@ -280,6 +342,11 @@ def chat_start_session(request):
 class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     attachment_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, help_text="List of file IDs from prior upload"
+    )
+    version_number = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Optional version number of the chatbot to use. Requires authentication.",
     )
 
 
@@ -323,6 +390,7 @@ def chat_send_message(request, session_id):
     data = serializer.validated_data
     message_text = data["message"]
     attachment_ids = data.get("attachment_ids", [])
+    version_number = data.get("version_number")
     context = data.get("context", {})
 
     session = get_experiment_session_cached(session_id)
@@ -332,6 +400,23 @@ def chat_send_message(request, session_id):
     # Verify session is active
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if version_number is not None:
+        if not request.user.is_authenticated:
+            return Response(
+                {"error": "Version number requires authentication"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not session.experiment.team.members.filter(id=request.user.id).exists():
+            return Response(
+                {"error": "You do not have access to this chatbot"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        experiment_version = get_object_or_404(
+            Experiment, working_version_id=session.experiment.id, version_number=version_number
+        )
+    else:
+        experiment_version = session.experiment_version
 
     attachment_data = []
     if attachment_ids:
@@ -350,7 +435,6 @@ def chat_send_message(request, session_id):
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
-    experiment_version = session.experiment_version
     task_id = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
