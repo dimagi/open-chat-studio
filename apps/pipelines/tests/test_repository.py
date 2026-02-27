@@ -11,7 +11,6 @@ from apps.pipelines.repository import (
     CollectionIndexSummary,
     InMemoryPipelineRepository,
     ORMRepository,
-    PipelineRepository,
     RepositoryLookupError,
 )
 from apps.utils.factories.documents import CollectionFactory
@@ -29,11 +28,11 @@ def _make_orm():
 @pytest.mark.django_db()
 @pytest.mark.parametrize("factory", [_make_in_memory, _make_orm], ids=["in_memory", "orm"])
 class TestSharedRepositoryContract:
-    """Parametrized tests that verify both implementations satisfy the PipelineRepository contract."""
+    """Parametrized tests that verify both implementations satisfy the ORMRepository contract."""
 
-    def test_is_pipeline_repository(self, factory):
+    def test_is_repository(self, factory):
         repo = factory()
-        assert isinstance(repo, PipelineRepository)
+        assert isinstance(repo, ORMRepository)
 
     def test_get_llm_provider_not_found(self, factory):
         repo = factory()

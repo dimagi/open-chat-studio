@@ -1,6 +1,6 @@
 # Pipeline Repository Pattern
 
-All DB access during pipeline execution goes through `PipelineRepository` (`apps/pipelines/repository.py`).
+All DB access during pipeline execution goes through `ORMRepository` (`apps/pipelines/repository.py`).
 
 ## Why
 * **Testability** — node logic tests use `InMemoryPipelineRepository` with no `@pytest.mark.django_db`
@@ -16,7 +16,7 @@ bots.py  →  LangGraph config  →  base.py extracts repo  →  node.repo
 ```
 
 * `ORMRepository` — production, wraps Django ORM
-* `InMemoryPipelineRepository` — tests, backed by dicts and `factory_boy.build()`
+* `InMemoryPipelineRepository` — tests, subclass of `ORMRepository` backed by dicts and `factory_boy.build()`
 
 ## Using `self.repo` in nodes
 
@@ -42,11 +42,10 @@ PipelineParticipantDataProxy(output_state, session, repo=self.repo)
 
 ## Adding a new DB operation
 
-1. Add `@abstractmethod` to `PipelineRepository` ABC
-2. Implement in `ORMRepository` (wrap ORM call, catch `DoesNotExist` → raise `RepositoryLookupError`)
-3. Implement in `InMemoryPipelineRepository` (use dict lookup or pre-loaded data)
-4. Add tests for both implementations in `test_repository.py`
-5. Use `self.repo.new_method(...)` in the node
+1. Add the method to `ORMRepository` (wrap ORM call, catch `DoesNotExist` → raise `RepositoryLookupError`)
+2. Override in `InMemoryPipelineRepository` (use dict lookup or pre-loaded data)
+3. Add tests for both implementations in `test_repository.py`
+4. Use `self.repo.new_method(...)` in the node
 
 ## Error handling
 

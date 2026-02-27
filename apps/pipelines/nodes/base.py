@@ -21,7 +21,7 @@ from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.context import NodeContext
 
 if TYPE_CHECKING:
-    from apps.pipelines.repository import PipelineRepository
+    from apps.pipelines.repository import ORMRepository
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -236,7 +236,7 @@ class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
-    _repo: "PipelineRepository | None" = None
+    _repo: "ORMRepository | None" = None
     _incoming_nodes: list[str] | None = None
     _outgoing_nodes: list[str] | None = None
 
@@ -288,10 +288,10 @@ class BasePipelineNode(BaseModel, ABC):
         return state
 
     @property
-    def repo(self) -> "PipelineRepository":
+    def repo(self) -> "ORMRepository":
         """Access the pipeline repository. Always available during _process()."""
         if self._repo is None:
-            raise PipelineNodeRunError("PipelineRepository not set")
+            raise PipelineNodeRunError("ORMRepository not set")
         return self._repo
 
     @property

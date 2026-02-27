@@ -6,7 +6,7 @@ from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
-    from apps.pipelines.repository import PipelineRepository
+    from apps.pipelines.repository import ORMRepository
 
 
 class PromptTemplateContext:
@@ -18,7 +18,7 @@ class PromptTemplateContext:
         collection_index_ids: list[int] | None = None,
         extra: dict | None = None,
         participant_data: dict | None = None,
-        repo: "PipelineRepository | None" = None,
+        repo: "ORMRepository | None" = None,
     ):
         self.session = session
         self.source_material_id = source_material_id
@@ -253,7 +253,7 @@ class ParticipantDataProxy:
 
 
 class PipelineParticipantDataProxy(ParticipantDataProxy):
-    """ParticipantDataProxy subclass that uses a PipelineRepository for data access."""
+    """ParticipantDataProxy subclass that uses an ORMRepository for data access."""
 
     def __init__(self, pipeline_state: dict, experiment_session, repo):
         super().__init__(pipeline_state, experiment_session)
