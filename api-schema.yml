@@ -160,7 +160,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ChatStartSessionRequest'
             examples:
-              StartSessionWorkingVersion:
+              StartSessionPublishedVersion:
                 value:
                   chatbot_id: 123e4567-e89b-12d3-a456-426614174000
                   session_data:
@@ -168,7 +168,7 @@ paths:
                     page_url: https://example.com
                   participant_remote_id: abc
                   participant_name: participant_name
-                summary: Start session with working (unreleased) version
+                summary: Start session with published version
               StartSessionSpecificVersion:
                 value:
                   chatbot_id: 123e4567-e89b-12d3-a456-426614174000
@@ -187,7 +187,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatStartSessionResponse'
               examples:
-                StartSessionWorkingVersionResponse:
+                StartSessionPublishedVersionResponse:
                   value:
                     session_id: 123e4567-e89b-12d3-a456-426614174000
                     chatbot:
