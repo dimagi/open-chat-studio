@@ -136,7 +136,6 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                             },
                             "participant_schedules": self.repo.get_participant_schedules(
                                 participant,
-                                # TODO: Move to repo
                                 session.experiment_id,
                                 as_dict=True,
                                 include_inactive=True,
