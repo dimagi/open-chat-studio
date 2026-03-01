@@ -316,7 +316,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - name: Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        uses: actions/setup-node@54045abd5dcd3b0fee9ca02fa24c57545834c9cc # v6.2.0
         with:
           node-version: '24'
           package-manager-cache: false
@@ -979,7 +979,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - name: Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        uses: actions/setup-node@54045abd5dcd3b0fee9ca02fa24c57545834c9cc # v6.2.0
         with:
           node-version: '24'
           package-manager-cache: false
