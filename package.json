@@ -55,7 +55,7 @@
     "@codemirror/merge": "^6.11.1",
     "@sentry/webpack-plugin": "^4.0.2",
     "@tailwindcss/postcss": "^4.1.5",
-    "@uiw/codemirror-theme-github": "^4.23.11",
+    "@uiw/codemirror-theme-github": "^4.25.5",
     "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.14.3",
