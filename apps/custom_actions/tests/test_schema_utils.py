@@ -7,6 +7,7 @@ from typing import Any
 from apps.custom_actions.schema_utils import (
     APIOperationDetails,
     ParameterDetail,
+    _resolve_schema_type,
     get_operations_from_spec_dict,
 )
 
@@ -316,6 +317,46 @@ class TestGetOperationsFromSpecDict:
         assert delete_user.body_parameters == []
         assert len(delete_user.path_parameters) == 1
 
+    def test_fastapi_sql_spec_with_refs_and_empty_response_schema(self):
+        """Test parsing a FastAPI-generated spec with $ref schemas and empty response schemas."""
+        spec = load_test_data("fastapi_sql_spec.json")
+        operations = get_operations_from_spec_dict(spec)
+
+        assert len(operations) == 2
+
+        # Verify operation IDs
+        operation_ids = {op.operation_id for op in operations}
+        assert operation_ids == {
+            "execute_sql_query_execute_sql_query_post",
+            "fetch_column_names_and_types_fetch_column_names_and_types_post",
+        }
+
+        # Test execute_sql_query operation
+        exec_op = self._get_operation_by_id(operations, "execute_sql_query_execute_sql_query_post")
+        assert exec_op is not None
+        assert exec_op.method == "post"
+        assert exec_op.path == "/execute_sql_query"
+
+        exec_param_names = {p.name for p in exec_op.parameters}
+        assert exec_param_names == {"query", "force_csv", "force_json"}
+
+        self._assert_parameter(exec_op, "query", schema_type="string", required=True, param_in="body")
+        self._assert_parameter(exec_op, "force_csv", schema_type="boolean", required=False, param_in="body")
+        self._assert_parameter(exec_op, "force_json", schema_type="boolean", required=False, param_in="body")
+
+        # Test fetch_column_names_and_types operation
+        fetch_op = self._get_operation_by_id(
+            operations, "fetch_column_names_and_types_fetch_column_names_and_types_post"
+        )
+        assert fetch_op is not None
+        assert fetch_op.method == "post"
+        assert fetch_op.path == "/fetch_column_names_and_types"
+
+        fetch_param_names = {p.name for p in fetch_op.parameters}
+        assert fetch_param_names == {"tables"}
+
+        self._assert_parameter(fetch_op, "tables", schema_type="array", required=True, param_in="body")
+
     def _test_delete_user(self, operations: list[APIOperationDetails]):
         """Test DELETE /users/{user_id} operation."""
         delete_user = self._get_operation_by_id(operations, "deleteUser")
@@ -330,3 +371,31 @@ class TestGetOperationsFromSpecDict:
         self._assert_parameter(
             operation=delete_user, param_name="user_id", schema_type="string", required=True, param_in="path"
         )
+
+
+class TestResolveSchemaType:
+    """Test _resolve_schema_type helper for anyOf/oneOf unwrapping."""
+
+    def test_direct_type(self):
+        assert _resolve_schema_type({"type": "boolean"}) == "boolean"
+
+    def test_anyof_single(self):
+        assert _resolve_schema_type({"anyOf": [{"type": "boolean"}]}) == "boolean"
+
+    def test_anyof_optional(self):
+        """Pydantic v2 Optional[bool] pattern: anyOf with a null variant."""
+        assert _resolve_schema_type({"anyOf": [{"type": "boolean"}, {"type": "null"}]}) == "boolean"
+
+    def test_anyof_multi_non_null_defaults_to_string(self):
+        """Union of multiple non-null types cannot be reduced to one; fall back to string."""
+        assert _resolve_schema_type({"anyOf": [{"type": "string"}, {"type": "integer"}]}) == "string"
+
+    def test_oneof_single(self):
+        assert _resolve_schema_type({"oneOf": [{"type": "integer"}]}) == "integer"
+
+    def test_empty_schema_defaults_to_string(self):
+        assert _resolve_schema_type({}) == "string"
+
+    def test_variant_without_type_key_defaults_to_string(self):
+        """A resolved $ref that is a complex object without a top-level type key."""
+        assert _resolve_schema_type({"anyOf": [{"properties": {"foo": {}}}]}) == "string"
