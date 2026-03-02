@@ -280,7 +280,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     def get_highlight_message_id(self):
         """Extract and validate the message_id query parameter for highlighting."""
         try:
-            return int(self.request.GET.get("message_id"))
+            return int(self.request.GET.get("message_id"))  # ty: ignore[invalid-argument-type]
         except (ValueError, TypeError):
             return None
 
@@ -656,7 +656,7 @@ class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
             messages.error(request, "Invalid message selected.")
             return HttpResponse(status=400)
 
-        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
+        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [str(message_id)]})
         if not eval_messages:
             messages.error(request, "No valid messages found to add to dataset.")
             return HttpResponse(status=400)

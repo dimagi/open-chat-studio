@@ -125,7 +125,7 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
         identifier = user.email
 
     session = WebChannel.start_new_session(
-        experiment,
+        experiment,  # ty: ignore[invalid-argument-type]
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -151,7 +151,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
         identifier = user.email
 
     session = WebChannel.start_new_session(
-        experiment1,
+        experiment1,  # ty: ignore[invalid-argument-type]
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -164,7 +164,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     experiment2 = ExperimentFactory(team=team)
 
     session = WebChannel.start_new_session(
-        experiment2,
+        experiment2,  # ty: ignore[invalid-argument-type]
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -188,7 +188,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         identifier = user.email
 
     session = WebChannel.start_new_session(
-        experiment1,
+        experiment1,  # ty: ignore[invalid-argument-type]
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -206,7 +206,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     experiment2 = ExperimentFactory(team=new_team)
 
     session = WebChannel.start_new_session(
-        experiment2,
+        experiment2,  # ty: ignore[invalid-argument-type]
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -291,7 +291,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     part_data2 = ParticipantData.objects.create(team=experiment2.team, participant=participant, experiment=experiment2)
 
     WebChannel.start_new_session(
-        experiment,
+        experiment,  # ty: ignore[invalid-argument-type]
         participant_identifier=identifier,
         timezone="Africa/Johannesburg",
     )

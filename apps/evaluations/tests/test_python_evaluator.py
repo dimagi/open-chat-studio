@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from apps.evaluations.evaluators import PythonEvaluator
 from apps.evaluations.exceptions import EvaluationRunException
+from apps.evaluations.models import EvaluationMessage
 from apps.utils.factories.evaluations import EvaluationMessageFactory
 
 
@@ -32,7 +33,7 @@ from apps.utils.factories.evaluations import EvaluationMessageFactory
 @pytest.mark.django_db()
 def test_python_evaluator(code, message_input, expected_output):
     evaluator = PythonEvaluator(code=code)
-    message = EvaluationMessageFactory(input=message_input)
+    message: EvaluationMessage = EvaluationMessageFactory(input=message_input)  # ty: ignore[invalid-assignment]
     evaluator_output = evaluator.run(message, "")
     assert evaluator_output.result == expected_output
 
@@ -50,7 +51,7 @@ def test_python_evaluator_traceback():
     """)
 
     evaluator = PythonEvaluator(code=code_set)
-    message = EvaluationMessageFactory()
+    message: EvaluationMessage = EvaluationMessageFactory()  # ty: ignore[invalid-assignment]
 
     with pytest.raises(EvaluationRunException) as exc_info:  # EvaluationRunException wraps the actual error
         evaluator.run(message, "")
@@ -118,7 +119,7 @@ def test_python_evaluator_build_errors(code, expected_error):
 @pytest.mark.django_db()
 def test_python_evaluator_runtime_errors(code, expected_error):
     evaluator = PythonEvaluator(code=code)
-    message = EvaluationMessageFactory()
+    message: EvaluationMessage = EvaluationMessageFactory()  # ty: ignore[invalid-assignment]
 
     with pytest.raises(EvaluationRunException, match=expected_error):
         evaluator.run(message, "")
@@ -137,7 +138,7 @@ def test_python_evaluator_with_missing_output():
     evaluator = PythonEvaluator(code=code)
 
     # Create a message with no AI output (failed to generate)
-    message = EvaluationMessageFactory(
+    message: EvaluationMessage = EvaluationMessageFactory(  # ty: ignore[invalid-assignment]
         input={"content": "Hello, I need help", "role": "human"},
         output={},  # No AI response
     )

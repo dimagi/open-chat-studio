@@ -14,7 +14,7 @@ def enqueue_static_triggers(session_id, trigger_type):
         fire_static_trigger.delay(trigger_id, session_id)
 
 
-def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTrigger):
+def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTriggerType):
     session = ExperimentSession.objects.get(id=session_id)
     experiment_version = session.experiment_version
 

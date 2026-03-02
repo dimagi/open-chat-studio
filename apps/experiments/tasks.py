@@ -127,7 +127,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
     llm = llm_service.get_chat_model(llm_provider_model.name, temperature=float(data_dict["temperature"]))
     llm = with_llm_retry(llm)
-    conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
+    conversation = create_conversation(data_dict["prompt"], source_material_material, llm)  # ty: ignore[invalid-argument-type]
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
     input_formatter = data_dict["inputFormatter"]
     if input_formatter:

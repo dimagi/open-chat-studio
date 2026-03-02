@@ -160,7 +160,8 @@ def test_create_messages_from_sessions_includes_history():
     ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        session_1.team, [session_1.external_id, session_2.external_id]
+        session_1.team,  # ty: ignore[invalid-argument-type]
+        [session_1.external_id, session_2.external_id],
     )
 
     assert len(eval_messages) == 4  # This includes the single "AI seed message"
@@ -207,15 +208,15 @@ def test_create_messages_from_sessions_includes_comments(team_with_users):
     human_message = ChatMessageFactory(
         message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
     )
-    UserComment.add_for_model(human_message, comment="comment1", added_by=user, team=team)
-    UserComment.add_for_model(human_message, comment="comment2", added_by=user, team=team)
+    UserComment.add_for_model(human_message, comment="comment1", added_by=user, team=team)  # ty: ignore[invalid-argument-type]
+    UserComment.add_for_model(human_message, comment="comment2", added_by=user, team=team)  # ty: ignore[invalid-argument-type]
 
     ai_message = ChatMessageFactory(
         message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat
     )
-    UserComment.add_for_model(ai_message, comment="comment3", added_by=user, team=team)
+    UserComment.add_for_model(ai_message, comment="comment3", added_by=user, team=team)  # ty: ignore[invalid-argument-type]
 
-    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])
+    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])  # ty: ignore[invalid-argument-type]
 
     assert len(eval_messages) == 1
 
@@ -239,7 +240,7 @@ def test_create_messages_from_sessions_includes_tags():
     ai_message.add_version_tag(3, True)
     ai_message.add_rating("+2")
 
-    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])
+    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])  # ty: ignore[invalid-argument-type]
 
     assert len(eval_messages) == 1
 
@@ -265,7 +266,7 @@ def test_create_from_sessions_with_filtered_sessions_only():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=filter_params,
@@ -311,7 +312,7 @@ def test_create_from_sessions_mixed_regular_and_filtered():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[session_1.external_id],
         filtered_session_ids=[session_2.external_id],
         filter_params=filter_params,
@@ -341,7 +342,7 @@ def test_create_from_sessions_no_filter_params():
     ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=None,  # No filter params
@@ -359,7 +360,11 @@ def test_create_from_sessions_empty_sessions():
     team = session_1.team
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team, external_session_ids=[], filtered_session_ids=[], filter_params=None, timezone=None
+        team=team,  # ty: ignore[invalid-argument-type]
+        external_session_ids=[],
+        filtered_session_ids=[],
+        filter_params=None,
+        timezone=None,
     )
 
     assert len(eval_messages) == 0
@@ -385,7 +390,7 @@ def test_filtered_messages_include_complete_history():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=filter_params,
@@ -419,7 +424,7 @@ def test_consecutive_human_messages():
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[session_1.external_id],
         timezone=None,
     )
@@ -454,7 +459,7 @@ def test_consecutive_ai_messages():
     ChatMessageFactory(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[session_1.external_id],
         timezone=None,
     )
@@ -502,7 +507,7 @@ def test_filtered_messages_complete_history_with_mixed_pairs():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,
+        team=team,  # ty: ignore[invalid-argument-type]
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=filter_params,

@@ -19,6 +19,7 @@ from apps.experiments.models import (
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo
+from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
@@ -46,6 +47,9 @@ from apps.utils.pytest import django_db_with_data
 @pytest.fixture()
 def experiment_session():
     return ExperimentSessionFactory()
+
+
+_team_type_ref: type[Team] = Team  # noqa: F841
 
 
 class TestSyntheticVoice:
@@ -93,19 +97,19 @@ class TestSyntheticVoice:
         voice3 = SyntheticVoiceFactory(voice_provider=VoiceProviderFactory(team=team2), service=SyntheticVoice.AWS)
 
         # Assert exclusivity
-        voices_queryset = SyntheticVoice.get_for_team(team1)
+        voices_queryset = SyntheticVoice.get_for_team(team1)  # ty: ignore[invalid-argument-type]
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == all_services
         assert voice2 not in voices_queryset
         assert voice3 not in voices_queryset
 
-        voices_queryset = SyntheticVoice.get_for_team(team2)
+        voices_queryset = SyntheticVoice.get_for_team(team2)  # ty: ignore[invalid-argument-type]
         assert set(voices_queryset.values_list("service", flat=True)) == all_services
         assert voice1 not in voices_queryset
         assert voice3 in voices_queryset
 
         # Although voice1 belongs to team1, if we exclude its service, it should not be returned
-        voices_queryset = SyntheticVoice.get_for_team(team1, exclude_services=[SyntheticVoice.OpenAIVoiceEngine])
+        voices_queryset = SyntheticVoice.get_for_team(team1, exclude_services=[SyntheticVoice.OpenAIVoiceEngine])  # ty: ignore[invalid-argument-type]
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure}
         assert voice1 not in voices_queryset
@@ -304,9 +308,9 @@ class TestExperimentSession:
         if custom_experiment:
             event_action_kwargs["experiment_id"] = custom_experiment.id
 
-        event_action, params = self._construct_event_action(**event_action_kwargs)
+        event_action, params = self._construct_event_action(**event_action_kwargs)  # ty: ignore[invalid-argument-type]
         trigger_action = ScheduleTriggerAction()
-        trigger_action.invoke(session, action=event_action)
+        trigger_action.invoke(session, action=event_action)  # ty: ignore[invalid-argument-type]
 
         message = ScheduledMessage.objects.get(action=event_action)
         message.participant.get_latest_session = lambda *args, **kwargs: session

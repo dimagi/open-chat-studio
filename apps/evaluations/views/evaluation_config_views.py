@@ -279,7 +279,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     def get_highlight_result_id(self):
         """Extract and validate the result_id query parameter for highlighting."""
         try:
-            return int(self.request.GET.get("result_id"))
+            return int(self.request.GET.get("result_id"))  # ty: ignore[invalid-argument-type]
         except (ValueError, TypeError):
             return None
 
