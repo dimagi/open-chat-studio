@@ -5,13 +5,12 @@ from django.core.files.base import ContentFile
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
-from apps.chat.models import ChatAttachment
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
-from apps.pipelines.repository import InMemoryPipelineRepository, ORMRepository
+from apps.pipelines.repository import InMemoryPipelineRepository
 from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
@@ -288,7 +287,7 @@ def main(input, **kwargs):
         attachments=[Attachment.from_file(file, "code_interpreter", experiment_session.id)],
         temp_state={},
     )
-    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
+    config = {"configurable": {"repo": InMemoryPipelineRepository(session=experiment_session)}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "content from file"  # ty: ignore[not-subscriptable]
 
@@ -453,37 +452,36 @@ def test_code_node_reserved_session_state_keys(key_name, should_raise):
         assert node is not None
 
 
-@pytest.mark.django_db()
-def test_add_file_attachment(experiment_session):
+def test_add_file_attachment():
     code = """
 def main(input, **kwargs):
     add_file_attachment("test.txt", b"hello world", "text/plain")
     return input
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    session = ExperimentSessionFactory.build()
+    repo = InMemoryPipelineRepository(session=session)
     state = PipelineState(
         messages=["hi"],
         outputs={},
-        experiment_session=experiment_session,
+        experiment_session=session,
         temp_state={},
     )
-    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
+    config = {"configurable": {"repo": repo}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 
     # Verify file was created
-    file = File.objects.latest("id")
-    assert file.name == "test.txt"
-    assert file.content_type == "text/plain"
-    assert file.file.read() == b"hello world"
+    assert len(repo.files_created) == 1
+    assert repo.files_created[0]["filename"] == "test.txt"
+    assert repo.files_created[0]["content_type"] == "text/plain"
 
     # Verify file ID tracked in output metadata
     generated_files = node_output.update["output_message_metadata"]["generated_files"]  # ty: ignore[not-subscriptable]
-    assert file.id in generated_files
+    assert len(generated_files) == 1
 
-    # Verify ChatAttachment was created
-    attachment = ChatAttachment.objects.get(chat=experiment_session.chat)
-    assert attachment.tool_type == "code_interpreter"
-    assert file in attachment.files.all()
+    # Verify attachment was recorded
+    assert len(repo.attached_files) == 1
+    assert repo.attached_files[0]["type"] == "code_interpreter"
 
 
 def test_add_file_attachment_requires_bytes():
