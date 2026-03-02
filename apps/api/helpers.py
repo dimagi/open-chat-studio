@@ -1,3 +1,5 @@
+from typing import cast
+
 from django.http import HttpRequest
 from rest_framework_api_key.permissions import KeyParser
 
@@ -12,7 +14,7 @@ def get_user_from_request(request: HttpRequest) -> CustomUser | None:
         user_api_key = _get_api_key_object(request, UserAPIKey)
         return user_api_key.user
     else:
-        return request.user  # ty: ignore[invalid-return-type]
+        return cast(CustomUser, request.user)
 
 
 def get_team_from_request(request: HttpRequest) -> CustomUser | None:

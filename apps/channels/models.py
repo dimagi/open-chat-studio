@@ -1,5 +1,4 @@
 import uuid
-from typing import Self
 
 from django.conf import settings
 from django.db import models
@@ -39,7 +38,7 @@ class ChannelPlatform(models.TextChoices):
         return [cls.API, cls.WEB, cls.EVALUATIONS]
 
     @classmethod
-    def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
+    def for_dropdown(cls, used_platforms, team) -> dict["ChannelPlatform", bool]:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
         from apps.service_providers.models import MessagingProvider
 
@@ -66,7 +65,7 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform)
 
-        return platform_availability  # ty: ignore[invalid-return-type]
+        return platform_availability
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm

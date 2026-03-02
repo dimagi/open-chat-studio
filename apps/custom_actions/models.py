@@ -194,7 +194,7 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
 
     @transaction.atomic()
-    def create_new_version(self, new_assistant=None, new_node=None, is_copy=False):  # ty: ignore[invalid-method-override]
+    def create_new_version(self, save=True, is_copy=False, new_assistant=None, new_node=None, **kwargs):
         action_holders = [new_assistant, new_node]
         if not any(action_holders):
             raise ValueError("Either new_assistant or new_node must be provided")

@@ -3,7 +3,6 @@ from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Self
 from uuid import uuid4
 
 import pydantic
@@ -39,7 +38,7 @@ class ModelParamSpec:
         return self.model_cls.objects.get(id=id)
 
 
-def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):  # ty: ignore[invalid-type-form]
+def _set_versioned_param_value(node_version: "Node", param_name: str, param_cls):
     """
     Handles parameters referencing versioned models with the following logic:
     - If the referenced model has changes compared to its latest version, a new version is created, and the
@@ -57,7 +56,7 @@ def _set_versioned_param_value(node_version: Self, param_name: str, param_cls): 
                 node_version.params[param_name] = str(param_instance.latest_version.id)
 
 
-def _set_versioned_param_list_values(node_version: Self, param_name: str, param_cls):  # ty: ignore[invalid-type-form]
+def _set_versioned_param_list_values(node_version: "Node", param_name: str, param_cls):
     """
     Handles list parameters referencing versioned models with the same logic as _set_versioned_param_value
     but for a list of IDs.
@@ -270,7 +269,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
     @transaction.atomic()
-    def create_new_version(self, is_copy: bool = False):  # ty: ignore[invalid-method-override]
+    def create_new_version(self, save=True, is_copy: bool = False, **kwargs):
         version_number = 1 if is_copy else self.version_number
         if not is_copy:
             self.version_number = self.version_number + 1
@@ -375,7 +374,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def name(self):
         return self.params.get("name", None)
 
-    def create_new_version(self, is_copy=False, new_flow_id=None):  # ty: ignore[invalid-method-override]
+    def create_new_version(self, save=True, is_copy=False, new_flow_id=None, **kwargs):
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.

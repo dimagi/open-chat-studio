@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         return {
             "active_tab": "traces",
             "title": "Traces",
