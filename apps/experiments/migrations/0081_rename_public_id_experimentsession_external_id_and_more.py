@@ -18,6 +18,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="experimentsession",
             name="external_id",
-            field=models.CharField(default=uuid.uuid4, max_length=255, unique=True),  # ty: ignore[invalid-argument-type]
+            field=models.CharField(default=lambda: str(uuid.uuid4()), max_length=255, unique=True),
         ),
     ]

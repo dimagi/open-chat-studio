@@ -847,7 +847,8 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_experimentsession"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
             team=self.request.team,

@@ -24,7 +24,8 @@ class TagHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
     template_name = "generic/object_home.html"
     permission_required = "annotations.view_tag"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         return {
             "active_tab": "tags",
             "title": "Tags",

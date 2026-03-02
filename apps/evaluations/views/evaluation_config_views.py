@@ -34,7 +34,8 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
     permission_required = "evaluations.view_evaluationconfig"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         return {
             "active_tab": "evaluations",
             "title": "Evaluations",
@@ -123,7 +124,8 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequi
         "allow_new": False,
     }
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
 
         return {
@@ -145,7 +147,8 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         ("all", "All time"),
     ]
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
 
         date_range = self.request.GET.get("range", "30")
@@ -193,7 +196,8 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_result_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         evaluation_run = get_object_or_404(
             EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
         )
@@ -279,7 +283,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
     def get_highlight_result_id(self):
         """Extract and validate the result_id query parameter for highlighting."""
         try:
-            return int(self.request.GET.get("result_id"))  # ty: ignore[invalid-argument-type]
+            return int(self.request.GET["result_id"])
         except (ValueError, TypeError):
             return None
 

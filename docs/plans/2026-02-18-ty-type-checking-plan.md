@@ -12,7 +12,64 @@
 
 ---
 
-## Task 1: Install django-types and ty as dev dependencies
+## Implementation Status (as of 2026-03-02)
+
+### Completed and merged to main
+
+| Task | Commit(s) | Notes |
+|------|-----------|-------|
+| Task 1 — Install django-types + ty | (early commits) | Both in `pyproject.toml` dev deps |
+| Task 2 — Configure ty, all rules ignored | (early commits) | `[tool.ty]` section in pyproject.toml |
+| Task 3 — Non-blocking CI step | `fd2f29598` | `continue-on-error: true` in lint_and_test.yml |
+| Task 4 — AGENTS.md ty command | `88b6d464d` | `uv run ty check apps/` documented |
+| Task 5 — unresolved-import | `2e942c1dd` | 5 violations → all suppressed |
+| Task 6 — Zero-violation rules batch | `16cd31804` | ~30 zero-violation rules enabled as error |
+| Task 7 — Remaining low-count Phase 1 rules | `ef68b205f` | invalid-raise, empty-body, etc. |
+| Task 8a — unsupported-operator | `37bdc6b3d` | 16 violations fixed |
+| Task 8b — invalid-return-type | `c70556231` | 32 violations fixed |
+| Task 8c — possibly-missing-attribute | `18de5d9bb` | 44 violations fixed |
+| Task 8d — invalid-method-override | `9ff4169f3` | 60 violations suppressed |
+| Task 8e — invalid-parameter-default | `6455d549d` | 79 violations fixed (Optional annotations) |
+| Task 8f — not-subscriptable | `23e884fa0` | 39 violations suppressed |
+| Task 8g — invalid-assignment | `264f8621c` | 108 violations fixed/suppressed |
+| Additional cleanup | `17f4c7bb1`, `30d3f3e4b` | 14 + N more suppressions improved |
+
+### In progress — branch `sk/types-IV` (not yet merged)
+
+| Commit | Rule | Initial violations | Suppressions added |
+|--------|------|-------------------|-------------------|
+| `1b8b42144` | invalid-type-form | 25 | ~3 remaining (25 fixed) |
+| `3588e5fc9` | invalid-argument-type | 346 | ~180 remaining (346 addressed) |
+| `523b16db7` | unresolved-attribute | 1,642 | enabled as **warn**, not error |
+| (uncommitted, this session) | cleanup across all rules | 395 → 352 | 43 suppressions removed |
+
+### Current suppression counts (working tree, 2026-03-02)
+
+Total: **352** `ty: ignore` suppressions
+
+| Rule | Count | Notes |
+|------|-------|-------|
+| `invalid-argument-type` | 180 | Largest remaining batch — Django/LangChain API mismatches |
+| `invalid-assignment` | 99 | Second largest — Django descriptors, lazy objects, etc. |
+| `invalid-method-override` | 32 | LSP violations: events models (justified), others |
+| `not-subscriptable` | 18 | Third-party types without generics |
+| `invalid-return-type` | 10 | channels.py and a few others (callers not guarded for None) |
+| `unresolved-import` | 5 | Optional/conditional imports (mailchimp3, etc.) |
+| `invalid-type-form` | 3 | Remaining after fixes |
+| other | 5 | invalid-key, not-subscriptable+invalid-argument-type combos, etc. |
+
+### Known gotchas discovered during implementation
+
+- **`get_context_data` pattern**: Django URL kwargs flow through `self.kwargs`, not method params. Views that declared `team_slug: str` as an explicit param were LSP violations. Fixed in session by removing the param and reading from `self.kwargs["team_slug"]`.
+- **`VersionsMixin.create_new_version` hierarchy**: `**kwargs` on the base alone does not satisfy ty's LSP check — subclasses must explicitly declare `save=True, is_copy=False`. `StaticTrigger`/`TimeoutTrigger` in `events/models.py` are genuine violations (required positional `new_experiment` arg) and kept as justified suppressions.
+- **`channels.py` ExperimentSession return type**: Broadening to `ExperimentSession | None` cascades to ~10 call sites that don't guard for None. Reverted; kept ty: ignore.
+- **ruff post-Edit hook**: The project runs ruff after each file edit, stripping unused imports. Import + usage changes must be made atomically (use `Write` to rewrite the whole file, or a Python script).
+- **`uuid.uuid4` as `CharField` default**: Actual bug — `uuid4()` returns `UUID`, not `str`. Fixed with `lambda: str(uuid.uuid4())` in both model and migration.
+- **GET[] vs GET.get()**: Switching from `.get("key")` to `["key"]` changes None-missing behavior to KeyError. Two instances changed in dataset_views.py and evaluation_config_views.py — verify these params are always present.
+
+---
+
+## Task 1: Install django-types and ty as dev dependencies ✅ DONE
 
 **Files:**
 - Modify: `pyproject.toml:139-155` (dev dependency group)
@@ -79,7 +136,7 @@ git commit -m "build: add django-types and ty as dev dependencies"
 
 ---
 
-## Task 2: Configure ty in pyproject.toml with all rules ignored
+## Task 2: Configure ty in pyproject.toml with all rules ignored ✅ DONE
 
 **Files:**
 - Modify: `pyproject.toml` (add `[tool.ty]` section after `[tool.djlint]`)
@@ -118,7 +175,7 @@ git commit -m "build: add ty configuration with all rules ignored"
 
 ---
 
-## Task 3: Add non-blocking ty CI step
+## Task 3: Add non-blocking ty CI step ✅ DONE
 
 **Files:**
 - Modify: `.github/workflows/lint_and_test.yml` (add new job after `code-style`)
@@ -163,7 +220,7 @@ git commit -m "ci: add non-blocking ty type check step"
 
 ---
 
-## Task 4: Update AGENTS.md with ty command
+## Task 4: Update AGENTS.md with ty command ✅ DONE
 
 **Files:**
 - Modify: `AGENTS.md:43-53` (Useful commands section)
@@ -185,7 +242,7 @@ git commit -m "docs: add ty check to AGENTS.md useful commands"
 
 ---
 
-## Task 5: Enable Phase 1 low-noise rules — unresolved-import
+## Task 5: Enable Phase 1 low-noise rules — unresolved-import ✅ DONE
 
 **Files:**
 - Modify: `pyproject.toml` (`[tool.ty.rules]` section)
@@ -233,7 +290,7 @@ git commit -m "types: enable unresolved-import rule and fix violations"
 
 ---
 
-## Task 6: Enable Phase 1 low-noise rules — batch of zero/near-zero violation rules
+## Task 6: Enable Phase 1 low-noise rules — batch of zero/near-zero violation rules ✅ DONE
 
 **Files:**
 - Modify: `pyproject.toml` (`[tool.ty.rules]` section)
@@ -277,7 +334,7 @@ git commit -m "types: enable batch of zero-violation ty rules"
 
 ---
 
-## Task 7: Enable Phase 1 low-noise rules — remaining low-count rules
+## Task 7: Enable Phase 1 low-noise rules — remaining low-count rules ✅ DONE
 
 **Files:**
 - Modify: `pyproject.toml` (`[tool.ty.rules]` section)
@@ -307,20 +364,25 @@ Group rules into a single PR when combined violations are <20.
 
 ---
 
-## Task 8: Enable Phase 2 medium-noise rules — one rule per PR
+## Task 8: Enable Phase 2 medium-noise rules — one rule per PR ✅ DONE
 
-Each of these rules has 30-110 violations. Handle them as separate PRs.
+All Phase 2 rules have been enabled and merged to main.
 
-**Process for each rule (repeat for each):**
+**Actual results (vs original estimates):**
 
-Rules to enable in this order:
-1. `unsupported-operator` (~31 violations)
-2. `invalid-return-type` (~33 violations)
-3. `possibly-missing-attribute` (~43 violations)
-4. `invalid-method-override` (~46 violations)
-5. `invalid-parameter-default` (~79 violations)
-6. `not-subscriptable` (~107 violations)
-7. `invalid-assignment` (~109 violations)
+| Rule | Estimated | Actual violations | Resolution |
+|------|-----------|-------------------|------------|
+| `unsupported-operator` | ~31 | 16 | Fixed |
+| `invalid-return-type` | ~33 | 32 | Fixed |
+| `possibly-missing-attribute` | ~43 | 44 | Fixed |
+| `invalid-method-override` | ~46 | 60 | Suppressed (intentional overrides) |
+| `invalid-parameter-default` | ~79 | 79 | Fixed (Optional annotations) |
+| `not-subscriptable` | ~107 | 39 | Suppressed (false positives) |
+| `invalid-assignment` | ~109 | 108 | Fixed/suppressed |
+
+**Process for each rule (repeat for each) — preserved for reference:**
+
+Rules enabled in this order:
 
 **For each rule:**
 
@@ -366,45 +428,63 @@ PR description should list the violation count and categorize fixes vs suppressi
 
 ---
 
-## Task 9: Enable Phase 3 high-noise rules
+## Task 9: Enable Phase 3 high-noise rules 🔄 IN PROGRESS (branch sk/types-IV)
 
-These rules have the most violations. Handle them one at a time, potentially splitting into multiple commits within a PR.
+These rules have the most violations. Handled one at a time in separate commits.
 
-**Rules:**
-1. `invalid-argument-type` (~369 violations)
-2. `invalid-type-form` (~29 violations)
-3. `unresolved-attribute` (~2,417 violations pre-django-types; re-measure)
+**Actual results:**
 
-**For `invalid-argument-type` and `invalid-type-form`:**
+| Rule | Estimated | Actual | Status | Branch commit |
+|------|-----------|--------|--------|---------------|
+| `invalid-type-form` | ~29 | 25 | ✅ Enabled as error, 22 fixed, 3 suppressed | `1b8b42144` |
+| `invalid-argument-type` | ~369 | 346 initial; **180 suppressed remain** | ✅ Enabled as error | `3588e5fc9` |
+| `unresolved-attribute` | ~2,417 pre-django-types | **1,642 violations** after django-types | ⏳ Enabled as **warn** only | `523b16db7` |
 
-Follow the same process as Task 8. For large violation counts, split fixes by app directory:
+**Session cleanup (2026-03-02, uncommitted):** After enabling these rules, a focused session
+removed **43 more ty: ignore suppressions** (395 → 352 total) across 31 files by fixing:
+- 14× `get_context_data` LSP violations (team_slug via self.kwargs)
+- 7× `create_new_version` LSP violations (aligned signatures with **kwargs)
+- 6× return-type/annotation fixes (cast, forward refs, Generator)
+- 2× GET[] subscript fixes, 2× uuid default bug, 2× callback param narrowing
+- 2× FK _id field trick, 1× cast for SimpleLazyObject, 3× stale suppressions removed
+
+**Next steps for this task:**
+
+1. **Merge this branch** (sk/types-IV) via PR — includes the 3 rule-enablement commits + session cleanup.
+
+2. **Reduce `invalid-argument-type` suppressions (180 remaining):**
+   These are primarily Django ORM calls and LangChain API mismatches where ty's type stubs
+   don't match the actual runtime types. Approach:
+   - Check if django-types or LangChain stubs have improved in newer versions first
+   - For genuine Django patterns (QuerySet.filter, model.save, etc.) — suppress with comment
+   - For actual bugs — fix
+
+3. **Fix `unresolved-attribute` violations (1,642 as warn):**
+   The rule is currently `"warn"` to avoid blocking CI. To promote to `"error"`:
+   ```bash
+   uv run ty check --ignore all --error unresolved-attribute apps/ 2>&1 | head -100
+   ```
+   Most violations are Django ORM patterns (`.objects`, `.pk`, custom managers).
+   Split by app — some apps may be fixable quickly, others need django-types upstream fixes.
+
+**For `invalid-argument-type` — top offending apps:**
 
 ```bash
-# Check per-app violation count
 for app in apps/*/; do
   count=$(uv run ty check --ignore all --error invalid-argument-type "$app" 2>&1 | grep -oP 'Found \K\d+' || echo "0")
   [ "$count" != "0" ] && echo "$count $app"
 done
 ```
 
-Consider splitting into multiple commits (one per app) within the same PR.
-
-**For `unresolved-attribute`:**
-
-This is the largest rule. After django-types is installed (Task 1), re-measure:
+**For `unresolved-attribute` — measure current state:**
 
 ```bash
-uv run ty check --ignore all --error unresolved-attribute apps/ 2>&1 | tail -3
+uv run ty check --ignore all --warn unresolved-attribute apps/ 2>&1 | tail -3
 ```
-
-If still >500 violations, consider:
-- Enable as `"warn"` first instead of `"error"`
-- Fix app-by-app in separate PRs
-- Some may require upstream django-types fixes
 
 ---
 
-## Task 10: Make CI blocking
+## Task 10: Make CI blocking ⏳ PENDING (after unresolved-attribute promoted to error)
 
 **Files:**
 - Modify: `.github/workflows/lint_and_test.yml`

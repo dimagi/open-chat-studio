@@ -59,7 +59,8 @@ class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
     template_name = "generic/object_home.html"
     permission_required = "documents.view_collection"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         return {
             "active_tab": "collections",
             "title": "Collections",
@@ -158,11 +159,9 @@ class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin
     template_name = "documents/collection_query_view.html"
     permission_required = "documents.view_collection"
 
-    def get_context_data(  # ty: ignore[invalid-method-override]
-        self,
-        team_slug: str,
-        pk: str,
-    ):
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
+        pk = self.kwargs["pk"]
         return {
             "active_tab": "collections",
             "title": "Query Collection",

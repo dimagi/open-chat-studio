@@ -46,7 +46,8 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
     template_name = "generic/object_home.html"
     permission_required = "assistants.view_openaiassistant"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         has_providers = get_llm_providers_for_assistants(self.request.team).exists()
         if not has_providers:
             messages.warning(self.request, "You need to add an OpenAI LLM provider before you can create an assistant.")

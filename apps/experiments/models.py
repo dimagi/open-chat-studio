@@ -7,7 +7,6 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 from functools import cached_property
-from typing import Self
 from uuid import uuid4
 
 import markdown
@@ -334,7 +333,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
 
-    def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
+    def create_new_version(self, save=True, is_copy=False, **kwargs):
         new_version = super().create_new_version(save=False)
         new_version.is_default = False
         new_version.save()
@@ -499,8 +498,8 @@ class AgentTools(models.TextChoices):
     CALCULATOR = "calculator", gettext("Calculator")
 
     @classmethod
-    def reminder_tools(cls) -> list[Self]:
-        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]  # ty: ignore[invalid-return-type]
+    def reminder_tools(cls) -> list[AgentTools]:
+        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]
 
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
@@ -1370,7 +1369,7 @@ class ExperimentSession(BaseTeamModel):
     """
 
     objects = ExperimentSessionObjectManager()
-    external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)  # ty: ignore[invalid-argument-type]
+    external_id = models.CharField(max_length=255, default=lambda: str(uuid.uuid4()), unique=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
