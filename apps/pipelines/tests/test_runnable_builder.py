@@ -126,11 +126,12 @@ class TestEmailPipeline:
             end_node(),
         ]
 
+        session = ExperimentSessionFactory()
         state = PipelineState(
             messages=["Ice is not a liquid. When it is melted it turns into water."],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=session,
         )
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=session)}}
         create_runnable(pipeline, nodes).invoke(state, config=config)
         assert len(mail.outbox) == 1
         assert mail.outbox[0].subject == "This is an interesting email"
@@ -196,7 +197,7 @@ class TestLLMResponse:
             end_node(),
         ]
         participant_data = {"name": "A"}
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = create_runnable(pipeline, nodes).invoke(
             PipelineState(
                 messages=[user_input],
@@ -236,7 +237,7 @@ class TestLLMResponse:
         ]
         runnable = create_runnable(pipeline, nodes, edges)
 
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session), config=config)
         assert output["intents"] == [Intents.END_SESSION]
 
@@ -314,7 +315,7 @@ class TestConditionalNode:
             },
         ]
         runnable = create_runnable(pipeline, nodes, edges)
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = runnable.invoke(
             PipelineState(messages=["hello"], experiment_session=experiment_session), config=config
         )
@@ -363,7 +364,7 @@ class TestRouterNode:
             llm_provider_id=provider.id,
             llm_provider_model_id=provider_model.id,
         )
-        node._repo = ORMRepository()
+        node._repo = ORMRepository(session=experiment_session)
         participant_data = {"participant_data": "b"}
         state = PipelineState(
             outputs={"123": {"message": "a"}},
@@ -460,7 +461,7 @@ class TestRouterNode:
             },
         ]
         runnable = create_runnable(pipeline, nodes, edges)
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
 
         output = runnable.invoke(PipelineState(messages=["a"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template A: a"
@@ -531,7 +532,7 @@ class TestRouterNode:
             llm_provider_id=provider.id,
             llm_provider_model_id=provider_model.id,
         )
-        node._repo = ORMRepository()
+        node._repo = ORMRepository(session=experiment_session)
         node.default_keyword_index = 0
         state = PipelineState(
             outputs={"123": {"message": "a"}},
@@ -589,7 +590,7 @@ def main(input, **kwargs):
             {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
         ]
         runnable = create_runnable(pipeline, nodes, edges)
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = runnable.invoke(
             PipelineState(messages=["Go to FIRST"], experiment_session=experiment_session), config=config
         )
@@ -642,7 +643,7 @@ def main(input, **kwargs):
             {"id": "C -> end", "source": template_c["id"], "target": end["id"]},
         ]
         runnable = create_runnable(pipeline, nodes, edges)
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
 
         def _check_match(route_to, expected):
             output = runnable.invoke(
@@ -690,7 +691,7 @@ def main(input, **kwargs):
             {"id": "B -> end", "source": template_b["id"], "target": end["id"]},
         ]
         runnable = create_runnable(pipeline, nodes, edges)
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
 
         def _check_routing_and_tags(route_to, expected_tag):
             output = runnable.invoke(
@@ -742,7 +743,7 @@ def main(input, **kwargs):
                 state["session_state"] = route
             return state
 
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = runnable.invoke(_get_state({"route_to": "first"}), config=config)
         assert output["messages"][-1] == "A Hi"
 
@@ -778,7 +779,7 @@ def main(input, **kwargs):
             Attachment(file_id=456, type="file_search", name="blog.md", size=20, download_link="http://localhost:8000"),
         ]
         serialized_attachments = [att.model_dump() for att in attachments]
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = runnable.invoke(
             PipelineState(
                 messages=["log attachments"], experiment_session=experiment_session, attachments=serialized_attachments
@@ -823,7 +824,7 @@ class TestDataExtraction:
                 messages=["ai: hi user\nhuman: hi there I am John"],
                 experiment_session=session,
             )
-            config = {"configurable": {"repo": ORMRepository()}}
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             assert graph.invoke(state, config=config)["messages"][-1] == '{"name": "John"}'
 
     @django_db_with_data()
@@ -851,7 +852,7 @@ class TestDataExtraction:
                 messages=["ai: hi user\nhuman: hi there I am John"],
                 experiment_session=session,
             )
-            config = {"configurable": {"repo": ORMRepository()}}
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             extracted_data = graph.invoke(state, config=config)["messages"][-1]
 
         # This is what the LLM sees.
@@ -972,7 +973,7 @@ class TestDataExtraction:
                 experiment_session=session,
                 participant_data=initial_data or {},
             )
-            config = {"configurable": {"repo": ORMRepository()}}
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             result = runnable.invoke(state, config=config)
             return result["participant_data"]
 
@@ -1006,12 +1007,13 @@ class TestAssistantNode:
         assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
         runnable = create_runnable(pipeline, nodes)
+        session = ExperimentSessionFactory()
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=session,
             attachments=[],
         )
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=session)}}
         output_state = runnable.invoke(state, config=config)
         assert output_state["input_message_metadata"] == {"test": "metadata"}
         assert output_state["output_message_metadata"] == {"test": "metadata"}
@@ -1040,12 +1042,13 @@ class TestAssistantNode:
                 download_link="http://localhost:8000",
             ),
         ]
+        session = ExperimentSessionFactory()
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=session,
             attachments=[att.model_dump() for att in attachments],
         )
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=session)}}
         output_state = runnable.invoke(state, config=config)
         assert output_state["messages"][-1] == "Hi there human"
         args, kwargs = runnable_mock.invoke.call_args
@@ -1064,12 +1067,13 @@ class TestAssistantNode:
         pipeline = PipelineFactory()
         nodes = [start_node(), assistant_node(str(999)), end_node()]
         runnable = create_runnable(pipeline, nodes)
+        session = ExperimentSessionFactory()
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=session,
             attachments=[],
         )
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=session)}}
         with pytest.raises(PipelineNodeBuildError):
             runnable.invoke(state, config=config)
 
@@ -1090,12 +1094,13 @@ class TestAssistantNode:
 
         with patch("apps.pipelines.nodes.nodes.AssistantChat", return_value=assistant_chat_mock):
             runnable = create_runnable(pipeline, nodes)
+            session = ExperimentSessionFactory()
             state = PipelineState(
                 messages=["I am just a human I have no feelings"],
-                experiment_session=ExperimentSessionFactory(),
+                experiment_session=session,
                 attachments=[],
             )
-            config = {"configurable": {"repo": ORMRepository()}}
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             output_state = runnable.invoke(state, config=config)
         assert output_state["input_message_metadata"] == {}
         assert output_state["output_message_metadata"] == {}
@@ -1288,7 +1293,7 @@ class TestPipelineValidation:
             messages=["not hello"],
             experiment_session=experiment_session,
         )
-        config = {"configurable": {"repo": ORMRepository()}}
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
         output = create_runnable(pipeline, nodes, edges).invoke(state, config=config)
         assert output["messages"][-1] == "T: not hello"
 
@@ -1310,13 +1315,14 @@ class TestPipelineStateHelpers:
         assert merge_dict_values_as_lists(left, right) == expected
 
     def test_input_with_format_strings(self):
+        session = ExperimentSessionFactory.build()
         state = PipelineState(
             messages=["Is this it {the thing}"],
-            experiment_session=ExperimentSessionFactory.build(),
+            experiment_session=session,
             temp_state={},
         )
         resp = Passthrough(node_id="test", django_node=None, name="test").process(
-            [], [], state, {"configurable": {"repo": ORMRepository()}}
+            [], [], state, {"configurable": {"repo": ORMRepository(session=session)}}
         )
 
         assert resp["messages"] == ["Is this it {the thing}"]
