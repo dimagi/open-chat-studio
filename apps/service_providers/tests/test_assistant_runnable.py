@@ -463,7 +463,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     ]
 
     ai_message = "Is this the file you're looking for:【6:0†source】."
-    assistant = create_experiment_runnable(session.experiment, session, local_assistant)
+    assistant = create_experiment_runnable(session.experiment, session, local_assistant)  # ty: ignore[invalid-argument-type]
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations, include_image_file=False
     )
@@ -548,7 +548,7 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
     adapter = Mock(spec=AssistantAdapter)
     adapter.get_messages_to_sync_to_thread.return_value = messages
     session = ExperimentSessionFactory()
-    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
+    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())  # ty: ignore[invalid-argument-type]
     assistant_runnable = AssistantChat(adapter=adapter, history_manager=history_manager)
     assistant_runnable._sync_messages_to_thread(thread_id)
 
@@ -573,7 +573,7 @@ def test_get_messages_to_sync_to_thread():
             ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
         ]
     )
-    adapter = AssistantAdapter(session, assistant, citations_enabled=False)
+    adapter = AssistantAdapter(session, assistant, citations_enabled=False)  # ty: ignore[invalid-argument-type]
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
         {"role": "user", "content": "hello2"},
@@ -632,7 +632,7 @@ def _create_thread_messages(
             created_at=0,
             content=get_content(message),
             object="thread.message",
-            role=list(message)[0],
+            role=list(message)[0],  # ty: ignore[invalid-argument-type]
             run_id=run_id,
             thread_id=thread_id,
             status="completed",

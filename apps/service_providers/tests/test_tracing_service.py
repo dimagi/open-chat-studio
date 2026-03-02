@@ -208,4 +208,4 @@ class TestTracingService:
 
     def test_tracing_service_raises_error_when_ids_none_and_tracers_nonempty(mock_tracer):
         with pytest.raises(ValueError, match="Tracers must be empty if experiment_id or team_id is None"):
-            TracingService(tracers=[mock_tracer], experiment_id=None, team_id=None)
+            TracingService(tracers=[mock_tracer], experiment_id=None, team_id=None)  # ty: ignore[invalid-argument-type]

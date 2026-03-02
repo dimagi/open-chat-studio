@@ -36,7 +36,7 @@ def openai_credentials():
     """Get real OpenAI credentials from environment"""
     api_key = env.str("OPENAI_API_KEY", default=None)
     if not api_key:
-        pytest.skip("OPENAI_API_KEY not set")
+        pytest.skip("OPENAI_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {
         "openai_api_key": api_key,
         "openai_api_base": env.str("OPENAI_API_BASE", default=None),
@@ -49,7 +49,7 @@ def anthropic_credentials():
     """Get real Anthropic credentials from environment"""
     api_key = env.str("ANTHROPIC_API_KEY", default=None)
     if not api_key:
-        pytest.skip("ANTHROPIC_API_KEY not set")
+        pytest.skip("ANTHROPIC_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {"anthropic_api_key": api_key, "anthropic_api_base": "https://api.anthropic.com"}
 
 
@@ -58,7 +58,7 @@ def google_credentials():
     """Get real Google Gemini credentials from environment"""
     api_key = env.str("GOOGLE_API_KEY", default=None)
     if not api_key:
-        pytest.skip("GOOGLE_API_KEY not set")
+        pytest.skip("GOOGLE_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {
         "google_api_key": api_key,
     }
@@ -71,12 +71,12 @@ def google_vertex_ai_credentials():
 
     credentials_json_str = env.str("GOOGLE_VERTEX_AI_CREDENTIALS_JSON", default=None)
     if not credentials_json_str:
-        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON not set")
+        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON not set")  # ty: ignore[invalid-argument-type]
 
     try:
         credentials_json = json.loads(credentials_json_str)
     except json.JSONDecodeError:
-        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON is not valid JSON")
+        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON is not valid JSON")  # ty: ignore[invalid-argument-type]
 
     return {
         "credentials_json": credentials_json,
@@ -90,7 +90,7 @@ def deepseek_credentials():
     """Get real DeepSeek credentials from environment"""
     api_key = env.str("DEEPSEEK_API_KEY", default=None)
     if not api_key:
-        pytest.skip("DEEPSEEK_API_KEY not set")
+        pytest.skip("DEEPSEEK_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {
         "deepseek_api_key": api_key,
     }
@@ -102,7 +102,7 @@ def azure_credentials():
     api_key = env.str("AZURE_OPENAI_API_KEY", default=None)
     endpoint = env.str("AZURE_OPENAI_ENDPOINT", default=None)
     if not (api_key and endpoint):
-        pytest.skip("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT not set")
+        pytest.skip("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT not set")  # ty: ignore[invalid-argument-type]
     return {
         "openai_api_key": api_key,
         "openai_api_base": endpoint,
@@ -115,7 +115,7 @@ def groq_credentials():
     """Get real Groq credentials from environment"""
     api_key = env.str("GROQ_API_KEY", default=None)
     if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
+        pytest.skip("GROQ_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {
         "openai_api_key": api_key,
     }
@@ -126,7 +126,7 @@ def perplexity_credentials():
     """Get real Perplexity credentials from environment"""
     api_key = env.str("PERPLEXITY_API_KEY", default=None)
     if not api_key:
-        pytest.skip("PERPLEXITY_API_KEY not set")
+        pytest.skip("PERPLEXITY_API_KEY not set")  # ty: ignore[invalid-argument-type]
     return {
         "openai_api_key": api_key,
     }
@@ -172,14 +172,14 @@ def _run_llm_pipeline_test(
         ),
         end_node(),
     ]
-    pipeline = create_pipeline_model(nodes, pipeline=pipeline)
+    pipeline = create_pipeline_model(nodes, pipeline=pipeline)  # ty: ignore[invalid-argument-type]
 
     # Create experiment and session
     experiment = ExperimentFactory(team=team_with_users, pipeline=pipeline)
     session = ExperimentSessionFactory(experiment=experiment)
 
     # Run pipeline
-    bot = PipelineBot(session=session, experiment=experiment, trace_service=TracingService.empty())
+    bot = PipelineBot(session=session, experiment=experiment, trace_service=TracingService.empty())  # ty: ignore[invalid-argument-type]
     input_state = PipelineState(messages=["Hello"], experiment_session=session)
     ai_message = bot.invoke_pipeline(input_state=input_state, pipeline=pipeline)
 

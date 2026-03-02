@@ -271,7 +271,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             file = collection_file.file
             embeddings = []
             try:
-                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)  # ty: ignore[invalid-argument-type]
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
                     embedding_vector = self.get_embedding_vector(chunk)
@@ -379,6 +379,7 @@ class GoogleLocalIndexManager(LocalIndexManager):
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
         embeddings = GoogleGenerativeAIEmbeddings(
-            google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
+            google_api_key=self._api_key,  # ty: ignore[invalid-argument-type]
+            model=f"models/{self.embedding_model_name}",
         )
         return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)
