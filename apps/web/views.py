@@ -14,7 +14,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
-from health_check.views import MainView
+from health_check.views import HealthCheckView
+from redis.asyncio import Redis as RedisClient
 
 from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
@@ -48,12 +49,19 @@ def team_home(request, team_slug):
     return redirect("dashboard:index", team_slug=request.team.slug)
 
 
-class HealthCheck(MainView):
-    def get(self, request, *args, **kwargs):
+class HealthCheck(HealthCheckView):
+    checks = [
+        "health_check.checks.Database",
+        "health_check.checks.Cache",
+        "health_check.contrib.celery.Ping",
+        ("health_check.contrib.redis.Redis", {"client_factory": lambda: RedisClient.from_url(settings.REDIS_URL)}),
+    ]
+
+    async def get(self, request, *args, **kwargs):
         tokens = settings.HEALTH_CHECK_TOKENS
         if tokens and request.GET.get("token") not in tokens:
             raise Http404
-        return super().get(request, *args, **kwargs)
+        return await super().get(request, *args, **kwargs)
 
 
 class ConfirmIdentityForm(forms.Form):

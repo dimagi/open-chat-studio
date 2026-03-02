@@ -23,6 +23,7 @@ _dist/
 .python-version
 .coverage
 venv
+.claude/worktrees
 
 # uncomment these lines after setting up the front-end build pipeline in dev and production
 static/css/

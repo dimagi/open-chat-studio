@@ -164,10 +164,10 @@ jobs:
 
         SUBNETS=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("PrivateSubnets")) | .OutputValue')
         SG=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("ServiceSecurityGroup")) | .OutputValue')
-        
+
         [[ -z "$SUBNETS" ]] && { echo "Error: Could not find subnets in stack outputs"; exit 1; }
         [[ -z "$SG" ]] && { echo "Error: Could not find security group in stack outputs"; exit 1; }
-        
+
         echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
         echo "security_group=$SG" >> $GITHUB_OUTPUT
 

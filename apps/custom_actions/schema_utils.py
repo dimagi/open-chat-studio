@@ -148,6 +148,7 @@ def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
 def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
     # When spec_dict is None, parameter locations (path/query/etc.) cannot be resolved;
     # all non-body parameters will default to param_in="query".
+    resolved_spec = resolve_references(spec_dict) if spec_dict else None
     operations = []
     for path in spec.paths:
         for method in spec.get_methods_for_path(path):
@@ -158,29 +159,53 @@ def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
                     description=op.description,
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(op, spec_dict, path, method),
+                    parameters=_extract_parameters(op, resolved_spec, path, method),
                 )
             )
     return operations
 
 
+def _resolve_schema_type(prop_schema: dict) -> str:
+    """Resolve the type from a property schema, handling anyOf/oneOf patterns.
+
+    Pydantic v2 generates schemas like ``{"anyOf": [{"type": "boolean"}]}``
+    instead of ``{"type": "boolean"}``.  This helper unwraps that pattern,
+    filtering out ``"null"`` variants (used for Optional fields), and falls
+    back to ``"string"`` when the type cannot be determined.
+    """
+    if "type" in prop_schema:
+        return prop_schema["type"]
+    for key in ("anyOf", "oneOf"):
+        variants = prop_schema.get(key, [])
+        non_null = [item for item in variants if item.get("type") != "null"]
+        if len(non_null) == 1 and "type" in non_null[0]:
+            return non_null[0]["type"]
+    return "string"
+
+
 def _extract_parameters(
-    operation: APIOperation, spec_dict=None, path: str = "", method: str = ""
+    operation: APIOperation, resolved_spec: dict | None = None, path: str = "", method: str = ""
 ) -> list[ParameterDetail]:
     """Extract parameter details from OpenAPI spec.
 
     Extracts both query/path parameters and request body parameters.
-    Looks up parameter location (path, query, etc.) from the spec_dict.
+    Looks up parameter location (path, query, etc.) from the resolved spec.
     """
-    # Build a map of parameter name -> param_in from the spec_dict
+    # Build a map of parameter name -> param_in from the resolved spec
     param_in_map = {}
-    if spec_dict and path and method:
-        operation_spec = spec_dict.get("paths", {}).get(path, {}).get(method, {})
-        for param_spec in operation_spec.get("parameters", []):
+    body_prop_schemas: dict[str, dict] = {}
+    if resolved_spec and path and method:
+        resolved_op = resolved_spec.get("paths", {}).get(path, {}).get(method, {})
+        for param_spec in resolved_op.get("parameters", []):
             param_name = param_spec.get("name")
             param_in = param_spec.get("in", "query")
             if param_name:
                 param_in_map[param_name] = param_in
+        # Pre-resolve body property schemas for type lookup (handles anyOf/oneOf)
+        body_schema = (
+            resolved_op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
+        )
+        body_prop_schemas = body_schema.get("properties", {})
 
     parameters = []
     for prop in operation.properties:
@@ -208,8 +233,12 @@ def _extract_parameters(
                 params["schema_type"] = param.type.value
                 # UGLY HACK! DataType.Array is converted into a string like "Array<DataType.STRING>"
                 # See langchain_community/tools/openapi/utils/api_models.py:315
-            elif param.type.startswith("Array<"):
+            elif isinstance(param.type, str) and param.type.startswith("Array<"):
                 params["schema_type"] = DataType.ARRAY.value
+            elif param.type is None:
+                # Type could not be determined by langchain (e.g. anyOf/oneOf schemas
+                # from Pydantic v2); resolve from the spec_dict property schema.
+                params["schema_type"] = _resolve_schema_type(body_prop_schemas.get(param.name, {}))
             params["param_in"] = "body"
             parameters.append(ParameterDetail.model_validate(params))
 
