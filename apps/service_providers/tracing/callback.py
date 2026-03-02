@@ -165,7 +165,7 @@ def get_langchain_run_name(serialized: dict[str, Any], **kwargs: Any) -> str:
 
     try:
         return serialized["id"][-1]
-    except (KeyError, TypeError):
+    except (IndexError, KeyError, TypeError):
         pass
 
     return "<unknown>"

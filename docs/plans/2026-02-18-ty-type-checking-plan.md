@@ -36,12 +36,12 @@
 
 ### In progress — branch `sk/types-IV` (not yet merged)
 
-| Commit | Rule | Initial violations | Suppressions added |
-|--------|------|-------------------|-------------------|
-| `1b8b42144` | invalid-type-form | 25 | ~3 remaining (25 fixed) |
-| `3588e5fc9` | invalid-argument-type | 346 | ~180 remaining (346 addressed) |
+| Commit | Rule | Initial violations | Outcome |
+|--------|------|-------------------|---------|
+| `1b8b42144` | invalid-type-form | 25 | 22 fixed, 3 suppressed |
+| `3588e5fc9` | invalid-argument-type | 346 | ~166 fixed, ~180 suppressed |
 | `523b16db7` | unresolved-attribute | 1,642 | enabled as **warn**, not error |
-| (uncommitted, this session) | cleanup across all rules | 395 → 352 | 43 suppressions removed |
+| `fafd0817b` | cleanup across all rules | 395 → 355 | 40 suppressions removed |
 
 ### Current suppression counts (working tree, 2026-03-02)
 

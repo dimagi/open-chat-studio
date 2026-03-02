@@ -284,7 +284,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         """Extract and validate the result_id query parameter for highlighting."""
         try:
             return int(self.request.GET["result_id"])
-        except (ValueError, TypeError):
+        except (KeyError, ValueError, TypeError):
             return None
 
     def get_context_data(self, **kwargs):

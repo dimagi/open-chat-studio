@@ -271,7 +271,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             file = collection_file.file
             embeddings = []
             try:
-                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)  # ty: ignore[invalid-argument-type]
+                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
                     embedding_vector = self.get_embedding_vector(chunk)
@@ -304,7 +304,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
-    def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
+    def chunk_file(self, file: File, chunk_size: int | None, chunk_overlap: int | None) -> list[str]:
         """
         Split text content into overlapping chunks for processing.
 

@@ -94,7 +94,8 @@ class LlmService(pydantic.BaseModel):
         # https://docs.langchain.com/oss/python/langchain/messages#content-block-reference
         for content_block in output.content_blocks:
             # Uploaded files
-            annotation_entries = content_block.get("annotations", [])
+            raw_annotations = content_block.get("annotations", [])
+            annotation_entries = raw_annotations if isinstance(raw_annotations, list) else []
             if include_citations:
                 # Cited files
                 external_ids = self.get_cited_file_ids(annotation_entries)  # ty: ignore[invalid-argument-type]

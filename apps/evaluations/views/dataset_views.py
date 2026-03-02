@@ -282,7 +282,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
         """Extract and validate the message_id query parameter for highlighting."""
         try:
             return int(self.request.GET["message_id"])
-        except (ValueError, TypeError):
+        except (KeyError, ValueError, TypeError):
             return None
 
     def get_table_pagination(self, table):

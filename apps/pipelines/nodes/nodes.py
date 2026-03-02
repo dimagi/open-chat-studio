@@ -561,8 +561,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         # Build the agent
         middleware = []
-        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):  # ty: ignore[invalid-argument-type]
-            middleware.append(history_middleware)
+        if session:
+            if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+                middleware.append(history_middleware)
 
         agent = create_agent(
             model=self.get_chat_model(),
@@ -756,7 +757,9 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
         session = context.session
-        runnable = self._get_assistant_runnable(assistant, session=session)  # ty: ignore[invalid-argument-type]
+        if session is None:
+            raise PipelineNodeBuildError("Assistant node requires an active session")
+        runnable = self._get_assistant_runnable(assistant, session=session)
         attachments = [att for att in context.attachments if att.upload_to_assistant]
         chain_output: ChainOutput = runnable.invoke(context.input, config=self._config, attachments=attachments)
         output = chain_output.output

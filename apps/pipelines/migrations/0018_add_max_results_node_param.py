@@ -2,10 +2,11 @@
 
 from collections.abc import Callable
 from django.db import migrations
-from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+LLM_RESPONSE_WITH_PROMPT_TYPE = "LLMResponseWithPrompt"
 
 def _batched_param_update(Node, update_func: Callable, chunk_size=100):
-    queryset = Node.objects.filter(type=LLMResponseWithPrompt.__name__).iterator(chunk_size=chunk_size)
+    queryset = Node.objects.filter(type=LLM_RESPONSE_WITH_PROMPT_TYPE).iterator(chunk_size=chunk_size)
     nodes_to_update = []
 
     counter = 0

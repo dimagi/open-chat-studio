@@ -334,9 +334,10 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
 
     def create_new_version(self, save=True, is_copy=False, **kwargs):
-        new_version = super().create_new_version(save=False)
+        new_version = super().create_new_version(save=False, is_copy=is_copy, **kwargs)
         new_version.is_default = False
-        new_version.save()
+        if save:
+            new_version.save()
         return new_version
 
     def get_fields_to_exclude(self):
