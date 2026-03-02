@@ -537,7 +537,7 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     """
     if platform == ChannelPlatform.EVALUATIONS:
         pytest.skip("Evaluations channel can't be instantiated from a session")  # ty: ignore[invalid-argument-type]
-    session = ExperimentSessionFactory(experiment_channel__platform=platform)
+    session = ExperimentSessionFactory.create(experiment_channel__platform=platform)
     ParticipantData.objects.create(
         team=session.team,
         experiment=session.experiment,
@@ -545,7 +545,7 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
         participant=session.participant,
         system_metadata={"consent": True},
     )
-    channel = ChannelBase.from_experiment_session(session)  # ty: ignore[invalid-argument-type]
+    channel = ChannelBase.from_experiment_session(session)
     assert type(channel) in ChannelBase.__subclasses__()
 
 
@@ -555,10 +555,10 @@ def test_missing_channel_raises_error(twilio_provider):
     experiment_channel = ExperimentChannelFactory(
         messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
     )
-    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
-    session.experiment_channel.platform = "snail_mail"  # ty: ignore[invalid-assignment]
+    session = ExperimentSessionFactory.create(experiment_channel=experiment_channel)
+    session.experiment_channel.platform = "snail_mail"
     with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
-        ChannelBase.from_experiment_session(session)  # ty: ignore[invalid-argument-type]
+        ChannelBase.from_experiment_session(session)
 
 
 @pytest.mark.django_db()
@@ -831,17 +831,17 @@ def test_new_sessions_are_linked_to_the_working_experiment(experiment):
 
 def test_can_start_a_session_with_working_experiment(experiment):
     assert experiment.is_a_version is False
-    channel = ExperimentChannelFactory(experiment=experiment)
-    session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")  # ty: ignore[invalid-argument-type]
+    channel = ExperimentChannelFactory.create(experiment=experiment)
+    session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
     assert session.experiment == experiment
 
 
 def test_cannot_start_a_session_with_an_experiment_version(experiment):
-    channel = ExperimentChannelFactory(experiment=experiment)
+    channel = ExperimentChannelFactory.create(experiment=experiment)
     new_version = experiment.create_new_version()
     assert new_version.is_a_version is True
     with pytest.raises(VersionedExperimentSessionsNotAllowedException):
-        ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")  # ty: ignore[invalid-argument-type]
+        ChannelBase.start_new_session(new_version, channel, participant_identifier="testy-pie")
 
 
 @pytest.mark.parametrize("new_session", [True, False])
@@ -880,14 +880,14 @@ def test_supported_and_unsupported_attachments(experiment):
     channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
     channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
 
-    file1 = FileFactory(name="f1", content_type="image/jpeg")
-    file2 = FileFactory(name="f2", content_type="image/jpeg")
+    file1 = FileFactory.create(name="f1", content_type="image/jpeg")
+    file2 = FileFactory.create(name="f2", content_type="image/jpeg")
     # This file is too large to be sent as a message and should be sent as a link
     file3 = Mock(
         spec=File, name="f3", content_type="image/jpeg", download_link=lambda *args, **kwargs: "https://example.com"
     )
 
-    channel.send_message_to_user("Hi there", files=[file1, file2, file3])  # ty: ignore[invalid-argument-type]
+    channel.send_message_to_user("Hi there", files=[file1, file2, file3])
 
     assert channel.send_text_to_user.call_args[0][0] == f"Hi there\n\n{file3.name}\nhttps://example.com\n"
     assert channel.send_file_to_user.mock_calls[0].args[0] == file1

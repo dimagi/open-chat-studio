@@ -42,17 +42,17 @@ def _use_team_backend(settings):
 def test_team_backend_no_current_team(group1, group2):
     """Test that the backend returns no permissions (and doesn't error)
     if there is no team set in the 'current_team' context."""
-    membership = MembershipFactory(groups=[group1, group2])
+    membership = MembershipFactory.create(groups=[group1, group2])
     user = membership.user
-    assert TeamBackend().get_group_permissions(user) == set()  # ty: ignore[invalid-argument-type]
+    assert TeamBackend().get_group_permissions(user) == set()
 
 
 @pytest.mark.django_db()
 def test_team_backend(group1, group2):
-    membership = MembershipFactory(groups=[group1, group2])
+    membership = MembershipFactory.create(groups=[group1, group2])
     user = membership.user
     with current_team(membership.team):
-        assert TeamBackend().get_group_permissions(user) == {  # ty: ignore[invalid-argument-type]
+        assert TeamBackend().get_group_permissions(user) == {
             "experiments.add_experiment",
             "experiments.change_experiment",
             "experiments.view_experiment",

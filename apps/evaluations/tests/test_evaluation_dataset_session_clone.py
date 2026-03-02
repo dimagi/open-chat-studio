@@ -17,7 +17,7 @@ from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterPara
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
     """Test cloning sessions when filtered sessions are selected without filters - should get all messages."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
@@ -61,7 +61,7 @@ def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_create_dataset_from_sessions_task_with_filter():
     """Test cloning sessions with filter - should only get filtered messages."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     human_msg1 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="good message", chat=session_1.chat)
@@ -104,7 +104,7 @@ def test_create_dataset_from_sessions_task_with_filter():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_create_dataset_from_sessions_task_with_duplicates():
     """Test that duplicate detection works when adding messages to existing dataset."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     human_msg = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="test message", chat=session_1.chat)
@@ -145,8 +145,8 @@ def test_create_dataset_from_sessions_task_with_duplicates():
 
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_history():
-    session_1 = ExperimentSessionFactory()
-    session_2 = ExperimentSessionFactory(team=session_1.team)
+    session_1 = ExperimentSessionFactory.create()
+    session_2 = ExperimentSessionFactory.create(team=session_1.team)
 
     # Two message pairs from the first session
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat)
@@ -160,7 +160,7 @@ def test_create_messages_from_sessions_includes_history():
     ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        session_1.team,  # ty: ignore[invalid-argument-type]
+        session_1.team,
         [session_1.external_id, session_2.external_id],
     )
 
@@ -201,22 +201,22 @@ def test_create_messages_from_sessions_includes_history():
 
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_comments(team_with_users):
-    session_1 = ExperimentSessionFactory(team=team_with_users)
+    session_1 = ExperimentSessionFactory.create(team=team_with_users)
     user = team_with_users.members.first()
 
     team = session_1.team
     human_message = ChatMessageFactory(
         message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
     )
-    UserComment.add_for_model(human_message, comment="comment1", added_by=user, team=team)  # ty: ignore[invalid-argument-type]
-    UserComment.add_for_model(human_message, comment="comment2", added_by=user, team=team)  # ty: ignore[invalid-argument-type]
+    UserComment.add_for_model(human_message, comment="comment1", added_by=user, team=team)
+    UserComment.add_for_model(human_message, comment="comment2", added_by=user, team=team)
 
     ai_message = ChatMessageFactory(
         message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat
     )
-    UserComment.add_for_model(ai_message, comment="comment3", added_by=user, team=team)  # ty: ignore[invalid-argument-type]
+    UserComment.add_for_model(ai_message, comment="comment3", added_by=user, team=team)
 
-    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])  # ty: ignore[invalid-argument-type]
+    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])
 
     assert len(eval_messages) == 1
 
@@ -225,7 +225,7 @@ def test_create_messages_from_sessions_includes_comments(team_with_users):
 
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_tags():
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
 
     team = session_1.team
     human_message = ChatMessageFactory(
@@ -240,7 +240,7 @@ def test_create_messages_from_sessions_includes_tags():
     ai_message.add_version_tag(3, True)
     ai_message.add_rating("+2")
 
-    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])  # ty: ignore[invalid-argument-type]
+    eval_messages = EvaluationMessage.create_from_sessions(team, [session_1.external_id])
 
     assert len(eval_messages) == 1
 
@@ -250,7 +250,7 @@ def test_create_messages_from_sessions_includes_tags():
 @pytest.mark.django_db()
 def test_create_from_sessions_with_filtered_sessions_only():
     """Test cloning only filtered messages from sessions."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     # Create messages with different ratings
@@ -266,7 +266,7 @@ def test_create_from_sessions_with_filtered_sessions_only():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=filter_params,
@@ -282,8 +282,8 @@ def test_create_from_sessions_with_filtered_sessions_only():
 @pytest.mark.django_db()
 def test_create_from_sessions_mixed_regular_and_filtered():
     """Test combining regular sessions (all messages) with filtered sessions."""
-    session_1 = ExperimentSessionFactory()
-    session_2 = ExperimentSessionFactory(team=session_1.team)
+    session_1 = ExperimentSessionFactory.create()
+    session_2 = ExperimentSessionFactory.create(team=session_1.team)
     team = session_1.team
 
     # Session 1: Regular session - all messages should be included
@@ -312,7 +312,7 @@ def test_create_from_sessions_mixed_regular_and_filtered():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[session_1.external_id],
         filtered_session_ids=[session_2.external_id],
         filter_params=filter_params,
@@ -334,7 +334,7 @@ def test_create_from_sessions_mixed_regular_and_filtered():
 @pytest.mark.django_db()
 def test_create_from_sessions_no_filter_params():
     """Test that filtered sessions are ignored when no filter params provided."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     # Create messages
@@ -342,7 +342,7 @@ def test_create_from_sessions_no_filter_params():
     ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=None,  # No filter params
@@ -356,11 +356,11 @@ def test_create_from_sessions_no_filter_params():
 @pytest.mark.django_db()
 def test_create_from_sessions_empty_sessions():
     """Test behavior with empty session lists."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[],
         filtered_session_ids=[],
         filter_params=None,
@@ -373,7 +373,7 @@ def test_create_from_sessions_empty_sessions():
 @pytest.mark.django_db()
 def test_filtered_messages_include_complete_history():
     """Test that filtered messages include complete session history, not just filtered messages."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
@@ -390,7 +390,7 @@ def test_filtered_messages_include_complete_history():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=filter_params,
@@ -414,7 +414,7 @@ def test_consecutive_human_messages():
     """Test that consecutive HUMAN messages each create an evaluation message with null AI output.
     This could happen there AI message fails to generate.
     """
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
@@ -424,7 +424,7 @@ def test_consecutive_human_messages():
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[session_1.external_id],
         timezone=None,
     )
@@ -448,7 +448,7 @@ def test_consecutive_ai_messages():
     """Test that consecutive AI messages
     This can happen when a scheduled message is sent
     """
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
@@ -459,7 +459,7 @@ def test_consecutive_ai_messages():
     ChatMessageFactory(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[session_1.external_id],
         timezone=None,
     )
@@ -481,7 +481,7 @@ def test_consecutive_ai_messages():
 @pytest.mark.django_db()
 def test_filtered_messages_complete_history_with_mixed_pairs():
     """Test that history includes all messages chronologically, even when filtering creates gaps."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     # Pair 1: Normal pair (not tagged)
@@ -507,7 +507,7 @@ def test_filtered_messages_complete_history_with_mixed_pairs():
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
     eval_messages = EvaluationMessage.create_from_sessions(
-        team=team,  # ty: ignore[invalid-argument-type]
+        team=team,
         external_session_ids=[],
         filtered_session_ids=[session_1.external_id],
         filter_params=filter_params,

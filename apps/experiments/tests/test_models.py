@@ -81,8 +81,8 @@ class TestSyntheticVoice:
             SyntheticVoice.OpenAIVoiceEngine,
         }
         # Let's setup two providers belonging to different teams
-        team1 = TeamFactory()
-        team2 = TeamFactory()
+        team1 = TeamFactory.create()
+        team2 = TeamFactory.create()
 
         # Create synthetic voices with providers from different teams. They should be exclusive to their teams
         voice1 = SyntheticVoiceFactory(
@@ -97,19 +97,19 @@ class TestSyntheticVoice:
         voice3 = SyntheticVoiceFactory(voice_provider=VoiceProviderFactory(team=team2), service=SyntheticVoice.AWS)
 
         # Assert exclusivity
-        voices_queryset = SyntheticVoice.get_for_team(team1)  # ty: ignore[invalid-argument-type]
+        voices_queryset = SyntheticVoice.get_for_team(team1)
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == all_services
         assert voice2 not in voices_queryset
         assert voice3 not in voices_queryset
 
-        voices_queryset = SyntheticVoice.get_for_team(team2)  # ty: ignore[invalid-argument-type]
+        voices_queryset = SyntheticVoice.get_for_team(team2)
         assert set(voices_queryset.values_list("service", flat=True)) == all_services
         assert voice1 not in voices_queryset
         assert voice3 in voices_queryset
 
         # Although voice1 belongs to team1, if we exclude its service, it should not be returned
-        voices_queryset = SyntheticVoice.get_for_team(team1, exclude_services=[SyntheticVoice.OpenAIVoiceEngine])  # ty: ignore[invalid-argument-type]
+        voices_queryset = SyntheticVoice.get_for_team(team1, exclude_services=[SyntheticVoice.OpenAIVoiceEngine])
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure}
         assert voice1 not in voices_queryset
@@ -303,14 +303,11 @@ class TestExperimentSession:
         """ScheduledMessages should use the experiment specified in the linked action's params"""
         custom_experiment = ExperimentFactory() if use_custom_experiment else None
         mock_ad_hoc.return_value = {}
-        session = ExperimentSessionFactory()
-        event_action_kwargs = {"time_period": TimePeriod.DAYS, "experiment_id": session.experiment.id}
-        if custom_experiment:
-            event_action_kwargs["experiment_id"] = custom_experiment.id
-
-        event_action, params = self._construct_event_action(**event_action_kwargs)  # ty: ignore[invalid-argument-type]
+        session = ExperimentSessionFactory.create()
+        experiment_id = custom_experiment.id if custom_experiment else session.experiment.id
+        event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment_id)
         trigger_action = ScheduleTriggerAction()
-        trigger_action.invoke(session, action=event_action)  # ty: ignore[invalid-argument-type]
+        trigger_action.invoke(session, action=event_action)
 
         message = ScheduledMessage.objects.get(action=event_action)
         message.participant.get_latest_session = lambda *args, **kwargs: session

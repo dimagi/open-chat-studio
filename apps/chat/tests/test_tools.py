@@ -292,7 +292,7 @@ def test_move_datetime_to_new_weekday_and_time(
 
 @pytest.mark.django_db()
 def test_create_schedule_message_success():
-    experiment_session = ExperimentSessionFactory()
+    experiment_session = ExperimentSessionFactory.create()
     message = "Test message"
     kwargs = {
         "frequency": 1,
@@ -302,7 +302,7 @@ def test_create_schedule_message_success():
     start_date = timezone.now()
     end_date = timezone.now()
     response = create_schedule_message(
-        experiment_session,  # ty: ignore[invalid-argument-type]
+        experiment_session,
         message,
         name="Test",
         start_date=start_date,
@@ -331,7 +331,7 @@ def test_create_schedule_message_success():
 
 @pytest.mark.django_db()
 def test_create_schedule_message_invalid_form():
-    experiment_session = ExperimentSessionFactory()
+    experiment_session = ExperimentSessionFactory.create()
     message = "Test message"
     kwargs = {
         "frequency": "invalid_frequency",  # invalid input
@@ -340,7 +340,7 @@ def test_create_schedule_message_invalid_form():
     }
 
     response = create_schedule_message(
-        experiment_session,  # ty: ignore[invalid-argument-type]
+        experiment_session,
         message,
         name="Test",
         start_date=None,  # ty: ignore[invalid-argument-type]
@@ -360,7 +360,7 @@ def test_create_schedule_message_invalid_form():
 
 @pytest.mark.django_db()
 def test_create_schedule_message_experiment_does_not_exist():
-    experiment_session = ExperimentSessionFactory()
+    experiment_session = ExperimentSessionFactory.create()
     message = "Test message"
     kwargs = {
         "frequency": 1,
@@ -370,7 +370,7 @@ def test_create_schedule_message_experiment_does_not_exist():
 
     with mock.patch("django.db.transaction.atomic", side_effect=Experiment.DoesNotExist):
         response = create_schedule_message(
-            experiment_session,  # ty: ignore[invalid-argument-type]
+            experiment_session,
             message,
             name="Test",
             start_date=None,  # ty: ignore[invalid-argument-type]
@@ -574,13 +574,13 @@ def test_get_mcp_tool_instances(fetch_tools, team):
             coroutine=async_func,
         )
     ]
-    server = MCPServerFactory(team=team)
-    node = NodeFactory(
+    server = MCPServerFactory.create(team=team)
+    node = NodeFactory.create(
         params={
             "mcp_tools": [f"{server.id}:test-tool"],
         }
     )
-    tools = get_mcp_tool_instances(node, team)  # ty: ignore[invalid-argument-type]
+    tools = get_mcp_tool_instances(node, team)
     assert len(tools) == 1
 
 

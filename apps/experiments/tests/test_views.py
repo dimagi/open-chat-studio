@@ -118,14 +118,14 @@ def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
 def test_new_participant_created_on_session_start(_trigger_mock, is_user):
     """For each new experiment session, a participant should be created and linked to the session"""
     identifier = "someone@example.com"
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory())
     user = None
     if is_user:
         user = experiment.team.members.first()
         identifier = user.email
 
     session = WebChannel.start_new_session(
-        experiment,  # ty: ignore[invalid-argument-type]
+        experiment,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -142,7 +142,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created
     """
-    experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment1 = ExperimentFactory.create(team=TeamWithUsersFactory())
     team = experiment1.team
     identifier = "someone@example.com"
     user = None
@@ -151,7 +151,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
         identifier = user.email
 
     session = WebChannel.start_new_session(
-        experiment1,  # ty: ignore[invalid-argument-type]
+        experiment1,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -161,10 +161,10 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     assert session.participant.identifier == identifier
 
     # user starts a second session in the same team
-    experiment2 = ExperimentFactory(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
 
     session = WebChannel.start_new_session(
-        experiment2,  # ty: ignore[invalid-argument-type]
+        experiment2,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -179,7 +179,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 @mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     """A new participant should be created for each team when a user uses the same identifier"""
-    experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment1 = ExperimentFactory.create(team=TeamWithUsersFactory())
     team = experiment1.team
     identifier = "someone@example.com"
     user = None
@@ -188,7 +188,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         identifier = user.email
 
     session = WebChannel.start_new_session(
-        experiment1,  # ty: ignore[invalid-argument-type]
+        experiment1,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -203,10 +203,10 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     else:
         new_team = TeamWithUsersFactory()
 
-    experiment2 = ExperimentFactory(team=new_team)
+    experiment2 = ExperimentFactory.create(team=new_team)
 
     session = WebChannel.start_new_session(
-        experiment2,  # ty: ignore[invalid-argument-type]
+        experiment2,
         participant_user=user,
         participant_identifier=identifier,
     )
@@ -282,7 +282,7 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 @mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_timezone_saved_in_participant_data(_trigger_mock):
     """A participant's timezone data should be saved in all ParticipantData records"""
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory())
     team = experiment.team
     experiment2 = ExperimentFactory(team=team)
     identifier = "someone@example.com"
@@ -291,7 +291,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     part_data2 = ParticipantData.objects.create(team=experiment2.team, participant=participant, experiment=experiment2)
 
     WebChannel.start_new_session(
-        experiment,  # ty: ignore[invalid-argument-type]
+        experiment,
         participant_identifier=identifier,
         timezone="Africa/Johannesburg",
     )

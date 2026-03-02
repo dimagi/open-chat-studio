@@ -161,7 +161,7 @@ def _run_llm_pipeline_test(
     )
 
     # Create pipeline with single LLM node
-    pipeline = PipelineFactory(team=team_with_users)
+    pipeline = PipelineFactory.create(team=team_with_users)
     nodes = [
         start_node(),
         llm_response_with_prompt_node(
@@ -172,14 +172,14 @@ def _run_llm_pipeline_test(
         ),
         end_node(),
     ]
-    pipeline = create_pipeline_model(nodes, pipeline=pipeline)  # ty: ignore[invalid-argument-type]
+    pipeline = create_pipeline_model(nodes, pipeline=pipeline)
 
     # Create experiment and session
-    experiment = ExperimentFactory(team=team_with_users, pipeline=pipeline)
-    session = ExperimentSessionFactory(experiment=experiment)
+    experiment = ExperimentFactory.create(team=team_with_users, pipeline=pipeline)
+    session = ExperimentSessionFactory.create(experiment=experiment)
 
     # Run pipeline
-    bot = PipelineBot(session=session, experiment=experiment, trace_service=TracingService.empty())  # ty: ignore[invalid-argument-type]
+    bot = PipelineBot(session=session, experiment=experiment, trace_service=TracingService.empty())
     input_state = PipelineState(messages=["Hello"], experiment_session=session)
     ai_message = bot.invoke_pipeline(input_state=input_state, pipeline=pipeline)
 

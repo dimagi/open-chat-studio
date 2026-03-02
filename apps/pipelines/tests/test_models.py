@@ -271,8 +271,8 @@ class TestPipeline:
             history_type="global",
         )
         nodes = [start_node(), llm_node, end_node()]
-        pipeline = PipelineFactory()
-        create_runnable(pipeline, nodes)  # ty: ignore[invalid-argument-type]
+        pipeline = PipelineFactory.create()
+        create_runnable(pipeline, nodes)
         pipeline.save()
 
         user_input = "The User Input"

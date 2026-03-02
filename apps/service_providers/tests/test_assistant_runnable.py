@@ -439,7 +439,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     """Test that cited files are rendered correctly in AI messsages"""
 
     local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID, allow_file_downloads=allow_file_downloads)
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     chat = session.chat
     external_file_id = "openai-file-1"
     assistant_file = FileFactory(team=session.team, external_id=external_file_id, name="test.png")
@@ -463,7 +463,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
     ]
 
     ai_message = "Is this the file you're looking for:【6:0†source】."
-    assistant = create_experiment_runnable(session.experiment, session, local_assistant)  # ty: ignore[invalid-argument-type]
+    assistant = create_experiment_runnable(session.experiment, session, local_assistant)
     list_messages.return_value.data = _create_thread_messages(
         ASSISTANT_ID, run.id, thread_id, [{"assistant": ai_message}], annotations, include_image_file=False
     )
@@ -547,8 +547,8 @@ def test_assistant_response_with_image_file_content_block(
 def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_created):
     adapter = Mock(spec=AssistantAdapter)
     adapter.get_messages_to_sync_to_thread.return_value = messages
-    session = ExperimentSessionFactory()
-    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())  # ty: ignore[invalid-argument-type]
+    session = ExperimentSessionFactory.create()
+    history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant_runnable = AssistantChat(adapter=adapter, history_manager=history_manager)
     assistant_runnable._sync_messages_to_thread(thread_id)
 
@@ -562,8 +562,8 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
 
 @pytest.mark.django_db()
 def test_get_messages_to_sync_to_thread():
-    assistant = OpenAiAssistantFactory()
-    session = ExperimentSessionFactory()
+    assistant = OpenAiAssistantFactory.create()
+    session = ExperimentSessionFactory.create()
     chat = session.chat
     ChatMessage.objects.bulk_create(
         [
@@ -573,7 +573,7 @@ def test_get_messages_to_sync_to_thread():
             ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
         ]
     )
-    adapter = AssistantAdapter(session, assistant, citations_enabled=False)  # ty: ignore[invalid-argument-type]
+    adapter = AssistantAdapter(session, assistant, citations_enabled=False)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
         {"role": "user", "content": "hello2"},
