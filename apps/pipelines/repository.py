@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -35,21 +36,39 @@ class CollectionIndexSummary(NamedTuple):
     summary: str
 
 
+def instance_cache(method):
+    """Cache method results per-instance, keyed by method name and arguments.
+
+    Designed for ORMRepository where one instance lives for one pipeline
+    execution.  List arguments are converted to tuples for hashability.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args):
+        cache_args = tuple(tuple(a) if isinstance(a, list) else a for a in args)
+        key = (method.__name__, *cache_args)
+        try:
+            return self._cache[key]
+        except KeyError:
+            result = method(self, *args)
+            self._cache[key] = result
+            return result
+
+    return wrapper
+
+
 class ORMRepository:
     """Repository for all DB operations during pipeline execution, backed by Django ORM.
 
-    # TODO: Per-execution caching optimization
-    # ORMRepository is instantiated once per pipeline execution and shared across
-    # all nodes via LangGraph config. Multiple nodes often query the same provider
-    # or collection (e.g., 3 LLM nodes using the same provider = 3 identical SELECTs).
-    # Adding a per-instance dict cache keyed by (method_name, args) would eliminate
-    # these duplicate queries. Implementation: check cache before DB query, populate
-    # on miss. Cache is naturally scoped to one pipeline execution (one ORMRepository
-    # instance) so there are no staleness concerns across executions.
+    Instantiated once per pipeline execution and shared across all nodes via
+    LangGraph config.  ID-based lookups are cached per-instance (via
+    ``@instance_cache``) so that multiple nodes querying the same provider or
+    collection don't produce duplicate SELECTs.
     """
 
     def __init__(self, session: ExperimentSession | None = None):
         self.session = session
+        self._cache: dict[tuple, Any] = {}
 
     @property
     def team(self):
@@ -111,6 +130,7 @@ class ORMRepository:
 
     # --- LLM providers & services ---
 
+    @instance_cache
     def get_llm_provider(self, provider_id: int) -> LlmProvider:
         """Fetch an LLM provider by ID. Raises RepositoryLookupError if not found."""
         try:
@@ -118,6 +138,7 @@ class ORMRepository:
         except LlmProvider.DoesNotExist:
             raise RepositoryLookupError(f"LLM provider with id {provider_id} not found") from None
 
+    @instance_cache
     def get_llm_service(self, provider_id: int) -> LlmService:
         """Fetch an LLM provider by ID and return its configured LlmService.
 
@@ -128,6 +149,7 @@ class ORMRepository:
         provider = self.get_llm_provider(provider_id)
         return provider.get_llm_service()
 
+    @instance_cache
     def get_llm_provider_model(self, model_id: int) -> LlmProviderModel:
         """Fetch an LLM provider model by ID. Raises RepositoryLookupError if not found."""
         try:
@@ -137,6 +159,7 @@ class ORMRepository:
 
     # --- Source materials & collections ---
 
+    @instance_cache
     def get_source_material(self, material_id: int) -> SourceMaterial:
         """Fetch source material by ID. Raises RepositoryLookupError if not found."""
         try:
@@ -144,6 +167,7 @@ class ORMRepository:
         except SourceMaterial.DoesNotExist:
             raise RepositoryLookupError(f"SourceMaterial with id {material_id} not found") from None
 
+    @instance_cache
     def get_collection(self, collection_id: int) -> Collection:
         """Fetch a collection by ID. Raises RepositoryLookupError if not found."""
         try:
@@ -151,14 +175,17 @@ class ORMRepository:
         except Collection.DoesNotExist:
             raise RepositoryLookupError(f"Collection with id {collection_id} not found") from None
 
+    @instance_cache
     def get_collections_in_bulk(self, collection_ids: list[int]) -> dict[int, Collection]:
         """Fetch multiple collections by IDs. Returns {id: Collection} dict."""
         return Collection.objects.in_bulk(collection_ids)
 
+    @instance_cache
     def get_collections_for_search(self, collection_ids: list[int]) -> list[Collection]:
         """Fetch indexed collections by IDs for search tools. Returns materialized list."""
         return list(Collection.objects.filter(id__in=collection_ids, is_index=True))
 
+    @instance_cache
     def get_collection_index_summaries(self, collection_ids: list[int]) -> list[CollectionIndexSummary]:
         """Fetch collection index id/name/summary tuples for prompt context."""
         return [
@@ -166,6 +193,7 @@ class ORMRepository:
             for row in Collection.objects.filter(id__in=collection_ids).values_list("id", "name", "summary")
         ]
 
+    @instance_cache
     def get_collection_file_info(self, collection_id: int) -> list[CollectionFileInfo]:
         """Fetch file id, summary, and content_type for all files in a collection.
 
@@ -206,6 +234,7 @@ class ORMRepository:
 
     # --- Assistants (deprecated node support) ---
 
+    @instance_cache
     def get_assistant(self, assistant_id: int) -> OpenAiAssistant:
         """Fetch an OpenAI assistant by ID. Raises RepositoryLookupError if not found."""
         from apps.assistants.models import OpenAiAssistant
