@@ -996,16 +996,16 @@ wheels = [
 
 [[package]]
 name = "django-pydantic-field"
-version = "0.3.12"
+version = "0.5.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/46/d4/8be5efc5dc2784a5c662744221a8e8ffc1df6d5866237b5e30c8f92e7d0c/django_pydantic_field-0.3.12.tar.gz", hash = "sha256:510af19d2813c32a2529234a70eb6b6bd8e75fcc4f53baee520f797cba3420d0", size = 38316, upload-time = "2025-01-14T19:48:06.276Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/3d/d2390f1383eb60b25c7b68b3493af566831b0db540e47ed85a395727bae2/django_pydantic_field-0.5.4.tar.gz", hash = "sha256:3c884299ea777e8221e4c0ff222e078960ba3576a3b6970636629524e5d6cf39", size = 22013, upload-time = "2026-02-22T13:47:30.633Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/92/bd13828e0d50dbbec496618471dd07727a645b8464f2431d2cbf2a126952/django_pydantic_field-0.3.12-py3-none-any.whl", hash = "sha256:57aeb055583e7ae82732cfaa36afd01166c7000a67502a9922dca1ce9b3e76a5", size = 42401, upload-time = "2025-01-14T19:48:03.582Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/88/1acbef013f172f9f03836d3c03639ae5604a46e9f1a921c6e623e60f8594/django_pydantic_field-0.5.4-py3-none-any.whl", hash = "sha256:5c080b5f0ea17ae11b5305d649778a87437c61a403894933337fe3e295f627a9", size = 36963, upload-time = "2026-02-22T13:47:29.613Z" },
 ]
 
 [[package]]
