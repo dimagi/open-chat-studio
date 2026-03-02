@@ -1,0 +1,1198 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/plans/2026-02-18-ty-type-checking-plan/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>ty Type Checking Implementation Plan - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ty-type-checking-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ty Type Checking Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#task-1-install-django-types-and-ty-as-dev-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 1: Install django-types and ty as dev dependencies
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-2-configure-ty-in-pyprojecttoml-with-all-rules-ignored" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 2: Configure ty in pyproject.toml with all rules ignored
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-3-add-non-blocking-ty-ci-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 3: Add non-blocking ty CI step
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-4-update-agentsmd-with-ty-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 4: Update AGENTS.md with ty command
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-5-enable-phase-1-low-noise-rules-unresolved-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 5: Enable Phase 1 low-noise rules — unresolved-import
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-6-enable-phase-1-low-noise-rules-batch-of-zeronear-zero-violation-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 6: Enable Phase 1 low-noise rules — batch of zero/near-zero violation rules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-7-enable-phase-1-low-noise-rules-remaining-low-count-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 7: Enable Phase 1 low-noise rules — remaining low-count rules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-8-enable-phase-2-medium-noise-rules-one-rule-per-pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 8: Enable Phase 2 medium-noise rules — one rule per PR
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-9-enable-phase-3-high-noise-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 9: Enable Phase 3 high-noise rules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-10-make-ci-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 10: Make CI blocking
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="ty-type-checking-implementation-plan">ty Type Checking Implementation Plan</h1>
+<blockquote>
+<p><strong>For Claude:</strong> REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.</p>
+</blockquote>
+<p><strong>Goal:</strong> Incrementally adopt ty type checking across the Open Chat Studio codebase, starting with foundation tooling and progressively enabling rules from low-noise to high-noise.</p>
+<p><strong>Architecture:</strong> Install <code>django-types</code> for Django stub support, configure ty in <code>pyproject.toml</code> with all rules ignored, add non-blocking CI, then enable rules tier-by-tier in separate PRs. Each rule enablement PR fixes all violations for that rule.</p>
+<p><strong>Tech Stack:</strong> ty (Python type checker), django-types (Django stubs), uv (package manager), GitHub Actions CI</p>
+<p><strong>Design doc:</strong> <code>docs/plans/2026-02-18-ty-type-checking-design.md</code></p>
+<hr />
+<h2 id="task-1-install-django-types-and-ty-as-dev-dependencies">Task 1: Install django-types and ty as dev dependencies</h2>
+<p><strong>Files:</strong>
+- Modify: <code>pyproject.toml:139-155</code> (dev dependency group)</p>
+<p><strong>Step 1: Add dependencies</strong></p>
+<p>Add <code>django-types</code> and <code>ty</code> to the <code>[dependency-groups] dev</code> list in <code>pyproject.toml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[dependency-groups]</span>
+<span class="n">dev</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="s">&quot;ruff&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;mock&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;invoke&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;termcolor&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;time-machine&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;watchfiles&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;pytest&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;pytest-django&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;factory-boy&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;pytest-httpx&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;pytest-cov&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;pytest-xdist&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;django-debug-toolbar&gt;=5.2.0&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;djlint&gt;=1.36.4&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;prek&gt;=0.3.2&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;django-types&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="s">&quot;ty&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+</code></pre></div>
+<p><strong>Step 2: Lock and sync</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>lock<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span>--dev
+</code></pre></div>
+Expected: lock file updated, both packages installed.</p>
+<p><strong>Step 3: Verify installation</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>--version
+</code></pre></div>
+Expected: prints ty version (e.g., <code>ty 0.0.17</code> or newer).</p>
+<p><strong>Step 4: Re-measure baseline with django-types</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-oP<span class="w"> </span><span class="s1">&#39;rule `[^`]+`&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span><span class="p">|</span><span class="w"> </span>uniq<span class="w"> </span>-c<span class="w"> </span><span class="p">|</span><span class="w"> </span>sort<span class="w"> </span>-rn<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-20
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-3
+</code></pre></div></p>
+<p>Record the new diagnostic counts. The <code>unresolved-attribute</code> count should decrease now that django-types provides <code>.objects</code> stubs.</p>
+<p><strong>Step 5: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>pyproject.toml<span class="w"> </span>uv.lock
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;build: add django-types and ty as dev dependencies&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-2-configure-ty-in-pyprojecttoml-with-all-rules-ignored">Task 2: Configure ty in pyproject.toml with all rules ignored</h2>
+<p><strong>Files:</strong>
+- Modify: <code>pyproject.toml</code> (add <code>[tool.ty]</code> section after <code>[tool.djlint]</code>)</p>
+<p><strong>Step 1: Add ty configuration</strong></p>
+<p>Add this section at the end of <code>pyproject.toml</code> (after the <code>[tool.djlint]</code> block):</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.ty]</span>
+<span class="n">python-version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;3.13&quot;</span>
+
+<span class="k">[tool.ty.src]</span>
+<span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;migrations/&quot;</span><span class="p">]</span>
+
+<span class="k">[tool.ty.rules]</span>
+<span class="n">all</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;ignore&quot;</span>
+</code></pre></div>
+<p>This starts with every rule turned off. We'll enable them one-by-one in later tasks.</p>
+<p><strong>Step 2: Verify ty runs clean</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/
+</code></pre></div>
+Expected: <code>All checks passed!</code> (since all rules are ignored).</p>
+<p><strong>Step 3: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>pyproject.toml
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;build: add ty configuration with all rules ignored&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-3-add-non-blocking-ty-ci-step">Task 3: Add non-blocking ty CI step</h2>
+<p><strong>Files:</strong>
+- Modify: <code>.github/workflows/lint_and_test.yml</code> (add new job after <code>code-style</code>)</p>
+<p><strong>Step 1: Add type-check job</strong></p>
+<p>Insert this job after the <code>code-style</code> job (after line 94) in <code>.github/workflows/lint_and_test.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="w">  </span><span class="nt">type-check</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.ref != &#39;refs/heads/main&#39;</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="nt">continue-on-error</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v6</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Set up Python</span>
+<span class="w">        </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/setup-python@v6</span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">python-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ env.PYTHON_VERSION }}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">astral-sh/setup-uv@v7</span>
+<span class="w">        </span><span class="nt">with</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">enable-cache</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Install dependencies</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">uv venv</span>
+<span class="w">          </span><span class="no">uv sync --locked --dev</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Run ty type checker</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uv run ty check apps/</span>
+</code></pre></div>
+<p>Key details:
+- <code>continue-on-error: true</code> makes this non-blocking (PR checks won't fail)
+- Uses the same Python version and uv setup pattern as the <code>python-tests</code> job
+- Only runs on PRs (not on main pushes) via the <code>if</code> condition</p>
+<p><strong>Step 2: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>.github/workflows/lint_and_test.yml
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;ci: add non-blocking ty type check step&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-4-update-agentsmd-with-ty-command">Task 4: Update AGENTS.md with ty command</h2>
+<p><strong>Files:</strong>
+- Modify: <code>AGENTS.md:43-53</code> (Useful commands section)</p>
+<p><strong>Step 1: Add ty check command</strong></p>
+<p>Add this line after the existing lint/format commands (after "Format python" line):</p>
+<div class="highlight"><pre><span></span><code><span class="k">*</span><span class="w"> </span>Type check python: <span class="sb">`ty check apps/`</span>
+</code></pre></div>
+<p><strong>Step 2: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>AGENTS.md
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;docs: add ty check to AGENTS.md useful commands&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-5-enable-phase-1-low-noise-rules-unresolved-import">Task 5: Enable Phase 1 low-noise rules — unresolved-import</h2>
+<p><strong>Files:</strong>
+- Modify: <code>pyproject.toml</code> (<code>[tool.ty.rules]</code> section)
+- Fix: any files with <code>unresolved-import</code> violations</p>
+<p><strong>Step 1: Check current violations</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>--ignore<span class="w"> </span>all<span class="w"> </span>--error<span class="w"> </span>unresolved-import<span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span>
+</code></pre></div></p>
+<p>The pre-django-types baseline had 5 violations. Record the new count.</p>
+<p><strong>Step 2: Enable the rule</strong></p>
+<p>In <code>pyproject.toml</code>, update the <code>[tool.ty.rules]</code> section:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.ty.rules]</span>
+<span class="n">all</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;ignore&quot;</span>
+<span class="n">unresolved-import</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;error&quot;</span>
+</code></pre></div>
+<p><strong>Step 3: Fix violations</strong></p>
+<p>For each violation, either:
+- Fix the import if it's a real issue
+- Add <code># ty: ignore[unresolved-import]</code> if it's a conditional/optional import (e.g., <code>try: import mailchimp3</code>)</p>
+<p><strong>Step 4: Verify clean</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/
+</code></pre></div>
+Expected: <code>All checks passed!</code></p>
+<p><strong>Step 5: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>-u
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;types: enable unresolved-import rule and fix violations&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-6-enable-phase-1-low-noise-rules-batch-of-zeronear-zero-violation-rules">Task 6: Enable Phase 1 low-noise rules — batch of zero/near-zero violation rules</h2>
+<p><strong>Files:</strong>
+- Modify: <code>pyproject.toml</code> (<code>[tool.ty.rules]</code> section)</p>
+<p><strong>Step 1: Identify zero-violation rules</strong></p>
+<p>Run each rule individually to find ones with 0 violations:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span>rule<span class="w"> </span><span class="k">in</span><span class="w"> </span>unresolved-reference<span class="w"> </span>unresolved-global<span class="w"> </span>invalid-raise<span class="w"> </span>call-non-callable<span class="w"> </span>duplicate-base<span class="w"> </span>cyclic-class-definition<span class="w"> </span>cyclic-type-alias-definition<span class="w"> </span>conflicting-declarations<span class="w"> </span>conflicting-metaclass<span class="w"> </span>invalid-base<span class="w"> </span>inconsistent-mro<span class="w"> </span>static-assert-error<span class="w"> </span>subclass-of-final-class<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nv">count</span><span class="o">=</span><span class="k">$(</span>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>--ignore<span class="w"> </span>all<span class="w"> </span>--error<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$rule</span><span class="s2">&quot;</span><span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-oP<span class="w"> </span><span class="s1">&#39;Found \K\d+&#39;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;0&quot;</span><span class="k">)</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$count</span><span class="s2"> </span><span class="nv">$rule</span><span class="s2">&quot;</span>
+<span class="k">done</span>
+</code></pre></div>
+<p><strong>Step 2: Enable all zero-violation rules at once</strong></p>
+<p>Add them all to <code>[tool.ty.rules]</code> in <code>pyproject.toml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[tool.ty.rules]</span>
+<span class="n">all</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;ignore&quot;</span>
+<span class="n">unresolved-import</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;error&quot;</span>
+<span class="c1"># Add each zero-violation rule here as = &quot;error&quot;</span>
+</code></pre></div>
+<p><strong>Step 3: Verify clean</strong></p>
+<p>Run:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/
+</code></pre></div>
+Expected: <code>All checks passed!</code></p>
+<p><strong>Step 4: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>pyproject.toml
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;types: enable batch of zero-violation ty rules&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-7-enable-phase-1-low-noise-rules-remaining-low-count-rules">Task 7: Enable Phase 1 low-noise rules — remaining low-count rules</h2>
+<p><strong>Files:</strong>
+- Modify: <code>pyproject.toml</code> (<code>[tool.ty.rules]</code> section)
+- Fix: files with violations for rules with 1-15 total violations</p>
+<p><strong>Step 1: Check violation counts</strong></p>
+<p>Run each remaining rule to find ones with &lt;=15 violations:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span>rule<span class="w"> </span><span class="k">in</span><span class="w"> </span>missing-argument<span class="w"> </span>too-many-positional-arguments<span class="w"> </span>unknown-argument<span class="w"> </span>invalid-key<span class="w"> </span>not-iterable<span class="w"> </span>no-matching-overload<span class="w"> </span>deprecated<span class="w"> </span>empty-body<span class="w"> </span>missing-typed-dict-key<span class="w"> </span>call-non-callable<span class="w"> </span>invalid-raise<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nv">count</span><span class="o">=</span><span class="k">$(</span>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>--ignore<span class="w"> </span>all<span class="w"> </span>--error<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$rule</span><span class="s2">&quot;</span><span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-oP<span class="w"> </span><span class="s1">&#39;Found \K\d+&#39;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;0&quot;</span><span class="k">)</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$count</span><span class="s2"> </span><span class="nv">$rule</span><span class="s2">&quot;</span>
+<span class="k">done</span>
+</code></pre></div>
+<p><strong>Step 2: Enable one rule at a time, fix violations, verify clean</strong></p>
+<p>For each rule with &lt;=15 violations, repeat:
+1. Add <code>rule-name = "error"</code> to <code>[tool.ty.rules]</code>
+2. Run <code>uv run ty check apps/</code> to see violations
+3. Fix each violation (real fix or <code># ty: ignore[rule-name]</code> for false positives)
+4. Verify <code>uv run ty check apps/</code> passes
+5. Commit: <code>git commit -am "types: enable &lt;rule-name&gt; and fix N violations"</code></p>
+<p>Group rules into a single PR when combined violations are &lt;20.</p>
+<hr />
+<h2 id="task-8-enable-phase-2-medium-noise-rules-one-rule-per-pr">Task 8: Enable Phase 2 medium-noise rules — one rule per PR</h2>
+<p>Each of these rules has 30-110 violations. Handle them as separate PRs.</p>
+<p><strong>Process for each rule (repeat for each):</strong></p>
+<p>Rules to enable in this order:
+1. <code>unsupported-operator</code> (~31 violations)
+2. <code>invalid-return-type</code> (~33 violations)
+3. <code>possibly-missing-attribute</code> (~43 violations)
+4. <code>invalid-method-override</code> (~46 violations)
+5. <code>invalid-parameter-default</code> (~79 violations)
+6. <code>not-subscriptable</code> (~107 violations)
+7. <code>invalid-assignment</code> (~109 violations)</p>
+<p><strong>For each rule:</strong></p>
+<p><strong>Step 1: Assess violations</strong></p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>--ignore<span class="w"> </span>all<span class="w"> </span>--error<span class="w"> </span>&lt;rule-name&gt;<span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-100
+</code></pre></div>
+<p>Review the violations. Categorize:
+- Real bugs to fix
+- Django false positives to suppress with <code># ty: ignore[&lt;rule-name&gt;]</code>
+- Third-party library false positives to suppress</p>
+<p><strong>Step 2: Enable the rule in pyproject.toml</strong></p>
+<div class="highlight"><pre><span></span><code><span class="err">&lt;</span><span class="n">rule-name</span><span class="err">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;error&quot;</span>
+</code></pre></div>
+<p><strong>Step 3: Fix all violations</strong></p>
+<ul>
+<li>Fix real bugs</li>
+<li>Add <code># ty: ignore[&lt;rule-name&gt;]</code> for false positives</li>
+<li>Never use blanket <code># type: ignore</code></li>
+</ul>
+<p><strong>Step 4: Verify clean</strong></p>
+<p><div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/
+</code></pre></div>
+Expected: <code>All checks passed!</code></p>
+<p><strong>Step 5: Commit and create PR</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>-u
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;types: enable &lt;rule-name&gt; and fix N violations&quot;</span>
+</code></pre></div>
+<p>PR title: <code>types: enable ty rule &lt;rule-name&gt;</code>
+PR description should list the violation count and categorize fixes vs suppressions.</p>
+<hr />
+<h2 id="task-9-enable-phase-3-high-noise-rules">Task 9: Enable Phase 3 high-noise rules</h2>
+<p>These rules have the most violations. Handle them one at a time, potentially splitting into multiple commits within a PR.</p>
+<p><strong>Rules:</strong>
+1. <code>invalid-argument-type</code> (~369 violations)
+2. <code>invalid-type-form</code> (~29 violations)
+3. <code>unresolved-attribute</code> (~2,417 violations pre-django-types; re-measure)</p>
+<p><strong>For <code>invalid-argument-type</code> and <code>invalid-type-form</code>:</strong></p>
+<p>Follow the same process as Task 8. For large violation counts, split fixes by app directory:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check per-app violation count</span>
+<span class="k">for</span><span class="w"> </span>app<span class="w"> </span><span class="k">in</span><span class="w"> </span>apps/*/<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nv">count</span><span class="o">=</span><span class="k">$(</span>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>--ignore<span class="w"> </span>all<span class="w"> </span>--error<span class="w"> </span>invalid-argument-type<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$app</span><span class="s2">&quot;</span><span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-oP<span class="w"> </span><span class="s1">&#39;Found \K\d+&#39;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;0&quot;</span><span class="k">)</span>
+<span class="w">  </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$count</span><span class="s2">&quot;</span><span class="w"> </span>!<span class="o">=</span><span class="w"> </span><span class="s2">&quot;0&quot;</span><span class="w"> </span><span class="o">]</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$count</span><span class="s2"> </span><span class="nv">$app</span><span class="s2">&quot;</span>
+<span class="k">done</span>
+</code></pre></div>
+<p>Consider splitting into multiple commits (one per app) within the same PR.</p>
+<p><strong>For <code>unresolved-attribute</code>:</strong></p>
+<p>This is the largest rule. After django-types is installed (Task 1), re-measure:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>--ignore<span class="w"> </span>all<span class="w"> </span>--error<span class="w"> </span>unresolved-attribute<span class="w"> </span>apps/<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-3
+</code></pre></div>
+<p>If still &gt;500 violations, consider:
+- Enable as <code>"warn"</code> first instead of <code>"error"</code>
+- Fix app-by-app in separate PRs
+- Some may require upstream django-types fixes</p>
+<hr />
+<h2 id="task-10-make-ci-blocking">Task 10: Make CI blocking</h2>
+<p><strong>Files:</strong>
+- Modify: <code>.github/workflows/lint_and_test.yml</code></p>
+<p><strong>Prerequisite:</strong> All rules from Phases 1-3 that you plan to enforce are enabled and passing.</p>
+<p><strong>Step 1: Remove continue-on-error</strong></p>
+<p>In <code>.github/workflows/lint_and_test.yml</code>, change the <code>type-check</code> job:</p>
+<div class="highlight"><pre><span></span><code><span class="w">  </span><span class="nt">type-check</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">if</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github.ref != &#39;refs/heads/main&#39;</span>
+<span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+<span class="w">    </span><span class="c1"># Remove: continue-on-error: true</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</code></pre></div>
+<p><strong>Step 2: Verify CI passes on current main</strong></p>
+<p>Push a test branch and confirm the type-check job passes.</p>
+<p><strong>Step 3: Commit</strong></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>.github/workflows/lint_and_test.yml
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;ci: make ty type checking blocking in CI&quot;</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>
