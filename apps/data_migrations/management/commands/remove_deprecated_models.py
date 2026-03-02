@@ -15,10 +15,15 @@ from apps.utils.deletion import get_related_objects, get_related_pipelines_query
 def _parse_deleted_models():
     """Yield (provider_type, model_name, replacement_name_or_None) for each entry in DELETED_MODELS."""
     for entry in DELETED_MODELS:
-        if len(entry) == 3:
+        if len(entry) == 2:
+            yield entry[0], entry[1], None
+        elif len(entry) == 3:
             yield entry[0], entry[1], entry[2]
         else:
-            yield entry[0], entry[1], None
+            raise ValueError(
+                f"Invalid DELETED_MODELS entry {entry!r}. "
+                "Expected (provider, name) or (provider, name, replacement_name)."
+            )
 
 
 class Command(IdempotentCommand):
@@ -108,30 +113,26 @@ class Command(IdempotentCommand):
         if dry_run:
             return f"Would remove {len(models_to_delete)} models"
 
-        # Send notifications per model per affected team
         all_team_ids = {tid for td in affected_by_model.values() for tid in td}
         teams_objs = {t.id: t for t in Team.objects.filter(id__in=all_team_ids)}
 
-        for db_model, replacement_name, replacement_model in models_to_delete:
-            for team_id, data in affected_by_model[db_model.id].items():
-                deleted_model_notification(
-                    team=teams_objs[team_id],
-                    model_name=f"{db_model.type}/{db_model.name}",
-                    replacement_model_name=replacement_name if replacement_model else None,
-                    affected_chatbots=sorted(data["chatbots"]),
-                    affected_pipelines=sorted(data["pipelines"]),
-                    affected_assistants=sorted(data["assistants"]),
-                )
-
-        # Delete models and update/clear references
+        # Delete each model and notify after successful deletion
         total_deleted = 0
-        for db_model, _replacement_name, replacement_model in models_to_delete:
+        for db_model, replacement_name, replacement_model in models_to_delete:
+            db_model_id = db_model.id  # Capture before delete sets pk to None
+
             # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
             if replacement_model:
                 for obj in get_related_objects(db_model):
-                    field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
-                    setattr(obj, field.attname, replacement_model.id)
-                    obj.save(update_fields=[field.name])
+                    fields_to_update = [
+                        f
+                        for f in obj._meta.fields
+                        if f.related_model == LlmProviderModel and getattr(obj, f.attname) == db_model.id
+                    ]
+                    for field in fields_to_update:
+                        setattr(obj, field.attname, replacement_model.id)
+                    if fields_to_update:
+                        obj.save(update_fields=[f.name for f in fields_to_update])
 
             # Update pipeline node references (stored as JSON params, not DB FKs)
             related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
@@ -142,6 +143,17 @@ class Command(IdempotentCommand):
             # Delete the model (bypass custom delete to avoid related-object pre-checks)
             super(LlmProviderModel, db_model).delete()
             total_deleted += 1
+
+            # Notify after successful deletion
+            for team_id, data in affected_by_model[db_model_id].items():
+                deleted_model_notification(
+                    team=teams_objs[team_id],
+                    model_name=f"{db_model.type}/{db_model.name}",
+                    replacement_model_name=replacement_name if replacement_model else None,
+                    affected_chatbots=sorted(data["chatbots"]),
+                    affected_pipelines=sorted(data["pipelines"]),
+                    affected_assistants=sorted(data["assistants"]),
+                )
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))
         return f"Removed {total_deleted} models, notified {total_teams} teams"

@@ -146,17 +146,30 @@ Notification helpers are defined in `apps/ocs_notifications/notifications.py`:
 
 ```python
 # Notifies a team that one of their resources uses a deprecated model, with recommended replacement
-deprecated_model_notification(team, old_model, replacement_model, affected_resources)
+deprecated_model_notification(
+    team=team,
+    model_name="openai/gpt-4",
+    replacement_model_name="gpt-4o",
+    affected_chatbots=["Bot A"],
+    affected_pipelines=["Pipeline B"],
+    affected_assistants=["Assistant C"],
+)
 
 # Notifies a team that a deleted model's references were auto-migrated or cleared
-deleted_model_notification(team, model_name, replacement_model, affected_resources)
+deleted_model_notification(
+    team=team,
+    model_name="anthropic/claude-2.0",
+    replacement_model_name="claude-3-5-sonnet-latest",
+    affected_chatbots=["Bot A"],
+    affected_pipelines=["Pipeline B"],
+    affected_assistants=["Assistant C"],
+)
 ```
 
 Notifications include:
 - Which model was deprecated/deleted
 - The replacement model (if any)
-- Affected chatbots, pipelines, and assistants
-- Links to the affected resources
+- Counts of affected chatbots, pipelines, and assistants
 
 ### Slug conventions
 
