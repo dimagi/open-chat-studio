@@ -4,11 +4,8 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.channels.models import ChannelPlatform
-from apps.documents.models import Collection
-from apps.experiments.models import SourceMaterial
+from apps.pipelines.repository import CollectionFileInfo, InMemoryPipelineRepository
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
-from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.files import FileFactory
 from apps.utils.prompt import validate_prompt_variables
 
 
@@ -32,10 +29,10 @@ def mock_session(mock_participant_data_proxy):
     return session
 
 
-@patch("apps.experiments.models.SourceMaterial.objects.get")
-def test_builds_context_with_specified_variables(mock_get, mock_session, mock_participant_data_proxy):
-    mock_get.return_value = Mock(material="source material")
-    context = PromptTemplateContext(mock_session, 1)
+def test_builds_context_with_specified_variables(mock_session, mock_participant_data_proxy):
+    repo = InMemoryPipelineRepository(session=mock_session)
+    repo.source_materials[1] = Mock(material="source material")
+    context = PromptTemplateContext(mock_session, repo, source_material_id=1)
     variables = ["source_material", "current_datetime"]
     result = context.get_context(variables)
     assert "source_material" in result
@@ -46,7 +43,8 @@ def test_builds_context_with_specified_variables(mock_get, mock_session, mock_pa
 
 
 def test_repeated_calls_are_cached(mock_session, mock_participant_data_proxy):
-    context = PromptTemplateContext(mock_session, 1)
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo, source_material_id=1)
     result = context.get_context([])
     assert result == {}
 
@@ -64,7 +62,8 @@ def test_repeated_calls_are_cached(mock_session, mock_participant_data_proxy):
 
 
 def test_calls_with_different_vars_returns_correct_context(mock_session):
-    context = PromptTemplateContext(mock_session, 1)
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo, source_material_id=1)
     result = context.get_context(["current_datetime"])
     assert "current_datetime" in result
 
@@ -75,51 +74,52 @@ def test_calls_with_different_vars_returns_correct_context(mock_session):
     assert result == {"participant_data": {"name": "Dimagi", "email": "hello@world.com"}}
 
 
-@patch("apps.experiments.models.SourceMaterial.objects.get")
-def test_retrieves_source_material_successfully(mock_get, mock_session):
-    mock_get.return_value = Mock(material="source material")
-    context = PromptTemplateContext(mock_session, 1)
+def test_retrieves_source_material_successfully(mock_session):
+    repo = InMemoryPipelineRepository(session=mock_session)
+    repo.source_materials[1] = Mock(material="source material")
+    context = PromptTemplateContext(mock_session, repo, source_material_id=1)
     assert context.get_source_material() == "source material"
 
 
-@patch("apps.experiments.models.SourceMaterial.objects.get")
-def test_returns_blank_source_material_not_found(mock_get, mock_session):
-    mock_get.side_effect = SourceMaterial.DoesNotExist
-    context = PromptTemplateContext(mock_session, 1)
+def test_returns_blank_source_material_not_found(mock_session):
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo, source_material_id=1)
     assert context.get_source_material() == ""
 
 
-@pytest.mark.django_db()
 def test_retrieves_media_successfully(mock_session):
-    collection = CollectionFactory()
-    file1 = FileFactory(summary="summary1", team_id=collection.team_id)
-    file2 = FileFactory(summary="summary2", team_id=collection.team_id)
-    collection.files.add(file1, file2)
-    context = PromptTemplateContext(session=mock_session, collection_id=collection.id)
+    repo = InMemoryPipelineRepository(session=mock_session)
+    collection_id = 1
+    file_info_1 = CollectionFileInfo(id=10, summary="summary1", content_type="text/plain")
+    file_info_2 = CollectionFileInfo(id=11, summary="summary2", content_type="application/pdf")
+    repo.collections[collection_id] = Mock()
+    repo.collection_files[collection_id] = [file_info_1, file_info_2]
+    context = PromptTemplateContext(session=mock_session, repo=repo, collection_id=collection_id)
     expected_media_summaries = [
-        f"* File (id={file1.id}, content_type={file1.content_type}): {file1.summary}\n",
-        f"* File (id={file2.id}, content_type={file2.content_type}): {file2.summary}\n",
+        f"* File (id={file_info_1.id}, content_type={file_info_1.content_type}): {file_info_1.summary}\n",
+        f"* File (id={file_info_2.id}, content_type={file_info_2.content_type}): {file_info_2.summary}\n",
     ]
     summaries = context.get_media_summaries()
     assert expected_media_summaries[0] in summaries
     assert expected_media_summaries[1] in summaries
 
 
-@patch("apps.documents.models.Collection.objects.get")
-def test_returns_blank_when_collection_not_found(collections_mock, mock_session):
-    collections_mock.side_effect = Collection.DoesNotExist
-    context = PromptTemplateContext(session=mock_session, source_material_id=1, collection_id=999)
+def test_returns_blank_when_collection_not_found(mock_session):
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(session=mock_session, repo=repo, source_material_id=1, collection_id=999)
     assert context.get_media_summaries() == ""
 
 
 def test_retrieves_participant_data_when_authorized(mock_session):
-    context = PromptTemplateContext(mock_session)
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo)
     assert context.get_participant_data() == {"name": "Dimagi", "email": "hello@world.com"}
 
 
 def test_participant_data_includes_schedules(mock_session, mock_participant_data_proxy):
     mock_participant_data_proxy.get_schedules.return_value = [{"id": 1}]
-    context = PromptTemplateContext(mock_session)
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo)
     assert context.get_participant_data() == {
         "name": "Dimagi",
         "email": "hello@world.com",
@@ -165,7 +165,8 @@ def test_invalid_conversion_and_specifier_caught():
 
 def test_extra_context_is_included(mock_session):
     extra_context = {"custom_var": "custom_value"}
-    context = PromptTemplateContext(mock_session, extra=extra_context)
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo, extra=extra_context)
     result = context.get_context(["custom_var"])
     assert result == {"custom_var": "custom_value"}
 

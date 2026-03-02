@@ -179,7 +179,7 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": InMemoryPipelineRepository()}}
     node_output = create_runnable(pipeline, nodes).invoke(
         PipelineState(experiment_session=experiment_session, messages=["hi"]),
         config=config,
@@ -205,7 +205,7 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": InMemoryPipelineRepository()}}
     node_output = create_runnable(pipeline, nodes).invoke(
         PipelineState(experiment_session=experiment_session, messages=["hi"]),
         config=config,
@@ -230,7 +230,7 @@ def main(input, **kwargs):
         code_node(code_get),
         end_node(),
     ]
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": InMemoryPipelineRepository()}}
     assert create_runnable(pipeline, nodes).invoke(
         PipelineState(experiment_session=experiment_session, messages=[input]),
         config=config,
@@ -288,49 +288,28 @@ def main(input, **kwargs):
         attachments=[Attachment.from_file(file, "code_interpreter", experiment_session.id)],
         temp_state={},
     )
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "content from file"  # ty: ignore[not-subscriptable]
 
 
-@pytest.mark.django_db()
-def test_get_participant_schedules(pipeline, experiment_session):
+def test_get_participant_schedules():
     """
     Test that the get_participant_schedules function correctly retrieves
     scheduled messages for the experiment session's participant and experiment.
     """
-    from django.utils import timezone
+    repo = InMemoryPipelineRepository()
+    repo.participant_schedules = [{"name": "Test Schedule", "next_trigger_date": "2024-01-01"}]
 
-    from apps.events.models import EventActionType, TimePeriod
-    from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
-
-    params = {
-        "name": "Test",
-        "time_period": TimePeriod.DAYS,
-        "frequency": 1,
-        "repetitions": 1,
-        "prompt_text": "",
-        "experiment_id": experiment_session.experiment.id,
-    }
-    event_action = EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER)
-
-    ScheduledMessageFactory(
-        experiment=experiment_session.experiment,
-        team=experiment_session.team,
-        participant=experiment_session.participant,
-        action=event_action,
-        next_trigger_date=timezone.now(),
-        is_complete=False,
-        cancelled_at=None,
-    )
     code = """
 def main(input, **kwargs):
     schedules = get_participant_schedules()
     return f"Number of schedules: {len(schedules)}"
 """
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    state = PipelineState(messages=["hi"], outputs={}, experiment_session=experiment_session, temp_state={})
-    config = {"configurable": {"repo": ORMRepository()}}
+    session = ExperimentSessionFactory.build()
+    state = PipelineState(messages=["hi"], outputs={}, experiment_session=session, temp_state={})
+    config = {"configurable": {"repo": repo}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output.update["messages"][-1] == "Number of schedules: 1"  # ty: ignore[not-subscriptable]
 
@@ -488,7 +467,7 @@ def main(input, **kwargs):
         experiment_session=experiment_session,
         temp_state={},
     )
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 
     # Verify file was created

@@ -14,7 +14,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
-from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
 )
@@ -191,7 +190,7 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, session: ExperimentSession, exclude_message_id: int | None = None) -> list[BaseMessage]:
+    def get_history(self, exclude_message_id: int | None = None) -> list[BaseMessage]:
         """
         Returns the chat history messages for the node based on its history configuration.
 
@@ -203,11 +202,9 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            return self.repo.get_session_messages(
-                session, self.get_history_mode(), exclude_message_id=exclude_message_id
-            )
+            return self.repo.get_session_messages(self.get_history_mode(), exclude_message_id=exclude_message_id)
         else:
-            history = self.repo.get_pipeline_chat_history(session, self.history_type, self._get_history_name())
+            history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
     def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
@@ -225,9 +222,7 @@ class HistoryMixin(LLMResponseMixin):
             history_mode=self.get_history_mode(),
         )
 
-    def build_history_middleware(
-        self, session: ExperimentSession, system_message: BaseMessage
-    ) -> BaseNodeHistoryMiddleware | None:
+    def build_history_middleware(self, system_message: BaseMessage) -> BaseNodeHistoryMiddleware | None:
         """Construct the history compression middleware configured for this node."""
         if self.history_is_disabled:
             return None
@@ -235,7 +230,6 @@ class HistoryMixin(LLMResponseMixin):
         history_mode = self.get_history_mode()
 
         compressor_kwargs = {
-            "session": session,
             "node": self,
         }
         if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
@@ -257,7 +251,7 @@ class HistoryMixin(LLMResponseMixin):
         if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
             return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
 
-    def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
+    def save_history(self, human_message: str, ai_message: str):
         if self.history_is_disabled:
             return
 
@@ -265,7 +259,7 @@ class HistoryMixin(LLMResponseMixin):
             # Global History is saved outside of the node
             return
 
-        history = self.repo.get_pipeline_chat_history(session, self.history_type, self._get_history_name())
+        history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
         message = self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
         return message
 

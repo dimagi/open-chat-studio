@@ -42,7 +42,7 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         "input_message_url: {{input_message_url}} "
     )
     node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
-    config = {"configurable": {"repo": ORMRepository()}}
+    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
     node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output["messages"][-1] == (
         "input: Cycling, inputs: ['Cycling'], temp_state.my_key: example_key, "

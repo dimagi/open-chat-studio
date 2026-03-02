@@ -7,15 +7,15 @@ from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
-from apps.pipelines.repository import InMemoryPipelineRepository, ORMRepository
+from apps.pipelines.repository import InMemoryPipelineRepository
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.factories.team import TeamFactory
 
 
 def _run_code_node(code, experiment_session=None):
-    repo = ORMRepository()
+    repo = InMemoryPipelineRepository(session=experiment_session)
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
-    node._repo = repo or InMemoryPipelineRepository()
+    node._repo = repo
     state = PipelineState(
         outputs={},
         experiment_session=experiment_session,

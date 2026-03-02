@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
-from apps.pipelines.repository import ORMRepository, RepositoryLookupError
+from apps.pipelines.repository import RepositoryLookupError
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -13,12 +15,12 @@ class PromptTemplateContext:
     def __init__(
         self,
         session,
+        repo: ORMRepository,
         source_material_id: int | None = None,
         collection_id: int | None = None,
         collection_index_ids: list[int] | None = None,
         extra: dict | None = None,
         participant_data: dict | None = None,
-        repo: "ORMRepository | None" = None,
     ):
         self.session = session
         self.source_material_id = source_material_id
@@ -26,7 +28,7 @@ class PromptTemplateContext:
         self.collection_index_ids = collection_index_ids or []
         self.extra = extra or {}
         self.context_cache = {}
-        self.repo = repo or ORMRepository()
+        self.repo = repo
         if participant_data is None:
             participant_data = session.participant_data_from_experiment
         self.participant_data_proxy = PipelineParticipantDataProxy(
@@ -261,7 +263,7 @@ class PipelineParticipantDataProxy(ParticipantDataProxy):
 
     def get(self):
         """Returns the current participant's data as a dictionary."""
-        global_data = self.repo.get_participant_global_data(self.session.participant)
+        global_data = self.repo.get_participant_global_data()
         return global_data | self._participant_data
 
     def get_schedules(self):
@@ -270,6 +272,6 @@ class PipelineParticipantDataProxy(ParticipantDataProxy):
         """
         if self._scheduled_messages is None:
             self._scheduled_messages = self.repo.get_participant_schedules(
-                self.session.participant, self.experiment_id, as_dict=True, as_timezone=self.get_timezone()
+                as_dict=True, as_timezone=self.get_timezone()
             )
         return self._scheduled_messages

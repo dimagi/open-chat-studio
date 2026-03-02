@@ -124,7 +124,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
 
             session = context.session
             if session:
-                participant = self.repo.get_session_participant(session)
+                participant = self.repo.participant
                 if participant:
                     content.update(
                         {
@@ -133,8 +133,6 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                                 "platform": getattr(participant, "platform", None),
                             },
                             "participant_schedules": self.repo.get_participant_schedules(
-                                participant,
-                                session.experiment_id,
                                 as_dict=True,
                                 include_inactive=True,
                             )
@@ -571,7 +569,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         # Build the agent
         middleware = []
-        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+        if history_middleware := self.build_history_middleware(system_message=system_message):
             middleware.append(history_middleware)
 
         agent = create_agent(
@@ -601,7 +599,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self.save_history(session, node_input, keyword)
+            self.save_history(node_input, keyword)
         return keyword, is_default_keyword
 
 
@@ -870,8 +868,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
-        session = context.session
-        team = self.repo.get_session_team(session) if session else None
+        team = self.repo.team
 
         http_client = RestrictedHttpClient(team=team)
 
@@ -919,24 +916,21 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
 
-            session = context.session
-            if not session:
+            if not context.session:
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
             file_obj = BytesIO(content)
-            team = self.repo.get_session_team(session)
-            if not team:
+            if not self.repo.team:
                 raise CodeNodeRunError("Cannot attach files without a valid session team")
 
             file = self.repo.create_file(
                 filename=filename,
                 file_obj=file_obj,
-                team_id=team.id,
                 content_type=content_type,
                 purpose=FilePurpose.MESSAGE_MEDIA,
             )
 
-            self.repo.attach_files_to_chat(session=session, attachment_type="code_interpreter", files=[file])
+            self.repo.attach_files_to_chat(attachment_type="code_interpreter", files=[file])
 
             metadata = output_state.setdefault("output_message_metadata", {})
             generated_files = metadata.setdefault("generated_files", [])

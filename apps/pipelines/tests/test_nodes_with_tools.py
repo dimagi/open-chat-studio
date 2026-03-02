@@ -76,12 +76,13 @@ def test_assistant_node(patched_invoke, disabled_tools):
     assistant = OpenAiAssistantFactory(tools=tools)
     nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
     runnable = create_runnable(pipeline, nodes)
+    session = ExperimentSessionFactory(team=assistant.team)
     state = PipelineState(
         messages=["Hi there bot"],
-        experiment_session=ExperimentSessionFactory(team=assistant.team),
+        experiment_session=session,
     )
     output_state = runnable.invoke(
-        state, config={"configurable": {"disabled_tools": disabled_tools, "repo": ORMRepository()}}
+        state, config={"configurable": {"disabled_tools": disabled_tools, "repo": ORMRepository(session=session)}}
     )
     assert output_state["messages"][-1] == "hello"
     args = patched_invoke.call_args[0]
@@ -119,8 +120,9 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
         {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}
     )
     node._config = ensure_config({"configurable": {"disabled_tools": disabled_tools}})
-    node._repo = ORMRepository()
-    tools = _get_configured_tools(node, ExperimentSessionFactory(), ToolCallbacks())
+    session = ExperimentSessionFactory()
+    node._repo = ORMRepository(session=session)
+    tools = _get_configured_tools(node, session, ToolCallbacks())
     tool_names = {getattr(tool, "name", "") for tool in tools}
     assert not set(disabled_tools) & tool_names
 
@@ -156,7 +158,7 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository()}})
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
 
@@ -205,7 +207,7 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository()}})
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
     assert output["messages"][-1] == "ai response after tool"
     assert tool.func.call_args == (("test arg",), {})
     assert len(service.llm.get_call_messages()) == 2

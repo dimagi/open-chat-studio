@@ -138,14 +138,14 @@ class TestInMemoryRepository:
         assert result == []
 
     def test_get_pipeline_chat_history_creates_on_first_call(self):
-        history = self.repo.get_pipeline_chat_history(session=None, history_type="node", name="test-node")
+        history = self.repo.get_pipeline_chat_history(history_type="node", name="test-node")
         assert history is not None
         assert history.type == "node"
         assert history.name == "test-node"
 
     def test_get_pipeline_chat_history_returns_same_on_second_call(self):
-        h1 = self.repo.get_pipeline_chat_history(session=None, history_type="node", name="test-node")
-        h2 = self.repo.get_pipeline_chat_history(session=None, history_type="node", name="test-node")
+        h1 = self.repo.get_pipeline_chat_history(history_type="node", name="test-node")
+        h2 = self.repo.get_pipeline_chat_history(history_type="node", name="test-node")
         assert h1 is h2
 
     def test_save_pipeline_chat_message(self):
@@ -158,7 +158,7 @@ class TestInMemoryRepository:
 
     def test_create_file(self):
         file = self.repo.create_file(
-            filename="test.txt", file_obj=BytesIO(b"content"), team_id=1, content_type="text/plain", purpose="test"
+            filename="test.txt", file_obj=BytesIO(b"content"), content_type="text/plain", purpose="test"
         )
         assert file.name == "test.txt"
         assert len(self.repo.files_created) == 1
@@ -207,14 +207,16 @@ class TestORMRepository:
 
     def test_get_pipeline_chat_history_creates(self):
         session = ExperimentSessionFactory()
-        history = self.repo.get_pipeline_chat_history(session, "node", "test-node")
+        repo = ORMRepository(session=session)
+        history = repo.get_pipeline_chat_history("node", "test-node")
         assert history.type == "node"
         assert history.name == "test-node"
 
     def test_save_pipeline_chat_message(self):
         session = ExperimentSessionFactory()
-        history = self.repo.get_pipeline_chat_history(session, "node", "test-node")
-        msg = self.repo.save_pipeline_chat_message(history, "Hello", "Hi", "node-1")
+        repo = ORMRepository(session=session)
+        history = repo.get_pipeline_chat_history("node", "test-node")
+        msg = repo.save_pipeline_chat_message(history, "Hello", "Hi", "node-1")
         assert msg.human_message == "Hello"
         assert msg.ai_message == "Hi"
         assert msg.node_id == "node-1"

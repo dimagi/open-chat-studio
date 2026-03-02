@@ -53,7 +53,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
-    node.save_history(session, user_input, ai_message)
+    node.save_history(user_input, ai_message)
 
     voice_kwargs = {}
     if node.synthetic_voice_id is not None:
@@ -80,7 +80,7 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
         output=message, session=session, include_citations=node.generate_citations
     )
     ai_message_metadata = _process_files(
-        node, session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
+        node, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
     )
     if node.generate_citations:
         ai_message = populate_reference_section_from_citations(
@@ -100,7 +100,7 @@ def build_node_agent(
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     middleware = []
-    if history_middleware := node.build_history_middleware(session=session, system_message=system_message):
+    if history_middleware := node.build_history_middleware(system_message=system_message):
         middleware.append(history_middleware)
 
     return create_agent(
@@ -113,16 +113,14 @@ def build_node_agent(
     )
 
 
-def _process_files(
-    node: PipelineNode, session: ExperimentSession, cited_files: set[File], generated_files: set[File]
-) -> dict:
+def _process_files(node: PipelineNode, cited_files: set[File], generated_files: set[File]) -> dict:
     """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
     by the LLM
     """
     if cited_files:
-        node.repo.attach_files_to_chat(session, attachment_type="file_citation", files=cited_files)
+        node.repo.attach_files_to_chat(attachment_type="file_citation", files=cited_files)
     if generated_files:
-        node.repo.attach_files_to_chat(session, attachment_type="code_interpreter", files=generated_files)
+        node.repo.attach_files_to_chat(attachment_type="code_interpreter", files=generated_files)
     return {
         "cited_files": [file.id for file in cited_files],
         "generated_files": [file.id for file in generated_files],

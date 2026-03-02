@@ -18,6 +18,7 @@ from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.main import (
     AnthropicBuiltinTool,
     OpenAIBuiltinTool,
@@ -91,7 +92,8 @@ class AssistantAdapter(BaseAdapter):
 
         self.tools = get_assistant_tools(assistant, experiment_session=session)
         self.disabled_tools = disabled_tools
-        self.template_context = PromptTemplateContext(session, source_material_id=None)
+        repo = ORMRepository(session=session)
+        self.template_context = PromptTemplateContext(session, repo=repo, source_material_id=None)
 
     @classmethod
     def for_pipeline(
@@ -139,7 +141,10 @@ class AssistantAdapter(BaseAdapter):
 
         input_variables = get_template_variables(instructions, "f-string")
         if input_variables:
-            context = PromptTemplateContext(self.session, None).get_context(input_variables)
+            repo = ORMRepository(session=self.session)
+            context = PromptTemplateContext(self.session, repo=repo, source_material_id=None).get_context(
+                input_variables
+            )
             instructions = instructions.format(**context)
 
         code_interpreter_attachments = self.get_attachments(["code_interpreter"])

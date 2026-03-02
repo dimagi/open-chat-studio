@@ -65,7 +65,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    repo = ORMRepository()
+    repo = ORMRepository(session=experiment_session)
     config = {"configurable": {"repo": repo}}
     runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)[
         "messages"
@@ -136,7 +136,7 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     )
     nodes = [start_node(), llm_1, llm_2, end_node()]
     runnable = create_runnable(pipeline, nodes)
-    repo = ORMRepository()
+    repo = ORMRepository(session=experiment_session)
     config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
@@ -310,7 +310,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     llm_3 = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), prompt="Node 3:", history_type=None)
     nodes = [start_node(), llm_1, llm_2, llm_3, end_node()]
     runnable = create_runnable(pipeline, nodes)
-    repo = ORMRepository()
+    repo = ORMRepository(session=experiment_session)
     config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
@@ -376,7 +376,7 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
     )
     nodes = [start_node(), llm_1, end_node()]
     runnable = create_runnable(pipeline, nodes)
-    repo = ORMRepository()
+    repo = ORMRepository(session=experiment_session)
     config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"

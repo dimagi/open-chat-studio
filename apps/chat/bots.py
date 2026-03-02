@@ -138,7 +138,7 @@ class PipelineBot:
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
-                "repo": ORMRepository(),
+                "repo": ORMRepository(session=self.session),
                 "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
             },
             run_name_map=graph.node_id_to_name_mapping,
@@ -279,7 +279,7 @@ class PipelineTestBot:
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             state = PipelineState(messages=[input], experiment_session=session)
-            config = {"configurable": {"repo": ORMRepository()}}
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
             output = runner.invoke(runnable, state, config)
             output = PipelineState(**output).json_safe()
@@ -382,7 +382,8 @@ class EventBot:
 
     @property
     def system_prompt(self):
-        context = PromptTemplateContext(self.session, None).get_context(["participant_data", "current_datetime"])
+        repo = ORMRepository(session=self.session)
+        context = PromptTemplateContext(self.session, repo=repo).get_context(["participant_data", "current_datetime"])
         context["conversation_history"] = self.get_conversation_history()
         return self.SYSTEM_PROMPT.format(**context)
 

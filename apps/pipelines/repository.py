@@ -3,8 +3,6 @@ from __future__ import annotations
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from langchain_core.messages import BaseMessage
-
 from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
@@ -14,6 +12,8 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 if TYPE_CHECKING:
+    from langchain_core.messages import BaseMessage
+
     from apps.assistants.models import OpenAiAssistant
 
 
@@ -48,13 +48,24 @@ class ORMRepository:
     # instance) so there are no staleness concerns across executions.
     """
 
+    def __init__(self, session: ExperimentSession | None = None):
+        self.session = session
+
+    @property
+    def team(self):
+        """Get the team for the current session."""
+        return self.session.team if self.session else None
+
+    @property
+    def participant(self):
+        """Get the participant for the current session."""
+        return self.session.participant if self.session else None
+
     # --- Chat history ---
 
-    def get_pipeline_chat_history(
-        self, session: ExperimentSession, history_type: str, name: str
-    ) -> PipelineChatHistory:
+    def get_pipeline_chat_history(self, history_type: str, name: str) -> PipelineChatHistory:
         """Get or create node-specific chat history."""
-        history, _ = session.pipeline_chat_history.get_or_create(type=history_type, name=name)
+        history, _ = self.session.pipeline_chat_history.get_or_create(type=history_type, name=name)
         return history
 
     def save_pipeline_chat_message(
@@ -67,11 +78,11 @@ class ORMRepository:
             node_id=node_id,
         )
 
-    def get_session_messages(
-        self, session: ExperimentSession, history_mode: str, exclude_message_id: int | None = None
-    ) -> list[BaseMessage]:
+    def get_session_messages(self, history_mode: str, exclude_message_id: int | None = None) -> list[BaseMessage]:
         """Get session-level chat history as LangChain messages."""
-        return session.chat.get_langchain_messages_until_marker(history_mode, exclude_message_id=exclude_message_id)
+        return self.session.chat.get_langchain_messages_until_marker(
+            history_mode, exclude_message_id=exclude_message_id
+        )
 
     def save_compression_checkpoint(
         self, checkpoint_message_id: int, history_type: str, compression_marker: str, history_mode: str
@@ -169,43 +180,29 @@ class ORMRepository:
 
     # --- Files ---
 
-    def create_file(
-        self, filename: str, file_obj: BytesIO, team_id: int, content_type: str | None, purpose: str
-    ) -> File:
-        """Create a file record."""
+    def create_file(self, filename: str, file_obj: BytesIO, content_type: str | None, purpose: str) -> File:
+        """Create a file record. Uses the team from the current session."""
         return File.create(
             filename=filename,
             file_obj=file_obj,
-            team_id=team_id,
+            team_id=self.team.id,
             content_type=content_type,
             purpose=purpose,
         )
 
-    def attach_files_to_chat(
-        self, session: ExperimentSession, attachment_type: str, files: list[File] | set[File]
-    ) -> None:
+    def attach_files_to_chat(self, attachment_type: str, files: list[File] | set[File]) -> None:
         """Attach files to a chat via the session. Covers both CodeNode and llm_node _process_files."""
-        session.chat.attach_files(attachment_type=attachment_type, files=files)
+        self.session.chat.attach_files(attachment_type=attachment_type, files=files)
 
     # --- Participant ---
 
-    def get_participant_global_data(self, participant) -> dict:
-        """Get a participant's global data."""
-        return participant.global_data
+    def get_participant_global_data(self) -> dict:
+        """Get the current participant's global data."""
+        return self.participant.global_data
 
-    def get_participant_schedules(self, participant, experiment_id, **kwargs) -> list:
-        """Get scheduled messages for a participant."""
-        return participant.get_schedules_for_experiment(experiment_id, **kwargs)
-
-    # --- Session accessors ---
-
-    def get_session_team(self, session: ExperimentSession):
-        """Get the team for a session (avoids FK traversal on session.team)."""
-        return session.team
-
-    def get_session_participant(self, session: ExperimentSession):
-        """Get the participant for a session (avoids FK traversal on session.participant)."""
-        return session.participant
+    def get_participant_schedules(self, **kwargs) -> list:
+        """Get scheduled messages for the current participant and experiment."""
+        return self.participant.get_schedules_for_experiment(self.session.experiment_id, **kwargs)
 
     # --- Assistants (deprecated node support) ---
 
@@ -227,7 +224,8 @@ class InMemoryPipelineRepository(ORMRepository):
     Raises RepositoryLookupError for unconfigured lookups (same as ORMRepository).
     """
 
-    def __init__(self):
+    def __init__(self, session=None):
+        super().__init__(session)
         self.providers: dict[int, Any] = {}
         self.llm_services: dict[int, Any] = {}
         self.source_materials: dict[int, Any] = {}
@@ -292,7 +290,7 @@ class InMemoryPipelineRepository(ORMRepository):
             raise RepositoryLookupError(f"Collection with id {collection_id} not found")
         return list(self.collection_files.get(collection_id, []))
 
-    def get_pipeline_chat_history(self, session, history_type, name):
+    def get_pipeline_chat_history(self, history_type, name):
         key = f"{history_type}:{name}"
         if key not in self.chat_histories:
             from apps.utils.factories.pipelines import PipelineChatHistoryFactory
@@ -317,7 +315,7 @@ class InMemoryPipelineRepository(ORMRepository):
             node_id=node_id,
         )
 
-    def get_session_messages(self, session, history_mode, exclude_message_id=None):
+    def get_session_messages(self, history_mode, exclude_message_id=None):
         return list(self.session_messages)
 
     def save_compression_checkpoint(self, checkpoint_message_id, history_type, compression_marker, history_mode):
@@ -330,10 +328,11 @@ class InMemoryPipelineRepository(ORMRepository):
             }
         )
 
-    def create_file(self, filename, file_obj, team_id, content_type, purpose):
+    def create_file(self, filename, file_obj, content_type, purpose):
+        team = self.team
         record = {
             "filename": filename,
-            "team_id": team_id,
+            "team_id": team.id if team else None,
             "content_type": content_type,
             "purpose": purpose,
         }
@@ -342,20 +341,14 @@ class InMemoryPipelineRepository(ORMRepository):
 
         return FileFactory.build(id=len(self.files_created), name=filename, content_type=content_type or "")
 
-    def attach_files_to_chat(self, session, attachment_type, files):
-        self.attached_files.append({"session": session, "type": attachment_type, "files": files})
+    def attach_files_to_chat(self, attachment_type, files):
+        self.attached_files.append({"session": self.session, "type": attachment_type, "files": files})
 
-    def get_participant_global_data(self, participant):
+    def get_participant_global_data(self):
         return dict(self.participant_global_data)
 
-    def get_participant_schedules(self, participant, experiment_id, **kwargs):
+    def get_participant_schedules(self, **kwargs):
         return list(self.participant_schedules)
-
-    def get_session_team(self, session):
-        return getattr(session, "team", None)
-
-    def get_session_participant(self, session):
-        return getattr(session, "participant", None)
 
     def get_assistant(self, assistant_id):
         if assistant_id not in self.assistants:

@@ -50,7 +50,7 @@ def test_parallel_branch_pipeline(pipeline, experiment_session):
     user_input = "The Input"
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )["outputs"]
     expected_output = {
         "start": {"message": user_input, "node_id": start["id"]},
@@ -87,7 +87,7 @@ def test_parallel_branch_with_merge(pipeline, experiment_session):
     user_input = "The Input"
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )["outputs"]
     expected_output = {
         "start": {"message": user_input, "node_id": start["id"]},
@@ -122,7 +122,7 @@ def test_parallel_branch_with_dangling_node(pipeline, experiment_session):
     user_input = "The Input"
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=[user_input], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )["outputs"]
     expected_output = {
         "start": {"message": user_input, "node_id": start["id"]},
@@ -162,7 +162,7 @@ def main(input, **kwargs):
     edges = ["start - safety_check", "start - B", "safety_check - Code", "B - Code", "Code - C", "C - end"]
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )
     output_state = PipelineState(output)
     if safety_check == "safe":
@@ -205,7 +205,7 @@ def main(input, **kwargs):
     edges = ["start - A", "start - C", "A - B", "B - Code", "C - Code", "Code - end"]
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )
     output_state = PipelineState(output)
     assert PipelineAccessor(output_state).get_node_output("end") == "B: A: Hi,C: Hi"
@@ -257,7 +257,7 @@ def main(input, **kwargs):
     edges = ["start - A", "start - C", "A - B", "B - Code", "C - Code", "Code - end"]
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )
     output_state = PipelineState(output)
     assert PipelineAccessor(output_state).get_node_output("end") == "B: A: Hi,C: Hi"
@@ -279,7 +279,7 @@ def test_dangling_node_abort_terminates_early(pipeline, experiment_session):
     edges = ["start - Code Abort", "start - A", "A - B", "B - end"]
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )
     output_state = PipelineState(output)
     assert "__interrupt__" in output_state
@@ -303,7 +303,7 @@ def test_safety_router_abort(pipeline, experiment_session, safety_check):
     edges = ["start - A", "start - Router", "A - end", "Router:1 - Code Abort"]
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session, temp_state={"is_safe": safety_check}),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )
     output_state = PipelineState(output)
     if safety_check == "safe":
@@ -329,7 +329,7 @@ def test_dangling_node_abort_after(pipeline, experiment_session):
     edges = ["start - A", "start - B", "A - end", "B - C", "C - Code Abort"]
     output = create_runnable(pipeline, nodes, edges).invoke(
         PipelineState(messages=["Hi"], experiment_session=experiment_session),
-        config={"configurable": {"repo": ORMRepository()}},
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
     )
     output_state = PipelineState(output)
     assert "__interrupt__" in output_state
