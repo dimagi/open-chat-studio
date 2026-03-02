@@ -112,12 +112,12 @@ class Command(IdempotentCommand):
         all_team_ids = {tid for td in affected_by_model.values() for tid in td}
         teams_objs = {t.id: t for t in Team.objects.filter(id__in=all_team_ids)}
 
-        for db_model, replacement_name, _replacement_model in models_to_delete:
+        for db_model, replacement_name, replacement_model in models_to_delete:
             for team_id, data in affected_by_model[db_model.id].items():
                 deleted_model_notification(
                     team=teams_objs[team_id],
                     model_name=f"{db_model.type}/{db_model.name}",
-                    replacement_model_name=replacement_name,
+                    replacement_model_name=replacement_name if replacement_model else None,
                     affected_chatbots=sorted(data["chatbots"]),
                     affected_pipelines=sorted(data["pipelines"]),
                     affected_assistants=sorted(data["assistants"]),

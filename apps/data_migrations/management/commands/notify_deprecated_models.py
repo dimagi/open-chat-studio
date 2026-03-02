@@ -48,7 +48,7 @@ class Command(IdempotentCommand):
         # teams_data: {team_id: {"chatbots": set, "pipelines": set, "assistants": set}}
         affected_by_model = {}
 
-        for db_model, model_name, replacement in db_models:
+        for db_model, _model_name, replacement in db_models:
             teams_data = defaultdict(lambda: {"chatbots": set(), "pipelines": set(), "assistants": set()})
 
             related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
@@ -75,7 +75,7 @@ class Command(IdempotentCommand):
             for assistant in referenced_assistants:
                 teams_data[assistant.team_id]["assistants"].add(assistant.name)
 
-            affected_by_model[db_model.id] = (teams_data, model_name, replacement)
+            affected_by_model[db_model.id] = (teams_data, f"{db_model.type}/{db_model.name}", replacement)
 
         total_affected = sum(len(td) for td, _, _ in affected_by_model.values())
         self.stdout.write(f"Found {len(db_models)} deprecated models affecting {total_affected} team(s)")

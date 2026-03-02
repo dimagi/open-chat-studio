@@ -45,7 +45,7 @@ class TestNotifyDeprecatedModelsCommand:
         mock_notify.assert_called_once()
         call_kwargs = mock_notify.call_args.kwargs
         assert call_kwargs["team"] == experiment.team
-        assert call_kwargs["model_name"] == "gpt-4"
+        assert call_kwargs["model_name"] == "openai/gpt-4"
         assert call_kwargs["replacement_model_name"] == "gpt-4o"
         assert experiment.name in call_kwargs["affected_chatbots"]
 
