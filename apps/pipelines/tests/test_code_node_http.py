@@ -7,12 +7,15 @@ from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
+from apps.pipelines.repository import InMemoryPipelineRepository
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.factories.team import TeamFactory
 
 
 def _run_code_node(code, experiment_session=None):
+    repo = InMemoryPipelineRepository(session=experiment_session)
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = repo
     state = PipelineState(
         outputs={},
         experiment_session=experiment_session,
@@ -40,6 +43,7 @@ def main(input, **kwargs):
     return "should not reach here"
 """
         node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+        node._repo = InMemoryPipelineRepository()
         state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
         with pytest.raises(CodeNodeRunError, match="Importing 'httpx' is not allowed"):
             node._process(state, NodeContext(state))

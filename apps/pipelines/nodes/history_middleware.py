@@ -25,9 +25,8 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
     to the database in the before_model step, if a summary is generated.
     """
 
-    def __init__(self, session, node: PipelineNode, **kwargs):
+    def __init__(self, node: PipelineNode, **kwargs):
         super().__init__(model=node.get_chat_model(), **kwargs)
-        self.session = session
         self.node = node
 
     def before_agent(self, state, runtime):
@@ -37,7 +36,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
                 # history to the user's message. We need to replace the full message history in the state.
                 # See https://github.com/langchain-ai/langchain/blob/c63f23d2339b2604edc9ae1d9f7faf7d6cc7dc78/libs/langchain_v1/langchain/agents/middleware/summarization.py#L286-L292
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *self.node.get_history(self.session, exclude_message_id=state.get("input_message_id")),
+                *self.node.get_history(exclude_message_id=state.get("input_message_id")),
                 *state["messages"],
             ]
         }

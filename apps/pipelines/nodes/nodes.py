@@ -24,8 +24,8 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
+from apps.files.models import FilePurpose
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -50,10 +50,14 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import (
+    PipelineParticipantDataProxy,
+    PromptTemplateContext,
+)
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -71,7 +75,6 @@ from .mixins import (
     OutputMessageTagMixin,
     RouterMixin,
     StructuredDataSchemaValidatorMixin,
-    get_llm_provider,
 )
 
 if TYPE_CHECKING:
@@ -121,7 +124,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
 
             session = context.session
             if session:
-                participant = getattr(session, "participant", None)
+                participant = self.repo.participant
                 if participant:
                     content.update(
                         {
@@ -129,8 +132,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
                                 "identifier": getattr(participant, "identifier", None),
                                 "platform": getattr(participant, "platform", None),
                             },
-                            "participant_schedules": participant.get_schedules_for_experiment(
-                                session.experiment,
+                            "participant_schedules": self.repo.get_participant_schedules(
                                 as_dict=True,
                                 include_inactive=True,
                             )
@@ -340,7 +342,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return value
 
         # Bulk fetch all collections to avoid N+1 queries
-        collections = Collection.objects.in_bulk(value)
+        repo = ORMRepository()
+        collections = repo.get_collections_in_bulk(value)
 
         # Check for non-existent collections
         missing_ids = set(value) - set(collections.keys())
@@ -384,7 +387,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 )
 
             # Check if provider has a limit on number of vector stores
-            llm_provider = get_llm_provider(llm_provider_id)
+            try:
+                llm_provider = repo.get_llm_provider(llm_provider_id)
+            except RepositoryLookupError:
+                llm_provider = None
             if llm_provider:
                 max_vector_stores = llm_provider.type_enum.max_vector_stores
                 if max_vector_stores and len(collections) > max_vector_stores:
@@ -553,7 +559,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "session_state": context.state.session_state,
         }
         participant_data = context.state.participant_data or {}
-        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        template_context = PromptTemplateContext(
+            session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
+        )
         system_message = get_system_message(
             prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
             prompt_context=template_context,
@@ -561,7 +569,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         # Build the agent
         middleware = []
-        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+        if history_middleware := self.build_history_middleware(system_message=system_message):
             middleware.append(history_middleware)
 
         agent = create_agent(
@@ -591,7 +599,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self.save_history(session, node_input, keyword)
+            self.save_history(node_input, keyword)
         return keyword, is_default_keyword
 
 
@@ -751,8 +759,8 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         try:
-            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
-        except OpenAiAssistant.DoesNotExist:
+            assistant = self.repo.get_assistant(self.assistant_id)
+        except RepositoryLookupError:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
         session = context.session
@@ -856,12 +864,11 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # use 'output_state' so that we capture any updates
-        participant_data_proxy = ParticipantDataProxy(output_state, context.session)
+        participant_data_proxy = PipelineParticipantDataProxy(output_state, context.session, repo=self.repo)
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
-        session = context.session
-        team = session.team if session else None
+        team = self.repo.team
 
         http_client = RestrictedHttpClient(team=team)
 
@@ -906,25 +913,24 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             """
             from io import BytesIO
 
-            from apps.files.models import File, FilePurpose
-
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
 
-            session = context.session
-            if not session:
+            if not context.session:
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
             file_obj = BytesIO(content)
-            file = File.create(
+            if not self.repo.team:
+                raise CodeNodeRunError("Cannot attach files without a valid session team")
+
+            file = self.repo.create_file(
                 filename=filename,
                 file_obj=file_obj,
-                team_id=session.team_id,
                 content_type=content_type,
                 purpose=FilePurpose.MESSAGE_MEDIA,
             )
 
-            session.chat.attach_files(attachment_type="code_interpreter", files=[file])
+            self.repo.attach_files_to_chat(attachment_type="code_interpreter", files=[file])
 
             metadata = output_state.setdefault("output_message_metadata", {})
             generated_files = metadata.setdefault("generated_files", [])

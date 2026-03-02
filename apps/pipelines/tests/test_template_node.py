@@ -3,6 +3,7 @@ import pytest
 from apps.experiments.models import Participant
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import RenderTemplate
+from apps.pipelines.repository import ORMRepository
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 
@@ -41,7 +42,8 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         "input_message_url: {{input_message_url}} "
     )
     node = RenderTemplate(name="test", node_id="123", django_node=None, template_string=template)
-    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config={})
+    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
+    node_output = node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
     assert node_output["messages"][-1] == (
         "input: Cycling, inputs: ['Cycling'], temp_state.my_key: example_key, "
         "participant_id: participant_123, "
