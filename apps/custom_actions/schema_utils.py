@@ -233,7 +233,7 @@ def _extract_parameters(
                 params["schema_type"] = param.type.value
                 # UGLY HACK! DataType.Array is converted into a string like "Array<DataType.STRING>"
                 # See langchain_community/tools/openapi/utils/api_models.py:315
-            elif param.type is not None and param.type.startswith("Array<"):
+            elif isinstance(param.type, str) and param.type.startswith("Array<"):
                 params["schema_type"] = DataType.ARRAY.value
             elif param.type is None:
                 # Type could not be determined by langchain (e.g. anyOf/oneOf schemas
