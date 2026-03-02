@@ -972,7 +972,7 @@ class TestAssistantNode:
         pipeline = PipelineFactory()
         assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-        runnable = create_runnable(pipeline, nodes)
+        runnable = create_runnable(pipeline, nodes)  # ty: ignore[invalid-argument-type]
         state = PipelineState(
             messages=["Hi there bot"],
             experiment_session=ExperimentSessionFactory(),
@@ -992,7 +992,7 @@ class TestAssistantNode:
         pipeline = PipelineFactory()
         assistant = OpenAiAssistantFactory()
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-        runnable = create_runnable(pipeline, nodes)
+        runnable = create_runnable(pipeline, nodes)  # ty: ignore[invalid-argument-type]
         attachments = [
             Attachment(
                 file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
@@ -1028,7 +1028,7 @@ class TestAssistantNode:
 
         pipeline = PipelineFactory()
         nodes = [start_node(), assistant_node(str(999)), end_node()]
-        runnable = create_runnable(pipeline, nodes)
+        runnable = create_runnable(pipeline, nodes)  # ty: ignore[invalid-argument-type]
         state = PipelineState(
             messages=["Hi there bot"],
             experiment_session=ExperimentSessionFactory(),

@@ -33,7 +33,7 @@ class ModelParamSpec:
     """A helper class to hold the parameter name and model of those that are database records"""
 
     param_name: str
-    model_cls: VersionsMixin
+    model_cls: type[VersionsMixin]
 
     def get_object(self, id: int):
         return self.model_cls.objects.get(id=id)

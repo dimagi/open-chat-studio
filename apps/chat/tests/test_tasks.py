@@ -69,7 +69,7 @@ class TasksTest(TestCase):
         return _start_experiment_session(
             experiment,
             experiment_channel=self.experiment_channel,
-            participant_identifier=self.telegram_chat_id,
+            participant_identifier=self.telegram_chat_id,  # ty: ignore[invalid-argument-type]
             session_status=session_status,
         )
 

@@ -10,6 +10,8 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import ExperimentSession
+from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -105,10 +107,10 @@ class TestTwilio:
         channel = ExperimentChannelFactory(
             platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider, extra_data={"number": "123"}
         )
-        session = ExperimentSessionFactory(experiment_channel=channel, experiment=experiment)
+        session: ExperimentSession = ExperimentSessionFactory(experiment_channel=channel, experiment=experiment)  # ty: ignore[invalid-assignment]
         channel = WhatsappChannel.from_experiment_session(session)
-        file1 = FileFactory(name="f1", content_type="image/jpeg")
-        file2 = FileFactory(name="f2", content_type="image/jpeg")
+        file1: File = FileFactory(name="f1", content_type="image/jpeg")  # ty: ignore[invalid-assignment]
+        file2: File = FileFactory(name="f2", content_type="image/jpeg")  # ty: ignore[invalid-assignment]
 
         channel.send_message_to_user("Hi there", [file1, file2])
         message_call = twilio_client_mock.messages.create.mock_calls[0]
@@ -202,7 +204,9 @@ class TestTurnio:
     @pytest.mark.django_db()
     @patch("apps.service_providers.messaging_service.TurnIOService.client")
     def test_attachment_links_attached_to_message(self, turnio_client, turnio_whatsapp_channel, experiment):
-        session = ExperimentSessionFactory(experiment_channel=turnio_whatsapp_channel, experiment=experiment)
+        session: ExperimentSession = ExperimentSessionFactory(
+            experiment_channel=turnio_whatsapp_channel, experiment=experiment
+        )  # ty: ignore[invalid-assignment]
         channel = WhatsappChannel.from_experiment_session(session)
         files = FileFactory.create_batch(2)
         channel.send_message_to_user("Hi there", files=files)

@@ -296,7 +296,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt",
-                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable, invalid-argument-type]
                 {"field": "prompt"},
             ) from None
 
@@ -348,7 +348,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             ids_str = ", ".join(str(missing_id) for missing_id in missing_ids)
             raise PydanticCustomError(
                 "collection_not_found",
-                f"Collection index(s) with ID(s) {ids_str} not found",
+                f"Collection index(s) with ID(s) {ids_str} not found",  # ty: ignore[invalid-argument-type]
             )
 
         # Validate that all collections are the same type (either all remote or all local)
@@ -366,7 +366,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 "mixed_collection_types",
                 "All collection indexes must be the same type (either all remote or all local). "
                 f"Remote collections: {', '.join(remote_collections)}. "
-                f"Local collections: {', '.join(local_collections)}.",
+                f"Local collections: {', '.join(local_collections)}.",  # ty: ignore[invalid-argument-type]
             )
 
         # From this point on, we either have all remote or all local
@@ -380,7 +380,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 raise PydanticCustomError(
                     "invalid_collection_index",
                     f"All remote collection indexes must use the same LLM provider as the node. "
-                    f"Incompatible collections: {', '.join(incompatible_collections)}",
+                    f"Incompatible collections: {', '.join(incompatible_collections)}",  # ty: ignore[invalid-argument-type]
                 )
 
             # Check if provider has a limit on number of vector stores
@@ -393,7 +393,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                         f"{llm_provider.type_enum.value.label} hosted vectorstores are limited to "
                         f"{max_vector_stores} per request. "
                         f"You have selected {len(collections)} collection indexes. "
-                        f"Please select at most {max_vector_stores} collection indexes.",
+                        f"Please select at most {max_vector_stores} collection indexes.",  # ty: ignore[invalid-argument-type]
                     )
 
         if len(collections) > 1 and not all_are_remote:
@@ -403,7 +403,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 raise PydanticCustomError(
                     "collections_missing_summary",
                     "When using multiple collection indexes, the collections must have a summary. "
-                    f"Collections missing summary: {', '.join(missing_summary)}",
+                    f"Collections missing summary: {', '.join(missing_summary)}",  # ty: ignore[invalid-argument-type]
                 )
 
         return value
@@ -540,7 +540,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt",
-                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
+                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable, invalid-argument-type]
                 {"field": "prompt"},
             ) from None
 
@@ -561,7 +561,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         # Build the agent
         middleware = []
-        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):  # ty: ignore[invalid-argument-type]
             middleware.append(history_middleware)
 
         agent = create_agent(
@@ -591,7 +591,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self.save_history(session, node_input, keyword)
+            self.save_history(session, node_input, keyword)  # ty: ignore[invalid-argument-type]
         return keyword, is_default_keyword
 
 
@@ -756,7 +756,7 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
         session = context.session
-        runnable = self._get_assistant_runnable(assistant, session=session)
+        runnable = self._get_assistant_runnable(assistant, session=session)  # ty: ignore[invalid-argument-type]
         attachments = [att for att in context.attachments if att.upload_to_assistant]
         chain_output: ChainOutput = runnable.invoke(context.input, config=self._config, attachments=attachments)
         output = chain_output.output
@@ -812,7 +812,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             if pattern.search(value):
                 raise PydanticCustomError(
                     "reserved_key_used",
-                    f"The key '{key}' is a reserved session state key and is read-only.",
+                    f"The key '{key}' is a reserved session state key and is read-only.",  # ty: ignore[invalid-argument-type]
                 )
         return value
 

@@ -283,7 +283,7 @@ def test_move_datetime_to_new_weekday_and_time(
 ):
     """Test weekday and time changes. A weekday change will not cause the datetime to jump to a different week"""
     initial_datetime = datetime.strptime(initial_datetime_str, "%Y-%m-%d %H:%M:%S")
-    initial_datetime = initial_datetime.astimezone(pytz.UTC)
+    initial_datetime = initial_datetime.astimezone(pytz.UTC)  # ty: ignore[invalid-argument-type]
     new_datetime = _move_datetime_to_new_weekday_and_time(
         initial_datetime, new_weekday=new_weekday, new_hour=new_hour, new_minute=new_minute
     )
@@ -302,7 +302,13 @@ def test_create_schedule_message_success():
     start_date = timezone.now()
     end_date = timezone.now()
     response = create_schedule_message(
-        experiment_session, message, name="Test", start_date=start_date, end_date=end_date, is_recurring=True, **kwargs
+        experiment_session,  # ty: ignore[invalid-argument-type]
+        message,
+        name="Test",
+        start_date=start_date,
+        end_date=end_date,
+        is_recurring=True,
+        **kwargs,
     )
     assert response == "Success: scheduled message created"
 
@@ -334,7 +340,12 @@ def test_create_schedule_message_invalid_form():
     }
 
     response = create_schedule_message(
-        experiment_session, message, name="Test", start_date=None, is_recurring=True, **kwargs
+        experiment_session,  # ty: ignore[invalid-argument-type]
+        message,
+        name="Test",
+        start_date=None,  # ty: ignore[invalid-argument-type]
+        is_recurring=True,
+        **kwargs,  # ty: ignore[invalid-argument-type]
     )
     assert response == "Could not create scheduled message"
 
@@ -359,7 +370,12 @@ def test_create_schedule_message_experiment_does_not_exist():
 
     with mock.patch("django.db.transaction.atomic", side_effect=Experiment.DoesNotExist):
         response = create_schedule_message(
-            experiment_session, message, name="Test", start_date=None, is_recurring=True, **kwargs
+            experiment_session,  # ty: ignore[invalid-argument-type]
+            message,
+            name="Test",
+            start_date=None,  # ty: ignore[invalid-argument-type]
+            is_recurring=True,
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )
         assert response == "Could not create scheduled message"
 
@@ -564,7 +580,7 @@ def test_get_mcp_tool_instances(fetch_tools, team):
             "mcp_tools": [f"{server.id}:test-tool"],
         }
     )
-    tools = get_mcp_tool_instances(node, team)
+    tools = get_mcp_tool_instances(node, team)  # ty: ignore[invalid-argument-type]
     assert len(tools) == 1
 
 

@@ -239,7 +239,7 @@ class RecurringReminderTool(CustomBaseTool):
         repetitions: int | None = None,
     ):
         return create_schedule_message(
-            self.experiment_session,
+            self.experiment_session,  # ty: ignore[invalid-argument-type]
             message=message,
             name=schedule_name,
             start_date=datetime_due,
@@ -264,7 +264,11 @@ class OneOffReminderTool(CustomBaseTool):
         schedule_name: str,
     ):
         return create_schedule_message(
-            self.experiment_session, message=message, name=schedule_name, start_date=datetime_due, is_recurring=False
+            self.experiment_session,  # ty: ignore[invalid-argument-type]
+            message=message,
+            name=schedule_name,
+            start_date=datetime_due,
+            is_recurring=False,
         )
 
 

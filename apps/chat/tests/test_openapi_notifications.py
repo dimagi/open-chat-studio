@@ -12,7 +12,7 @@ from apps.utils.factories.custom_actions import CustomActionFactory
 def _test_tool_call_with_custom_action(spec_dict, call_args: dict, custom_action, path=None):
     """Helper function to test tool calls with custom action context for notifications."""
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    path = path or list(spec.paths)[0]
+    path = path or list(spec.paths)[0]  # ty: ignore[invalid-argument-type]
     function_def = openapi_spec_op_to_function_def(spec, path, "get")
     tool = function_def.build_tool(auth_service=anonymous_auth_service, custom_action=custom_action)
     return tool.run(call_args, tool_call_id="123")

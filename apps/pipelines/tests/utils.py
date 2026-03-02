@@ -24,7 +24,7 @@ def _make_edges(nodes) -> list[dict]:
     ]
 
 
-def _edges_from_strings(edge_strings: list[str], nodes: list[dict]) -> list[dict]:
+def _edges_from_strings(edge_strings: list[str | dict], nodes: list[dict]) -> list[dict]:
     """
     Convert a list of edge strings into a list of edge dictionaries.
 
@@ -285,13 +285,13 @@ def code_node(code: str | None = None, name: str | None = None):
     )
 
 
-def _with_node_id_and_name(name: str, default_name: str, params: dict):
+def _with_node_id_and_name(name: str | None, default_name: str, params: dict):
     node_id = _node_id(name, default_name)
     params["id"] = node_id
     params["params"]["name"] = name or node_id
     return params
 
 
-def _node_id(name: str, default_name: str | None = None):
+def _node_id(name: str | None, default_name: str | None = None):
     name = name or default_name or str(uuid4())
     return f"{name}-{str(uuid4())[-4:]}"

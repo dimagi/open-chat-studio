@@ -130,7 +130,7 @@ class PipelineGraph(pydantic.BaseModel):
         if self._check_for_cycles():
             raise PipelineBuildError("A cycle was detected")
 
-        state_graph = StateGraph(PipelineState)
+        state_graph = StateGraph(PipelineState)  # ty: ignore[invalid-argument-type]
 
         state_graph.set_entry_point(self.start_node.id)
         state_graph.set_finish_point(self.end_node.id)
