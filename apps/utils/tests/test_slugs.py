@@ -23,13 +23,13 @@ def test_next_slug_fail():
 
 def test_get_next_unique_slug():
     with patch("apps.utils.slug._instance_exists", side_effect=[True, True, False]) as exists:
-        slug = get_next_unique_slug(Mock(), "test abc", field_name="slug")
+        slug = get_next_unique_slug(Mock(), "test abc", field_name="slug")  # ty: ignore[invalid-argument-type]
     assert slug == "test-abc-3"
     assert exists.call_count == 3
 
 
 def test_get_next_unique_id():
     with patch("apps.utils.slug._instance_exists", side_effect=[True, True, False]) as exists:
-        hash_id = get_next_unique_id(Mock(), ["test abc", 1, 3], field_name="id", length=5)
+        hash_id = get_next_unique_id(Mock(), ["test abc", 1, 3], field_name="id", length=5)  # ty: ignore[invalid-argument-type]
     assert len(hash_id) == 5
     assert exists.call_count == 3

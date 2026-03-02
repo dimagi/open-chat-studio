@@ -24,7 +24,7 @@ class ColumnWithCustomHeader(tables.Column):
 
     def header(self):
         context = {"verbose_name": self.verbose_name, **self.template_context}
-        return get_template(self.template_path).render(context)
+        return get_template(self.template_path).render(context)  # ty: ignore[invalid-argument-type]
 
 
 class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, tables.TemplateColumn):

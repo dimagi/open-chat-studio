@@ -68,7 +68,7 @@ def create_notification(
     """
     links = links or {}
 
-    user_info = get_users_to_be_notified(team, permissions)
+    user_info = get_users_to_be_notified(team, permissions or [])
     users = list(user_info.keys())
 
     event_data = event_data or {}

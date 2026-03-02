@@ -20,7 +20,7 @@ def request_factory():
 def user_with_team(db):
     """Create a user with a default team."""
     user = UserFactory()
-    create_default_team_for_user(user, "User's Team")
+    create_default_team_for_user(user, "User's Team")  # ty: ignore[invalid-argument-type]
     return user
 
 

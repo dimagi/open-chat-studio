@@ -58,7 +58,7 @@ def _django_db_restore_serialized(request: pytest.FixtureRequest, django_db_keep
         with django_db_blocker.unblock():
             for connection in connections.all(initialized_only=True):
                 if hasattr(connection, "_test_serialized_contents"):
-                    connection.creation.deserialize_db_from_string(connection._test_serialized_contents)
+                    connection.creation.deserialize_db_from_string(connection._test_serialized_contents)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.fixture(autouse=True, scope="session")

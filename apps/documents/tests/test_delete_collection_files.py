@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from apps.documents.models import CollectionFile
+from apps.documents.models import Collection, CollectionFile
 from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File
 from apps.utils.factories.documents import CollectionFactory
@@ -15,7 +15,7 @@ class TestBulkDeleteCollectionFiles:
 
     def test_delete_files_not_used_elsewhere(self, team_with_users):
         """Test deleting files that are not used in other collections."""
-        collection = CollectionFactory(team=team_with_users, is_index=False)
+        collection: Collection = CollectionFactory(team=team_with_users, is_index=False)  # ty: ignore[invalid-assignment]
         file1 = FileFactory(team=team_with_users)
         file2 = FileFactory(team=team_with_users)
 
@@ -33,7 +33,7 @@ class TestBulkDeleteCollectionFiles:
 
     def test_delete_files_used_elsewhere(self, team_with_users):
         """Test deleting files that are used in other collections."""
-        collection1 = CollectionFactory(team=team_with_users, is_index=True)
+        collection1: Collection = CollectionFactory(team=team_with_users, is_index=True)  # ty: ignore[invalid-assignment]
         file1 = FileFactory(team=team_with_users)
         file2 = FileFactory(team=team_with_users)
 
@@ -63,7 +63,7 @@ class TestBulkDeleteCollectionFiles:
 
     def test_delete_files_not_used_elsewhere_with_versions(self, team_with_users):
         """Test deleting files that are not used in other collections."""
-        collection = CollectionFactory(team=team_with_users, is_index=False)
+        collection: Collection = CollectionFactory(team=team_with_users, is_index=False)  # ty: ignore[invalid-assignment]
         file1 = FileFactory(team=team_with_users)
         file2 = FileFactory(team=team_with_users)
 
@@ -86,7 +86,7 @@ class TestBulkDeleteCollectionFiles:
             assert file1.is_archived
 
     def test_delete_files_full(self, team_with_users):
-        collection = CollectionFactory(team=team_with_users, is_index=False)
+        collection: Collection = CollectionFactory(team=team_with_users, is_index=False)  # ty: ignore[invalid-assignment]
         file1 = FileFactory(team=team_with_users)
 
         collection.files.add(file1)

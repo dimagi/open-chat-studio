@@ -43,7 +43,7 @@ def get_default_team_from_request(request: HttpRequest) -> Team:
             # fall back to default behavior
             del request.session["team"]
             pass
-    return get_default_team_for_user(request.user)
+    return get_default_team_for_user(request.user)  # ty: ignore[invalid-argument-type]
 
 
 def get_default_team_for_user(user: CustomUser):
@@ -65,7 +65,7 @@ def get_team_membership_for_request(request: HttpRequest):
     if request.user.is_authenticated and request.team:
         membership = Membership.objects.filter(team=request.team, user=request.user).first()
         if not membership and request.user.is_superuser and has_temporary_superuser_access(request, request.team.slug):
-            membership = SuperuserMembership(request.user, request.team)
+            membership = SuperuserMembership(request.user, request.team)  # ty: ignore[invalid-argument-type]
         return membership
 
 

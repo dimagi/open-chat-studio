@@ -367,7 +367,7 @@ def test_remove_files_from_tool(delete_file, delete_file_from_openai):
     file2 = FileFactory(external_id="file2")
     resource.files.add(*[file1.id, file2.id])
 
-    remove_files_from_tool(resource, files=[file1, file2])
+    remove_files_from_tool(resource, files=[file1, file2])  # ty: ignore[invalid-argument-type]
     delete_file_from_openai.assert_called_once()
     assert delete_file_from_openai.mock_calls[0].args[1].external_id == "file2"
     delete_file.assert_called_once_with(file_id="file1")

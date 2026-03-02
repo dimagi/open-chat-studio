@@ -133,7 +133,7 @@ class BannerServiceTests(TestCase):
 
     def test_get_active_banners_with_team_that_has_flag(self):
         """Test that banners with feature flags show for teams that have the flag enabled."""
-        result = BannerService.get_active_banners([], "global", self.team_with_flag, None)
+        result = BannerService.get_active_banners([], "global", self.team_with_flag, None)  # ty: ignore[invalid-argument-type]
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids
@@ -141,7 +141,7 @@ class BannerServiceTests(TestCase):
 
     def test_get_active_banners_with_team_without_flag(self):
         """Test that banners with feature flags don't show for teams without the flag."""
-        result = BannerService.get_active_banners([], "global", self.team_without_flag, None)
+        result = BannerService.get_active_banners([], "global", self.team_without_flag, None)  # ty: ignore[invalid-argument-type]
         banner_ids = [banner.id for banner in result]
 
         assert self.active_global_banner.id in banner_ids

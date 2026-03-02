@@ -268,7 +268,7 @@ class TestExportParticipantDataToResponse:
 
         # Verify header
         expected_headers = ["identifier", "channel", "name"]
-        assert list(csv_reader.fieldnames) == expected_headers
+        assert list(csv_reader.fieldnames) == expected_headers  # ty: ignore[invalid-argument-type]
 
         # Verify data (ordered by channel, identifier)
         assert rows[0]["identifier"] == "user2@example.com"  # telegram comes before web
@@ -295,7 +295,7 @@ class TestExportParticipantDataToResponse:
 
         # Verify headers include data fields
         expected_headers = ["identifier", "channel", "name", "data.age", "data.city", "data.name"]
-        assert set(csv_reader.fieldnames) == set(expected_headers)
+        assert set(csv_reader.fieldnames) == set(expected_headers)  # ty: ignore[invalid-argument-type]
 
         # Verify data content
         web_row = next(row for row in rows if row["channel"] == "web")
@@ -351,7 +351,7 @@ class TestExportParticipantDataToResponse:
         rows = list(csv_reader)
 
         assert len(rows) == 0
-        assert list(csv_reader.fieldnames) == ["identifier", "channel", "name"]
+        assert list(csv_reader.fieldnames) == ["identifier", "channel", "name"]  # ty: ignore[invalid-argument-type]
 
     def test_export_complex_data_types(self, team_with_users, experiment, participants):
         """Test exporting participants with complex data types (dicts, lists)"""
