@@ -205,3 +205,80 @@ def tool_error_notification(team, tool_name: str, error_message: str, session=No
         permissions=None,
         links=links,
     )
+
+
+@silence_exceptions(logger, log_message="Failed to create deprecated model notification")
+def deprecated_model_notification(
+    team,
+    model_name: str,
+    replacement_model_name: str | None,
+    affected_chatbots: list[str],
+    affected_pipelines: list[str],
+    affected_assistants: list[str],
+) -> None:
+    """Notify a team that a model they use has been deprecated."""
+    resource_parts = []
+    if affected_chatbots:
+        resource_parts.append(f"{len(affected_chatbots)} chatbot(s)")
+    if affected_pipelines:
+        resource_parts.append(f"{len(affected_pipelines)} pipeline(s)")
+    if affected_assistants:
+        resource_parts.append(f"{len(affected_assistants)} assistant(s)")
+    resources_text = ", ".join(resource_parts) if resource_parts else "some resources"
+
+    message = (
+        f"The model '{model_name}' has been deprecated and will be removed soon. {resources_text} are still using it."
+    )
+    if replacement_model_name:
+        message += f" Please update to '{replacement_model_name}' before it is removed."
+
+    create_notification(
+        title=f"LLM Model '{model_name}' Deprecated",
+        message=message,
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="llm-model-deprecated",
+        event_data={"model_name": model_name},
+        permissions=["service_providers.change_llmprovidermodel"],
+        links={},
+    )
+
+
+@silence_exceptions(logger, log_message="Failed to create deleted model notification")
+def deleted_model_notification(
+    team,
+    model_name: str,
+    replacement_model_name: str | None,
+    affected_chatbots: list[str],
+    affected_pipelines: list[str],
+    affected_assistants: list[str],
+) -> None:
+    """Notify a team that a model has been removed from the platform."""
+    resource_parts = []
+    if affected_chatbots:
+        resource_parts.append(f"{len(affected_chatbots)} chatbot(s)")
+    if affected_pipelines:
+        resource_parts.append(f"{len(affected_pipelines)} pipeline(s)")
+    if affected_assistants:
+        resource_parts.append(f"{len(affected_assistants)} assistant(s)")
+    resources_text = ", ".join(resource_parts) if resource_parts else "some resources"
+
+    if replacement_model_name:
+        action_text = f"References have been automatically updated to use '{replacement_model_name}'."
+    else:
+        action_text = "References have been cleared and will need to be updated manually."
+
+    create_notification(
+        title=f"LLM Model '{model_name}' Removed",
+        message=(
+            f"The model '{model_name}' has been removed from the platform. "
+            f"{resources_text} were affected. "
+            f"{action_text}"
+        ),
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="llm-model-deleted",
+        event_data={"model_name": model_name},
+        permissions=["service_providers.change_llmprovidermodel"],
+        links={},
+    )
