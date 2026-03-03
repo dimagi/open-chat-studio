@@ -21,12 +21,12 @@ from apps.utils.langchain import build_fake_llm_service
 
 @pytest.fixture()
 def team_with_users():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.fixture()
 def experiment(team_with_users, db):
-    experiment = ChatbotFactory()
+    experiment = ChatbotFactory.create()
     template_node = render_template_node("I heard: {{input}}")
     create_pipeline_model([start_node(), template_node, end_node()], pipeline=experiment.pipeline)
     experiment.pipeline.save()
@@ -36,12 +36,12 @@ def experiment(team_with_users, db):
 @pytest.fixture()
 def evaluation_message(team_with_users, db):
     """Create an evaluation message with test data"""
-    message = EvaluationMessageFactory(
+    message = EvaluationMessageFactory.create(
         input={"content": "What is the weather like?", "role": "human"},
         output={"content": "I cannot check the weather.", "role": "ai"},
         context={"history": []},
     )
-    EvaluationDatasetFactory(team=team_with_users, messages=[message])
+    EvaluationDatasetFactory.create(team=team_with_users, messages=[message])
     return message
 
 
@@ -50,10 +50,10 @@ def evaluation_run(evaluation_message, team_with_users, db):
     """Create an evaluation run with config and evaluator"""
     # Get the dataset that contains the message
     dataset = evaluation_message.evaluationdataset_set.first()
-    config = EvaluationConfigFactory(team=team_with_users, dataset=dataset)
-    evaluator = EvaluatorFactory(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset)
+    evaluator = EvaluatorFactory.create(team=team_with_users)
     config.evaluators.add(evaluator)
-    return EvaluationRunFactory(config=config, team=team_with_users), evaluator
+    return EvaluationRunFactory.create(config=config, team=team_with_users), evaluator
 
 
 @pytest.mark.django_db()
@@ -82,7 +82,7 @@ def test_run_bot_generation(experiment, evaluation_message, team_with_users):
 @pytest.mark.django_db()
 def test_run_bot_generation_with_participant_data_session_state(evaluation_message, team_with_users):
     """Test that _run_bot_generation calls the bot correctly"""
-    experiment = ChatbotFactory()
+    experiment = ChatbotFactory.create()
     template_node = render_template_node("{{participant_data}}:{{session_state}}")
     create_pipeline_model([start_node(), template_node, end_node()], pipeline=experiment.pipeline)
     experiment.pipeline.save()

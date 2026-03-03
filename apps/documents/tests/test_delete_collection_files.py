@@ -15,9 +15,9 @@ class TestBulkDeleteCollectionFiles:
 
     def test_delete_files_not_used_elsewhere(self, team_with_users):
         """Test deleting files that are not used in other collections."""
-        collection = CollectionFactory(team=team_with_users, is_index=False)
-        file1 = FileFactory(team=team_with_users)
-        file2 = FileFactory(team=team_with_users)
+        collection = CollectionFactory.create(team=team_with_users, is_index=False)
+        file1 = FileFactory.create(team=team_with_users)
+        file2 = FileFactory.create(team=team_with_users)
 
         collection.files.add(file1, file2)
         collection_files = list(CollectionFile.objects.filter(collection=collection))
@@ -33,9 +33,9 @@ class TestBulkDeleteCollectionFiles:
 
     def test_delete_files_used_elsewhere(self, team_with_users):
         """Test deleting files that are used in other collections."""
-        collection1 = CollectionFactory(team=team_with_users, is_index=True)
-        file1 = FileFactory(team=team_with_users)
-        file2 = FileFactory(team=team_with_users)
+        collection1 = CollectionFactory.create(team=team_with_users, is_index=True)
+        file1 = FileFactory.create(team=team_with_users)
+        file2 = FileFactory.create(team=team_with_users)
 
         collection1.files.add(file1, file2)
 
@@ -63,9 +63,9 @@ class TestBulkDeleteCollectionFiles:
 
     def test_delete_files_not_used_elsewhere_with_versions(self, team_with_users):
         """Test deleting files that are not used in other collections."""
-        collection = CollectionFactory(team=team_with_users, is_index=False)
-        file1 = FileFactory(team=team_with_users)
-        file2 = FileFactory(team=team_with_users)
+        collection = CollectionFactory.create(team=team_with_users, is_index=False)
+        file1 = FileFactory.create(team=team_with_users)
+        file2 = FileFactory.create(team=team_with_users)
 
         collection.files.add(file1, file2)
         collection_files = list(CollectionFile.objects.filter(collection=collection))
@@ -86,8 +86,8 @@ class TestBulkDeleteCollectionFiles:
             assert file1.is_archived
 
     def test_delete_files_full(self, team_with_users):
-        collection = CollectionFactory(team=team_with_users, is_index=False)
-        file1 = FileFactory(team=team_with_users)
+        collection = CollectionFactory.create(team=team_with_users, is_index=False)
+        file1 = FileFactory.create(team=team_with_users)
 
         collection.files.add(file1)
         collection_files = list(CollectionFile.objects.filter(collection=collection))

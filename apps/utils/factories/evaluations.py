@@ -41,14 +41,14 @@ class EvaluationMessageFactory(DjangoModelFactory):
             from apps.chat.models import ChatMessageType
             from apps.utils.factories.experiment import ChatFactory
 
-            chat = ChatFactory()
+            chat = ChatFactory.create()
             if self.input:
-                input_chat_message = ChatMessageFactory(
+                input_chat_message = ChatMessageFactory.create(
                     message_type=ChatMessageType.HUMAN, content=self.input["content"], chat=chat
                 )
                 self.input_chat_message = input_chat_message
             if self.output:
-                output_chat_message = ChatMessageFactory(
+                output_chat_message = ChatMessageFactory.create(
                     message_type=ChatMessageType.AI, content=self.output["content"], chat=chat
                 )
                 self.expected_output_chat_message = output_chat_message
@@ -71,7 +71,7 @@ class EvaluationDatasetFactory(DjangoModelFactory):
             for message in extracted:
                 self.messages.add(message)
         else:
-            self.messages.add(EvaluationMessageFactory())
+            self.messages.add(EvaluationMessageFactory.create())
 
 
 class EvaluationConfigFactory(DjangoModelFactory):
@@ -91,7 +91,7 @@ class EvaluationConfigFactory(DjangoModelFactory):
             for evaluator in extracted:
                 self.evaluators.add(evaluator)
         else:
-            self.evaluators.add(EvaluatorFactory())
+            self.evaluators.add(EvaluatorFactory.create())
 
 
 class EvaluationRunFactory(DjangoModelFactory):

@@ -89,8 +89,8 @@ class TestCodeNodeHttpWithAuth:
     @patch("apps.utils.restricted_http.validate_user_input_url")
     def test_auth_provider_integration(self, mock_validate, httpx_mock):
         """End-to-end test: CodeNode uses auth provider for authenticated request."""
-        team = TeamFactory()
-        AuthProviderFactory(
+        team = TeamFactory.create()
+        AuthProviderFactory.create(
             name="My API Key",
             type="api_key",
             config={"key": "X-Api-Key", "value": "secret123"},
@@ -114,7 +114,7 @@ def main(input, **kwargs):
     @patch("apps.utils.restricted_http.validate_user_input_url")
     def test_auth_provider_not_found_error(self, mock_validate):
         """AuthProvider not found surfaces as a CodeNodeRunError."""
-        team = TeamFactory()
+        team = TeamFactory.create()
         session = MagicMock()
         session.team = team
 

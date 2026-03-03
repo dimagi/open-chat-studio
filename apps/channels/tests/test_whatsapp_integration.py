@@ -22,7 +22,7 @@ from .message_examples import turnio_messages, twilio_messages
 
 @pytest.fixture()
 def turnio_whatsapp_channel(turn_io_provider):
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory.create(
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=turn_io_provider,
         experiment__team=turn_io_provider.team,
@@ -32,7 +32,7 @@ def turnio_whatsapp_channel(turn_io_provider):
 
 @pytest.fixture()
 def _twilio_whatsapp_channel(twilio_provider):
-    ExperimentChannelFactory(
+    ExperimentChannelFactory.create(
         platform=ChannelPlatform.WHATSAPP,
         messaging_provider=twilio_provider,
         experiment__team=twilio_provider.team,
@@ -84,7 +84,7 @@ class TestTwilio:
             patch("apps.service_providers.messaging_service.TwilioService.s3_client"),
             patch("apps.service_providers.messaging_service.TwilioService.client"),
         ):
-            experiment = ExperimentFactory(conversational_consent_enabled=True)
+            experiment = ExperimentFactory.create(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
             bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
             get_voice_transcript_mock.return_value = "Hi"
@@ -102,13 +102,13 @@ class TestTwilio:
         """
         Test that the bot's response is sent along with a message for each supported attachment
         """
-        channel = ExperimentChannelFactory(
+        channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider, extra_data={"number": "123"}
         )
-        session = ExperimentSessionFactory(experiment_channel=channel, experiment=experiment)
+        session = ExperimentSessionFactory.create(experiment_channel=channel, experiment=experiment)
         channel = WhatsappChannel.from_experiment_session(session)
-        file1 = FileFactory(name="f1", content_type="image/jpeg")
-        file2 = FileFactory(name="f2", content_type="image/jpeg")
+        file1 = FileFactory.create(name="f1", content_type="image/jpeg")
+        file2 = FileFactory.create(name="f2", content_type="image/jpeg")
 
         channel.send_message_to_user("Hi there", [file1, file2])
         message_call = twilio_client_mock.messages.create.mock_calls[0]
@@ -165,7 +165,7 @@ class TestTurnio:
     ):
         """Test that the turnio integration can use the WhatsappChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
-        experiment = ExperimentFactory(conversational_consent_enabled=True)
+        experiment = ExperimentFactory.create(conversational_consent_enabled=True)
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
         get_voice_transcript_mock.return_value = "Hi"
@@ -192,8 +192,10 @@ class TestTurnio:
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
     @patch("apps.channels.tasks.handle_turn_message")
     def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):
-        messaging_provider = MessagingProviderFactory(type=MessagingProviderType.turnio)
-        channel = ExperimentChannelFactory(platform=ChannelPlatform.WHATSAPP, messaging_provider=messaging_provider)
+        messaging_provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio)
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP, messaging_provider=messaging_provider
+        )
         url = reverse("channels:new_turn_message", kwargs={"experiment_id": channel.experiment.public_id})
         response = client.post(url, data=message, content_type="application/json")
         assert response.status_code == 200
@@ -202,7 +204,7 @@ class TestTurnio:
     @pytest.mark.django_db()
     @patch("apps.service_providers.messaging_service.TurnIOService.client")
     def test_attachment_links_attached_to_message(self, turnio_client, turnio_whatsapp_channel, experiment):
-        session = ExperimentSessionFactory(experiment_channel=turnio_whatsapp_channel, experiment=experiment)
+        session = ExperimentSessionFactory.create(experiment_channel=turnio_whatsapp_channel, experiment=experiment)
         channel = WhatsappChannel.from_experiment_session(session)
         files = FileFactory.create_batch(2)
         channel.send_message_to_user("Hi there", files=files)

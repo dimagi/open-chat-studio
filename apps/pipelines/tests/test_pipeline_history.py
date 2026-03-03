@@ -22,22 +22,22 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.fixture()
 def provider_model():
-    return LlmProviderModelFactory()
+    return LlmProviderModelFactory.create()
 
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @django_db_with_data()

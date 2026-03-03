@@ -44,15 +44,15 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
     ],
 )
 def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_configs, filtered_indices):
-    experiment = ExperimentFactory()
+    experiment = ExperimentFactory.create()
     team = experiment.team
     sessions = []
 
     for config in session_configs:
-        session = ExperimentSessionFactory(
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             team=team,
-            experiment_channel=ExperimentChannelFactory(),
+            experiment_channel=ExperimentChannelFactory.create(),
             participant__identifier=config["participant"],
         )
         ChatMessage.objects.create(

@@ -35,8 +35,8 @@ from apps.utils.prompt import get_root_var, validate_prompt_variables
 @pytest.mark.django_db()
 def test_create_experiment_creates_first_version(client, team_with_users):
     user = team_with_users.members.first()
-    consent_form = ConsentFormFactory(team=team_with_users)
-    LlmProviderFactory(team=team_with_users)
+    consent_form = ConsentFormFactory.create(team=team_with_users)
+    LlmProviderFactory.create(team=team_with_users)
     client.force_login(user)
 
     post_data = {
@@ -45,8 +45,8 @@ def test_create_experiment_creates_first_version(client, team_with_users):
         "prompt_text": "You are a helpful assistant.",
         "consent_form": consent_form.id,
         "temperature": 0.7,
-        "llm_provider": LlmProviderFactory(team=team_with_users).id,
-        "llm_provider_model": LlmProviderModelFactory(team=team_with_users).id,
+        "llm_provider": LlmProviderFactory.create(team=team_with_users).id,
+        "llm_provider_model": LlmProviderModelFactory.create(team=team_with_users).id,
         "max_token_limit": 100,
         "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
     }
@@ -118,7 +118,7 @@ def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
 def test_new_participant_created_on_session_start(_trigger_mock, is_user):
     """For each new experiment session, a participant should be created and linked to the session"""
     identifier = "someone@example.com"
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     user = None
     if is_user:
         user = experiment.team.members.first()
@@ -142,7 +142,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created
     """
-    experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment1 = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     team = experiment1.team
     identifier = "someone@example.com"
     user = None
@@ -161,7 +161,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     assert session.participant.identifier == identifier
 
     # user starts a second session in the same team
-    experiment2 = ExperimentFactory(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
 
     session = WebChannel.start_new_session(
         experiment2,
@@ -179,7 +179,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 @mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     """A new participant should be created for each team when a user uses the same identifier"""
-    experiment1 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment1 = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     team = experiment1.team
     identifier = "someone@example.com"
     user = None
@@ -199,11 +199,11 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
 
     # user starts a second session in another team
     if is_user:
-        new_team = TeamWithUsersFactory(member__user=user)
+        new_team = TeamWithUsersFactory.create(member__user=user)
     else:
-        new_team = TeamWithUsersFactory()
+        new_team = TeamWithUsersFactory.create()
 
-    experiment2 = ExperimentFactory(team=new_team)
+    experiment2 = ExperimentFactory.create(team=new_team)
 
     session = WebChannel.start_new_session(
         experiment2,
@@ -225,7 +225,7 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
     """When a non platform user starts a session, a participant without a user is created. When they then sign up
     and start another session, their participant user should be populated
     """
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     assert Participant.objects.filter(team=experiment.team).count() == 0
     email = "test@user.com"
     post_data = {
@@ -245,7 +245,7 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
     assert participant.user is None
 
     # Let's create the user by creating another experiment
-    user = UserFactory(email=email)
+    user = UserFactory.create(email=email)
     add_user_to_team(experiment.team, user=user)
     # Now the platform user creates a session
     client.login(username=user.username, password="password")
@@ -262,7 +262,7 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
     not contain the `identifier` field, so we pass it as initial data to the form. This test simulates a logged
     in user submitting the consent form
     """
-    experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=True)
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create(), consent_form__capture_identifier=True)
     assert Participant.objects.filter(team=experiment.team).count() == 0
 
     user = experiment.team.members.first()
@@ -282,9 +282,9 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 @mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_timezone_saved_in_participant_data(_trigger_mock):
     """A participant's timezone data should be saved in all ParticipantData records"""
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     team = experiment.team
-    experiment2 = ExperimentFactory(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
     identifier = "someone@example.com"
     participant = Participant.objects.create(identifier=identifier, team=team, platform="web")
     part_data1 = ParticipantData.objects.create(team=team, participant=participant, experiment=experiment)
@@ -310,7 +310,9 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     task = mock.Mock()
     task.task_id = 1
     delay_mock.return_value = task
-    session = ExperimentSessionFactory(experiment=experiment, participant=ParticipantFactory(user=experiment.owner))
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, participant=ParticipantFactory.create(user=experiment.owner)
+    )
     url_kwargs = {
         "team_slug": experiment.team.slug,
         "experiment_id": experiment.public_id,
@@ -340,7 +342,9 @@ class TestPublicSessions:
     def test_start_session_public_with_emtpy_identifier(self, _trigger_mock, is_user, client):
         """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
         the case where it's an external user, use a UUID as the identifier"""
-        experiment = ExperimentFactory(team=TeamWithUsersFactory(), consent_form__capture_identifier=False)
+        experiment = ExperimentFactory.create(
+            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=False
+        )
         assert Participant.objects.filter(team=experiment.team).count() == 0
 
         user = None
@@ -371,8 +375,8 @@ class TestPublicSessions:
     ):
         verify_user.return_value = HttpResponse()
         prompt = "This is data: {participant_data}"
-        experiment = ExperimentFactory(
-            team=TeamWithUsersFactory(), consent_form__capture_identifier=capture_identifier, prompt_text=prompt
+        experiment = ExperimentFactory.create(
+            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier, prompt_text=prompt
         )
         post_data = {
             "identifier": "someone@gmail.com",
@@ -393,7 +397,7 @@ class TestPublicSessions:
 
     @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     def test_do_not_verify_authenticated_users(self, record_consent_and_redirect_mock, request):
-        experiment_session = ExperimentSessionFactory()
+        experiment_session = ExperimentSessionFactory.create()
         request.user = experiment_session.experiment.owner
 
         _verify_user_or_start_session("something", request, experiment_session.experiment, experiment_session)
@@ -424,7 +428,7 @@ class TestPublicSessions:
         request_user = mock.Mock()
         request_user.is_authenticated = False
         request.user = request_user
-        experiment_session = ExperimentSessionFactory()
+        experiment_session = ExperimentSessionFactory.create()
         participant = experiment_session.participant
         get_chat_session_access_cookie_data.return_value = {
             "participant_id": participant.id if participant_match else participant.id + 1
@@ -465,9 +469,9 @@ class TestPublicSessions:
         request_user.is_authenticated = False
         request.user = request_user
 
-        pipeline = PipelineFactory()
-        NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": prompt})
-        session = ExperimentSessionFactory(experiment__pipeline=pipeline)
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": prompt})
+        session = ExperimentSessionFactory.create(experiment__pipeline=pipeline)
         assert session.requires_participant_data() == participant_data_injected
 
         _verify_user_or_start_session(
@@ -490,7 +494,7 @@ class TestVerifyPublicChatToken:
     @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     def test_valid_token_redirects_to_chat(self, record_consent_and_redirect, client):
         record_consent_and_redirect.return_value = HttpResponse()
-        session = ExperimentSessionFactory(experiment__pre_survey=None)
+        session = ExperimentSessionFactory.create(experiment__pre_survey=None)
         experiment = session.experiment
         token = jwt.encode(
             {

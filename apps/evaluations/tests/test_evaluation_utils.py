@@ -82,24 +82,24 @@ def test_parse_history_functionality():
 def test_make_evaluation_messages_from_sessions():
     """Test the make_evaluation_messages_from_sessions function with various message configurations."""
     # Setup
-    team = TeamFactory()
-    session = ExperimentSessionFactory(team=team)
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
     chat = session.chat
 
     # 1. Human message + AI message pair
-    human_msg_1 = ChatMessageFactory(
+    human_msg_1 = ChatMessageFactory.create(
         chat=chat,
         message_type=ChatMessageType.HUMAN,
         content="First human message",
     )
-    ai_msg_1 = ChatMessageFactory(
+    ai_msg_1 = ChatMessageFactory.create(
         chat=chat,
         message_type=ChatMessageType.AI,
         content="First AI response",
     )
 
     # 2. Human message without AI message (orphaned human)
-    human_msg_2 = ChatMessageFactory(
+    human_msg_2 = ChatMessageFactory.create(
         chat=chat,
         message_type=ChatMessageType.HUMAN,
         content="Second human message without response",
@@ -107,13 +107,13 @@ def test_make_evaluation_messages_from_sessions():
 
     # 3. Another human + AI message pair (so there are two human messages next to each other)
     # This human message will have a trace with participant and session data
-    human_msg_3 = ChatMessageFactory(
+    human_msg_3 = ChatMessageFactory.create(
         chat=chat,
         message_type=ChatMessageType.HUMAN,
         content="Third human message",
     )
     # Let's add a trace with participant and session data
-    TraceFactory(
+    TraceFactory.create(
         team=team,
         experiment=session.experiment,
         session=session,
@@ -124,14 +124,14 @@ def test_make_evaluation_messages_from_sessions():
         session_state={"current_step": 3, "total_interactions": 5, "session_score": 85},
     )
 
-    ai_msg_3 = ChatMessageFactory(
+    ai_msg_3 = ChatMessageFactory.create(
         chat=chat,
         message_type=ChatMessageType.AI,
         content="Third AI response",
     )
 
     # 4. AI message without human message (orphaned AI)
-    ai_msg_4 = ChatMessageFactory(
+    ai_msg_4 = ChatMessageFactory.create(
         chat=chat,
         message_type=ChatMessageType.AI,
         content="Fourth AI message without human input",

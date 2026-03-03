@@ -84,27 +84,27 @@ class StructuredOutputValidationErrorLlmEcho(FakeLlmEcho):
 
 @pytest.fixture()
 def provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def provider_model():
-    return LlmProviderModelFactory()
+    return LlmProviderModelFactory.create()
 
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.fixture()
 def source_material():
-    return SourceMaterialFactory()
+    return SourceMaterialFactory.create()
 
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 class TestEmailPipeline:
@@ -127,7 +127,7 @@ class TestEmailPipeline:
 
         state = PipelineState(
             messages=["Ice is not a liquid. When it is melted it turns into water."],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
         )
         create_runnable(pipeline, nodes).invoke(state)
         assert len(mail.outbox) == 1
@@ -786,7 +786,7 @@ class TestDataExtraction:
 
     @django_db_with_data()
     def test_extract_structured_data_no_chunking(self, provider, provider_model, pipeline):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         with self.extract_structured_data_pipeline(provider, provider_model, pipeline) as graph:
             state = PipelineState(
@@ -797,7 +797,7 @@ class TestDataExtraction:
 
     @django_db_with_data()
     def test_extract_structured_data_with_chunking(self, provider, provider_model, pipeline):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         llm = FakeLlmSimpleTokenCount(
             responses=[
                 # the first chunk sees nothing of value
@@ -860,7 +860,7 @@ class TestDataExtraction:
         participant to make sure it creates data. Then we run it again a few times to test that it updates the data
         correctly.
         """
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         # New data should be created
         data = self._run_data_extract_and_update_pipeline(
@@ -969,13 +969,13 @@ class TestAssistantNode:
         )
         get_assistant_runnable.return_value = runnable_mock
 
-        pipeline = PipelineFactory()
-        assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
+        pipeline = PipelineFactory.create()
+        assistant = OpenAiAssistantFactory.create(tools=[] if tools_enabled else ["some-tool"])
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
         runnable = create_runnable(pipeline, nodes)
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
             attachments=[],
         )
         output_state = runnable.invoke(state)
@@ -989,8 +989,8 @@ class TestAssistantNode:
         runnable_mock = self.assistant_node_runnable_mock(output="Hi there human")
         get_assistant_runnable.return_value = runnable_mock
 
-        pipeline = PipelineFactory()
-        assistant = OpenAiAssistantFactory()
+        pipeline = PipelineFactory.create()
+        assistant = OpenAiAssistantFactory.create()
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
         runnable = create_runnable(pipeline, nodes)
         attachments = [
@@ -1008,7 +1008,7 @@ class TestAssistantNode:
         ]
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
             attachments=[att.model_dump() for att in attachments],
         )
         output_state = runnable.invoke(state)
@@ -1026,12 +1026,12 @@ class TestAssistantNode:
         )
         get_assistant_runnable.return_value = runnable_mock
 
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         nodes = [start_node(), assistant_node(str(999)), end_node()]
         runnable = create_runnable(pipeline, nodes)
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
             attachments=[],
         )
         with pytest.raises(PipelineNodeBuildError):
@@ -1049,14 +1049,14 @@ class TestAssistantNode:
         assistant_chat_mock.invoke = lambda *args, **kwargs: ChainOutput(
             output="How are you doing?", prompt_tokens=30, completion_tokens=20
         )
-        assistant = OpenAiAssistantFactory()
+        assistant = OpenAiAssistantFactory.create()
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
 
         with patch("apps.pipelines.nodes.nodes.AssistantChat", return_value=assistant_chat_mock):
             runnable = create_runnable(pipeline, nodes)
             state = PipelineState(
                 messages=["I am just a human I have no feelings"],
-                experiment_session=ExperimentSessionFactory(),
+                experiment_session=ExperimentSessionFactory.create(),
                 attachments=[],
             )
             output_state = runnable.invoke(state)

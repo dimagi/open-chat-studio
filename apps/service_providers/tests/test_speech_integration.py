@@ -79,8 +79,8 @@ class TestOpenAISpeechIntegration:
 
     def test_synthesize_voice_with_real_api(self, openai_credentials, team_with_users):
         """Test synthesis with real OpenAI API"""
-        provider = VoiceProviderFactory(team=team_with_users, type="openai")
-        voice = SyntheticVoiceFactory(
+        provider = VoiceProviderFactory.create(team=team_with_users, type="openai")
+        voice = SyntheticVoiceFactory.create(
             service="OpenAI",
             name="alloy",  # Valid OpenAI voice
             voice_provider=provider,
@@ -122,8 +122,8 @@ class TestAWSSpeechIntegration:
 
     def test_synthesize_voice_with_real_api(self, aws_credentials, team_with_users):
         """Test synthesis with real AWS Polly API"""
-        provider = VoiceProviderFactory(team=team_with_users, type="aws")
-        voice = SyntheticVoiceFactory(
+        provider = VoiceProviderFactory.create(team=team_with_users, type="aws")
+        voice = SyntheticVoiceFactory.create(
             service="AWS",
             name="Joanna",  # Valid AWS Polly voice
             neural=True,
@@ -151,8 +151,8 @@ class TestAzureSpeechIntegration:
 
     def test_synthesize_voice_with_real_api(self, azure_credentials, team_with_users):
         """Test synthesis with real Azure API"""
-        provider = VoiceProviderFactory(team=team_with_users, type="azure")
-        voice = SyntheticVoiceFactory(
+        provider = VoiceProviderFactory.create(team=team_with_users, type="azure")
+        voice = SyntheticVoiceFactory.create(
             service="Azure",
             name="JennyNeural",  # Valid Azure voice
             language_code="en-US",

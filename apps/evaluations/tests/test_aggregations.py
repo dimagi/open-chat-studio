@@ -62,11 +62,11 @@ class TestAggregators:
 @pytest.mark.django_db()
 class TestComputeAggregatesForRun:
     def test_computes_aggregates_from_results(self):
-        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
-        evaluator = EvaluatorFactory(team=run.team)
+        run = EvaluationRunFactory.create(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory.create(team=run.team)
 
         for score in [0.8, 0.9, 0.7]:
-            EvaluationResultFactory(
+            EvaluationResultFactory.create(
                 run=run,
                 evaluator=evaluator,
                 team=run.team,
@@ -84,11 +84,11 @@ class TestComputeAggregatesForRun:
         assert agg.aggregates["label"]["mode"] == "good"
 
     def test_skips_results_with_errors(self):
-        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
-        evaluator = EvaluatorFactory(team=run.team)
+        run = EvaluationRunFactory.create(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory.create(team=run.team)
 
-        EvaluationResultFactory(run=run, evaluator=evaluator, team=run.team, output={"result": {"score": 0.5}})
-        EvaluationResultFactory(run=run, evaluator=evaluator, team=run.team, output={"error": "failed"})
+        EvaluationResultFactory.create(run=run, evaluator=evaluator, team=run.team, output={"result": {"score": 0.5}})
+        EvaluationResultFactory.create(run=run, evaluator=evaluator, team=run.team, output={"error": "failed"})
 
         aggregates = compute_aggregates_for_run(run)
         assert aggregates[0].aggregates["score"]["count"] == 1
@@ -97,8 +97,8 @@ class TestComputeAggregatesForRun:
 @pytest.mark.django_db()
 class TestBuildTrendData:
     def test_builds_trend_from_runs(self):
-        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
-        evaluator = EvaluatorFactory(team=run.team, name="Quality Check")
+        run = EvaluationRunFactory.create(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory.create(team=run.team, name="Quality Check")
 
         run.aggregates.create(
             evaluator=evaluator,
@@ -120,8 +120,8 @@ class TestBuildTrendData:
         assert build_trend_data([]) == {}
 
     def test_respects_use_in_aggregations_setting(self):
-        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
-        evaluator = EvaluatorFactory(
+        run = EvaluationRunFactory.create(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory.create(
             team=run.team,
             name="Test Evaluator",
             params={
@@ -151,13 +151,13 @@ class TestBuildTrendData:
         Previously this caused a TypeError because mixed values were summed together.
         Now each type gets its own trend entry keyed by (field_name, type).
         """
-        evaluator = EvaluatorFactory(name="Quality Check")
+        evaluator = EvaluatorFactory.create(name="Quality Check")
         team = evaluator.team
 
         # First run: field "rating" was categorical (e.g., "good"/"bad")
-        run1 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run1 = EvaluationRunFactory.create(team=team, status=EvaluationRunStatus.COMPLETED)
         for rating in ["good", "good", "bad", "good"]:
-            EvaluationResultFactory(
+            EvaluationResultFactory.create(
                 run=run1,
                 evaluator=evaluator,
                 team=team,
@@ -166,9 +166,9 @@ class TestBuildTrendData:
         compute_aggregates_for_run(run1)
 
         # Second run: field "rating" is now numeric (e.g., 1-5 scale)
-        run2 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run2 = EvaluationRunFactory.create(team=team, status=EvaluationRunStatus.COMPLETED)
         for rating in [4, 5, 4, 3, 5]:
-            EvaluationResultFactory(
+            EvaluationResultFactory.create(
                 run=run2,
                 evaluator=evaluator,
                 team=team,
@@ -200,13 +200,13 @@ class TestBuildTrendData:
         Previously this caused data corruption with mixed types in points.
         Now each type gets its own trend entry keyed by (field_name, type).
         """
-        evaluator = EvaluatorFactory(name="Quality Check")
+        evaluator = EvaluatorFactory.create(name="Quality Check")
         team = evaluator.team
 
         # First run: field "rating" was numeric (e.g., 1-5 scale)
-        run1 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run1 = EvaluationRunFactory.create(team=team, status=EvaluationRunStatus.COMPLETED)
         for rating in [4, 5, 4, 3, 5]:
-            EvaluationResultFactory(
+            EvaluationResultFactory.create(
                 run=run1,
                 evaluator=evaluator,
                 team=team,
@@ -215,9 +215,9 @@ class TestBuildTrendData:
         compute_aggregates_for_run(run1)
 
         # Second run: field "rating" is now categorical (e.g., "good"/"bad")
-        run2 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run2 = EvaluationRunFactory.create(team=team, status=EvaluationRunStatus.COMPLETED)
         for rating in ["good", "good", "bad", "good"]:
-            EvaluationResultFactory(
+            EvaluationResultFactory.create(
                 run=run2,
                 evaluator=evaluator,
                 team=team,

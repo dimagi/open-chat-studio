@@ -24,10 +24,10 @@ class TestSurveyTableView:
 
 @pytest.mark.django_db()
 def test_delete(client):
-    team = TeamWithUsersFactory()
+    team = TeamWithUsersFactory.create()
     user = team.members.first()
-    survey = SurveyFactory(team=team)
-    experiment = ExperimentFactory(team=team, pre_survey=survey, post_survey=survey)
+    survey = SurveyFactory.create(team=team)
+    experiment = ExperimentFactory.create(team=team, pre_survey=survey, post_survey=survey)
     client.force_login(user)
     url = reverse("experiments:survey_delete", args=[experiment.team.slug, survey.id])
     response = client.delete(url)

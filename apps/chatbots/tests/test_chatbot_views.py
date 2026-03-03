@@ -314,7 +314,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
     user = team.members.first()
     client.force_login(user)
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         participant__platform="web",
         team=team,
@@ -362,13 +362,13 @@ def test_new_chatbot_session_view(
     user = team.members.first()
     client.force_login(user)
 
-    old_session = ExperimentSessionFactory(
+    old_session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         team=team,
         status=SessionStatus.ACTIVE,
     )
 
-    new_session = ExperimentSessionFactory(
+    new_session = ExperimentSessionFactory.create(
         participant=old_session.participant,
         experiment=old_session.experiment,
         experiment_channel=old_session.experiment_channel,
@@ -428,7 +428,7 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
     user = team.members.first()
     client.force_login(user)
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         experiment_channel__platform="web",
         team=team,
@@ -486,11 +486,11 @@ def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
     experiment = Experiment.objects.create(name="Test Chatbot", owner=user, team=team, pipeline=pipeline)
 
     # A bot-initiated session that never received a human message → last_activity_at is null
-    ExperimentSessionFactory(experiment=experiment, last_activity_at=None)
+    ExperimentSessionFactory.create(experiment=experiment, last_activity_at=None)
 
     # A session with genuine user activity
     activity_time = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
-    ExperimentSessionFactory(experiment=experiment, last_activity_at=activity_time)
+    ExperimentSessionFactory.create(experiment=experiment, last_activity_at=activity_time)
 
     request = RequestFactory().get(reverse("chatbots:table", args=[team.slug]))
     request.team = team

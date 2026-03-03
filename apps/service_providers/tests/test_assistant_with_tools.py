@@ -31,12 +31,12 @@ def fake_llm_service():
 
 @pytest.fixture()
 def session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.fixture()
 def assistant(fake_llm_service):
-    assistant = OpenAiAssistantFactory(assistant_id="assistant_1", tools=["fake_tool"])
+    assistant = OpenAiAssistantFactory.create(assistant_id="assistant_1", tools=["fake_tool"])
     assistant.get_llm_service = lambda *args, **kwargs: fake_llm_service
     return assistant
 

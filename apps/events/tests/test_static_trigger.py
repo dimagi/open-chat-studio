@@ -26,7 +26,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
@@ -84,8 +84,8 @@ def test_last_timeout_can_end_conversation(session):
 
 @pytest.mark.django_db()
 def test_delete():
-    team = TeamWithUsersFactory()
-    experiment = ExperimentFactory(team=team)
+    team = TeamWithUsersFactory.create()
+    experiment = ExperimentFactory.create(team=team)
     static_trigger = StaticTrigger.objects.create(
         experiment=experiment,
         action=EventAction.objects.create(action_type=EventActionType.END_CONVERSATION),
@@ -108,7 +108,7 @@ def test_delete():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.django_db()
 def test_start_session_fires_participant_joined_event(team):
-    experiment = ExperimentFactory(team=team)
+    experiment = ExperimentFactory.create(team=team)
     _assert_participant_joined_event_fired(
         experiment,
         [StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT, StaticTriggerType.CONVERSATION_START],
@@ -121,7 +121,7 @@ def test_start_session_fires_participant_joined_event(team):
 
     # another call with a different experiment to check that the event is fired again
     _assert_participant_joined_event_fired(
-        ExperimentFactory(team=team),
+        ExperimentFactory.create(team=team),
         [StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT, StaticTriggerType.CONVERSATION_START],
     )
 
@@ -130,7 +130,7 @@ def _assert_participant_joined_event_fired(experiment, expected_events):
     with mock.patch("apps.events.tasks.enqueue_static_triggers.run") as mock_fire_trigger:
         session = _start_experiment_session(
             working_experiment=experiment,
-            experiment_channel=ExperimentChannelFactory(team=experiment.team, experiment=experiment),
+            experiment_channel=ExperimentChannelFactory.create(team=experiment.team, experiment=experiment),
             participant_identifier="test_participant",
         )
 

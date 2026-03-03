@@ -26,17 +26,17 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def experiment():
-    return ExperimentFactory()
+    return ExperimentFactory.create()
 
 
 @pytest.fixture()
 def channel(experiment):
-    return ExperimentChannelFactory(experiment=experiment, platform="web")
+    return ExperimentChannelFactory.create(experiment=experiment, platform="web")
 
 
 @pytest.fixture()
 def session(experiment, channel):
-    return ExperimentSessionFactory(experiment=experiment, experiment_channel=channel)
+    return ExperimentSessionFactory.create(experiment=experiment, experiment_channel=channel)
 
 
 @pytest.mark.django_db()
@@ -471,8 +471,8 @@ def test_not_triggered_no_human_message(session):
 
 @pytest.mark.django_db()
 def test_delete():
-    team = TeamWithUsersFactory()
-    experiment = ExperimentFactory(team=team)
+    team = TeamWithUsersFactory.create()
+    experiment = ExperimentFactory.create(team=team)
     timeout_trigger = TimeoutTrigger.objects.create(
         experiment=experiment,
         action=EventAction.objects.create(action_type=EventActionType.LOG),

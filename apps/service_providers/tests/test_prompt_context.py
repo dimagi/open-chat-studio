@@ -89,9 +89,9 @@ def test_returns_blank_source_material_not_found(mock_get, mock_session):
 
 @pytest.mark.django_db()
 def test_retrieves_media_successfully(mock_session):
-    collection = CollectionFactory()
-    file1 = FileFactory(summary="summary1", team_id=collection.team_id)
-    file2 = FileFactory(summary="summary2", team_id=collection.team_id)
+    collection = CollectionFactory.create()
+    file1 = FileFactory.create(summary="summary1", team_id=collection.team_id)
+    file2 = FileFactory.create(summary="summary2", team_id=collection.team_id)
     collection.files.add(file1, file2)
     context = PromptTemplateContext(session=mock_session, collection_id=collection.id)
     expected_media_summaries = [
