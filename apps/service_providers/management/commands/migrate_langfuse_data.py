@@ -55,17 +55,25 @@ def _parse_datetime(datetime_str):
 
 def _load_checkpoint(filepath: str) -> tuple[set, str | None]:
     """Load checkpoint state. Returns (migrated_ids, resume_from_timestamp)."""
+    from django.core.management.base import CommandError
+
     if not os.path.exists(filepath):
         return set(), None
-    with open(filepath) as f:
-        data = json.load(f)
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise CommandError(f"Invalid checkpoint file '{filepath}'. Use --reset-checkpoint to start fresh.") from e
     return set(data.get("migrated_ids", [])), data.get("resume_from_timestamp")
 
 
 def _save_checkpoint(filepath: str, migrated_ids: set, resume_from_timestamp: str | None = None) -> None:
-    """Write checkpoint state to file."""
-    with open(filepath, "w") as f:
-        json.dump({"migrated_ids": list(migrated_ids), "resume_from_timestamp": resume_from_timestamp}, f, indent=2)
+    """Write checkpoint state to file atomically to avoid corruption on interruption."""
+    tmp_path = f"{filepath}.tmp"
+    payload = {"migrated_ids": list(migrated_ids), "resume_from_timestamp": resume_from_timestamp}
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    os.replace(tmp_path, filepath)
 
 
 def _transform_trace_to_ingestion_batch(source_trace):
@@ -178,8 +186,8 @@ def _transform_trace_to_ingestion_batch(source_trace):
             ingestion_events.append(
                 ingestion_event_type(id=str(uuid.uuid4()), timestamp=event_specific_timestamp, body=event_body)
             )
-        except Exception:
-            continue
+        except Exception as e:
+            raise ValueError(f"Failed to transform observation {source_obs.id} (type: {source_obs.type})") from e
 
     for source_score in source_trace.scores:
         new_observation_id = obs_id_map.get(source_score.observation_id) if source_score.observation_id else None
@@ -221,8 +229,8 @@ def _transform_trace_to_ingestion_batch(source_trace):
             ingestion_events.append(
                 IngestionEvent_ScoreCreate(id=str(uuid.uuid4()), timestamp=event_timestamp_str, body=score_body)
             )
-        except Exception:
-            continue
+        except Exception as e:
+            raise ValueError(f"Failed to transform score {source_score.id}") from e
 
     return ingestion_events
 
@@ -386,6 +394,8 @@ class Command(BaseCommand):
             raise CommandError(f"Could not parse --from-timestamp: '{from_timestamp_str}'")
         if to_timestamp_str and not to_timestamp:
             raise CommandError(f"Could not parse --to-timestamp: '{to_timestamp_str}'")
+        if from_timestamp and to_timestamp and from_timestamp > to_timestamp:
+            raise CommandError("--from-timestamp must be earlier than or equal to --to-timestamp")
 
         migrated_ids, resume_from_timestamp = _load_checkpoint(checkpoint_file)
         if migrated_ids:
@@ -523,8 +533,8 @@ class Command(BaseCommand):
                     self.stdout.write(f"        Max retries reached fetching details for {trace_id}.")
                     return None
                 else:
-                    self.stdout.write(f"        Non-rate-limit error for {trace_id}. Failing this trace.")
-                    return None
+                    self.stdout.write(f"        Transient error for {trace_id}, retrying...")
+                    time.sleep(2**attempt)
         return None
 
     def _push_batch_with_retry(
