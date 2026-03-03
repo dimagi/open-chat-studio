@@ -60,7 +60,7 @@ Use this tool to look up valid option values for `choice` or `exclusive_choice` 
 **Returns:** `{{"options": [{{"id": ..., "label": ...}}, ...], "returned": N, "total": M}}`
 
 **Rules for tool use:**
-1. Always call the tool before using a choice filter value if you don't already know the exact option IDs.
+1. Always call this tool before using any choice filter value to confirm valid IDs.
 2. Use the `search` parameter with the user's term to narrow results before selecting.
 3. Use option **IDs** (not labels) as filter values in `ColumnFilterData`.
 4. If `total > returned`, the list is truncated — refine your search to find the right option.
