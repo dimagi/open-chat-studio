@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from langfuse._client.get_client import _create_client_from_instance
@@ -48,7 +48,7 @@ class LangFuseTracer(Tracer):
     different credentials per call. This is why we don't use the standard 'observe' decorator.
     """
 
-    def __init__(self, type_, config: dict):
+    def __init__(self, type_: str, config: dict):
         super().__init__(type_, config)
         self.client = None
         self.trace_record = None
@@ -149,11 +149,14 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
-        return {  # ty: ignore[invalid-return-type]
-            "trace_id": self.trace_record.trace_id,
-            "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
-            "trace_provider": self.type,
-        }
+        return cast(
+            dict[str, str],
+            {
+                "trace_id": self.trace_record.trace_id,
+                "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
+                "trace_provider": self.type,
+            },
+        )
 
     def add_trace_tags(self, tags: list[str]) -> None:
         if not self.ready:
