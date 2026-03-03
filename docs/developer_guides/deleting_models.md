@@ -51,12 +51,10 @@ class Migration(migrations.Migration):
         # Update model list (marks deprecated models in DB)
         llm_model_migration(),
 
-        # Optional: notify affected teams about the deprecation and recommended replacement
+        # notify affected teams about the deprecation and recommended replacement
         RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]
 ```
-
-Include `RunDataMigration("notify_deprecated_models")` when you want to proactively alert teams that have active references to the deprecated model. The notification includes the replacement model name (if set) so users know what to switch to before deletion.
 
 ---
 
@@ -141,30 +139,6 @@ When no replacement is specified:
 ## User Notifications
 
 Both the deprecation notification and the deletion command use the OCS notifications system (see [notifications guide](notifications.md)) rather than admin emails. Notifications are sent to team members with the `service_providers.change_llmprovidermodel` permission.
-
-Notification helpers are defined in `apps/ocs_notifications/notifications.py`:
-
-```python
-# Notifies a team that one of their resources uses a deprecated model, with recommended replacement
-deprecated_model_notification(
-    team=team,
-    model_name="openai/gpt-4",
-    replacement_model_name="gpt-4o",
-    affected_chatbots=["Bot A"],
-    affected_pipelines=["Pipeline B"],
-    affected_assistants=["Assistant C"],
-)
-
-# Notifies a team that a deleted model's references were auto-migrated or cleared
-deleted_model_notification(
-    team=team,
-    model_name="anthropic/claude-2.0",
-    replacement_model_name="claude-3-5-sonnet-latest",
-    affected_chatbots=["Bot A"],
-    affected_pipelines=["Pipeline B"],
-    affected_assistants=["Assistant C"],
-)
-```
 
 Notifications include:
 - Which model was deprecated/deleted
