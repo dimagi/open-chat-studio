@@ -191,7 +191,7 @@ class ChannelBase(ABC):
 
     @property
     def message(self) -> BaseMessage:
-        return cast(BaseMessage, self._message)
+        return self._message  # ty: ignore[invalid-return-type]
 
     @property
     def supports_multimedia(self) -> bool:
