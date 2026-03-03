@@ -197,6 +197,60 @@ class OpenAIGenericService(LlmService):
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
+
+class OpenAILlmService(OpenAIGenericService):
+    openai_api_base: str | None = None
+    openai_organization: str | None = None
+    # OpenAI supports the Responses API; enable it for this service
+    _use_responses_api: ClassVar[bool] = True
+
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        return {
+            **super()._get_model_kwargs(**kwargs),
+            "openai_organization": self.openai_organization,
+        }
+
+    def get_raw_client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
+
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
+
+    def transcribe_audio(self, audio: BytesIO) -> str:
+        transcript = self.get_raw_client().audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        tools = []
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
+            elif tool_name == "code-execution":
+                tools.append(OpenAIBuiltinTool({"type": "code_interpreter", "container": {"type": "auto"}}))
+            else:
+                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
+        return tools
+
+    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
+        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
+
+        return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
+        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
+
+        return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
+        file_ids_param = NOT_GIVEN if file_ids is None else file_ids
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
+        return vector_store.id
+
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         """Returns the file ids from the annotation entries of type file_citation
 
@@ -280,60 +334,6 @@ class OpenAIGenericService(LlmService):
         pattern = rf"\(sandbox:/mnt/data/{re.escape(file.name)}\)"
         replacement = f"({file.download_link(session.id)})"
         return re.sub(pattern, replacement, text)
-
-
-class OpenAILlmService(OpenAIGenericService):
-    openai_api_base: str | None = None
-    openai_organization: str | None = None
-    # OpenAI supports the Responses API; enable it for this service
-    _use_responses_api: ClassVar[bool] = True
-
-    def _get_model_kwargs(self, **kwargs) -> dict:
-        return {
-            **super()._get_model_kwargs(**kwargs),
-            "openai_organization": self.openai_organization,
-        }
-
-    def get_raw_client(self) -> OpenAI:
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
-
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
-
-    def transcribe_audio(self, audio: BytesIO) -> str:
-        transcript = self.get_raw_client().audio.transcriptions.create(
-            model="whisper-1",
-            file=audio,
-        )
-        return transcript.text
-
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
-        tools = []
-        for tool_name in built_in_tools:
-            if tool_name == "web-search":
-                tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
-            elif tool_name == "code-execution":
-                tools.append(OpenAIBuiltinTool({"type": "code_interpreter", "container": {"type": "auto"}}))
-            else:
-                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
-        return tools
-
-    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
-
-        return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
-
-    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
-
-        return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
-
-    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
-        file_ids_param = NOT_GIVEN if file_ids is None else file_ids
-        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
-        return vector_store.id
 
 
 class AzureLlmService(LlmService):
