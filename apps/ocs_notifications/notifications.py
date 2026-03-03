@@ -212,9 +212,9 @@ def deprecated_model_notification(
     team,
     model_name: str,
     replacement_model_name: str | None,
-    affected_chatbots: list[str],
-    affected_pipelines: list[str],
-    affected_assistants: list[str],
+    affected_chatbots: dict[str, str],
+    affected_pipelines: dict[str, str],
+    affected_assistants: dict[str, str],
 ) -> None:
     """Notify a team that a model they use has been deprecated."""
     resource_parts = []
@@ -240,7 +240,7 @@ def deprecated_model_notification(
         slug="llm-model-deprecated",
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
-        links={},
+        links={**affected_chatbots, **affected_pipelines, **affected_assistants},
     )
 
 
@@ -249,9 +249,9 @@ def deleted_model_notification(
     team,
     model_name: str,
     replacement_model_name: str | None,
-    affected_chatbots: list[str],
-    affected_pipelines: list[str],
-    affected_assistants: list[str],
+    affected_chatbots: dict[str, str],
+    affected_pipelines: dict[str, str],
+    affected_assistants: dict[str, str],
 ) -> None:
     """Notify a team that a model has been removed from the platform."""
     resource_parts = []
@@ -280,5 +280,5 @@ def deleted_model_notification(
         slug="llm-model-deleted",
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
-        links={},
+        links={**affected_chatbots, **affected_pipelines, **affected_assistants},
     )

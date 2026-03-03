@@ -67,7 +67,7 @@ class Command(IdempotentCommand):
         affected_by_model = {}  # {db_model.id: {team_id: {"chatbots": set, "pipelines": set, "assistants": set}}}
 
         for db_model, _replacement_name, _replacement_model in models_to_delete:
-            teams_data = defaultdict(lambda: {"chatbots": set(), "pipelines": set(), "assistants": set()})
+            teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
 
             related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
             nodes_by_pipeline = defaultdict(list)
@@ -87,11 +87,11 @@ class Command(IdempotentCommand):
             )
 
             for exp in referenced_experiments:
-                teams_data[exp.team_id]["chatbots"].add(exp.name)
+                teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()
             for pipeline in unreferenced_pipelines:
-                teams_data[pipeline.team_id]["pipelines"].add(pipeline.name)
+                teams_data[pipeline.team_id]["pipelines"][pipeline.name] = pipeline.get_absolute_url()
             for assistant in referenced_assistants:
-                teams_data[assistant.team_id]["assistants"].add(assistant.name)
+                teams_data[assistant.team_id]["assistants"][assistant.name] = assistant.get_absolute_url()
 
             affected_by_model[db_model.id] = teams_data
 
@@ -150,9 +150,9 @@ class Command(IdempotentCommand):
                     team=teams_objs[team_id],
                     model_name=f"{db_model.type}/{db_model.name}",
                     replacement_model_name=replacement_name if replacement_model else None,
-                    affected_chatbots=sorted(data["chatbots"]),
-                    affected_pipelines=sorted(data["pipelines"]),
-                    affected_assistants=sorted(data["assistants"]),
+                    affected_chatbots=data["chatbots"],
+                    affected_pipelines=data["pipelines"],
+                    affected_assistants=data["assistants"],
                 )
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))

@@ -399,9 +399,9 @@ class TestDeprecatedModelNotification:
             team=team,
             model_name="gpt-4",
             replacement_model_name="gpt-4o",
-            affected_chatbots=["My Bot"],
-            affected_pipelines=[],
-            affected_assistants=[],
+            affected_chatbots={"My Bot": "/chatbots/my-bot/"},
+            affected_pipelines={},
+            affected_assistants={},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
@@ -415,7 +415,7 @@ class TestDeprecatedModelNotification:
             slug="llm-model-deprecated",
             event_data={"model_name": "gpt-4"},
             permissions=["service_providers.change_llmprovidermodel"],
-            links={},
+            links={"My Bot": "/chatbots/my-bot/"},
         )
 
     @pytest.mark.django_db()
@@ -426,9 +426,9 @@ class TestDeprecatedModelNotification:
             team=team,
             model_name="gpt-4",
             replacement_model_name=None,
-            affected_chatbots=[],
-            affected_pipelines=["My Pipeline"],
-            affected_assistants=["My Assistant"],
+            affected_chatbots={},
+            affected_pipelines={"My Pipeline": "/pipelines/1/"},
+            affected_assistants={"My Assistant": "/assistants/1/"},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
@@ -441,7 +441,7 @@ class TestDeprecatedModelNotification:
             slug="llm-model-deprecated",
             event_data={"model_name": "gpt-4"},
             permissions=["service_providers.change_llmprovidermodel"],
-            links={},
+            links={"My Pipeline": "/pipelines/1/", "My Assistant": "/assistants/1/"},
         )
 
 
@@ -454,9 +454,9 @@ class TestDeletedModelNotification:
             team=team,
             model_name="claude-2.0",
             replacement_model_name="claude-3-5-sonnet-latest",
-            affected_chatbots=["Bot A", "Bot B"],
-            affected_pipelines=[],
-            affected_assistants=[],
+            affected_chatbots={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
+            affected_pipelines={},
+            affected_assistants={},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
@@ -470,7 +470,7 @@ class TestDeletedModelNotification:
             slug="llm-model-deleted",
             event_data={"model_name": "claude-2.0"},
             permissions=["service_providers.change_llmprovidermodel"],
-            links={},
+            links={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
         )
 
     @pytest.mark.django_db()
@@ -481,9 +481,9 @@ class TestDeletedModelNotification:
             team=team,
             model_name="claude-2.0",
             replacement_model_name=None,
-            affected_chatbots=[],
-            affected_pipelines=["Pipeline X"],
-            affected_assistants=["Assistant Y"],
+            affected_chatbots={},
+            affected_pipelines={"Pipeline X": "/pipelines/1/"},
+            affected_assistants={"Assistant Y": "/assistants/1/"},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
@@ -497,5 +497,5 @@ class TestDeletedModelNotification:
             slug="llm-model-deleted",
             event_data={"model_name": "claude-2.0"},
             permissions=["service_providers.change_llmprovidermodel"],
-            links={},
+            links={"Pipeline X": "/pipelines/1/", "Assistant Y": "/assistants/1/"},
         )
