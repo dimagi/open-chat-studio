@@ -175,17 +175,8 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
     table_class = ChatbotTable
     permission_required = "experiments.view_experiment"
 
-    def get_table(self, **kwargs):
-        table = super().get_table(**kwargs)
-        if not flag_is_active(self.request, "flag_tracing"):
-            table.exclude = ("trends",)
-        return table
-
     def get_table_data(self):
         data = super().get_table_data()
-        if not flag_is_active(self.request, "flag_tracing"):
-            return data
-
         qs = list(data)
         ids = [obj.id for obj in qs]
         trend_data = Experiment.get_bulk_trend_data(ids)
@@ -241,7 +232,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         last_activity_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .order_by("-last_activity_at")
+            .order_by(F("last_activity_at").desc(nulls_last=True))
             .values("last_activity_at")[:1]
         )
 

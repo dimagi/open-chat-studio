@@ -111,7 +111,7 @@ jobs:
           CYPRESS_BASE_URL: 'http://127.0.0.1:8000'
 
       - name: Upload Cypress screenshots on failure
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7.0.0
         if: failure()
         with:
           name: cypress-screenshots
@@ -119,7 +119,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Cypress videos
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7.0.0
         if: always()
         with:
           name: cypress-videos

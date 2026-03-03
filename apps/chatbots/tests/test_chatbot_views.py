@@ -1,3 +1,4 @@
+from datetime import UTC
 from unittest.mock import Mock, patch
 
 import pytest
@@ -7,10 +8,10 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
+    ChatbotExperimentTableView,
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
@@ -445,9 +446,8 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
 
 
 @pytest.mark.django_db()
-def test_chatbot_table_view_embeds_trend_data_inline_when_flag_active(client, team_with_users):
-    """When flag_tracing is active, the chatbot table embeds trend JSON directly in the HTML
-    instead of generating per-experiment fetch URLs."""
+def test_chatbot_table_view_embeds_trend_data_inline(client, team_with_users):
+    """The chatbot table embeds trend JSON directly in the HTML instead of generating per-experiment fetch URLs."""
     team = team_with_users
     user = team.members.first()
     Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
@@ -460,11 +460,47 @@ def test_chatbot_table_view_embeds_trend_data_inline_when_flag_active(client, te
 
     client.force_login(user)
     url = reverse("chatbots:table", args=[team.slug])
-    with override_flag("flag_tracing", active=True):
-        response = client.get(url)
+    response = client.get(url)
 
     assert response.status_code == 200
     content = response.content.decode()
     # Inline data attribute should be present, not a per-experiment fetch URL
     assert "data-trends=" in content
     assert "trends_data" not in content
+
+
+@pytest.mark.django_db()
+def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
+    """The last_activity annotation must return the most recent non-null last_activity_at.
+
+    PostgreSQL ORDER BY col DESC defaults to NULLS FIRST, so without an explicit
+    NULLS LAST directive the subquery picks a NULL session instead of the most
+    recently-active one, causing the Last Activity column to appear blank even
+    when real activity exists.
+    """
+    from datetime import datetime
+
+    team = team_with_users
+    user = team.members.first()
+    pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(name="Test Chatbot", owner=user, team=team, pipeline=pipeline)
+
+    # A bot-initiated session that never received a human message → last_activity_at is null
+    ExperimentSessionFactory(experiment=experiment, last_activity_at=None)
+
+    # A session with genuine user activity
+    activity_time = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
+    ExperimentSessionFactory(experiment=experiment, last_activity_at=activity_time)
+
+    request = RequestFactory().get(reverse("chatbots:table", args=[team.slug]))
+    request.team = team
+    request.user = user
+    request.GET = request.GET.copy()
+
+    view = ChatbotExperimentTableView()
+    view.request = request
+    view.kwargs = {}
+    view.args = []
+
+    result = view.get_queryset().get(id=experiment.id)
+    assert result.last_activity == activity_time
