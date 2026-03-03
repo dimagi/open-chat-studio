@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 import apps.experiments.filters  # noqa: F401 — ensure filter subclasses are registered
 from apps.help.agents.filter import FilterAgent, FilterInput
@@ -36,7 +37,5 @@ class TestFilterAgentPrompt:
             FilterAgent.get_system_prompt(input_data)
 
     def test_filter_input_requires_team_id(self):
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             FilterInput(query="test", filter_slug="session")  # missing team_id
