@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 import apps.experiments.filters  # noqa: F401 — ensure filter subclasses are registered
-from apps.help.agents.filter import FilterAgent, FilterInput, make_get_options_tool
+from apps.help.agents.filter import FilterAgent, FilterInput, FilterOutput, make_get_options_tool
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import ParticipantFilter
 
@@ -156,3 +156,39 @@ class TestMakeGetOptionsTool:
         tool_fn.invoke({"param": "experiment"})
 
         choice_filter.prepare.assert_called_once_with(team)
+
+
+class TestFilterAgentRun:
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_run_passes_options_tool_to_agent(self, mock_build, mock_team_cls):
+        """FilterAgent.run() should build one tool and pass it to build_system_agent."""
+        stub_output = FilterOutput(filters=[])
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": stub_output}
+        mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = mock.Mock(id=1)
+
+        agent = FilterAgent(input=FilterInput(query="active sessions", filter_slug="session", team_id=1))
+        result = agent.run()
+
+        assert result == stub_output
+        call_kwargs = mock_build.call_args.kwargs
+        assert "tools" in call_kwargs
+        assert len(call_kwargs["tools"]) == 1
+        assert call_kwargs["tools"][0].name == "get_filter_options"
+
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_run_fetches_team_by_team_id(self, mock_build, mock_team_cls):
+        """FilterAgent.run() must look up the team from team_id."""
+        stub_output = FilterOutput(filters=[])
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": stub_output}
+        mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = mock.Mock(id=42)
+
+        agent = FilterAgent(input=FilterInput(query="test", filter_slug="session", team_id=42))
+        agent.run()
+
+        mock_team_cls.objects.get.assert_called_once_with(id=42)

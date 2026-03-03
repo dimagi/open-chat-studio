@@ -8,8 +8,10 @@ from typing import ClassVar, Literal
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
+from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
+from apps.teams.models import Team
 from apps.web.dynamic_filters.base import ChoiceColumnFilter
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
@@ -103,3 +105,19 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
     @classmethod
     def get_user_message(cls, input: FilterInput) -> str:
         return input.query
+
+    def run(self) -> FilterOutput:
+        from apps.web.dynamic_filters.base import get_filter_registry
+
+        registry = get_filter_registry()
+        filter_class = registry[self.input.filter_slug]
+        team = Team.objects.get(id=self.input.team_id)
+        options_tool = make_get_options_tool(filter_class, team)
+        agent = build_system_agent(
+            self.mode,
+            self.get_system_prompt(self.input),
+            tools=[options_tool],
+            response_format=self._get_output_type(),
+        )
+        response = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
+        return self.parse_response(response)
