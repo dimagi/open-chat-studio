@@ -6,7 +6,7 @@ from apps.help.agents.filter import FilterAgent, FilterInput
 
 class TestFilterAgentPrompt:
     def test_system_prompt_contains_schema(self):
-        input_data = FilterInput(query="test", filter_slug="session")
+        input_data = FilterInput(query="test", filter_slug="session", team_id=1)
         prompt = FilterAgent.get_system_prompt(input_data)
         # Should contain column names from ExperimentSessionFilter
         assert "participant" in prompt
@@ -15,13 +15,13 @@ class TestFilterAgentPrompt:
         assert "state" in prompt
 
     def test_system_prompt_contains_operators(self):
-        input_data = FilterInput(query="test", filter_slug="session")
+        input_data = FilterInput(query="test", filter_slug="session", team_id=1)
         prompt = FilterAgent.get_system_prompt(input_data)
         assert "contains" in prompt
         assert "any of" in prompt
 
     def test_system_prompt_for_message_slug(self):
-        input_data = FilterInput(query="test", filter_slug="message")
+        input_data = FilterInput(query="test", filter_slug="message", team_id=1)
         prompt = FilterAgent.get_system_prompt(input_data)
         # ChatMessageFilter columns
         assert "tags" in prompt
@@ -31,6 +31,12 @@ class TestFilterAgentPrompt:
         assert '"participant"' not in prompt
 
     def test_unknown_slug_raises(self):
-        input_data = FilterInput(query="test", filter_slug="nonexistent")
+        input_data = FilterInput(query="test", filter_slug="nonexistent", team_id=1)
         with pytest.raises(ValueError, match="Unknown filter slug"):
             FilterAgent.get_system_prompt(input_data)
+
+    def test_filter_input_requires_team_id(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            FilterInput(query="test", filter_slug="session")  # missing team_id

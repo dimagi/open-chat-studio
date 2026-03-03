@@ -20,6 +20,7 @@ def _get_system_prompt():
 class FilterInput(BaseModel):
     query: str
     filter_slug: str
+    team_id: int
 
 
 class FilterOutput(BaseModel):
