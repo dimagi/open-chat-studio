@@ -26,12 +26,12 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 IMPORTS = """
@@ -300,9 +300,9 @@ def test_get_participant_schedules(pipeline, experiment_session):
         "prompt_text": "",
         "experiment_id": experiment_session.experiment.id,
     }
-    event_action = EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER)
+    event_action = EventActionFactory.create(params=params, action_type=EventActionType.SCHEDULETRIGGER)
 
-    ScheduledMessageFactory(
+    ScheduledMessageFactory.create(
         experiment=experiment_session.experiment,
         team=experiment_session.team,
         participant=experiment_session.participant,

@@ -13,7 +13,7 @@ from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 @pytest.fixture()
 def assistant():
-    return OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
+    return OpenAiAssistantFactory.create(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
 
 
 @pytest.fixture()
@@ -68,18 +68,18 @@ class TestAssistantDeletion:
 @pytest.mark.django_db()
 class TestAssistantArchival:
     def test_archive_assistant(self):
-        assistant = OpenAiAssistantFactory()
+        assistant = OpenAiAssistantFactory.create()
         assert assistant.is_archived is False
         assistant.archive()
         assert assistant.is_archived is True
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_succeeds_with_unpublished_related_pipeline(self):
-        pipeline = PipelineFactory()
-        exp_v1 = ExperimentFactory(pipeline=pipeline)
+        pipeline = PipelineFactory.create()
+        exp_v1 = ExperimentFactory.create(pipeline=pipeline)
         exp_v2 = exp_v1.create_new_version()
-        assistant = OpenAiAssistantFactory()
-        NodeFactory(pipeline=exp_v2.pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        assistant = OpenAiAssistantFactory.create()
+        NodeFactory.create(pipeline=exp_v2.pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
         exp_v2.is_default_version = False
         exp_v2.save()
 
@@ -88,11 +88,11 @@ class TestAssistantArchival:
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_fails_with_working_related_versioned_pipeline_and_working_experiment(self):
-        pipeline_v1 = PipelineFactory()
-        assistant = OpenAiAssistantFactory()
+        pipeline_v1 = PipelineFactory.create()
+        assistant = OpenAiAssistantFactory.create()
         pipeline_v2 = pipeline_v1.create_new_version()
-        NodeFactory(pipeline=pipeline_v2, type="AssistantNode", params={"assistant_id": str(assistant.id)})
-        exp_v1 = ExperimentFactory()
+        NodeFactory.create(pipeline=pipeline_v2, type="AssistantNode", params={"assistant_id": str(assistant.id)})
+        exp_v1 = ExperimentFactory.create()
         exp_v2 = exp_v1.create_new_version()
         exp_v2.pipeline = pipeline_v2
         exp_v2.is_default_version = True
@@ -110,9 +110,9 @@ class TestAssistantArchival:
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_assistant_fails_with_working_related_pipeline(self):
-        pipeline = PipelineFactory()
-        assistant = OpenAiAssistantFactory()
-        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": str(assistant.id)})
+        pipeline = PipelineFactory.create()
+        assistant = OpenAiAssistantFactory.create()
+        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": str(assistant.id)})
 
         assert pipeline.is_working_version is True
         assistant.archive()

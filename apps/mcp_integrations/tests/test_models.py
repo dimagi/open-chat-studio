@@ -28,7 +28,7 @@ class TestMcpServer:
         assert server.tool_count > 0
 
     def test_fetch_tools_with_auth(self, team):
-        auth_provider = AuthProviderFactory(team=team)
+        auth_provider = AuthProviderFactory.create(team=team)
         auth_service_mock = Mock()
         auth_service_mock.get_auth_headers.return_value = {"Authorization": "Bearer token"}
 

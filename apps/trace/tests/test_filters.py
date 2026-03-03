@@ -17,15 +17,15 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 class TestTraceFilter:
     @pytest.fixture()
     def experiment(self, team):
-        return ExperimentFactory(team=team)
+        return ExperimentFactory.create(team=team)
 
     @pytest.fixture()
     def participant(self, team):
-        return ParticipantFactory(team=team, identifier="test_participant")
+        return ParticipantFactory.create(team=team, identifier="test_participant")
 
     @pytest.fixture()
     def trace(self, team, experiment, participant):
-        return TraceFactory(
+        return TraceFactory.create(
             team=team, experiment=experiment, participant=participant, status=TraceStatus.SUCCESS, duration=1000
         )
 
@@ -246,7 +246,7 @@ class TestTraceFilter:
         from apps.utils.factories.experiment import ChatFactory
 
         # Create a chat and input message with tags
-        chat = ChatFactory(team=team)
+        chat = ChatFactory.create(team=team)
         input_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test input")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         Tag.objects.create(name="urgent", team=team, is_system_tag=False)
@@ -274,7 +274,7 @@ class TestTraceFilter:
         from apps.utils.factories.experiment import ChatFactory
 
         # Create a chat and output message with tags
-        chat = ChatFactory(team=team)
+        chat = ChatFactory.create(team=team)
         output_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="Test output")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         output_message.add_tag(tag1, team)
@@ -296,7 +296,7 @@ class TestTraceFilter:
         from apps.utils.factories.experiment import ChatFactory
 
         # Create messages with multiple tags
-        chat = ChatFactory(team=team)
+        chat = ChatFactory.create(team=team)
         input_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test input")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         tag2 = Tag.objects.create(name="urgent", team=team, is_system_tag=False)
@@ -326,7 +326,7 @@ class TestTraceFilter:
         from apps.utils.factories.experiment import ChatFactory
 
         # Create message with tags
-        chat = ChatFactory(team=team)
+        chat = ChatFactory.create(team=team)
         input_message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test input")
         tag1 = Tag.objects.create(name="important", team=team, is_system_tag=False)
         Tag.objects.create(name="urgent", team=team, is_system_tag=False)

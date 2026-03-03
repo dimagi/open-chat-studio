@@ -10,12 +10,12 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def team():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.fixture()
 def chat(team, db):
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
     return session.chat
 
 

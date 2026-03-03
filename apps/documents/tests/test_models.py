@@ -14,9 +14,9 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 class TestCollection:
     def test_create_new_version(self):
         """Test basic version creation without vector store"""
-        collection = CollectionFactory(is_index=False)
-        file1 = FileFactory()
-        file2 = FileFactory()
+        collection = CollectionFactory.create(is_index=False)
+        file1 = FileFactory.create()
+        file2 = FileFactory.create()
         collection.files.add(file1, file2)
 
         # Create new version
@@ -39,11 +39,11 @@ class TestCollection:
 
     def test_create_new_version_with_document_source(self):
         """Test basic version creation without vector store"""
-        collection = CollectionFactory(is_index=False)
-        document_source = DocumentSourceFactory(collection=collection)
+        collection = CollectionFactory.create(is_index=False)
+        document_source = DocumentSourceFactory.create(collection=collection)
 
-        file1 = FileFactory()
-        file2 = FileFactory()
+        file1 = FileFactory.create()
+        file2 = FileFactory.create()
         document_source.files.add(file1, file2, through_defaults={"collection": collection})
 
         new_collection_version = collection.create_new_version()
@@ -68,10 +68,10 @@ class TestCollection:
         This is a recreation of an issue where a file from the collection was versioned and linked to the
         document source's version that is linked to the collection.
         """
-        collection = CollectionFactory(is_index=False)
-        document_source = DocumentSourceFactory(collection=collection)
+        collection = CollectionFactory.create(is_index=False)
+        document_source = DocumentSourceFactory.create(collection=collection)
 
-        file = FileFactory()
+        file = FileFactory.create()
         collection.files.add(file)
 
         collection.create_new_version()
@@ -86,14 +86,14 @@ class TestCollection:
         """Ensure that a new vector store is created for the new version when one is created"""
         create_remote_index.return_value = "new-vs-123"
 
-        collection = CollectionFactory(
+        collection = CollectionFactory.create(
             name="Test Collection",
             is_index=True,
             is_remote_index=True,
             openai_vector_store_id="old-vs-123",
-            llm_provider=LlmProviderFactory(),
+            llm_provider=LlmProviderFactory.create(),
         )
-        file = FileFactory()
+        file = FileFactory.create()
         collection.files.add(file)
 
         # Create new version
@@ -115,13 +115,13 @@ class TestCollection:
 
     def test_create_new_version_of_local_collection_index(self):
         """Ensure that file chunk embeddings are versioned when creating a new version of a local index"""
-        collection = CollectionFactory(
+        collection = CollectionFactory.create(
             name="Test Local Collection",
             is_index=True,
             is_remote_index=False,
-            llm_provider=LlmProviderFactory(),
+            llm_provider=LlmProviderFactory.create(),
         )
-        file = FileFactory()
+        file = FileFactory.create()
         collection.files.add(file)
 
         # Create some file chunk embeddings for the original collection
@@ -165,8 +165,8 @@ class TestCollection:
     @mock.patch("apps.documents.tasks.delete_collection_task.delay")
     def test_archive_collection(self, delete_collection_task):
         """Test that a collection can be archived"""
-        collection = CollectionFactory(openai_vector_store_id="vs-123")
-        file = FileFactory(external_id="remote-file-123")
+        collection = CollectionFactory.create(openai_vector_store_id="vs-123")
+        file = FileFactory.create(external_id="remote-file-123")
         collection.files.add(file)
 
         # Archive the collection
@@ -178,8 +178,11 @@ class TestCollection:
 
     def test_remove_remote_index(self, remote_index_manager_mock):
         """Test that the index can be removed"""
-        collection = CollectionFactory(
-            is_index=True, is_remote_index=True, openai_vector_store_id="vs-123", llm_provider=LlmProviderFactory()
+        collection = CollectionFactory.create(
+            is_index=True,
+            is_remote_index=True,
+            openai_vector_store_id="vs-123",
+            llm_provider=LlmProviderFactory.create(),
         )
 
         # Invoke the remove_index method
@@ -191,8 +194,8 @@ class TestCollection:
 
     def test_get_index_manager_returns_correct_manager(self):
         """Remote indexes should return a remote index manager whereas local indexes should return a local one"""
-        collection_remote = CollectionFactory(is_index=True, is_remote_index=True)
-        collection_local = CollectionFactory(is_index=True, is_remote_index=False)
+        collection_remote = CollectionFactory.create(is_index=True, is_remote_index=True)
+        collection_local = CollectionFactory.create(is_index=True, is_remote_index=False)
 
         assert isinstance(collection_remote.get_index_manager(), RemoteIndexManager)
         assert isinstance(collection_local.get_index_manager(), LocalIndexManager)
@@ -208,7 +211,9 @@ class TestCollection:
     @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
     def test_ensure_remote_index_created(self, create_remote_index, is_remote_index, openai_id, expect_remote_call):
         """Test creating vector store without file IDs"""
-        collection = CollectionFactory(is_index=True, is_remote_index=is_remote_index, openai_vector_store_id=openai_id)
+        collection = CollectionFactory.create(
+            is_index=True, is_remote_index=is_remote_index, openai_vector_store_id=openai_id
+        )
         create_remote_index.return_value = "new-vs-123"
         collection.ensure_remote_index_created()
         collection.refresh_from_db()

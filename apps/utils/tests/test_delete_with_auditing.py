@@ -54,11 +54,11 @@ def test_deleting_a_team_does_not_remove_llm_providers_from_other_teams():
     some assistants that were associated with other teams. This test ensures that this issue is fixed.
     """
     with enable_audit():
-        team = TeamFactory()
-        assistant = OpenAiAssistantFactory(llm_provider=LlmProviderFactory(team=team), team=team)
+        team = TeamFactory.create()
+        assistant = OpenAiAssistantFactory.create(llm_provider=LlmProviderFactory.create(team=team), team=team)
 
-        team_to_delete = TeamFactory()
-        LlmProviderFactory(team=team_to_delete)
+        team_to_delete = TeamFactory.create()
+        LlmProviderFactory.create(team=team_to_delete)
 
         delete_object_with_auditing_of_related_objects(team_to_delete)
         assistant.refresh_from_db()

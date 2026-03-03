@@ -34,17 +34,17 @@ def date_range():
 class TestGetTopTeams:
     def test_ordering_and_counts(self, date_range):
         start, end = date_range
-        team_a = TeamFactory(name="Team A")
-        team_b = TeamFactory(name="Team B")
+        team_a = TeamFactory.create(name="Team A")
+        team_b = TeamFactory.create(name="Team B")
 
-        session_a = ExperimentSessionFactory(team=team_a, experiment__team=team_a)
-        session_b = ExperimentSessionFactory(team=team_b, experiment__team=team_b)
+        session_a = ExperimentSessionFactory.create(team=team_a, experiment__team=team_a)
+        session_b = ExperimentSessionFactory.create(team=team_b, experiment__team=team_b)
 
         # Team A: 3 messages
         for _ in range(3):
-            ChatMessageFactory(chat=session_a.chat, message_type="human", content="hi")
+            ChatMessageFactory.create(chat=session_a.chat, message_type="human", content="hi")
         # Team B: 1 message
-        ChatMessageFactory(chat=session_b.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=session_b.chat, message_type="human", content="hi")
 
         result = get_top_teams(start, end)
         assert len(result) == 2
@@ -60,31 +60,31 @@ class TestGetTopTeams:
 class TestGetPlatformBreakdown:
     def test_excludes_evaluations(self, date_range):
         start, end = date_range
-        team = TeamFactory()
+        team = TeamFactory.create()
 
         # Web session with a message
-        web_channel = ExperimentChannelFactory(team=team, platform=ChannelPlatform.WEB)
-        web_session = ExperimentSessionFactory(
+        web_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.WEB)
+        web_session = ExperimentSessionFactory.create(
             team=team,
             experiment=web_channel.experiment,
             experiment_channel=web_channel,
             platform=ChannelPlatform.WEB,
         )
-        ChatMessageFactory(chat=web_session.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=web_session.chat, message_type="human", content="hi")
 
         # Telegram session with a message
-        tg_channel = ExperimentChannelFactory(team=team, platform=ChannelPlatform.TELEGRAM)
-        tg_session = ExperimentSessionFactory(
+        tg_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.TELEGRAM)
+        tg_session = ExperimentSessionFactory.create(
             team=team,
             experiment=tg_channel.experiment,
             experiment_channel=tg_channel,
             platform=ChannelPlatform.TELEGRAM,
         )
-        ChatMessageFactory(chat=tg_session.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=tg_session.chat, message_type="human", content="hi")
 
         # Evaluations session (should be excluded)
-        eval_channel = ExperimentChannelFactory(team=team, platform=ChannelPlatform.EVALUATIONS)
-        ExperimentSessionFactory(
+        eval_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS)
+        ExperimentSessionFactory.create(
             team=team,
             experiment=eval_channel.experiment,
             experiment_channel=eval_channel,
@@ -101,14 +101,14 @@ class TestGetPlatformBreakdown:
 class TestGetTeamActivitySummary:
     def test_active_and_inactive(self, date_range):
         start, end = date_range
-        team_active1 = TeamFactory(name="Active 1")
-        team_active2 = TeamFactory(name="Active 2")
-        TeamFactory(name="Inactive 1")
+        team_active1 = TeamFactory.create(name="Active 1")
+        team_active2 = TeamFactory.create(name="Active 2")
+        TeamFactory.create(name="Inactive 1")
 
-        session1 = ExperimentSessionFactory(team=team_active1, experiment__team=team_active1)
-        session2 = ExperimentSessionFactory(team=team_active2, experiment__team=team_active2)
-        ChatMessageFactory(chat=session1.chat, message_type="human", content="hi")
-        ChatMessageFactory(chat=session2.chat, message_type="human", content="hi")
+        session1 = ExperimentSessionFactory.create(team=team_active1, experiment__team=team_active1)
+        session2 = ExperimentSessionFactory.create(team=team_active2, experiment__team=team_active2)
+        ChatMessageFactory.create(chat=session1.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=session2.chat, message_type="human", content="hi")
 
         result = get_team_activity_summary(start, end)
         assert result["active_count"] == 2
@@ -123,11 +123,11 @@ class TestGetTeamActivitySummary:
 class TestGetPeriodTotals:
     def test_counts(self, date_range):
         start, end = date_range
-        team = TeamFactory()
-        session = ExperimentSessionFactory(team=team, experiment__team=team)
-        ChatMessageFactory(chat=session.chat, message_type="human", content="hi")
-        ChatMessageFactory(chat=session.chat, message_type="ai", content="hello")
-        ParticipantFactory(team=team)
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=session.chat, message_type="ai", content="hello")
+        ParticipantFactory.create(team=team)
 
         result = get_period_totals(start, end)
         assert result["messages"] >= 2
@@ -139,15 +139,15 @@ class TestGetPeriodTotals:
 class TestGetTopExperiments:
     def test_limit_and_ordering(self, date_range):
         start, end = date_range
-        team = TeamFactory()
+        team = TeamFactory.create()
 
         # Create 3 experiments with different message counts
         sessions = []
         for i in range(3):
-            session = ExperimentSessionFactory(team=team, experiment__team=team)
+            session = ExperimentSessionFactory.create(team=team, experiment__team=team)
             sessions.append(session)
             for _ in range(3 - i):
-                ChatMessageFactory(chat=session.chat, message_type="human", content="hi")
+                ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
 
         result = get_top_experiments(start, end, limit=2)
         assert len(result) == 2

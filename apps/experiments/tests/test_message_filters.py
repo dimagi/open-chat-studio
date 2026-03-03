@@ -18,10 +18,10 @@ def team_with_messages(db, team):
     tag2 = Tag.objects.create(team=team, name="urgent")
     version_tag = Tag.objects.create(team=team, name="v1.0", category=TagCategories.EXPERIMENT_VERSION)
 
-    chat = ChatFactory(team=team)
+    chat = ChatFactory.create(team=team)
 
     with travel(datetime(2024, 1, 1, tzinfo=UTC)):
-        msg1 = ChatMessageFactory(
+        msg1 = ChatMessageFactory.create(
             chat=chat,
             message_type=ChatMessageType.HUMAN,
             content="Important message",
@@ -30,7 +30,7 @@ def team_with_messages(db, team):
         msg1.add_tag(version_tag, team=team)
 
     with travel(datetime(2024, 1, 15, tzinfo=UTC)):
-        msg2 = ChatMessageFactory(
+        msg2 = ChatMessageFactory.create(
             chat=chat,
             message_type=ChatMessageType.AI,
             content="Urgent response",
@@ -39,7 +39,7 @@ def team_with_messages(db, team):
         msg2.add_tag(version_tag, team=team)
 
     with travel(datetime(2024, 2, 1, tzinfo=UTC)):
-        msg3 = ChatMessageFactory(
+        msg3 = ChatMessageFactory.create(
             chat=chat,
             message_type=ChatMessageType.HUMAN,
             content="Regular message",

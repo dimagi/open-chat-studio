@@ -12,7 +12,7 @@ from apps.utils.factories.pipelines import PipelineFactory
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.mark.django_db()

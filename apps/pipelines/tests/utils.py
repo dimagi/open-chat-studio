@@ -64,7 +64,7 @@ def create_pipeline_model(
     nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline | None = None
 ) -> Pipeline:
     if not pipeline:
-        pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
+        pipeline = PipelineFactory.create()
     assert pipeline is not None
     if edges is None:
         edges = _make_edges(nodes)  # ty: ignore[invalid-assignment]

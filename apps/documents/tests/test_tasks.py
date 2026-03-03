@@ -21,8 +21,8 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 @pytest.fixture()
 def collection(db):
-    llm_provider = LlmProviderFactory(name="test-provider")
-    return CollectionFactory(
+    llm_provider = LlmProviderFactory.create(name="test-provider")
+    return CollectionFactory.create(
         name="test-collection",
         llm_provider=llm_provider,
         openai_vector_store_id="vs_123",
@@ -36,13 +36,13 @@ def collection(db):
 def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, collection):
     """Test that collection files are grouped by chunking strategy"""
     col_file_1 = CollectionFile.objects.create(
-        file=FileFactory(team=collection.team),
+        file=FileFactory.create(team=collection.team),
         collection=collection,
         status=FileStatus.PENDING,
         metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
     )
     col_file_2 = CollectionFile.objects.create(
-        file=FileFactory(team=collection.team),
+        file=FileFactory.create(team=collection.team),
         collection=collection,
         status=FileStatus.PENDING,
         metadata={"chunking_strategy": {"chunk_size": 1000, "chunk_overlap": 100}},
@@ -69,9 +69,9 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
 @patch("apps.documents.models.Collection.add_files_to_index")
 def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection, remote_index_manager_mock):
     """Test that the migration task cleans up old vector stores"""
-    previous_llm_provider = LlmProviderFactory(name="old-provider")
+    previous_llm_provider = LlmProviderFactory.create(name="old-provider")
 
-    file = FileFactory(team=collection.team, external_id="old-file-id")
+    file = FileFactory.create(team=collection.team, external_id="old-file-id")
     col_file = CollectionFile.objects.create(
         file=file,
         collection=collection,
@@ -94,21 +94,21 @@ def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection,
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
 def test_create_collection_zip_task_creates_zip_with_all_files(progress_recorder_mock):
-    collection = CollectionFactory(name="test-collection")
+    collection = CollectionFactory.create(name="test-collection")
     team = collection.team
 
     # Create manually uploaded files (no document_source)
-    file1 = FileFactory(team=team, name="file1.txt", file=ContentFile(b"Content of file 1", name="file1.txt"))
-    file2 = FileFactory(team=team, name="file2.pdf", file=ContentFile(b"Content of file 2", name="file2.pdf"))
-    file3 = FileFactory(team=team, name="file3.docx", file=ContentFile(b"Content of file 3", name="file3.docx"))
+    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"Content of file 1", name="file1.txt"))
+    file2 = FileFactory.create(team=team, name="file2.pdf", file=ContentFile(b"Content of file 2", name="file2.pdf"))
+    file3 = FileFactory.create(team=team, name="file3.docx", file=ContentFile(b"Content of file 3", name="file3.docx"))
 
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
     CollectionFile.objects.create(file=file2, collection=collection, document_source=None)
     CollectionFile.objects.create(file=file3, collection=collection, document_source=None)
 
     # Create a file with a document source (should be excluded)
-    document_source = DocumentSourceFactory(collection=collection, team=team)
-    file4 = FileFactory(team=team, name="file4.txt", file=ContentFile(b"Content of file 4", name="file4.txt"))
+    document_source = DocumentSourceFactory.create(collection=collection, team=team)
+    file4 = FileFactory.create(team=team, name="file4.txt", file=ContentFile(b"Content of file 4", name="file4.txt"))
     CollectionFile.objects.create(file=file4, collection=collection, document_source=document_source)
 
     result = create_collection_zip_task(collection.id, team.id)
@@ -135,12 +135,12 @@ def test_create_collection_zip_task_creates_zip_with_all_files(progress_recorder
 @patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.logger")
 def test_create_collection_zip_task_no_files_returns_none(logger_mock, progress_recorder_mock):
-    collection = CollectionFactory(name="empty-collection")
+    collection = CollectionFactory.create(name="empty-collection")
     team = collection.team
 
     # Create only files with document sources (should be excluded)
-    document_source = DocumentSourceFactory(collection=collection, team=team)
-    file1 = FileFactory(team=team, name="file1.txt", file=ContentFile(b"Content of file 1", name="file1.txt"))
+    document_source = DocumentSourceFactory.create(collection=collection, team=team)
+    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"Content of file 1", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=document_source)
 
     result = create_collection_zip_task(collection.id, team.id)
@@ -154,13 +154,15 @@ def test_create_collection_zip_task_no_files_returns_none(logger_mock, progress_
 @patch("apps.documents.tasks.ProgressRecorder")
 def test_create_collection_zip_task_handles_duplicate_filenames(progress_recorder_mock):
     """handles duplicate filenames by appending a numerical suffix."""
-    collection = CollectionFactory(name="duplicate-collection")
+    collection = CollectionFactory.create(name="duplicate-collection")
     team = collection.team
 
     # Create files with duplicate names
-    file1 = FileFactory(team=team, name="document.txt", file=ContentFile(b"First document", name="document.txt"))
-    file2 = FileFactory(team=team, name="document.txt", file=ContentFile(b"Second document", name="document.txt"))
-    file3 = FileFactory(team=team, name="document.txt", file=ContentFile(b"Third document", name="document.txt"))
+    file1 = FileFactory.create(team=team, name="document.txt", file=ContentFile(b"First document", name="document.txt"))
+    file2 = FileFactory.create(
+        team=team, name="document.txt", file=ContentFile(b"Second document", name="document.txt")
+    )
+    file3 = FileFactory.create(team=team, name="document.txt", file=ContentFile(b"Third document", name="document.txt"))
 
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
     CollectionFile.objects.create(file=file2, collection=collection, document_source=None)
@@ -186,14 +188,14 @@ def test_create_collection_zip_task_handles_duplicate_filenames(progress_recorde
 @patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.timezone")
 def test_create_collection_zip_task_sets_expiry_date(timezone_mock, progress_recorder_mock):
-    collection = CollectionFactory(name="expiry-test-collection")
+    collection = CollectionFactory.create(name="expiry-test-collection")
     team = collection.team
 
     # Mock timezone to get predictable expiry date
     mock_now = timezone.now()
     timezone_mock.now.return_value = mock_now
 
-    file1 = FileFactory(team=team, name="file1.txt", file=ContentFile(b"Content of file 1", name="file1.txt"))
+    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"Content of file 1", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
     result = create_collection_zip_task(collection.id, team.id)

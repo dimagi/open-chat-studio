@@ -6,19 +6,21 @@ from apps.utils.factories.service_provider_factories import MessagingProviderFac
 
 @pytest.fixture()
 def twilio_provider(db):
-    return MessagingProviderFactory(
+    return MessagingProviderFactory.create(
         name="twilio", type=MessagingProviderType.twilio, config={"auth_token": "123", "account_sid": "123"}
     )
 
 
 @pytest.fixture()
 def turn_io_provider():
-    return MessagingProviderFactory(name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"})
+    return MessagingProviderFactory.create(
+        name="turnio", type=MessagingProviderType.turnio, config={"auth_token": "123"}
+    )
 
 
 @pytest.fixture()
 def sureadhere_provider():
-    return MessagingProviderFactory(
+    return MessagingProviderFactory.create(
         name="sureadhere",
         type=MessagingProviderType.sureadhere,
         config={
@@ -33,7 +35,7 @@ def sureadhere_provider():
 
 @pytest.fixture()
 def slack_provider():
-    return MessagingProviderFactory(
+    return MessagingProviderFactory.create(
         name="slack",
         type=MessagingProviderType.slack,
         config={

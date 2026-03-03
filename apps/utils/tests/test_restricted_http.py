@@ -306,7 +306,7 @@ class TestAuthProviderIntegration:
     def test_auth_provider_not_found(self, mock_validate_url):
         from apps.utils.factories.team import TeamFactory
 
-        team = TeamFactory()
+        team = TeamFactory.create()
         client = RestrictedHttpClient(team=team)
         with pytest.raises(HttpAuthProviderError, match="not found"):
             client.get("https://api.example.com/data", auth="Nonexistent Provider")
@@ -314,7 +314,7 @@ class TestAuthProviderIntegration:
     def test_auth_provider_found_and_headers_injected(self):
         from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
-        provider = AuthProviderFactory(
+        provider = AuthProviderFactory.create(
             name="My API Key",
             type="api_key",
             config={"key": "X-Api-Key", "value": "secret123"},
@@ -327,7 +327,7 @@ class TestAuthProviderIntegration:
     def test_auth_provider_cached(self):
         from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
-        provider = AuthProviderFactory(
+        provider = AuthProviderFactory.create(
             name="Cached Provider",
             type="bearer",
             config={"token": "bearer-token"},
@@ -342,7 +342,7 @@ class TestAuthProviderIntegration:
     def test_auth_headers_take_precedence(self):
         from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
-        provider = AuthProviderFactory(
+        provider = AuthProviderFactory.create(
             name="Bearer Auth",
             type="bearer",
             config={"token": "real-token"},
@@ -366,8 +366,8 @@ class TestAuthProviderIntegration:
         from apps.utils.factories.service_provider_factories import AuthProviderFactory
         from apps.utils.factories.team import TeamFactory
 
-        AuthProviderFactory(name="Team A Provider")
-        other_team = TeamFactory()
+        AuthProviderFactory.create(name="Team A Provider")
+        other_team = TeamFactory.create()
 
         client = RestrictedHttpClient(team=other_team)
         with pytest.raises(HttpAuthProviderError, match="not found"):

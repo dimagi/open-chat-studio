@@ -161,11 +161,11 @@ class TestDashboardSecurity:
     def test_team_isolation(self, client):
         """Test that users can only access their team's data"""
         # Create two teams with users
-        team1 = TeamFactory()
-        team2 = TeamFactory()
+        team1 = TeamFactory.create()
+        team2 = TeamFactory.create()
 
-        user1 = MembershipFactory(team=team1).user
-        user2 = MembershipFactory(team=team2).user
+        user1 = MembershipFactory.create(team=team1).user
+        user2 = MembershipFactory.create(team=team2).user
 
         # Create filter for team1/user1
         filter_data = {"test": "data"}

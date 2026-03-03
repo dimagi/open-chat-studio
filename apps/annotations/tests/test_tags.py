@@ -12,12 +12,12 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def team():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.fixture()
 def chat(team, db):
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
     return session.chat
 
 
@@ -66,12 +66,12 @@ def test_link_tag(tag, chat, client):
 @pytest.mark.django_db()
 def test_tags_with_same_name_can_be_used_in_different_teams(client):
     """This simply ensures that different teams can use tags with the same name"""
-    team1 = TeamWithUsersFactory()
-    team2 = TeamWithUsersFactory()
+    team1 = TeamWithUsersFactory.create()
+    team2 = TeamWithUsersFactory.create()
     user1 = team1.members.first()
     user2 = team2.members.first()
-    session1 = ExperimentSessionFactory(team=team1, chat__team=team1)
-    session2 = ExperimentSessionFactory(team=team2, chat__team=team2)
+    session1 = ExperimentSessionFactory.create(team=team1, chat__team=team1)
+    session2 = ExperimentSessionFactory.create(team=team2, chat__team=team2)
     chat1 = session1.chat
     chat2 = session2.chat
     tag1 = Tag.objects.create(name="testing", created_by=user1, team=team1)
@@ -137,7 +137,7 @@ def test_unlink_tag_returns_404(tag, client):
 
 @pytest.mark.django_db()
 def test_create_duplicate_tag_error(client):
-    team = TeamWithUsersFactory()
+    team = TeamWithUsersFactory.create()
     user = team.members.first()
     client.login(username=user.username, password="password")
 
@@ -154,7 +154,7 @@ def test_create_duplicate_tag_error(client):
 
 @pytest.mark.django_db()
 def test_unicode_normalization_prevents_duplicates(client):
-    team = TeamWithUsersFactory()
+    team = TeamWithUsersFactory.create()
     user = team.members.first()
 
     client.login(username=user.username, password="password")

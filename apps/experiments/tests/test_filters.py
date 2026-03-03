@@ -38,13 +38,13 @@ class TestExperimentSessionFilters:
     @pytest.fixture()
     def base_session(self):
         """Create a base experiment session with participant"""
-        return ExperimentSessionFactory()
+        return ExperimentSessionFactory.create()
 
     @pytest.fixture()
     def sessions_with_tags(self):
         """Create sessions with different tag combinations"""
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1 = ExperimentSessionFactory.create()
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
         tag1 = _get_tag(team=session1.team, name="important")
         tag2 = _get_tag(team=session1.team, name="follow-up")
 
@@ -54,8 +54,8 @@ class TestExperimentSessionFilters:
 
     @pytest.fixture()
     def sessions_with_messages_tags(self):
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1 = ExperimentSessionFactory.create()
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
 
         tag1 = _get_tag(team=session1.team, name="important")
         tag2 = _get_tag(team=session1.team, name="follow-up")
@@ -75,8 +75,8 @@ class TestExperimentSessionFilters:
     @pytest.fixture()
     def sessions_with_versions(self):
         """Create sessions with different version tags on messages"""
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1 = ExperimentSessionFactory.create()
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
 
         v1_tag = _get_tag(team=session1.team, name="v1", tag_category=Chat.MetadataKeys.EXPERIMENT_VERSION)
         v2_tag = _get_tag(team=session1.team, name="v2", tag_category=Chat.MetadataKeys.EXPERIMENT_VERSION)
@@ -102,8 +102,8 @@ class TestExperimentSessionFilters:
         """
         Create sessions with ACTIVE and COMPLETE status.
         """
-        session1 = ExperimentSessionFactory(status=SessionStatus.ACTIVE)
-        session2 = ExperimentSessionFactory(experiment=session1.experiment, status=SessionStatus.COMPLETE)
+        session1 = ExperimentSessionFactory.create(status=SessionStatus.ACTIVE)
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment, status=SessionStatus.COMPLETE)
 
         return [session1, session2]
 
@@ -112,7 +112,7 @@ class TestExperimentSessionFilters:
         """Test message timestamp filtering"""
         # Setup
         with travel("2025-01-01 10:00:00", tick=False):
-            session1 = ExperimentSessionFactory()
+            session1 = ExperimentSessionFactory.create()
             ChatMessage.objects.create(
                 chat=session1.chat, content="First message for session 1", message_type=ChatMessageType.HUMAN
             )
@@ -126,7 +126,7 @@ class TestExperimentSessionFilters:
             session1.save()
 
         with travel("2025-01-02 10:00:00", tick=False):
-            session2 = ExperimentSessionFactory(experiment=session1.experiment)
+            session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
             ChatMessage.objects.create(
                 chat=session2.chat, content="First message for session 2", message_type=ChatMessageType.HUMAN
             )
@@ -356,8 +356,8 @@ class TestParticipantFilter:
     def session(self, django_db_setup, django_db_blocker):
         """Create a base experiment session with participant"""
         with django_db_blocker.unblock():
-            team = TeamFactory()
-            session = ExperimentSessionFactory(
+            team = TeamFactory.create()
+            session = ExperimentSessionFactory.create(
                 team=team, participant__name="Jeremy Fisher", participant__identifier="test.user@example.com"
             )
             yield session

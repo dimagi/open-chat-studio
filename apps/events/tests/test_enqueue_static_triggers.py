@@ -11,7 +11,7 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 @pytest.fixture()
 def experiment_session():
     """Create an experiment session for testing."""
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.mark.django_db()
@@ -61,7 +61,7 @@ def test_get_static_triggers_to_fire_with_different_experiment(experiment_sessio
     )
 
     # Create another experiment and a trigger for it
-    other_experiment = ExperimentFactory(team=experiment_session.team)
+    other_experiment = ExperimentFactory.create(team=experiment_session.team)
     StaticTrigger.objects.create(
         experiment=other_experiment,
         action=EventAction.objects.create(action_type=EventActionType.LOG),

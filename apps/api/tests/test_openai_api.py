@@ -36,7 +36,7 @@ def live_server(request):
 
 @pytest.fixture()
 def experiment(team_with_users):
-    return ExperimentFactory(team=team_with_users)
+    return ExperimentFactory.create(team=team_with_users)
 
 
 @pytest.fixture()

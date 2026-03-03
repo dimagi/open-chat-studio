@@ -8,8 +8,8 @@ from apps.utils.factories.files import FileFactory
 
 @pytest.mark.django_db()
 def test_clean_up_expired_files():
-    expired_file = FileFactory(expiry_date=timezone.now() - timezone.timedelta(days=1, minutes=1))
-    non_expired_file = FileFactory(expiry_date=timezone.now() + timezone.timedelta(days=1, minutes=1))
+    expired_file = FileFactory.create(expiry_date=timezone.now() - timezone.timedelta(days=1, minutes=1))
+    non_expired_file = FileFactory.create(expiry_date=timezone.now() + timezone.timedelta(days=1, minutes=1))
     clean_up_expired_files()
 
     with pytest.raises(File.DoesNotExist):

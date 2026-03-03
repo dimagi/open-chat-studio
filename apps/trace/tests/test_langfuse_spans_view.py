@@ -116,7 +116,7 @@ class TestAutoSelectedSpanId:
 class TestTraceLangfuseSpansView:
     @pytest.fixture()
     def trace_provider(self, team):
-        return TraceProviderFactory(
+        return TraceProviderFactory.create(
             team=team,
             type=TraceProviderType.langfuse,
             config={"public_key": "pk-test", "secret_key": "sk-test", "host": "https://cloud.langfuse.com"},
@@ -124,12 +124,12 @@ class TestTraceLangfuseSpansView:
 
     @pytest.fixture()
     def experiment(self, team, trace_provider):
-        return ExperimentFactory(team=team, trace_provider=trace_provider)
+        return ExperimentFactory.create(team=team, trace_provider=trace_provider)
 
     @pytest.fixture()
     def output_message(self, team):
-        return ChatMessageFactory(
-            chat=ChatFactory(team=team),
+        return ChatMessageFactory.create(
+            chat=ChatFactory.create(team=team),
             metadata={
                 "trace_info": [
                     {
@@ -143,14 +143,18 @@ class TestTraceLangfuseSpansView:
 
     @pytest.fixture()
     def trace(self, team, experiment, output_message):
-        return TraceFactory(team=team, experiment=experiment, output_message=output_message, status=TraceStatus.SUCCESS)
+        return TraceFactory.create(
+            team=team, experiment=experiment, output_message=output_message, status=TraceStatus.SUCCESS
+        )
 
     def _url(self, team, trace):
         return reverse("trace:trace_langfuse_spans", args=[team.slug, trace.pk])
 
     def test_null_experiment_returns_not_available(self, anon_client, team, user, output_message):
         """Trace with no experiment (experiment=None): no AttributeError, show 'not available' note."""
-        trace = TraceFactory(team=team, experiment=None, output_message=output_message, status=TraceStatus.SUCCESS)
+        trace = TraceFactory.create(
+            team=team, experiment=None, output_message=output_message, status=TraceStatus.SUCCESS
+        )
         anon_client.force_login(user)
         response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
@@ -158,9 +162,9 @@ class TestTraceLangfuseSpansView:
 
     def test_no_langfuse_provider_returns_not_available(self, anon_client, team, user):
         """Experiment has no trace_provider: show 'not available' note."""
-        experiment = ExperimentFactory(team=team, trace_provider=None)
-        output_message = ChatMessageFactory(chat=ChatFactory(team=team), metadata={})
-        trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
+        experiment = ExperimentFactory.create(team=team, trace_provider=None)
+        output_message = ChatMessageFactory.create(chat=ChatFactory.create(team=team), metadata={})
+        trace = TraceFactory.create(team=team, experiment=experiment, output_message=output_message)
         anon_client.force_login(user)
         response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
@@ -168,12 +172,12 @@ class TestTraceLangfuseSpansView:
 
     def test_no_langfuse_trace_info_returns_not_available(self, anon_client, team, user, trace_provider):
         """Output message has no Langfuse trace_info: show 'not available' note."""
-        experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
-        output_message = ChatMessageFactory(
-            chat=ChatFactory(team=team),
+        experiment = ExperimentFactory.create(team=team, trace_provider=trace_provider)
+        output_message = ChatMessageFactory.create(
+            chat=ChatFactory.create(team=team),
             metadata={"trace_info": [{"trace_provider": "ocs", "trace_id": "123"}]},
         )
-        trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
+        trace = TraceFactory.create(team=team, experiment=experiment, output_message=output_message)
         anon_client.force_login(user)
         response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
@@ -181,8 +185,8 @@ class TestTraceLangfuseSpansView:
 
     def test_no_output_message_returns_not_available(self, anon_client, team, user, trace_provider):
         """Trace has no output_message: show 'not available' note."""
-        experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
-        trace = TraceFactory(team=team, experiment=experiment, output_message=None)
+        experiment = ExperimentFactory.create(team=team, trace_provider=trace_provider)
+        trace = TraceFactory.create(team=team, experiment=experiment, output_message=None)
         anon_client.force_login(user)
         response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
@@ -190,14 +194,14 @@ class TestTraceLangfuseSpansView:
 
     def test_none_trace_id_in_trace_info_returns_not_available(self, anon_client, team, user, trace_provider):
         """trace_info has a Langfuse entry but trace_id is None: show 'not available' note."""
-        experiment = ExperimentFactory(team=team, trace_provider=trace_provider)
-        output_message = ChatMessageFactory(
-            chat=ChatFactory(team=team),
+        experiment = ExperimentFactory.create(team=team, trace_provider=trace_provider)
+        output_message = ChatMessageFactory.create(
+            chat=ChatFactory.create(team=team),
             metadata={
                 "trace_info": [{"trace_provider": "langfuse", "trace_id": None, "trace_url": LANGFUSE_TRACE_URL}]
             },
         )
-        trace = TraceFactory(team=team, experiment=experiment, output_message=output_message)
+        trace = TraceFactory.create(team=team, experiment=experiment, output_message=output_message)
         anon_client.force_login(user)
         response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200

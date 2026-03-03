@@ -17,19 +17,19 @@ from apps.utils.factories.files import FileFactory
 @patch("apps.experiments.management.commands.fix_vector_store_duplication._clear_assistant_vector_store", Mock())
 @patch("apps.experiments.management.commands.fix_vector_store_duplication.push_assistant_to_openai")
 def test_fix_vector_store_duplication_command(push_assistant_to_openai, args):
-    assistant = OpenAiAssistantFactory(assistant_id="a-123", version_number=2, team__slug="assistant-team")
+    assistant = OpenAiAssistantFactory.create(assistant_id="a-123", version_number=2, team__slug="assistant-team")
     original_tool_resource = assistant.tool_resources.create(
         tool_type="file_search", extra={"vector_store_id": "v-123"}
     )
-    original_file = FileFactory(external_id="f-123", external_source="openai")
+    original_file = FileFactory.create(external_id="f-123", external_source="openai")
     original_tool_resource.files.add(original_file)
 
     # Set up a broken version with the same tool resource and file details as the working assistant version
-    assistant_version = OpenAiAssistantFactory(assistant_id="a-312", version_number=1, working_version=assistant)
+    assistant_version = OpenAiAssistantFactory.create(assistant_id="a-312", version_number=1, working_version=assistant)
     version_tool_resource = assistant_version.tool_resources.create(
         tool_type="file_search", extra={"vector_store_id": "v-123"}
     )
-    version_file = FileFactory(external_id="f-123", external_source="openai")
+    version_file = FileFactory.create(external_id="f-123", external_source="openai")
     version_tool_resource.files.add(version_file)
 
     call_command("fix_vector_store_duplication", *args)
