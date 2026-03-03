@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from apps.help.base import BaseHelpAgent
@@ -15,6 +16,60 @@ from apps.web.dynamic_filters.datastructures import ColumnFilterData
 @functools.cache
 def _get_system_prompt():
     return (Path(__file__).parent.parent / "filter_system_prompt.md").read_text()
+
+
+def make_get_options_tool(filter_class, team):
+    """Return a LangChain tool that fetches options for a choice filter parameter.
+
+    The tool is closed over filter_class and team so it can call prepare(team)
+    on the appropriate ColumnFilter instance without needing extra arguments.
+    """
+    from apps.web.dynamic_filters.base import ChoiceColumnFilter
+
+    @tool
+    def get_filter_options(param: str, search: str = "", limit: int = 50) -> dict:
+        """Get available options for a choice or exclusive_choice filter parameter.
+
+        Call this tool before using a choice/exclusive_choice filter to look up
+        valid option values. Use the returned option IDs (not labels) as filter values.
+
+        Args:
+            param: The filter query_param name (e.g. 'experiment', 'tags', 'channels').
+            search: Optional case-insensitive substring to filter options by label.
+            limit: Maximum number of options to return (default 50).
+
+        Returns:
+            Dict with 'options' (list of {id, label}), 'returned' (count returned),
+            'total' (total matching before limit is applied).
+            On error, returns {'error': '<message>'}.
+        """
+        filter_component = next(
+            (f for f in filter_class.filters if f.query_param == param),
+            None,
+        )
+        if filter_component is None:
+            return {"error": f"No filter with param {param!r} found"}
+        if not isinstance(filter_component, ChoiceColumnFilter):
+            return {"error": f"Filter {param!r} does not have options (type: {filter_component.type})"}
+
+        instance = filter_component.model_copy(deep=True)
+        instance.prepare(team)
+
+        normalized = []
+        for opt in instance.options:
+            if isinstance(opt, str):
+                normalized.append({"id": opt, "label": opt})
+            else:
+                normalized.append(opt)
+
+        if search:
+            normalized = [opt for opt in normalized if search.lower() in opt["label"].lower()]
+
+        total = len(normalized)
+        limited = normalized[:limit]
+        return {"options": limited, "returned": len(limited), "total": total}
+
+    return get_filter_options
 
 
 class FilterInput(BaseModel):
