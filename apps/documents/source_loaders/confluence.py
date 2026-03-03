@@ -24,7 +24,9 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             raise ValueError(f"Confluence document source requires a basic authentication provider, got {type_}")
         if not auth_provider.config.get("username") or not auth_provider.config.get("password"):
             raise ValueError("Confluence authentication both username and password")
-        return cls(collection, document_source.config.confluence, auth_provider)  # ty: ignore[invalid-argument-type]
+        config = document_source.config.confluence
+        assert config is not None
+        return cls(collection, config, auth_provider)
 
     def load_documents(self) -> Iterator[Document]:
         """Load documents from Confluence using configured options"""
