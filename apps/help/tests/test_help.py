@@ -261,6 +261,7 @@ class TestRunAgentView:
         )
         # Bypass @require_POST (already POST) and @login_and_team_required
         # by calling the innermost function via __wrapped__
+        request.team = mock.Mock(id=1)
         inner = run_agent.__wrapped__.__wrapped__
         return inner(request, team_slug="test-team", agent_name=agent_name)
 
@@ -288,14 +289,24 @@ class TestRunAgentView:
         assert "response" in data
         assert data["response"]["code"] == valid_code
 
-    @mock.patch("apps.help.base.build_system_agent")
-    def test_successful_filter_agent_call(self, mock_build):
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_successful_filter_agent_call(self, mock_build, mock_team_cls):
         stub_output = FilterOutput(filters=[ColumnFilterData(column="state", operator="equals", value="setup")])
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
         mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = mock.Mock(id=1)
 
-        response = self._make_request("filter", {"query": "active sessions", "filter_slug": "session"})
+        inner = run_agent.__wrapped__.__wrapped__
+        request = RequestFactory().post(
+            "/help/filter/",
+            data=json.dumps({"query": "active sessions", "filter_slug": "session"}),
+            content_type="application/json",
+        )
+        request.team = mock.Mock(id=1)
+
+        response = inner(request, team_slug="test-team", agent_name="filter")
 
         assert response.status_code == 200
         data = json.loads(response.content)
