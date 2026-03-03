@@ -160,7 +160,7 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         ordering = ("operation_id",)
         constraints = [
             models.CheckConstraint(
-                check=Q(assistant__isnull=False) | Q(node__isnull=False),
+                condition=Q(assistant__isnull=False) | Q(node__isnull=False),
                 name="assistant_or_node_required",
             ),
             models.UniqueConstraint(
