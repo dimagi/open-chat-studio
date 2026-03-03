@@ -15,11 +15,18 @@ FAKE_DEPRECATED_MODELS = {
     ],
 }
 
+FAKE_DEPRECATED_NO_REPLACEMENT = {
+    "openai": [
+        Model("gpt-4", 8192, deprecated=True),
+        Model("gpt-4o", 128000, is_default=True),
+    ],
+}
+
 
 @pytest.mark.django_db()
 class TestNotifyDeprecatedModelsCommand:
-    def test_no_deprecated_models_with_replacement(self, capsys):
-        """If no deprecated models have a replacement set, nothing happens."""
+    def test_no_deprecated_models(self, capsys):
+        """If no models are deprecated, nothing happens."""
         no_deprecated = {"openai": [Model("gpt-4o", 128000, is_default=True)]}
         with patch(
             "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
@@ -47,6 +54,26 @@ class TestNotifyDeprecatedModelsCommand:
         assert call_kwargs["team"] == experiment.team
         assert call_kwargs["model_name"] == "openai/gpt-4"
         assert call_kwargs["replacement_model_name"] == "gpt-4o"
+        assert experiment.name in call_kwargs["affected_chatbots"]
+
+    @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
+    def test_notifies_affected_teams_without_replacement(self, mock_notify):
+        """Teams are notified about deprecated models even when no replacement is specified."""
+        deprecated_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4", deprecated=True)
+        pipeline = _make_pipeline_referencing(deprecated_model)
+        experiment = ExperimentFactory(pipeline=pipeline)
+
+        with patch(
+            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            FAKE_DEPRECATED_NO_REPLACEMENT,
+        ):
+            call_command("notify_deprecated_models", force=True)
+
+        mock_notify.assert_called_once()
+        call_kwargs = mock_notify.call_args.kwargs
+        assert call_kwargs["team"] == experiment.team
+        assert call_kwargs["model_name"] == "openai/gpt-4"
+        assert call_kwargs["replacement_model_name"] is None
         assert experiment.name in call_kwargs["affected_chatbots"]
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")

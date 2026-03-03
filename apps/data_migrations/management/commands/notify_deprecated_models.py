@@ -18,15 +18,15 @@ class Command(IdempotentCommand):
     disable_audit = True
 
     def perform_migration(self, dry_run=False):
-        # Find deprecated models with a replacement specified
+        # Find all deprecated models (with or without a replacement)
         deprecated_with_replacement = {}
         for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
             for model in provider_models:
-                if model.deprecated and model.replacement:
-                    deprecated_with_replacement[(provider_type, model.name)] = model.replacement
+                if model.deprecated:
+                    deprecated_with_replacement[(provider_type, model.name)] = model.replacement or None
 
         if not deprecated_with_replacement:
-            self.stdout.write(self.style.SUCCESS("No deprecated models with replacements found"))
+            self.stdout.write(self.style.SUCCESS("No deprecated models found"))
             return
 
         # Find DB records for each deprecated model
