@@ -34,7 +34,7 @@ from .tables import make_table
 class ServiceProviderType:
     slug: str
     label: str
-    model: models.Model
+    model: type[models.Model]
 
     """
     Enum for the subtypes of this provider type.

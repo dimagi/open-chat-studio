@@ -88,7 +88,7 @@ class OpenAiAssistantForm(forms.ModelForm):
         assistant.team = self.request.team
         if commit:
             assistant.save()
-            set_custom_actions(assistant, self.cleaned_data.get("custom_action_operations"))
+            set_custom_actions(assistant, self.cleaned_data.get("custom_action_operations") or [])
             self.save_m2m()
         return assistant
 

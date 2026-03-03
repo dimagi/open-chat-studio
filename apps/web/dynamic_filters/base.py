@@ -36,7 +36,7 @@ TYPE_TIMESTAMP = "timestamp"
 TYPE_CHOICE = "choice"
 TYPE_EXCLUSIVE_CHOICE = "exclusive_choice"
 
-TYPE_ANNOTATION = Literal[TYPE_STRING, TYPE_TIMESTAMP, TYPE_CHOICE, TYPE_EXCLUSIVE_CHOICE]
+TYPE_ANNOTATION = Literal["string", "timestamp", "choice", "exclusive_choice"]
 
 FIELD_TYPE_FILTERS = {
     TYPE_STRING: [
@@ -146,7 +146,7 @@ class ColumnFilter(BaseModel):
             logger.exception("Failed to decode JSON for filter value: %s: %s", self.query_param, json_value)
         return []
 
-    def parse_query_value(self, query_value) -> any:
+    def parse_query_value(self, query_value) -> Any:
         """Parses the query value from the URL into a format suitable for filtering."""
         return query_value
 
@@ -167,7 +167,7 @@ class ChoiceColumnFilter(ColumnFilter):
     type: str = TYPE_EXCLUSIVE_CHOICE
     options: list[str | dict[str, Any]] = Field(default_factory=list)
 
-    def parse_query_value(self, query_value) -> any:
+    def parse_query_value(self, query_value) -> Any:
         return self.values_list(query_value)
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:

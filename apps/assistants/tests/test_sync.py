@@ -361,10 +361,10 @@ def test_remove_files_from_tool(delete_file, delete_file_from_openai):
     resource = ToolResources.objects.create(
         tool_type="file_search", assistant=OpenAiAssistantFactory(), extra={"vector_store_id": "vs-123"}
     )
-    file1 = FileFactory(external_id="file1")
+    file1 = FileFactory.create(external_id="file1")
     collection.files.add(file1)
 
-    file2 = FileFactory(external_id="file2")
+    file2 = FileFactory.create(external_id="file2")
     resource.files.add(*[file1.id, file2.id])
 
     remove_files_from_tool(resource, files=[file1, file2])

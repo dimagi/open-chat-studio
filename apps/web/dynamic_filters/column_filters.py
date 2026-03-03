@@ -77,7 +77,7 @@ class TimestampFilter(ColumnFilter):
         try:
             date_value = datetime.fromisoformat(value)
             # Convert date to UTC to compare it correctly with stored timestamps
-            return date_value.astimezone(pytz.UTC)
+            return date_value.astimezone(pytz.UTC)  # ty: ignore[invalid-argument-type]
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
             return None
 
@@ -96,7 +96,7 @@ class TimestampFilter(ColumnFilter):
     def apply_after(self, queryset, value, timezone=None) -> QuerySet:
         """Filter for timestamps after a specific date"""
         if date_value := self._get_date_as_utc(value):
-            date_value = date_value.astimezone(pytz.UTC)
+            date_value = date_value.astimezone(pytz.UTC)  # ty: ignore[invalid-argument-type]
             return queryset.filter(**{f"{self.column}__date__gt": date_value})
         return queryset
 
@@ -105,7 +105,7 @@ class TimestampFilter(ColumnFilter):
         For 1d 24h are subtracted i.e sessions in the range of 24h are shown not based on the date"""
         try:
             client_tz = pytz.timezone(timezone) if timezone else pytz.UTC
-            now_client = datetime.now(client_tz)
+            now_client = datetime.now(client_tz)  # ty: ignore[invalid-argument-type]
 
             if not value.endswith(("h", "d", "m")):
                 return queryset
@@ -123,7 +123,7 @@ class TimestampFilter(ColumnFilter):
                 return queryset
 
             range_starting_client_time = now_client - delta
-            range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
+            range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)  # ty: ignore[invalid-argument-type]
             return queryset.filter(**{f"{self.column}__gte": range_starting_utc_time})
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
             return queryset

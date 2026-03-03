@@ -48,7 +48,7 @@ def test_output_message_tagging(pipeline: Pipeline, session: ExperimentSession):
 
     tags = list(result.tags.all())
     version_tag = (f"v{session.experiment.version_number}-unreleased", TagCategories.EXPERIMENT_VERSION.value)
-    _assert_tags(tags, output_message_tags + [version_tag])
+    _assert_tags(tags, output_message_tags + [version_tag])  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.django_db()
@@ -63,7 +63,7 @@ def test_session_tagging(pipeline: Pipeline, session: ExperimentSession):
     _assert_tags(tags, output_message_tags)
 
 
-def _assert_tags(object_tags, expected: list[tuple[str, str]]):
+def _assert_tags(object_tags, expected: list[tuple[str, str | None]]):
     assert len(object_tags) == len(expected)
     created_tags = set((tag.name, tag.category) for tag in object_tags)
     assert created_tags == set((name, category or "") for name, category in expected)

@@ -108,7 +108,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
 
     speech_service = provider.get_speech_service()
     # bypass pydantic validation
-    mock_synthesize = mock.Mock(return_value=(SynthesizedAudio(audio=None, duration=0.0, format="mp3")))
+    mock_synthesize = mock.Mock(return_value=(SynthesizedAudio(audio=None, duration=0.0, format="mp3")))  # ty: ignore[invalid-argument-type]
     object.__setattr__(speech_service, "_synthesize_voice", mock_synthesize)
     speech_service.synthesize_voice("test", voice)
     assert mock_synthesize.call_count == 1

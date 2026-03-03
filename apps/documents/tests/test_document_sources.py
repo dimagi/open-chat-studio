@@ -27,7 +27,10 @@ def collection(team):
 @pytest.fixture()
 def github_config():
     return GitHubSourceConfig(
-        repo_url="https://github.com/test/repo", branch="main", file_pattern="*.md", path_filter=""
+        repo_url="https://github.com/test/repo",  # ty: ignore[invalid-argument-type]
+        branch="main",
+        file_pattern="*.md",
+        path_filter="",
     )
 
 

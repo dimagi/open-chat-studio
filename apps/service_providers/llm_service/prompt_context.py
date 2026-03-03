@@ -35,7 +35,7 @@ class PromptTemplateContext:
             "collection_index_summaries": self.get_collection_index_summaries,
         }
 
-    def get_context(self, variables: list[str]) -> dict:
+    def get_context(self, variables: list[str] | set[str]) -> dict:
         context = {}
         for key, factory in self.factories.items():
             # allow partial matches to support format specifiers
@@ -224,7 +224,7 @@ class ParticipantDataProxy:
         self.set(existing_data)
         return value_at_key
 
-    def increment_key(self, key: str, increment: int = 1) -> int:
+    def increment_key(self, key: str, increment: int | float = 1) -> int | float:
         """
         Increment a numeric value at the specified key in the participant data.
         If the current value is not a number, it will be initialized to 0 before incrementing.

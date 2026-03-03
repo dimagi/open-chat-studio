@@ -2,7 +2,7 @@ import pytest
 
 from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.aggregators import aggregate_field, get_aggregators_for_value
-from apps.evaluations.models import EvaluationRunStatus
+from apps.evaluations.models import EvaluationRun, EvaluationRunStatus
 from apps.evaluations.utils import build_trend_data
 from apps.utils.factories.evaluations import EvaluationResultFactory, EvaluationRunFactory, EvaluatorFactory
 
@@ -62,7 +62,7 @@ class TestAggregators:
 @pytest.mark.django_db()
 class TestComputeAggregatesForRun:
     def test_computes_aggregates_from_results(self):
-        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
+        run: EvaluationRun = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)  # ty: ignore[invalid-assignment]
         evaluator = EvaluatorFactory(team=run.team)
 
         for score in [0.8, 0.9, 0.7]:
@@ -84,7 +84,7 @@ class TestComputeAggregatesForRun:
         assert agg.aggregates["label"]["mode"] == "good"
 
     def test_skips_results_with_errors(self):
-        run = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)
+        run: EvaluationRun = EvaluationRunFactory(status=EvaluationRunStatus.COMPLETED)  # ty: ignore[invalid-assignment]
         evaluator = EvaluatorFactory(team=run.team)
 
         EvaluationResultFactory(run=run, evaluator=evaluator, team=run.team, output={"result": {"score": 0.5}})
@@ -155,7 +155,7 @@ class TestBuildTrendData:
         team = evaluator.team
 
         # First run: field "rating" was categorical (e.g., "good"/"bad")
-        run1 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run1: EvaluationRun = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)  # ty: ignore[invalid-assignment]
         for rating in ["good", "good", "bad", "good"]:
             EvaluationResultFactory(
                 run=run1,
@@ -166,7 +166,7 @@ class TestBuildTrendData:
         compute_aggregates_for_run(run1)
 
         # Second run: field "rating" is now numeric (e.g., 1-5 scale)
-        run2 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run2: EvaluationRun = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)  # ty: ignore[invalid-assignment]
         for rating in [4, 5, 4, 3, 5]:
             EvaluationResultFactory(
                 run=run2,
@@ -204,7 +204,7 @@ class TestBuildTrendData:
         team = evaluator.team
 
         # First run: field "rating" was numeric (e.g., 1-5 scale)
-        run1 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run1: EvaluationRun = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)  # ty: ignore[invalid-assignment]
         for rating in [4, 5, 4, 3, 5]:
             EvaluationResultFactory(
                 run=run1,
@@ -215,7 +215,7 @@ class TestBuildTrendData:
         compute_aggregates_for_run(run1)
 
         # Second run: field "rating" is now categorical (e.g., "good"/"bad")
-        run2 = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)
+        run2: EvaluationRun = EvaluationRunFactory(team=team, status=EvaluationRunStatus.COMPLETED)  # ty: ignore[invalid-assignment]
         for rating in ["good", "good", "bad", "good"]:
             EvaluationResultFactory(
                 run=run2,

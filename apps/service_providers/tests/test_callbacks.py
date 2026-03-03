@@ -42,7 +42,7 @@ def test_filter_patterns():
 
     callback = MockCallback()
     filter_patterns = ["llm_name"]
-    wrapper = NameMappingWrapper(callback, {}, filter_patterns)
+    wrapper = NameMappingWrapper(callback, {}, filter_patterns)  # ty: ignore[invalid-argument-type]
     wrapper.on_llm_start({"name": "llm_name"}, ["prompt"])
 
 
@@ -54,5 +54,5 @@ def test_name_map():
             assert kwargs["name"] == "mapped_name"
 
     callback = MockCallback()
-    wrapper = NameMappingWrapper(callback, {"llm_name": "mapped_name"}, [])
+    wrapper = NameMappingWrapper(callback, {"llm_name": "mapped_name"}, [])  # ty: ignore[invalid-argument-type]
     wrapper.on_llm_start({"name": "llm_name"}, ["prompt"])

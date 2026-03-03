@@ -464,7 +464,7 @@ def chat_send_message(request, session_id):
             {
                 "error": serializers.CharField(required=False),
                 "status": "error",
-            },
+            },  # ty: ignore[invalid-argument-type]
         ),
     },
     parameters=[

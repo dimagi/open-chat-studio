@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from io import BytesIO
 
 from bs4 import UnicodeDammit
@@ -45,7 +46,7 @@ class Document(BaseModel):
         return "".join(part.content for part in self.parts)
 
 
-def get_file_content_reader(content_type) -> callable:
+def get_file_content_reader(content_type) -> Callable:
     if content_type in READERS:
         return READERS[content_type]
     mime_class = content_type.split("/")[0]

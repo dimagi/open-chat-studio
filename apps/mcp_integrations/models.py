@@ -74,7 +74,7 @@ class McpServer(BaseTeamModel):
                         "url": self.server_url,
                         "headers": headers,
                     }
-                }
+                }  # ty: ignore[invalid-argument-type]
             )
             return await client.get_tools()
         except Exception:

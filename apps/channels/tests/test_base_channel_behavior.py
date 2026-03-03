@@ -289,7 +289,7 @@ def test_pre_conversation_flow(_send_seed_message):
 
     def _user_message(message: str):
         message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
-        return channel.new_user_message(message)
+        return channel.new_user_message(message)  # ty: ignore[invalid-argument-type]
 
     experiment = channel.experiment
     experiment.seed_message = "Hi human"
@@ -536,8 +536,8 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     messenging provider.
     """
     if platform == ChannelPlatform.EVALUATIONS:
-        pytest.skip("Evaluations channel can't be instantiated from a session")
-    session = ExperimentSessionFactory(experiment_channel__platform=platform)
+        pytest.skip("Evaluations channel can't be instantiated from a session")  # ty: ignore[invalid-argument-type]
+    session = ExperimentSessionFactory.create(experiment_channel__platform=platform)
     ParticipantData.objects.create(
         team=session.team,
         experiment=session.experiment,
@@ -555,8 +555,8 @@ def test_missing_channel_raises_error(twilio_provider):
     experiment_channel = ExperimentChannelFactory(
         messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
     )
-    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
-    session.experiment_channel.platform = "snail_mail"  # ty: ignore[invalid-assignment]
+    session = ExperimentSessionFactory.create(experiment_channel=experiment_channel)
+    session.experiment_channel.platform = "snail_mail"
     with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
         ChannelBase.from_experiment_session(session)
 
@@ -831,13 +831,13 @@ def test_new_sessions_are_linked_to_the_working_experiment(experiment):
 
 def test_can_start_a_session_with_working_experiment(experiment):
     assert experiment.is_a_version is False
-    channel = ExperimentChannelFactory(experiment=experiment)
+    channel = ExperimentChannelFactory.create(experiment=experiment)
     session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
     assert session.experiment == experiment
 
 
 def test_cannot_start_a_session_with_an_experiment_version(experiment):
-    channel = ExperimentChannelFactory(experiment=experiment)
+    channel = ExperimentChannelFactory.create(experiment=experiment)
     new_version = experiment.create_new_version()
     assert new_version.is_a_version is True
     with pytest.raises(VersionedExperimentSessionsNotAllowedException):
@@ -880,8 +880,8 @@ def test_supported_and_unsupported_attachments(experiment):
     channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
     channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
 
-    file1 = FileFactory(name="f1", content_type="image/jpeg")
-    file2 = FileFactory(name="f2", content_type="image/jpeg")
+    file1 = FileFactory.create(name="f1", content_type="image/jpeg")
+    file2 = FileFactory.create(name="f2", content_type="image/jpeg")
     # This file is too large to be sent as a message and should be sent as a link
     file3 = Mock(
         spec=File, name="f3", content_type="image/jpeg", download_link=lambda *args, **kwargs: "https://example.com"
@@ -900,7 +900,7 @@ def test_chat_message_returned_for_cancelled_generate():
     channel = TestChannel(session.experiment, None, session)
     channel._add_message = Mock()  # ty: ignore[invalid-assignment]
     channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
-    channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
+    channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")  # ty: ignore[invalid-argument-type]
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
 

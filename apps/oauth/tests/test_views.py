@@ -19,7 +19,7 @@ def request_factory():
 @pytest.fixture()
 def user_with_team(db):
     """Create a user with a default team."""
-    user = UserFactory()
+    user = UserFactory.create()
     create_default_team_for_user(user, "User's Team")
     return user
 

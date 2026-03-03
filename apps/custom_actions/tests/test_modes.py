@@ -20,7 +20,7 @@ class TestCustomActionModel:
         schema_with_health = {
             **ACTION_SCHEMA,
             "paths": {
-                **ACTION_SCHEMA["paths"],
+                **ACTION_SCHEMA["paths"],  # ty: ignore[invalid-argument-type]
                 "/health": {
                     "get": {
                         "summary": "Health check",

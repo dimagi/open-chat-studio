@@ -56,7 +56,7 @@ def _build_user_message(encryption_key, commcare_connect_channel_id, message_spe
         messages.append(
             Message(
                 timestamp=timestamp,
-                message_id=str(uuid4()),
+                message_id=str(uuid4()),  # ty: ignore[invalid-argument-type]
                 ciphertext=ciphertext,
                 tag=tag,
                 nonce=nonce,
@@ -173,7 +173,7 @@ class TestCommCareConnectChannel:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_get_encryption_key_generates_missing_key(self):
         """Missing encryption keys should be generated"""
-        session = ExperimentSessionFactory(experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT)
+        session = ExperimentSessionFactory.create(experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT)
         channel = CommCareConnectChannel.from_experiment_session(session)
         participant_data = ParticipantData.objects.create(
             team=session.team,

@@ -304,7 +304,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
-    def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
+    def chunk_file(self, file: File, chunk_size: int | None, chunk_overlap: int | None) -> list[str]:
         """
         Split text content into overlapping chunks for processing.
 
@@ -379,6 +379,7 @@ class GoogleLocalIndexManager(LocalIndexManager):
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
         embeddings = GoogleGenerativeAIEmbeddings(
-            google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
+            google_api_key=self._api_key,  # ty: ignore[invalid-argument-type]
+            model=f"models/{self.embedding_model_name}",
         )
         return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)

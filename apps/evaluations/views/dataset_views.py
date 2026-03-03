@@ -60,7 +60,8 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
     permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+    def get_context_data(self, **kwargs):
+        team_slug = self.kwargs["team_slug"]
         return {
             "active_tab": "evaluation_datasets",
             "title": "Datasets",
@@ -280,8 +281,8 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     def get_highlight_message_id(self):
         """Extract and validate the message_id query parameter for highlighting."""
         try:
-            return int(self.request.GET.get("message_id"))
-        except (ValueError, TypeError):
+            return int(self.request.GET["message_id"])
+        except (KeyError, ValueError, TypeError):
             return None
 
     def get_table_pagination(self, table):
@@ -402,8 +403,8 @@ def update_message(request, team_slug, message_id):
     # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
-    message.input_chat_message = None  # ty: ignore[invalid-assignment]
-    message.expected_output_chat_message = None  # ty: ignore[invalid-assignment]
+    message.input_chat_message_id = None
+    message.expected_output_chat_message_id = None
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None
@@ -656,7 +657,7 @@ class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
             messages.error(request, "Invalid message selected.")
             return HttpResponse(status=400)
 
-        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [int(message_id)]})
+        eval_messages = make_evaluation_messages_from_sessions({str(session_id): [str(message_id)]})
         if not eval_messages:
             messages.error(request, "No valid messages found to add to dataset.")
             return HttpResponse(status=400)

@@ -358,7 +358,7 @@ class PipelineRouterNode(BasePipelineNode):
         self, edge_map: dict, incoming_edges: list
     ) -> Callable[[PipelineState, RunnableConfig], Command]:
         output_map = self.get_output_map()
-        ReturnType = Command[Literal[tuple(edge_map.values())]]  # noqa
+        ReturnType = Command[Literal[tuple(edge_map.values())]]  # noqa  # ty: ignore[invalid-type-form]
 
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config

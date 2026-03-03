@@ -77,7 +77,7 @@ class ChoiceFieldDefinition(BaseFieldDefinition):
         if any(not c or not c.strip() for c in self.choices):
             raise ValueError("Choice field cannot contain empty or whitespace-only strings")
 
-        return Literal[tuple(self.choices)]
+        return Literal[tuple(self.choices)]  # ty: ignore[invalid-type-form]
 
 
 FieldDefinition = StringFieldDefinition | IntFieldDefinition | FloatFieldDefinition | ChoiceFieldDefinition

@@ -1,3 +1,5 @@
+from typing import cast
+
 from django.conf import settings
 from django.contrib.messages import constants
 from django.urls import reverse
@@ -65,7 +67,7 @@ def get_slack_app():
     return app
 
 
-app: App = SimpleLazyObject(get_slack_app)  # ty: ignore[invalid-assignment]
+app: App = cast(App, SimpleLazyObject(get_slack_app))
 handler = SimpleLazyObject(lambda: SlackRequestHandler(app=app))
 
 

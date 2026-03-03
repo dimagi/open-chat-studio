@@ -969,13 +969,13 @@ class TestAssistantNode:
         )
         get_assistant_runnable.return_value = runnable_mock
 
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         assistant = OpenAiAssistantFactory(tools=[] if tools_enabled else ["some-tool"])
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
         runnable = create_runnable(pipeline, nodes)
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
             attachments=[],
         )
         output_state = runnable.invoke(state)
@@ -989,7 +989,7 @@ class TestAssistantNode:
         runnable_mock = self.assistant_node_runnable_mock(output="Hi there human")
         get_assistant_runnable.return_value = runnable_mock
 
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         assistant = OpenAiAssistantFactory()
         nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
         runnable = create_runnable(pipeline, nodes)
@@ -1008,7 +1008,7 @@ class TestAssistantNode:
         ]
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
             attachments=[att.model_dump() for att in attachments],
         )
         output_state = runnable.invoke(state)
@@ -1026,12 +1026,12 @@ class TestAssistantNode:
         )
         get_assistant_runnable.return_value = runnable_mock
 
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         nodes = [start_node(), assistant_node(str(999)), end_node()]
         runnable = create_runnable(pipeline, nodes)
         state = PipelineState(
             messages=["Hi there bot"],
-            experiment_session=ExperimentSessionFactory(),
+            experiment_session=ExperimentSessionFactory.create(),
             attachments=[],
         )
         with pytest.raises(PipelineNodeBuildError):

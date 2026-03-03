@@ -266,12 +266,12 @@ class TestPipeline:
         llm_node = llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
-            source_material_id=1,
+            source_material_id=1,  # ty: ignore[invalid-argument-type]
             prompt="Help the user. User data: {participant_data}. Source material: {source_material}",
             history_type="global",
         )
         nodes = [start_node(), llm_node, end_node()]
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         create_runnable(pipeline, nodes)
         pipeline.save()
 

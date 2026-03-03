@@ -19,6 +19,7 @@ from apps.experiments.models import (
 )
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo
+from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
@@ -46,6 +47,9 @@ from apps.utils.pytest import django_db_with_data
 @pytest.fixture()
 def experiment_session():
     return ExperimentSessionFactory()
+
+
+_team_type_ref: type[Team] = Team  # noqa: F841
 
 
 class TestSyntheticVoice:
@@ -77,8 +81,8 @@ class TestSyntheticVoice:
             SyntheticVoice.OpenAIVoiceEngine,
         }
         # Let's setup two providers belonging to different teams
-        team1 = TeamFactory()
-        team2 = TeamFactory()
+        team1 = TeamFactory.create()
+        team2 = TeamFactory.create()
 
         # Create synthetic voices with providers from different teams. They should be exclusive to their teams
         voice1 = SyntheticVoiceFactory(
@@ -299,12 +303,9 @@ class TestExperimentSession:
         """ScheduledMessages should use the experiment specified in the linked action's params"""
         custom_experiment = ExperimentFactory() if use_custom_experiment else None
         mock_ad_hoc.return_value = {}
-        session = ExperimentSessionFactory()
-        event_action_kwargs = {"time_period": TimePeriod.DAYS, "experiment_id": session.experiment.id}
-        if custom_experiment:
-            event_action_kwargs["experiment_id"] = custom_experiment.id
-
-        event_action, params = self._construct_event_action(**event_action_kwargs)
+        session = ExperimentSessionFactory.create()
+        experiment_id = custom_experiment.id if custom_experiment else session.experiment.id
+        event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment_id)
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 

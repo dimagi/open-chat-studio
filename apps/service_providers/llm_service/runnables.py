@@ -370,7 +370,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     def _get_response(self, assistant_runnable: OpenAIAssistantRunnable, input: dict, config: dict) -> tuple[str, str]:
         if self.adapter.tools:
             input["tools"] = []  # all tools are disabled
-        response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)
+        response: OpenAIAssistantFinish = assistant_runnable.invoke(input, config)  # ty: ignore[invalid-argument-type]
         return response.thread_id, response.run_id
 
     def _extra_input_configs(self) -> dict:
@@ -392,7 +392,7 @@ class AgentAssistantChat(AssistantChat):
         if self.adapter.disabled_tools:
             input["tools"] = self._get_allowed_tools(self.adapter.disabled_tools)
 
-        response = assistant_runnable.invoke(input, config)
+        response = assistant_runnable.invoke(input, config)  # ty: ignore[invalid-argument-type]
         max_time_limit = 60
         start_time = time.time()
         time_elapsed = 0.0
@@ -419,7 +419,7 @@ class AgentAssistantChat(AssistantChat):
 
                 response = assistant_runnable.invoke(
                     {"tool_outputs": tool_outputs, "run_id": last_action.run_id, "thread_id": last_action.thread_id},
-                    config,
+                    config,  # ty: ignore[invalid-argument-type]
                 )
             else:
                 response = self._handle_tool_artifacts(

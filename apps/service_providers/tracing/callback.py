@@ -31,7 +31,7 @@ class CallbackWrapper(Proxy):
 
 
 def wrap_callback(
-    callback: BaseCallbackHandler, run_name_map: dict[str, str], filter_patterns: list[str]
+    callback: BaseCallbackHandler, run_name_map: dict[str, str] | None, filter_patterns: list[str] | None
 ) -> BaseCallbackHandler:
     """Wrap a callback handler to ensure that dict values are serializable.
 
@@ -139,7 +139,7 @@ class NameMappingWrapper(Proxy):
         return tags, kwargs
 
 
-def get_langchain_run_name(serialized: dict[str, Any] | None, **kwargs: Any) -> str:
+def get_langchain_run_name(serialized: dict[str, Any], **kwargs: Any) -> str:
     """Retrieve the name of a serialized LangChain runnable.
 
     The prioritization for the determination of the run name is as follows:
@@ -159,13 +159,13 @@ def get_langchain_run_name(serialized: dict[str, Any] | None, **kwargs: Any) -> 
         return kwargs["name"]
 
     try:
-        return serialized["name"]  # ty: ignore[not-subscriptable]
+        return serialized["name"]
     except (KeyError, TypeError):
         pass
 
     try:
-        return serialized["id"][-1]  # ty: ignore[not-subscriptable]
-    except (KeyError, TypeError):
+        return serialized["id"][-1]
+    except (IndexError, KeyError, TypeError):
         pass
 
     return "<unknown>"

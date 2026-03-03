@@ -1,5 +1,6 @@
 import contextlib
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from functools import cached_property
@@ -53,7 +54,7 @@ class VersionField:
 
     name: str = ""
     raw_value: Any | None = None
-    to_display: callable = None
+    to_display: Callable | None = None
     group_name: str = data_field(default="General")
     previous_field_version: "VersionField | None" = data_field(default=None)
     changed: bool = False
@@ -302,7 +303,7 @@ class VersionsMixin:
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
     @transaction.atomic()
-    def create_new_version(self, save=True, is_copy=False):
+    def create_new_version(self, save=True, is_copy=False, **kwargs):
         """
         Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
         original instance ID

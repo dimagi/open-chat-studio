@@ -116,13 +116,13 @@ class LLMResponseMixin(BaseModel):
         except PipelineNodeBuildError as e:
             raise PydanticCustomError(
                 "invalid_model",
-                str(e),
+                str(e),  # ty: ignore[invalid-argument-type]
                 {"field": "llm_provider_id"},
             ) from None
         if model.deprecated:
             raise PydanticCustomError(
                 "deprecated_model",
-                f"LLM provider model '{model.name}' is deprecated.",
+                f"LLM provider model '{model.name}' is deprecated.",  # ty: ignore[invalid-argument-type]
                 {"field": "llm_provider_id"},
             )
 
@@ -330,7 +330,8 @@ class RouterMixin(BaseModel):
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
         return create_model(
-            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
+            "RouterOutput",
+            route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination")),  # ty: ignore[invalid-type-form]
         )
 
     def get_output_map(self):

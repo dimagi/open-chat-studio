@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Trace
@@ -13,7 +14,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 class TestOCSTracer:
     def test_ending_trace_creates_trace_object(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
 
         # Initially no traces exist
         assert Trace.objects.count() == 0
@@ -42,7 +43,7 @@ class TestOCSTracer:
 
     def test_record_experiment_version(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         with tracer.trace(trace_context=trace_context, session=session):
@@ -60,7 +61,7 @@ class TestOCSTracer:
     def test_trace_error_recording(self, experiment):
         """Test that errors during trace execution are captured in the trace record"""
         tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         error_message = "Test error message"
@@ -109,7 +110,7 @@ class TestOCSTracerNotifications:
         # Use a published (non-working) version so notification firing is allowed
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
         config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -132,10 +133,10 @@ class TestOCSTracerNotifications:
 
     def test_only_innermost_erroring_span_is_captured(self, experiment):
         """When nested spans both exit with an error, only the innermost span's config wins."""
-        # Use a published (non-working) version so notification firing is allowed
+        # Use a published (non-working) version so the working-version guard doesn't hide the failure
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
         inner_config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
         outer_config = SpanNotificationConfig(permissions=["experiments.view_experiment"])
 
@@ -166,7 +167,7 @@ class TestOCSTracerNotifications:
         # The base experiment fixture is always the working version
         assert experiment.is_working_version
         tracer = self._make_tracer(experiment)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
         config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -183,7 +184,7 @@ class TestOCSTracerNotifications:
         # Use a published (non-working) version so the working-version guard doesn't hide the failure
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         # No notification_config on span_context
@@ -200,7 +201,7 @@ class TestOCSTracerNotifications:
         # The base experiment fixture is the working version — notification won't fire
         assert experiment.is_working_version
         tracer = self._make_tracer(experiment)
-        session = ExperimentSessionFactory()
+        session: ExperimentSession = ExperimentSessionFactory()  # ty: ignore[invalid-assignment]
         config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")

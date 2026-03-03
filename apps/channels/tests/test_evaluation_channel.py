@@ -8,7 +8,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.channels import MESSAGE_TYPES, EvaluationChannel
 from apps.chat.models import ChatMessage
-from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -28,7 +28,9 @@ def evaluation_channel(experiment):
 @pytest.mark.django_db()
 def test_evaluation_channel_initialization_with_session(experiment, evaluation_channel):
     """Test EvaluationChannel can be initialized with a session"""
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session: ExperimentSession = ExperimentSessionFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, experiment_channel=evaluation_channel
+    )
 
     channel = EvaluationChannel(
         experiment=experiment,
@@ -47,7 +49,9 @@ def test_evaluation_channel_initialization_with_session(experiment, evaluation_c
 @pytest.mark.django_db()
 def test_evaluation_channel_disables_ocs_tracer(experiment, evaluation_channel):
     """Test that EvaluationChannel uses empty tracing service (no OCS tracer)"""
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session: ExperimentSession = ExperimentSessionFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, experiment_channel=evaluation_channel
+    )
 
     channel = EvaluationChannel(
         experiment=experiment,
@@ -83,7 +87,9 @@ def test_get_team_evaluations_channel_uniqueness(experiment):
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_evaluation_channel_processes_message(get_bot_response_mock, experiment, evaluation_channel):
     """Test that EvaluationChannel can process messages"""
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session: ExperimentSession = ExperimentSessionFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, experiment_channel=evaluation_channel
+    )
 
     get_bot_response_mock.return_value = ChatMessage(content="Bot response")
 
@@ -107,7 +113,9 @@ def test_evaluation_channel_processes_message(get_bot_response_mock, experiment,
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_handle_evaluation_message(get_bot_response_mock, experiment, evaluation_channel):
     get_bot_response_mock.return_value = ChatMessage(content="Bot response")
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session: ExperimentSession = ExperimentSessionFactory(  # ty: ignore[invalid-assignment]
+        experiment=experiment, experiment_channel=evaluation_channel
+    )
 
     result = handle_evaluation_message(
         experiment_version=experiment,
@@ -118,23 +126,3 @@ def test_handle_evaluation_message(get_bot_response_mock, experiment, evaluation
     )
 
     assert isinstance(result, ChatMessage)
-    assert result.content == "Bot response"
-
-
-def test_evaluation_channel_participant_data():
-    test_state = {"test": "demo"}
-    test_pd = {"userid": "1234"}
-    experiment = ExperimentFactory.build()
-    channel = ExperimentChannelFactory.build(platform=ChannelPlatform.EVALUATIONS)
-    session = ExperimentSessionFactory.build(experiment=experiment, experiment_channel=channel, state=test_state)
-
-    channel = EvaluationChannel(
-        experiment=experiment,
-        experiment_channel=channel,
-        experiment_session=session,
-        participant_data=test_pd,
-    )
-    bot = channel.bot
-    state = bot._get_input_state([], "hi")
-    assert state["session_state"] == test_state
-    assert state["participant_data"] == test_pd

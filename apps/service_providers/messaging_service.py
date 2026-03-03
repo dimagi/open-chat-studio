@@ -159,7 +159,7 @@ class TwilioService(MessagingService):
             if num_chunks == 1:
                 return
 
-            self.block_until_delivered(message_id)
+            self.block_until_delivered(message_id)  # ty: ignore[invalid-argument-type]
 
     def send_voice_message(
         self,
@@ -176,7 +176,7 @@ class TwilioService(MessagingService):
 
     def get_message_audio(self, message: TwilioMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         auth = (self.account_sid, self.auth_token)
-        response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
+        response = httpx.get(message.media_url, auth=auth, follow_redirects=True)  # ty: ignore[invalid-argument-type]
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:

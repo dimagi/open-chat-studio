@@ -14,7 +14,7 @@ class AuthService(pydantic.BaseModel):
             "timeout": 10,
             "limits": httpx.Limits(max_keepalive_connections=5, max_connections=10),
         }
-        return httpx.Client(**kwargs)
+        return httpx.Client(**kwargs)  # ty: ignore[invalid-argument-type]
 
     def _get_http_client_kwargs(self) -> dict:
         return {}

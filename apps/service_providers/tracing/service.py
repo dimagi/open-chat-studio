@@ -26,7 +26,7 @@ logger = logging.getLogger("ocs.tracing")
 
 
 class TracingService:
-    def __init__(self, tracers: list[Tracer], experiment_id: int, team_id: int):
+    def __init__(self, tracers: list[Tracer], experiment_id: int | None, team_id: int | None):
         self._tracers = tracers
 
         self.outputs: dict[UUID, dict] = defaultdict(dict)
@@ -253,7 +253,7 @@ class TracingService:
     def _get_current_span_info(self) -> TraceContext:
         if self.span_stack:
             return self.span_stack[-1]
-        return TraceContext(self.trace_id, self.trace_name)
+        return TraceContext(self.trace_id, self.trace_name)  # ty: ignore[invalid-argument-type]
 
     def add_output_message_tags_to_trace(self, tags: list[str]) -> None:
         if not self.activated or not tags:

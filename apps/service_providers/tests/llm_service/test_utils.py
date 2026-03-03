@@ -229,7 +229,7 @@ class TestFormatMultimodalInput:
         # When conversion fails, the attachment should be skipped (only text message)
         assert len(result.content) == 2
         assert result.content[0] == {"type": "text", "text": "Check this doc"}
-        assert "Error" in result.content[1]["text"]
+        assert "Error" in result.content[1]["text"]  # ty: ignore[invalid-argument-type]
 
     def test_mixed_attachments(self):
         image_attachment = Mock()
@@ -253,11 +253,11 @@ class TestFormatMultimodalInput:
         result = format_multimodal_input("Review all files", [image_attachment, docx_attachment, pdf_attachment])
 
         assert len(result.content) == 4
-        assert result.content[0]["type"] == "text"
-        assert result.content[1]["type"] == "image"  # PNG image
-        assert result.content[2]["type"] == "text"  # DOCX converted to text
-        assert "Document content" in result.content[2]["text"]
-        assert result.content[3]["type"] == "file"  # PDF as file
+        assert result.content[0]["type"] == "text"  # ty: ignore[invalid-argument-type]
+        assert result.content[1]["type"] == "image"  # ty: ignore[invalid-argument-type] # PNG image
+        assert result.content[2]["type"] == "text"  # ty: ignore[invalid-argument-type] # DOCX converted to text
+        assert "Document content" in result.content[2]["text"]  # ty: ignore[invalid-argument-type]
+        assert result.content[3]["type"] == "file"  # ty: ignore[invalid-argument-type] # PDF as file
 
     @patch("apps.service_providers.llm_service.utils.settings")
     def test_file_size_exceeds_max(self, mock_settings):

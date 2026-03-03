@@ -24,7 +24,7 @@ def _get_querydict(params: dict) -> QueryDict:
     return query_dict
 
 
-def _get_tag(team: Team, name: str, tag_category: TagCategories | None = None) -> Tag:
+def _get_tag(team: Team, name: str, tag_category: str | TagCategories | None = None) -> Tag:
     tag, _ = Tag.objects.get_or_create(
         name=name,
         team=team,
@@ -43,8 +43,8 @@ class TestExperimentSessionFilters:
     @pytest.fixture()
     def sessions_with_tags(self):
         """Create sessions with different tag combinations"""
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1 = ExperimentSessionFactory.create()
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
         tag1 = _get_tag(team=session1.team, name="important")
         tag2 = _get_tag(team=session1.team, name="follow-up")
 
@@ -54,8 +54,8 @@ class TestExperimentSessionFilters:
 
     @pytest.fixture()
     def sessions_with_messages_tags(self):
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1 = ExperimentSessionFactory.create()
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
 
         tag1 = _get_tag(team=session1.team, name="important")
         tag2 = _get_tag(team=session1.team, name="follow-up")
@@ -75,8 +75,8 @@ class TestExperimentSessionFilters:
     @pytest.fixture()
     def sessions_with_versions(self):
         """Create sessions with different version tags on messages"""
-        session1 = ExperimentSessionFactory()
-        session2 = ExperimentSessionFactory(experiment=session1.experiment)
+        session1 = ExperimentSessionFactory.create()
+        session2 = ExperimentSessionFactory.create(experiment=session1.experiment)
 
         v1_tag = _get_tag(team=session1.team, name="v1", tag_category=Chat.MetadataKeys.EXPERIMENT_VERSION)
         v2_tag = _get_tag(team=session1.team, name="v2", tag_category=Chat.MetadataKeys.EXPERIMENT_VERSION)

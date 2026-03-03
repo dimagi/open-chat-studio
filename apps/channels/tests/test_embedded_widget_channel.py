@@ -91,10 +91,12 @@ class TestEmbeddedWidgetChannelModel:
         ExperimentChannelFactory(
             platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "existing_token_123456789012345678"}
         )
-        new_experiment = ExperimentFactory()
+        new_experiment = ExperimentFactory.create()
 
         # Should raise exception for duplicate token usage
         with pytest.raises(ChannelAlreadyUtilizedException):
             ExperimentChannel.check_usage_by_another_experiment(
-                ChannelPlatform.EMBEDDED_WIDGET, "existing_token_123456789012345678", new_experiment
+                ChannelPlatform.EMBEDDED_WIDGET,
+                "existing_token_123456789012345678",
+                new_experiment,
             )

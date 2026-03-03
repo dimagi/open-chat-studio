@@ -14,18 +14,20 @@ from apps.utils.factories.service_provider_factories import MessagingProviderFac
 
 @pytest.mark.django_db()
 def test_new_integration_does_not_raise_exception():
-    channel = ExperimentChannelFactory()
-    new_experiment = ExperimentFactory()
+    channel = ExperimentChannelFactory.create()
+    new_experiment = ExperimentFactory.create()
 
     ExperimentChannel.check_usage_by_another_experiment(
-        channel.platform, identifier="321", new_experiment=new_experiment
+        channel.platform,
+        identifier="321",
+        new_experiment=new_experiment,
     )
 
 
 @pytest.mark.django_db()
 def test_duplicate_integration_raises_exception():
-    channel = ExperimentChannelFactory()
-    new_experiment = ExperimentFactory()
+    channel = ExperimentChannelFactory.create()
+    new_experiment = ExperimentFactory.create()
 
     with pytest.raises(ChannelAlreadyUtilizedException):
         ExperimentChannel.check_usage_by_another_experiment(
