@@ -4,7 +4,7 @@ import logging
 import re
 from functools import cached_property
 from io import BytesIO
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
 from django.db.models import Q
@@ -159,6 +159,9 @@ class LlmService(pydantic.BaseModel):
 class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
+    # Subclasses can override this to enable the OpenAI Responses API.
+    # Generic OpenAI-compatible providers (e.g. Groq, Perplexity) do not support it.
+    _use_responses_api: ClassVar[bool] = False
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import ChatOpenAI
@@ -168,7 +171,7 @@ class OpenAIGenericService(LlmService):
             # Remove the temperature parameter for custom reasoning models
             model_kwargs.pop("temperature")
 
-        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=True)
+        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=self._use_responses_api)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
@@ -282,6 +285,8 @@ class OpenAIGenericService(LlmService):
 class OpenAILlmService(OpenAIGenericService):
     openai_api_base: str | None = None
     openai_organization: str | None = None
+    # OpenAI supports the Responses API; enable it for this service
+    _use_responses_api: ClassVar[bool] = True
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         return {
