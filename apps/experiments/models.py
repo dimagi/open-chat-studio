@@ -53,6 +53,10 @@ from apps.web.meta import absolute_url
 log = logging.getLogger("ocs.experiments")
 
 
+def _new_session_id() -> str:
+    return str(uuid4())
+
+
 class VersionFieldDisplayFormatters:
     """A collection of formatters that are used for displaying version fields"""
 
@@ -1370,7 +1374,7 @@ class ExperimentSession(BaseTeamModel):
     """
 
     objects = ExperimentSessionObjectManager()
-    external_id = models.CharField(max_length=255, default=lambda: str(uuid.uuid4()), unique=True)
+    external_id = models.CharField(max_length=255, default=_new_session_id, unique=True)
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
