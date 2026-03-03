@@ -83,7 +83,7 @@ jobs:
       - name: Create Missing Migrations
         env:
           SECRET_KEY: secret-test-key
-        run: uv run python manage.py makemigrations
+        run: uv run python manage.py makemigrations --noinput
 
       - name: Check for changes
         id: verify-changed-files
