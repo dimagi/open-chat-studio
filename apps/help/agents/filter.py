@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import ClassVar, Literal
 
-from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from apps.help.agent import build_system_agent
@@ -27,6 +26,7 @@ def make_get_options_tool(filter_class, team):
     The tool is closed over filter_class and team so it can call prepare(team)
     on the appropriate ColumnFilter instance without needing extra arguments.
     """
+    from langchain_core.tools import tool  # lazy-loaded to keep Django startup fast
 
     @tool
     def get_filter_options(param: str, search: str = "", limit: int = 50) -> dict:
@@ -110,7 +110,9 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
         from apps.web.dynamic_filters.base import get_filter_registry
 
         registry = get_filter_registry()
-        filter_class = registry[self.input.filter_slug]
+        filter_class = registry.get(self.input.filter_slug)
+        if filter_class is None:
+            raise ValueError(f"Unknown filter slug: {self.input.filter_slug!r}. Available: {sorted(registry.keys())}")
         team = Team.objects.get(id=self.input.team_id)
         options_tool = make_get_options_tool(filter_class, team)
         agent = build_system_agent(
