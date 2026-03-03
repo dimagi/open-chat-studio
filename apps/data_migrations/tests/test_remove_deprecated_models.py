@@ -59,11 +59,11 @@ class TestRemoveDeprecatedModelsCommand:
     def test_deletes_model_and_migrates_pipeline_reference_to_replacement(self, mock_notify):
         """With a replacement, pipeline node references are updated to the replacement model."""
         old_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4-old")
-        replacement_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4o")
+        replacement_model = LlmProviderModelFactory(team=None, type="openai", name="test-replacement-model")
         pipeline = _make_pipeline_referencing(old_model)
         node = pipeline.node_set.get(type="LLMResponseWithPrompt")
 
-        deleted_models = [("openai", "gpt-4-old", "gpt-4o")]
+        deleted_models = [("openai", "gpt-4-old", "test-replacement-model")]
         with patch(
             "apps.data_migrations.management.commands.remove_deprecated_models.DELETED_MODELS",
             deleted_models,
@@ -78,11 +78,11 @@ class TestRemoveDeprecatedModelsCommand:
     def test_notifies_affected_team(self, mock_notify):
         """Affected teams receive a deleted_model_notification, not an email."""
         old_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4-old")
-        LlmProviderModelFactory(team=None, type="openai", name="gpt-4o")
+        LlmProviderModelFactory(team=None, type="openai", name="test-replacement-model")
         pipeline = _make_pipeline_referencing(old_model)
         experiment = ExperimentFactory(pipeline=pipeline)
 
-        deleted_models = [("openai", "gpt-4-old", "gpt-4o")]
+        deleted_models = [("openai", "gpt-4-old", "test-replacement-model")]
         with patch(
             "apps.data_migrations.management.commands.remove_deprecated_models.DELETED_MODELS",
             deleted_models,
@@ -93,7 +93,7 @@ class TestRemoveDeprecatedModelsCommand:
         kwargs = mock_notify.call_args.kwargs
         assert kwargs["team"] == experiment.team
         assert kwargs["model_name"] == "openai/gpt-4-old"
-        assert kwargs["replacement_model_name"] == "gpt-4o"
+        assert kwargs["replacement_model_name"] == "test-replacement-model"
         assert experiment.name in kwargs["affected_chatbots"]
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")

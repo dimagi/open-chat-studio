@@ -10,15 +10,15 @@ from apps.utils.factories.service_provider_factories import LlmProviderModelFact
 
 FAKE_DEPRECATED_MODELS = {
     "openai": [
-        Model("gpt-4", 8192, deprecated=True, replacement="gpt-4o"),
-        Model("gpt-4o", 128000, is_default=True),
+        Model("test-deprecated-model", 8192, deprecated=True, replacement="test-replacement-model"),
+        Model("test-replacement-model", 128000, is_default=True),
     ],
 }
 
 FAKE_DEPRECATED_NO_REPLACEMENT = {
     "openai": [
-        Model("gpt-4", 8192, deprecated=True),
-        Model("gpt-4o", 128000, is_default=True),
+        Model("test-deprecated-model", 8192, deprecated=True),
+        Model("test-replacement-model", 128000, is_default=True),
     ],
 }
 
@@ -39,7 +39,9 @@ class TestNotifyDeprecatedModelsCommand:
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_notifies_affected_teams(self, mock_notify):
         """Teams with pipeline references to deprecated models are notified."""
-        deprecated_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4", deprecated=True)
+        deprecated_model = LlmProviderModelFactory(
+            team=None, type="openai", name="test-deprecated-model", deprecated=True
+        )
         pipeline = _make_pipeline_referencing(deprecated_model)
         experiment = ExperimentFactory(pipeline=pipeline)
 
@@ -52,14 +54,16 @@ class TestNotifyDeprecatedModelsCommand:
         mock_notify.assert_called_once()
         call_kwargs = mock_notify.call_args.kwargs
         assert call_kwargs["team"] == experiment.team
-        assert call_kwargs["model_name"] == "openai/gpt-4"
-        assert call_kwargs["replacement_model_name"] == "gpt-4o"
+        assert call_kwargs["model_name"] == "openai/test-deprecated-model"
+        assert call_kwargs["replacement_model_name"] == "test-replacement-model"
         assert experiment.name in call_kwargs["affected_chatbots"]
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_notifies_affected_teams_without_replacement(self, mock_notify):
         """Teams are notified about deprecated models even when no replacement is specified."""
-        deprecated_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4", deprecated=True)
+        deprecated_model = LlmProviderModelFactory(
+            team=None, type="openai", name="test-deprecated-model", deprecated=True
+        )
         pipeline = _make_pipeline_referencing(deprecated_model)
         experiment = ExperimentFactory(pipeline=pipeline)
 
@@ -72,14 +76,16 @@ class TestNotifyDeprecatedModelsCommand:
         mock_notify.assert_called_once()
         call_kwargs = mock_notify.call_args.kwargs
         assert call_kwargs["team"] == experiment.team
-        assert call_kwargs["model_name"] == "openai/gpt-4"
+        assert call_kwargs["model_name"] == "openai/test-deprecated-model"
         assert call_kwargs["replacement_model_name"] is None
         assert experiment.name in call_kwargs["affected_chatbots"]
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_dry_run_does_not_notify(self, mock_notify):
         """Dry run previews without sending notifications."""
-        deprecated_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4", deprecated=True)
+        deprecated_model = LlmProviderModelFactory(
+            team=None, type="openai", name="test-deprecated-model", deprecated=True
+        )
         _make_pipeline_referencing(deprecated_model)
 
         with patch(
@@ -93,7 +99,7 @@ class TestNotifyDeprecatedModelsCommand:
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_skips_teams_with_no_active_references(self, mock_notify):
         """Teams with no active references to deprecated models are not notified."""
-        LlmProviderModelFactory(team=None, type="openai", name="gpt-4", deprecated=True)
+        LlmProviderModelFactory(team=None, type="openai", name="test-deprecated-model", deprecated=True)
 
         with patch(
             "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
