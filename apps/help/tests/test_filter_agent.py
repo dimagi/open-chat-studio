@@ -6,6 +6,7 @@ from pydantic import ValidationError
 import apps.experiments.filters  # noqa: F401 — ensure filter subclasses are registered
 from apps.help.agents.filter import FilterAgent, FilterInput, make_get_options_tool
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
+from apps.web.dynamic_filters.column_filters import ParticipantFilter
 
 
 class TestFilterAgentPrompt:
@@ -131,8 +132,6 @@ class TestMakeGetOptionsTool:
         assert "nonexistent" in result["error"]
 
     def test_error_for_non_choice_filter(self):
-        from apps.web.dynamic_filters.column_filters import ParticipantFilter
-
         string_filter = ParticipantFilter()
         filter_class = self._make_filter_class([string_filter])
         team = mock.Mock()

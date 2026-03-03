@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
+from apps.web.dynamic_filters.base import ChoiceColumnFilter
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
@@ -24,7 +25,6 @@ def make_get_options_tool(filter_class, team):
     The tool is closed over filter_class and team so it can call prepare(team)
     on the appropriate ColumnFilter instance without needing extra arguments.
     """
-    from apps.web.dynamic_filters.base import ChoiceColumnFilter
 
     @tool
     def get_filter_options(param: str, search: str = "", limit: int = 50) -> dict:
