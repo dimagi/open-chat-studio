@@ -1,15 +1,8 @@
-from collections import defaultdict
-
-from django.db.models import Q
-
-from apps.assistants.models import OpenAiAssistant
-from apps.data_migrations.management.commands.base import IdempotentCommand
-from apps.experiments.models import Experiment
+from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
 from apps.ocs_notifications.notifications import deprecated_model_notification
 from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
-from apps.utils.deletion import get_related_pipelines_queryset
 
 
 class Command(IdempotentCommand):
@@ -49,33 +42,11 @@ class Command(IdempotentCommand):
         affected_by_model = {}
 
         for db_model, _model_name, replacement in db_models:
-            teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
-
-            related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
-            nodes_by_pipeline = defaultdict(list)
-            pipelines = []
-            for node in related_pipeline_nodes.select_related("pipeline").all():
-                pipelines.append(node.pipeline)
-                nodes_by_pipeline[node.pipeline_id].append(node)
-
-            referenced_experiments = Experiment.objects.filter(pipeline_id__in=list(nodes_by_pipeline)).filter(
-                Q(working_version__isnull=True) | Q(is_default_version=True)
+            affected_by_model[db_model.id] = (
+                get_affected_teams_data(db_model),
+                f"{db_model.type}/{db_model.name}",
+                replacement,
             )
-            referenced_pipeline_ids = {exp.pipeline_id for exp in referenced_experiments}
-            unreferenced_pipelines = [p for p in pipelines if p.id not in referenced_pipeline_ids]
-
-            referenced_assistants = OpenAiAssistant.objects.filter(
-                llm_provider_model=db_model, working_version__isnull=True
-            )
-
-            for exp in referenced_experiments:
-                teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()
-            for pipeline in unreferenced_pipelines:
-                teams_data[pipeline.team_id]["pipelines"][pipeline.name] = pipeline.get_absolute_url()
-            for assistant in referenced_assistants:
-                teams_data[assistant.team_id]["assistants"][assistant.name] = assistant.get_absolute_url()
-
-            affected_by_model[db_model.id] = (teams_data, f"{db_model.type}/{db_model.name}", replacement)
 
         total_affected = sum(len(td) for td, _, _ in affected_by_model.values())
         self.stdout.write(f"Found {len(db_models)} deprecated models affecting {total_affected} team(s)")

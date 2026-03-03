@@ -1,10 +1,4 @@
-from collections import defaultdict
-
-from django.db.models import Q
-
-from apps.assistants.models import OpenAiAssistant
-from apps.data_migrations.management.commands.base import IdempotentCommand
-from apps.experiments.models import Experiment
+from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
 from apps.ocs_notifications.notifications import deleted_model_notification
 from apps.service_providers.llm_service.default_models import DELETED_MODELS, _update_pipeline_node_param
 from apps.service_providers.models import LlmProviderModel
@@ -67,33 +61,7 @@ class Command(IdempotentCommand):
         affected_by_model = {}  # {db_model.id: {team_id: {"chatbots": set, "pipelines": set, "assistants": set}}}
 
         for db_model, _replacement_name, _replacement_model in models_to_delete:
-            teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
-
-            related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
-            nodes_by_pipeline = defaultdict(list)
-            pipelines = []
-            for node in related_pipeline_nodes.select_related("pipeline").all():
-                pipelines.append(node.pipeline)
-                nodes_by_pipeline[node.pipeline_id].append(node)
-
-            referenced_experiments = Experiment.objects.filter(pipeline_id__in=list(nodes_by_pipeline)).filter(
-                Q(working_version__isnull=True) | Q(is_default_version=True)
-            )
-            referenced_pipeline_ids = {exp.pipeline_id for exp in referenced_experiments}
-            unreferenced_pipelines = [p for p in pipelines if p.id not in referenced_pipeline_ids]
-
-            referenced_assistants = OpenAiAssistant.objects.filter(
-                llm_provider_model=db_model, working_version__isnull=True
-            )
-
-            for exp in referenced_experiments:
-                teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()
-            for pipeline in unreferenced_pipelines:
-                teams_data[pipeline.team_id]["pipelines"][pipeline.name] = pipeline.get_absolute_url()
-            for assistant in referenced_assistants:
-                teams_data[assistant.team_id]["assistants"][assistant.name] = assistant.get_absolute_url()
-
-            affected_by_model[db_model.id] = teams_data
+            affected_by_model[db_model.id] = get_affected_teams_data(db_model)
 
         total_teams = len({tid for td in affected_by_model.values() for tid in td})
         self.stdout.write(f"Found {len(models_to_delete)} deleted models affecting {total_teams} teams")
