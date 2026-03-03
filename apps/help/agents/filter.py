@@ -28,6 +28,8 @@ def make_get_options_tool(filter_class, team):
     """
     from langchain_core.tools import tool  # lazy-loaded to keep Django startup fast
 
+    _options_cache: dict[str, list[dict]] = {}  # param -> normalized options (cached per agent run)
+
     @tool
     def get_filter_options(param: str, search: str = "", limit: int = 50) -> dict:
         """Get available options for a choice or exclusive_choice filter parameter.
@@ -45,6 +47,9 @@ def make_get_options_tool(filter_class, team):
             'total' (total matching before limit is applied).
             On error, returns {'error': '<message>'}.
         """
+        if limit < 1:
+            return {"error": "limit must be >= 1"}
+
         filter_component = next(
             (f for f in filter_class.filters if f.query_param == param),
             None,
@@ -54,18 +59,27 @@ def make_get_options_tool(filter_class, team):
         if not isinstance(filter_component, ChoiceColumnFilter):
             return {"error": f"Filter {param!r} does not have options (type: {filter_component.type})"}
 
-        instance = filter_component.model_copy(deep=True)
-        instance.prepare(team)
+        if param not in _options_cache:
+            try:
+                instance = filter_component.model_copy(deep=True)
+                instance.prepare(team)
 
-        normalized = []
-        for opt in instance.options:
-            if isinstance(opt, str):
-                normalized.append({"id": opt, "label": opt})
-            else:
-                normalized.append(opt)
+                normalized = []
+                for opt in instance.options:
+                    if isinstance(opt, str):
+                        normalized.append({"id": opt, "label": opt})
+                    elif isinstance(opt, dict) and "label" in opt:
+                        normalized.append({"id": opt.get("id", opt["label"]), "label": str(opt["label"])})
+
+                _options_cache[param] = normalized
+            except Exception as exc:
+                return {"error": f"Failed to resolve options for {param!r}: {exc}"}
+
+        normalized = _options_cache[param]
 
         if search:
-            normalized = [opt for opt in normalized if search.lower() in opt["label"].lower()]
+            needle = search.lower()
+            normalized = [opt for opt in normalized if needle in opt["label"].lower()]
 
         total = len(normalized)
         limited = normalized[:limit]

@@ -68,4 +68,4 @@ Use this tool to look up valid option values for `choice` or `exclusive_choice` 
 
 **Example:**
 - User says "filter by chatbot Alpha Bot" → call `get_filter_options(param="experiment", search="Alpha Bot")` → get `[{{"id": 42, "label": "Alpha Bot"}}]` → use value `[42]`
-- User says "filter by tag urgent" → call `get_filter_options(param="tags", search="urgent")` → get `[{{"id": "urgent", "label": "urgent"}}]` → use value `["urgent"]`
+- User says "filter by thumbs up tag" → call `get_filter_options(param="tags", search="👍")` → get `[{{"id": "👍", "label": "👍"}}]` → use value `["👍"]`
