@@ -43,3 +43,29 @@ When the user asks about a general time period (e.g., "last week", "last 30 days
 3. Each column should appear at most once in the output.
 4. Produce the minimum number of filters needed to satisfy the query.
 5. Use the `range` operator for relative time expressions (e.g. "last week" → `7d`, "last 3 months" → `90d`).
+
+## Available Tools
+
+### `get_filter_options`
+
+Use this tool to look up valid option values for `choice` or `exclusive_choice` filter types.
+
+**When to call it:** Whenever the user's query refers to a choice filter (e.g. chatbot name, tags, channels) and you need to resolve a name or partial name to valid option values.
+
+**Arguments:**
+- `param` (required): The filter query_param from the schema (e.g. `"experiment"`, `"tags"`, `"channels"`)
+- `search` (optional): A substring to narrow results (case-insensitive match on option label)
+- `limit` (optional): Max options to return, default 50
+
+**Returns:** `{{"options": [{{"id": ..., "label": ...}}, ...], "returned": N, "total": M}}`
+
+**Rules for tool use:**
+1. Always call the tool before using a choice filter value if you don't already know the exact option IDs.
+2. Use the `search` parameter with the user's term to narrow results before selecting.
+3. Use option **IDs** (not labels) as filter values in `ColumnFilterData`.
+4. If `total > returned`, the list is truncated — refine your search to find the right option.
+5. If the tool returns an error, skip that filter and proceed with remaining filters.
+
+**Example:**
+- User says "filter by chatbot Alpha Bot" → call `get_filter_options(param="experiment", search="Alpha Bot")` → get `[{{"id": 42, "label": "Alpha Bot"}}]` → use value `[42]`
+- User says "filter by tag urgent" → call `get_filter_options(param="tags", search="urgent")` → get `[{{"id": "urgent", "label": "urgent"}}]` → use value `["urgent"]`
