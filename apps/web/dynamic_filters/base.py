@@ -242,16 +242,25 @@ def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
     """Extract static schema from a MultiColumnFilter for use in AI prompts.
 
     Returns a dict keyed by query_param with label, type, description, and operators.
+    For choice filters with pre-populated (static) options the options list is included
+    so agents can use values directly without a tool call.  Dynamic filters (whose options
+    come from prepare()) have no options entry, signalling that get_filter_options must be
+    called to discover valid IDs.
     Does not call prepare() -- no DB access needed.
     """
     schema = {}
     for f in filter_class.filters:
-        schema[f.query_param] = {
+        entry: dict[str, Any] = {
             "label": f.label,
             "type": f.type,
             "description": f.description,
             "operators": [op.value for op in FIELD_TYPE_FILTERS[f.type]],
         }
+        if isinstance(f, ChoiceColumnFilter) and f.options:
+            entry["options"] = [
+                opt if isinstance(opt, str) else opt.get("id", opt.get("label", str(opt))) for opt in f.options
+            ]
+        schema[f.query_param] = entry
     return schema
 
 

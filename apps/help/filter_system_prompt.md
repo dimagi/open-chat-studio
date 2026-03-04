@@ -44,13 +44,23 @@ When the user asks about a general time period (e.g., "last week", "last 30 days
 4. Produce the minimum number of filters needed to satisfy the query.
 5. Use the `range` operator for relative time expressions (e.g. "last week" → `7d`, "last 3 months" → `90d`).
 
+## Choice Filter Values
+
+Some filters include an `"options"` list in the schema — these have a **fixed** set of valid values.
+Use those exact option strings as filter values. Do **not** call `get_filter_options` for them.
+
+Filters **without** an `"options"` list have dynamic, database-sourced values. For these you **must**
+call `get_filter_options` to discover valid IDs before setting the filter value.
+
 ## Available Tools
 
 ### `get_filter_options`
 
-Use this tool to look up valid option values for `choice` or `exclusive_choice` filter types.
+Use this tool to look up valid option values for `choice` or `exclusive_choice` filter types that
+have **no static `options` list in the schema** (e.g. `experiment`, `tags`, `channels`, `versions`).
 
-**When to call it:** Whenever the user's query refers to a choice filter (e.g. chatbot name, tags, channels) and you need to resolve a name or partial name to valid option values.
+**When to call it:** When the user's query refers to a dynamic choice filter and you need to
+resolve a name or partial name to valid option IDs.
 
 **Arguments:**
 - `param` (required): The filter query_param from the schema (e.g. `"experiment"`, `"tags"`, `"channels"`)
@@ -60,12 +70,12 @@ Use this tool to look up valid option values for `choice` or `exclusive_choice` 
 **Returns:** `{{"options": [{{"id": ..., "label": ...}}, ...], "returned": N, "total": M}}`
 
 **Rules for tool use:**
-1. Always call this tool before using any choice filter value to confirm valid IDs.
+1. Call this tool for any dynamic choice filter (no `options` in schema) before using a value.
 2. Use the `search` parameter with the user's term to narrow results before selecting.
-3. Use option **IDs** (not labels) as filter values in `ColumnFilterData`.
+3. Use option **IDs** (not labels) as filter values. IDs may be integers or differ from the label.
 4. If `total > returned`, the list is truncated — refine your search to find the right option.
-5. If the tool returns an error, skip that filter and proceed with remaining filters.
+5. If the tool returns an error or no matching options, skip that filter and proceed with the rest.
 
 **Example:**
-- User says "filter by chatbot Alpha Bot" → call `get_filter_options(param="experiment", search="Alpha Bot")` → get `[{{"id": 42, "label": "Alpha Bot"}}]` → use value `[42]`
+- User says "filter by chatbot Alpha Bot" → call `get_filter_options(param="experiment", search="Alpha Bot")` → get `[{{"id": 42, "label": "Alpha Bot"}}]` → use value `[42]` (integer ID, not the name string)
 - User says "filter by thumbs up tag" → call `get_filter_options(param="tags", search="👍")` → get `[{{"id": "👍", "label": "👍"}}]` → use value `["👍"]`
