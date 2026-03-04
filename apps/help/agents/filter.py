@@ -76,6 +76,9 @@ def make_get_options_tool(filter_class, team):
         if search:
             needle = search.lower()
             normalized = [opt for opt in normalized if needle in opt["label"].lower()]
+        if not normalized:
+            # return all if nothing found
+            normalized = _options_cache[param]
 
         limit = 50
         total = len(normalized)
