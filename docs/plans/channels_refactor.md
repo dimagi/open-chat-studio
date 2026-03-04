@@ -381,16 +381,16 @@ class QueryExtractionStage(ProcessingStage):
             ctx.user_query = ctx.message.message_text
 
     def _transcribe_voice(self, ctx: MessageProcessingContext) -> str:
-        # Channel-specific callbacks accessed via context
-        ctx.callbacks.transcription_started()
+        # Callbacks receive only the data they need (recipient, transcript, message)
+        ctx.callbacks.transcription_started(ctx.participant_identifier)
 
         audio_file = ctx.callbacks.get_message_audio(ctx.message)
         transcript = self._transcribe_audio(ctx, audio_file)
 
         if ctx.experiment.echo_transcript:
-            ctx.callbacks.echo_transcript(transcript)
+            ctx.callbacks.echo_transcript(ctx.participant_identifier, transcript)
 
-        ctx.callbacks.transcription_finished(transcript)
+        ctx.callbacks.transcription_finished(ctx.participant_identifier, transcript)
         return transcript
 ```
 
@@ -434,8 +434,8 @@ class BotInteractionStage(ProcessingStage):
         return ctx.early_exit_response is None and ctx.user_query is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        # Channel-specific "typing" indicator via callbacks
-        ctx.callbacks.submit_input_to_llm()
+        # Channel-specific "typing" indicator
+        ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
 
         bot = get_bot(
             ctx.experiment_session,
@@ -916,46 +916,45 @@ Stages don't maintain state between messages:
 - `echo_transcript()` \- Some channels echo back the transcript
 - `submit_input_to_llm()` \- Telegram shows "typing" indicator
 
-**Solution A: Callbacks Object**
+**Solution A: Callbacks Object (with targeted parameters)**
 
 ```py
 class ChannelCallbacks:
-    """Channel-specific callback hooks"""
-    def transcription_started(self) -> None:
+    """Channel-specific callback hooks.
+    All methods are no-ops by default. Methods that target a user
+    receive `recipient: str` — not the full context.
+    """
+    def transcription_started(self, recipient: str) -> None:
         pass  # Default: no-op
 
-    def echo_transcript(self, transcript: str) -> None:
+    def echo_transcript(self, recipient: str, transcript: str) -> None:
         pass  # Default: no-op
 
-    def submit_input_to_llm(self) -> None:
+    def submit_input_to_llm(self, recipient: str) -> None:
         pass  # Default: no-op
+
+    def get_message_audio(self, message: 'BaseMessage') -> BytesIO:
+        raise NotImplementedError("Channel must implement audio retrieval")
 
 class TelegramCallbacks(ChannelCallbacks):
-    def __init__(self, telegram_bot, experiment_session):
+    def __init__(self, telegram_bot):
         self.bot = telegram_bot
-        self.session = experiment_session
 
-    def transcription_started(self):
-        self.bot.send_chat_action(
-            self.session.participant.identifier,
-            "upload_voice"
-        )
+    def transcription_started(self, recipient):
+        self.bot.send_chat_action(recipient, "upload_voice")
 
-    def submit_input_to_llm(self):
-        self.bot.send_chat_action(
-            self.session.participant.identifier,
-            "typing"
-        )
+    def submit_input_to_llm(self, recipient):
+        self.bot.send_chat_action(recipient, "typing")
 ```
 
-Stages access callbacks via context:
+Stages access callbacks via context, passing only the data each method needs:
 
 ```py
 class QueryExtractionStage(ProcessingStage):
     # Zero-arg — no __init__ needed
 
     def process(self, ctx):
-        ctx.callbacks.transcription_started()  # Channel-specific hook
+        ctx.callbacks.transcription_started(ctx.participant_identifier)
         # ... transcribe
 ```
 
@@ -972,7 +971,7 @@ class MessageProcessingContext:
     on_submit_to_llm: Callable[[], None] = lambda: None
 ```
 
-**Decision**: Use **Solution A (Callbacks Object)** injected into the context. The `ChannelCallbacks` instance is set on `ctx.callbacks` by `ChannelBase.new_user_message()`. This keeps stages zero-arg while maintaining a clean, testable callbacks interface with no-op defaults.
+**Decision**: Use **Solution A (Callbacks Object)** with targeted parameters, injected into the context. Callback methods receive only the data they need (e.g., `recipient: str`) rather than the full context. This avoids the chicken-and-egg problem (callbacks don't need `participant_identifier` at construction time — they receive it at call time), keeps stages zero-arg, and maintains a clean, testable interface with no-op defaults.
 
 ### Challenge 2: Early Exit Handling
 
@@ -1406,18 +1405,19 @@ class ChannelCapabilities:
 class ChannelCallbacks:
     """Base class for channel-specific callback hooks.
     All methods are no-ops by default — channels override only what they need.
+    Methods that target a user receive `recipient: str` (not the full context).
     """
 
-    def transcription_started(self) -> None:
+    def transcription_started(self, recipient: str) -> None:
         pass
 
-    def transcription_finished(self, transcript: str) -> None:
+    def transcription_finished(self, recipient: str, transcript: str) -> None:
         pass
 
-    def echo_transcript(self, transcript: str) -> None:
+    def echo_transcript(self, recipient: str, transcript: str) -> None:
         pass
 
-    def submit_input_to_llm(self) -> None:
+    def submit_input_to_llm(self, recipient: str) -> None:
         pass
 
     def get_message_audio(self, message: 'BaseMessage') -> BytesIO:
@@ -1737,7 +1737,7 @@ class BotInteractionStage(ProcessingStage):
         return ctx.early_exit_response is None and ctx.user_query is not None
 
     def process(self, ctx) -> None:
-        ctx.callbacks.submit_input_to_llm()
+        ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
 
         if not ctx.bot:
             ctx.bot = get_bot(
@@ -1909,15 +1909,14 @@ class ChannelBase(ABC):
 
 ```py
 class TelegramCallbacks(ChannelCallbacks):
-    def __init__(self, telegram_bot, participant_id):
+    def __init__(self, telegram_bot):
         self.bot = telegram_bot
-        self.participant_id = participant_id
 
-    def transcription_started(self):
-        self.bot.send_chat_action(self.participant_id, "upload_voice")
+    def transcription_started(self, recipient):
+        self.bot.send_chat_action(recipient, "upload_voice")
 
-    def submit_input_to_llm(self):
-        self.bot.send_chat_action(self.participant_id, "typing")
+    def submit_input_to_llm(self, recipient):
+        self.bot.send_chat_action(recipient, "typing")
 
 class TelegramSender(ChannelSender):
     def __init__(self, telegram_bot):
@@ -1930,7 +1929,7 @@ class TelegramSender(ChannelSender):
 
 class TelegramChannel(ChannelBase):
     def _get_callbacks(self) -> ChannelCallbacks:
-        return TelegramCallbacks(self.telegram_bot, self.participant_identifier)
+        return TelegramCallbacks(self.telegram_bot)
 
     def _get_sender(self) -> ChannelSender:
         return TelegramSender(self.telegram_bot)
@@ -1971,6 +1970,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 8 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message, non-consent path. Chat history and sending moved out. |
 | — | Update | `EarlyExitResponseStage` | Persists `early_exit_response` to chat history. Uses `_add_to_history` (moved out of ConsentFlowStage). |
 | — | Update | `ResponseSendingStage` always fires | Sole stage that sends messages. Handles both normal responses and early exit responses. No other stage sends messages. |
+| — | Update | Callbacks receive targeted parameters | Callback methods receive `recipient: str` (not full context). No chicken-and-egg problem — `participant_identifier` passed at call time. |
 | 9 | Testing | DB-free stage unit tests | Use stubs/mocks (`unittest.mock.Mock`), not factories. No `@pytest.mark.django_db` for stage tests. |
 | 10 | Testing | Phased test migration | Migrate tests alongside code — as stages are extracted, write new stage tests and update old ones. |
 | 11 | Testing | Edge case test checklist | Per-stage checklist of edge cases to test (see Testing Strategy section). |

@@ -70,18 +70,19 @@ class ChannelCallbacks:
     """Base class for channel-specific callback hooks.
 
     Default implementations are no-ops. Channels override the methods they care about.
+    Methods that target a user receive `recipient: str` — not the full context.
     """
 
-    def transcription_started(self) -> None:
+    def transcription_started(self, recipient: str) -> None:
         """Called when voice transcription starts (e.g. show 'uploading voice' indicator)."""
 
-    def transcription_finished(self, transcript: str) -> None:
+    def transcription_finished(self, recipient: str, transcript: str) -> None:
         """Called when voice transcription completes."""
 
-    def echo_transcript(self, transcript: str) -> None:
+    def echo_transcript(self, recipient: str, transcript: str) -> None:
         """Send the transcript back to the user."""
 
-    def submit_input_to_llm(self) -> None:
+    def submit_input_to_llm(self, recipient: str) -> None:
         """Called before LLM invocation (e.g. show 'typing' indicator)."""
 
     def get_message_audio(self, message: BaseMessage) -> BytesIO:
@@ -450,15 +451,15 @@ class QueryExtractionStage(ProcessingStage):
             ctx.user_query = ctx.message.message_text
 
     def _transcribe_voice(self, ctx: MessageProcessingContext) -> str:
-        ctx.callbacks.transcription_started()
+        ctx.callbacks.transcription_started(ctx.participant_identifier)
 
         audio_file = ctx.callbacks.get_message_audio(ctx.message)
         transcript = self._do_transcription(ctx, audio_file)
 
         if ctx.experiment.echo_transcript:
-            ctx.callbacks.echo_transcript(transcript)
+            ctx.callbacks.echo_transcript(ctx.participant_identifier, transcript)
 
-        ctx.callbacks.transcription_finished(transcript)
+        ctx.callbacks.transcription_finished(ctx.participant_identifier, transcript)
         return transcript
 
     def _do_transcription(self, ctx: MessageProcessingContext, audio: BytesIO) -> str:
@@ -537,7 +538,7 @@ class BotInteractionStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         from apps.chat.bots import get_bot
 
-        ctx.callbacks.submit_input_to_llm()
+        ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
 
         # Lazy bot creation — reuse if already created (e.g. by ConsentFlowStage seed message)
         if not ctx.bot:
@@ -933,22 +934,19 @@ class ChannelBase(ABC):
 class TelegramCallbacks(ChannelCallbacks):
     """Telegram-specific callbacks: typing indicators, audio download, transcript echo."""
 
-    def __init__(self, telegram_bot, participant_identifier: str, message: BaseMessage):
+    def __init__(self, telegram_bot):
         self._bot = telegram_bot
-        self._participant_id = participant_identifier
-        self._message = message
 
-    def transcription_started(self) -> None:
-        self._bot.send_chat_action(chat_id=self._participant_id, action="upload_voice")
+    def transcription_started(self, recipient: str) -> None:
+        self._bot.send_chat_action(chat_id=recipient, action="upload_voice")
 
-    def submit_input_to_llm(self) -> None:
-        self._bot.send_chat_action(chat_id=self._participant_id, action="typing")
+    def submit_input_to_llm(self, recipient: str) -> None:
+        self._bot.send_chat_action(chat_id=recipient, action="typing")
 
-    def echo_transcript(self, transcript: str) -> None:
+    def echo_transcript(self, recipient: str, transcript: str) -> None:
         self._bot.send_message(
-            self._participant_id,
+            recipient,
             text=f"I heard: {transcript}",
-            reply_to_message_id=self._message.message_id,
         )
 
     def get_message_audio(self, message: BaseMessage) -> BytesIO:
@@ -1037,17 +1035,7 @@ class TelegramChannel(ChannelBase):
         super().__init__(experiment, experiment_channel, experiment_session)
 
     def _get_callbacks(self) -> ChannelCallbacks:
-        # Note: participant_identifier may not be known yet at pipeline build time,
-        # so callbacks that need it access it from the message at call time.
-        return TelegramCallbacks(
-            telegram_bot=self.telegram_bot,
-            participant_identifier="",  # Will be resolved from ctx.participant_identifier in stages
-            message=None,  # Will be set from ctx.message
-        )
-        # ^^^ In practice, you'd either:
-        # (a) make callbacks stateless and pass ctx to each callback method, or
-        # (b) create callbacks inside _create_context() where message is available.
-        # See the note below for the cleaner approach.
+        return TelegramCallbacks(telegram_bot=self.telegram_bot)
 
     def _get_sender(self) -> ChannelSender:
         return TelegramSender(self.telegram_bot)
@@ -1072,22 +1060,6 @@ class TelegramChannel(ChannelBase):
             return size <= 50 * 1024 * 1024
         return False
 
-
-# NOTE: The TelegramCallbacks above has a chicken-and-egg problem — it needs
-# participant_identifier, which isn't known until ParticipantValidationStage runs.
-# The cleaner approach is to create callbacks inside _create_context, or make
-# callback methods accept ctx directly. Here's what that looks like:
-
-
-class TelegramCallbacksV2(ChannelCallbacks):
-    """Alternative: callbacks that receive the full context."""
-
-    def __init__(self, telegram_bot):
-        self._bot = telegram_bot
-
-    # Each method would need ctx passed in, which means the ChannelCallbacks
-    # interface changes to accept (self, ctx) for methods that need participant info.
-    # This is a design tradeoff to resolve during implementation.
 
 
 # ---------------------------------------------------------------------------
@@ -1131,10 +1103,8 @@ class WhatsappCallbacks(ChannelCallbacks):
     def __init__(self, sender: WhatsappSender):
         self._sender = sender
 
-    def echo_transcript(self, transcript: str) -> None:
-        # Uses the sender to echo back — recipient comes from stage context
-        # In practice, this would need ctx.participant_identifier
-        pass  # Simplified for example
+    def echo_transcript(self, recipient: str, transcript: str) -> None:
+        self._sender.send_text(text=f"I heard: {transcript}", recipient=recipient)
 
 
 class WhatsappChannel(ChannelBase):
