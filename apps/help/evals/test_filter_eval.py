@@ -70,7 +70,7 @@ def test_filter_tags_tool_lookup():
 
     team = TeamFactory()
     Tag.objects.create(name="urgent", slug="urgent", team=team, is_system_tag=False, category="")
-    Tag.objects.create(name="👎🏻", slug="👎🏻", team=team, is_system_tag=True, category="response_rating")
+    Tag.objects.create(name="👎🏻", slug="👎🏻", team=team, is_system_tag=False, category="response_rating")
 
     agent = FilterAgent(
         input=FilterInput(
