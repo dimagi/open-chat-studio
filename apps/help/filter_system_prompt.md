@@ -70,10 +70,11 @@ resolve a name or partial name to valid option IDs.
 
 **Rules for tool use:**
 1. Call this tool for any dynamic choice filter (no `options` in schema) before using a value.
-2. Use the `search` parameter with the user's term to narrow results before selecting.
-3. Use option **IDs** (not labels) as filter values. IDs may be integers or differ from the label.
-4. If `total > returned`, the list is truncated — refine your search to find the right option.
-5. If the tool returns an error or no matching options, skip that filter and proceed with the rest.
+2. **Call all needed tool lookups in parallel** — if the query requires resolving multiple dynamic filters (e.g. both `tags` and `channels`), issue all tool calls simultaneously, not one after another.
+3. Use the `search` parameter with the user's term to narrow results before selecting.
+4. Use option **IDs** (not labels) as filter values. IDs may be integers or differ from the label.
+5. If `total > returned`, the list is truncated — refine your search to find the right option.
+6. If the tool returns an error or no matching options, skip that filter and proceed with the rest.
 
 **Example:**
 - User says "filter by chatbot Alpha Bot" → call `get_filter_options(param="experiment", search="Alpha Bot")` → get `[{{"id": 42, "label": "Alpha Bot"}}]` → use value `[42]` (integer ID, not the name string)
