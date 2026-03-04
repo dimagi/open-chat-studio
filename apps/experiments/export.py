@@ -1,11 +1,13 @@
 import csv
 import io
+import json
 
 from apps.analysis.translation import get_message_content
 from apps.annotations.models import Tag, UserComment
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.trace.models import Trace
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
@@ -35,16 +37,32 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
-    queryset = sessions_queryset.prefetch_related(
-        "chat",
-        "chat__messages",
-        "participant",
-        "experiment_channel",
-        "chat__tags",
-        "chat__messages__tags",
-        "chat__messages__comments",
-        "chat__messages__comments__user",
+    traces = (
+        Trace.objects.filter(session__in=sessions_queryset)
+        .select_related(
+            "session",
+            "session__participant",
+            "session__experiment_channel",
+            "input_message",
+            "input_message__chat",
+            "output_message",
+            "output_message__chat",
+        )
+        .prefetch_related(
+            "input_message__chat__tags",
+            "input_message__chat__comments",
+            "input_message__tags",
+            "input_message__comments",
+            "input_message__comments__user",
+            "output_message__chat__tags",
+            "output_message__chat__comments",
+            "output_message__tags",
+            "output_message__comments",
+            "output_message__comments__user",
+        )
+        .order_by("session_id", "timestamp")
     )
+
     header = [
         "Message ID",
         "Message Date",
@@ -59,6 +77,7 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
         "Participant Name",
         "Participant Identifier",
         "Participant Public ID",
+        "Participant Data",
         "Message Tags",
         "Message Comments",
         "Trace ID",
@@ -69,8 +88,13 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
 
     writer.writerow(header)
 
-    for session in queryset:
-        for message in session.chat.messages.all():
+    for trace in traces:
+        session = trace.session
+        participant_data_str = json.dumps(trace.participant_data) if trace.participant_data else ""
+
+        for message in [trace.input_message, trace.output_message]:
+            if message is None:
+                continue
             if translation_language:
                 content = get_message_content(message, translation_language)
             else:
@@ -90,6 +114,7 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
                 session.participant.name,
                 session.participant.identifier,
                 session.participant.public_id,
+                participant_data_str,
                 _format_tags(message.tags.all()),
                 _format_comments(message.comments.all()),
                 trace_id,
