@@ -45,6 +45,11 @@ class Trace(models.Model):
     experiment_version_number = models.PositiveIntegerField(null=True, blank=True)
     error = models.TextField(blank=True, help_text="Error message if the trace failed")
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["session", "timestamp"]),
+        ]
+
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"
 
