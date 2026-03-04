@@ -9,7 +9,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def team():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.mark.django_db()

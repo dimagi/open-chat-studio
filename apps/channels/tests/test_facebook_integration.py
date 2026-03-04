@@ -18,7 +18,7 @@ from .message_examples import twilio_messages
 
 @pytest.fixture()
 def _twilio_whatsapp_channel(twilio_provider):
-    ExperimentChannelFactory(
+    ExperimentChannelFactory.create(
         platform=ChannelPlatform.FACEBOOK,
         messaging_provider=twilio_provider,
         experiment__team=twilio_provider.team,
@@ -76,7 +76,7 @@ class TestTwilio:
             patch("apps.service_providers.messaging_service.TwilioService.s3_client"),
             patch("apps.service_providers.messaging_service.TwilioService.client"),
         ):
-            experiment = ExperimentFactory(conversational_consent_enabled=True)
+            experiment = ExperimentFactory.create(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
             bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
             get_voice_transcript_mock.return_value = "Hi"

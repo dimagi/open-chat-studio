@@ -48,7 +48,7 @@ def test_creates_new_models():
 
 @pytest.mark.django_db()
 def test_old_models_are_not_removed():
-    old_global_model = LlmProviderModelFactory(team=None)
+    old_global_model = LlmProviderModelFactory.create(team=None)
 
     update_llm_provider_models()
 
@@ -57,7 +57,7 @@ def test_old_models_are_not_removed():
 
 @pytest.mark.django_db()
 def test_converts_custom_models_to_global_models_pipelines():
-    custom_model = LlmProviderModelFactory()
+    custom_model = LlmProviderModelFactory.create()
     pipeline = get_pipeline(custom_model)
 
     # no custom model should exist
@@ -79,8 +79,18 @@ def test_converts_custom_models_to_global_models_pipelines():
     assert node_data[0]["data"]["params"]["llm_provider_model_id"] == global_model.id
 
 
+def test_model_replacement_defaults_to_none():
+    model = Model("gpt-4", 8192)
+    assert model.replacement is None
+
+
+def test_model_replacement_can_be_set():
+    model = Model("gpt-4", 8192, deprecated=True, replacement="gpt-4o")
+    assert model.replacement == "gpt-4o"
+
+
 def get_pipeline(llm_provider_model):
-    pipeline = PipelineFactory()
+    pipeline = PipelineFactory.create()
     pipeline.data["nodes"].append(
         {
             "id": "1",

@@ -31,14 +31,14 @@ def _construct_event_action(time_period: TimePeriod, experiment_id: int, frequen
         "prompt_text": "hi",
         "experiment_id": experiment_id,
     }
-    return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+    return EventActionFactory.create(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("period", ["hours", "days", "weeks"])
 @patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
 def test_create_scheduled_message_sets_start_date_and_external_id(ad_hoc_bot_message, period):
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(time_period=TimePeriod(period), experiment_id=session.experiment.id)
     with travel("2024-01-01", tick=False):
         message = ScheduledMessage.objects.create(
@@ -53,7 +53,7 @@ def test_create_scheduled_message_sets_start_date_and_external_id(ad_hoc_bot_mes
 
 @pytest.mark.django_db()
 def test_get_messages_to_fire():
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
@@ -61,7 +61,7 @@ def test_get_messages_to_fire():
         utc_now = timezone.now()
         db_time.return_value = utc_now
 
-        scheduled_message = ScheduledMessageFactory(
+        scheduled_message = ScheduledMessageFactory.create(
             team=session.team, participant=session.participant, action=event_action
         )
         # behind the trigger date
@@ -85,14 +85,14 @@ def test_get_messages_to_fire():
 
 @pytest.mark.django_db()
 def test_get_messages_to_fire_cancelled():
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
     with travel("2024-04-01", tick=False), patch("apps.events.models.functions.Now") as db_time:
         utc_now = timezone.now()
 
-        scheduled_message = ScheduledMessageFactory(
+        scheduled_message = ScheduledMessageFactory.create(
             team=session.team, participant=session.participant, action=event_action
         )
         db_time.return_value = utc_now + relativedelta(days=2)
@@ -154,7 +154,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
         assert scheduled_message.total_triggers == expected_total_triggers
         assert scheduled_message.is_complete == expected_is_complete
 
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod(period), repetitions=2, experiment_id=session.experiment.id
     )
@@ -164,7 +164,7 @@ def test_poll_scheduled_messages(ad_hoc_bot_message, period):
 
     with travel("2024-04-01", tick=False) as frozen_time, patch("apps.events.models.functions.Now") as db_time:
         current_time = db_time.return_value = timezone.now()
-        scheduled_message = ScheduledMessageFactory(
+        scheduled_message = ScheduledMessageFactory.create(
             team=session.team, participant=session.participant, action=event_action, experiment=session.experiment
         )
         # Set the DB time to now
@@ -211,7 +211,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
     """This test makes sure that any error that happens when sending a message to a user does not affect other
     pending messages"""
 
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, repetitions=2, experiment_id=session.experiment.id
     )
@@ -220,7 +220,7 @@ def test_error_when_sending_sending_message_to_a_user(_set_telegram_webhook, cap
         patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message", side_effect=Exception("Oops")),
         patch("apps.events.models.functions.Now") as db_time,
     ):
-        sm = ScheduledMessageFactory(
+        sm = ScheduledMessageFactory.create(
             participant=session.participant, action=event_action, team=session.team, experiment=session.experiment
         )
 
@@ -250,10 +250,10 @@ def test_schedule_update():
     if last_triggered_at is None, set next_trigger_date as created_at + delta
     if last_triggered_at is not None, set next_trigger_date as last_triggered_at + delta
     """
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     experiment = session.experiment
     team = experiment.team
-    session2 = ExperimentSessionFactory(team=team, experiment=experiment)
+    session2 = ExperimentSessionFactory.create(team=team, experiment=experiment)
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.WEEKS, repetitions=4, experiment_id=session.experiment.id
     )
@@ -317,7 +317,7 @@ def test_update_schedule_to_minute_period():
     exception was caused because of a mismatch between the value of `TimePeriod.MINUTES` and that which Postgres expects
     in the MakeInterval function i.e. postgres expects `mins` and the value is `minutes`.
     """
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, _params = _construct_event_action(
         frequency=1, time_period=TimePeriod.HOURS, repetitions=1, experiment_id=session.experiment.id
     )
@@ -335,7 +335,7 @@ def test_update_schedule_to_minute_period():
 @pytest.mark.django_db()
 def test_action_params_with_versioning():
     """Test that the message params get updated when new versions of the experiment are created."""
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, repetitions=2, experiment_id=session.experiment.id
     )
@@ -375,11 +375,11 @@ def test_action_params_with_versioning():
 def test_scheduled_message_attempts_success_and_failure(ad_hoc_bot_message, mock_retry_task):
     """Test ScheduledMessageAttempt creation for both success and failure with retry"""
     ad_hoc_bot_message.return_value = {"trace_id": "abc123", "trace_provider": "langfuse"}
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
     )
-    sm = ScheduledMessageFactory(
+    sm = ScheduledMessageFactory.create(
         participant=session.participant,
         action=event_action,
         team=session.team,
@@ -425,11 +425,11 @@ def test_scheduled_message_stops_retry_after_max(ad_hoc_bot_message, mock_retry_
     """Test that ScheduledMessage stops retrying after 3 attempts"""
     ad_hoc_bot_message.side_effect = Exception("Forced failure for max retries")
 
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
     )
-    sm = ScheduledMessageFactory(
+    sm = ScheduledMessageFactory.create(
         participant=session.participant,
         action=event_action,
         team=session.team,
@@ -468,11 +468,11 @@ def test_scheduled_message_trace_info_success_and_failure(ad_hoc_bot_message, mo
     # On first call, success with trace_info
     ad_hoc_bot_message.return_value = {"trace_id": "xyz123", "trace_provider": "langfuse"}
 
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     event_action, params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
     )
-    sm = ScheduledMessageFactory(
+    sm = ScheduledMessageFactory.create(
         participant=session.participant,
         action=event_action,
         team=session.team,

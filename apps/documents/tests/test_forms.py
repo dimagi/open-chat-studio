@@ -13,8 +13,8 @@ from apps.utils.factories.team import TeamFactory
 class TestCollectionForm:
     def test_validations(self, team):
         request = Mock(team=team)
-        llm_provider = LlmProviderFactory(team=team)
-        embedding_provider_model = EmbeddingProviderModelFactory(team=team)
+        llm_provider = LlmProviderFactory.create(team=team)
+        embedding_provider_model = EmbeddingProviderModelFactory.create(team=team)
 
         # Test creating a local index success
         data = {
@@ -75,17 +75,17 @@ class TestCollectionForm:
         Only providers that have embedding models should be shown in the form.
         """
         request = Mock(team=team)
-        openai_provider = LlmProviderFactory(team=team, type=LlmProviderTypes.openai)
-        LlmProviderFactory(team=team, type=LlmProviderTypes.perplexity)
+        openai_provider = LlmProviderFactory.create(team=team, type=LlmProviderTypes.openai)
+        LlmProviderFactory.create(team=team, type=LlmProviderTypes.perplexity)
 
         # Global provider
-        EmbeddingProviderModelFactory(type=LlmProviderTypes.openai)
+        EmbeddingProviderModelFactory.create(type=LlmProviderTypes.openai)
 
         # Team specific providers
-        EmbeddingProviderModelFactory(team=team, type=LlmProviderTypes.openai)
+        EmbeddingProviderModelFactory.create(team=team, type=LlmProviderTypes.openai)
 
-        team_b = TeamFactory()
-        EmbeddingProviderModelFactory(team=team_b, type=LlmProviderTypes.openai)
+        team_b = TeamFactory.create()
+        EmbeddingProviderModelFactory.create(team=team_b, type=LlmProviderTypes.openai)
 
         form = CollectionForm(request=request)
         assert form.fields["llm_provider"].queryset.count() == 1

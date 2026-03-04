@@ -19,7 +19,7 @@ def api_client():
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment)
 
 
 @pytest.fixture()
@@ -33,7 +33,7 @@ def mock_task_response():
 def test_chat_poll_task_response_with_file_attachments(api_client, session, mock_task_response):
     """Test that file attachments in messages are properly serialized with request context."""
     # Create a test file
-    test_file = FileFactory(team=session.chat.team)
+    test_file = FileFactory.create(team=session.chat.team)
 
     attachment = session.chat.attachments.create(tool_type="code_interpreter")
     attachment.files.add(test_file)

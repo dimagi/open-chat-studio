@@ -10,7 +10,7 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 
 @pytest.mark.django_db()
 def test_async_export_chat_returns_file_id():
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     result = async_export_chat.run(session.experiment_id, {}, "UTC")
     assert result == {"file_id": File.objects.first().id}
 
@@ -18,7 +18,7 @@ def test_async_export_chat_returns_file_id():
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_async_create_experiment_version():
-    experiment = ExperimentFactory(create_version_task_id="asd123")
+    experiment = ExperimentFactory.create(create_version_task_id="asd123")
     async_create_experiment_version(experiment.id)
     assert experiment.versions.count() == 1
     experiment.refresh_from_db()
@@ -30,7 +30,7 @@ def test_async_create_experiment_version():
 @patch("apps.experiments.models.Experiment.create_new_version")
 def test_async_create_experiment_version_fails(create_new_version):
     create_new_version.side_effect = Exception("Error")
-    experiment = ExperimentFactory(create_version_task_id="asd123")
+    experiment = ExperimentFactory.create(create_version_task_id="asd123")
     with pytest.raises(Exception, match="Error"):
         async_create_experiment_version(experiment.id)
     assert experiment.versions.count() == 0
@@ -42,7 +42,7 @@ def test_async_create_experiment_version_fails(create_new_version):
 @patch("apps.chat.channels.WebChannel")
 def test_get_response_for_webchat_task_merges_context(mock_web_channel):
     """Test that context is stored in session state at remote_context key"""
-    session = ExperimentSessionFactory(state={})
+    session = ExperimentSessionFactory.create(state={})
     context_data = {"page_url": "https://example.com", "user_info": "test_user"}
 
     mock_channel_instance = MagicMock()

@@ -65,7 +65,7 @@ class TraceContext:
 
 
 class Tracer(ABC):
-    def __init__(self, type_, config: dict):
+    def __init__(self, type_: str, config: dict):
         self.type = type_
         self.config = config
 

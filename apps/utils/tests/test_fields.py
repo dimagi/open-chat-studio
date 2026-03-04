@@ -21,7 +21,7 @@ class TestSanitizedJSONField:
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
         # Create necessary objects
-        config = EvaluationConfigFactory(team=team_with_users)
+        config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)
         message = EvaluationMessage.objects.create()
         evaluator = Evaluator.objects.create(team=team_with_users, name="Test", type="TestEvaluator")
@@ -56,7 +56,7 @@ class TestSanitizedJSONField:
         from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
-        config = EvaluationConfigFactory(team=team_with_users)
+        config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)
         message = EvaluationMessage.objects.create()
         evaluator = Evaluator.objects.create(team=team_with_users, name="Test", type="TestEvaluator")
@@ -96,7 +96,7 @@ class TestSanitizedJSONField:
         from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
-        config = EvaluationConfigFactory(team=team_with_users)
+        config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)
         message = EvaluationMessage.objects.create()
         evaluator = Evaluator.objects.create(team=team_with_users, name="Test", type="TestEvaluator")
@@ -130,7 +130,7 @@ class TestSanitizedJSONField:
         from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
         from apps.utils.factories.evaluations import EvaluationConfigFactory
 
-        config = EvaluationConfigFactory(team=team_with_users)
+        config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)
         message = EvaluationMessage.objects.create()
         evaluator = Evaluator.objects.create(team=team_with_users, name="Test", type="TestEvaluator")

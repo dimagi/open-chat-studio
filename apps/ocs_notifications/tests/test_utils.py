@@ -280,7 +280,7 @@ class TestNotificationMuting:
     def test_mute_notification_for_8h(self, team_with_users):
         """Ensure that muting for 8 hours is team-specific and expires correctly."""
         user = team_with_users.members.first()
-        team2 = TeamFactory()
+        team2 = TeamFactory.create()
         add_user_to_team(team2, user)
         event_type = EventType.objects.create(
             team=team_with_users,
@@ -322,7 +322,7 @@ class TestNotificationMuting:
     def test_mute_notification_forever(self, team_with_users):
         """Ensure that muting indefinitely is team-specific and persists."""
         user = team_with_users.members.first()
-        team2 = TeamFactory()
+        team2 = TeamFactory.create()
         add_user_to_team(team2, user)
         event_type = EventType.objects.create(
             team=team_with_users,

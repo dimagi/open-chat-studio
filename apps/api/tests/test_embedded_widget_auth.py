@@ -21,7 +21,7 @@ def api_client():
 @pytest.fixture()
 def embedded_widget_channel(experiment):
     """Create an embedded widget channel with a token and allowed domains."""
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory.create(
         experiment=experiment,
         platform=ChannelPlatform.EMBEDDED_WIDGET,
         extra_data={
@@ -34,7 +34,7 @@ def embedded_widget_channel(experiment):
 @pytest.fixture()
 def embedded_session(embedded_widget_channel):
     """Create a session associated with the embedded widget channel."""
-    return ExperimentSessionFactory(
+    return ExperimentSessionFactory.create(
         experiment=embedded_widget_channel.experiment,
         experiment_channel=embedded_widget_channel,
     )

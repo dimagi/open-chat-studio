@@ -1,5 +1,5 @@
 import uuid
-from typing import Self
+from typing import Self, cast
 
 from django.conf import settings
 from django.db import models
@@ -66,7 +66,7 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform)
 
-        return platform_availability  # ty: ignore[invalid-return-type]
+        return cast(dict[Self, bool], platform_availability)
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm

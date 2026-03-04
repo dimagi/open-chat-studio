@@ -16,8 +16,8 @@ class BannerServiceTests(TestCase):
         cls.factory = RequestFactory()
         now = timezone.now()
 
-        cls.team_with_flag = TeamFactory(name="Team With Flag")
-        cls.team_without_flag = TeamFactory(name="Team Without Flag")
+        cls.team_with_flag = TeamFactory.create(name="Team With Flag")
+        cls.team_without_flag = TeamFactory.create(name="Team Without Flag")
 
         cls.test_flag = Flag.objects.create(name="flag_test_banner", everyone=False)
         cls.test_flag.teams.add(cls.team_with_flag)

@@ -106,7 +106,7 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
     dataset = EvaluationDataset.objects.create(name="Test Dataset", team=team_with_users)
 
     # Test case 1: Message with both participant_data and session_state
-    message1 = EvaluationMessageFactory(
+    message1 = EvaluationMessageFactory.create(
         input=EvaluationMessageContent(content="What is AI?", role="human").model_dump(),
         output=EvaluationMessageContent(content="AI stands for Artificial Intelligence", role="ai").model_dump(),
         context={"current_datetime": "2023-01-01T10:00:00"},
@@ -116,7 +116,7 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
     )
 
     # Test case 2: Message with only participant_data
-    message2 = EvaluationMessageFactory(
+    message2 = EvaluationMessageFactory.create(
         input=EvaluationMessageContent(content="Tell me about Python", role="human").model_dump(),
         output=EvaluationMessageContent(content="Python is a programming language", role="ai").model_dump(),
         context={"topic": "programming"},
@@ -126,7 +126,7 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
     )
 
     # Test case 3: Message with only session_state
-    message3 = EvaluationMessageFactory(
+    message3 = EvaluationMessageFactory.create(
         input=EvaluationMessageContent(content="What is Django?", role="human").model_dump(),
         output=EvaluationMessageContent(content="Django is a web framework", role="ai").model_dump(),
         context={},
@@ -136,7 +136,7 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
     )
 
     # Test case 4: Message with neither
-    message4 = EvaluationMessageFactory(
+    message4 = EvaluationMessageFactory.create(
         input=EvaluationMessageContent(content="Hello", role="human").model_dump(),
         output=EvaluationMessageContent(content="Hi there!", role="ai").model_dump(),
         context={},
@@ -146,7 +146,7 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
     )
 
     # Test case 5: Message with nested JSON structures
-    message5 = EvaluationMessageFactory(
+    message5 = EvaluationMessageFactory.create(
         input=EvaluationMessageContent(content="Complex data", role="human").model_dump(),
         output=EvaluationMessageContent(content="Understood", role="ai").model_dump(),
         context={"nested": {"foo": {"bar": [1, 2, "3"]}}},

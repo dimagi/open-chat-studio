@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from collections import defaultdict
 from email.message import Message
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urljoin
 
 import httpx
@@ -344,7 +344,7 @@ def _get_enum_type(schema) -> type[enum.Enum]:
     if schema.type == DataType.STRING:
         type_ = enum.StrEnum(_make_model_name(schema.title, "Enum"), [(v, v) for v in schema.enum if v])
         type_.__doc__ = schema.description
-        return type_  # ty: ignore[invalid-return-type]
+        return cast(type[enum.Enum], type_)
     else:
         raise ValueError(f"Unsupported enum type: {schema.type}")
 

@@ -21,14 +21,14 @@ def experiment_permissions(experiment_content_type):
 
 @pytest.fixture()
 def group1(experiment_permissions):
-    group = GroupFactory(name="group1")
+    group = GroupFactory.create(name="group1")
     group.permissions.add(experiment_permissions["add_experiment"], experiment_permissions["change_experiment"])
     return group
 
 
 @pytest.fixture()
 def group2(experiment_permissions):
-    group = GroupFactory(name="group2")
+    group = GroupFactory.create(name="group2")
     group.permissions.add(experiment_permissions["view_experiment"], experiment_permissions["delete_experiment"])
     return group
 
@@ -42,14 +42,14 @@ def _use_team_backend(settings):
 def test_team_backend_no_current_team(group1, group2):
     """Test that the backend returns no permissions (and doesn't error)
     if there is no team set in the 'current_team' context."""
-    membership = MembershipFactory(groups=[group1, group2])
+    membership = MembershipFactory.create(groups=[group1, group2])
     user = membership.user
     assert TeamBackend().get_group_permissions(user) == set()
 
 
 @pytest.mark.django_db()
 def test_team_backend(group1, group2):
-    membership = MembershipFactory(groups=[group1, group2])
+    membership = MembershipFactory.create(groups=[group1, group2])
     user = membership.user
     with current_team(membership.team):
         assert TeamBackend().get_group_permissions(user) == {
@@ -62,7 +62,7 @@ def test_team_backend(group1, group2):
 
 @pytest.mark.django_db()
 def test_team_backend_user_permissions(group1):
-    membership = MembershipFactory(groups=[group1])
+    membership = MembershipFactory.create(groups=[group1])
     user = membership.user
     with current_team(membership.team):
         assert user.has_perm("experiments.add_experiment")

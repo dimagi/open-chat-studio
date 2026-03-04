@@ -115,6 +115,7 @@ def test_max_clients_limit(client_manager, langfuse_mock, mock_client_registry):
     """Test that the max_clients limit is enforced by removing oldest client."""
     # Arrange
     client_manager.max_clients = 3
+    client_manager.stale_timeout = 3600  # Prevent stale pruning from interfering with max_clients pruning
 
     # Create unique mock clients that return different timestamps
     configs = []

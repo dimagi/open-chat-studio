@@ -7,7 +7,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 from functools import cached_property
-from typing import Self
+from typing import Self, cast
 from uuid import uuid4
 
 import markdown
@@ -500,7 +500,10 @@ class AgentTools(models.TextChoices):
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
-        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]  # ty: ignore[invalid-return-type]
+        return cast(
+            list[Self],
+            [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE],
+        )
 
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:

@@ -7,13 +7,13 @@ from apps.utils.factories.user import UserFactory
 
 @pytest.fixture()
 def user():
-    return UserFactory()
+    return UserFactory.create()
 
 
 @pytest.fixture()
 def team(user):
-    team = TeamFactory()
-    MembershipFactory(team=team, user=user, groups=get_test_user_groups)
+    team = TeamFactory.create()
+    MembershipFactory.create(team=team, user=user, groups=get_test_user_groups)
     return team
 
 

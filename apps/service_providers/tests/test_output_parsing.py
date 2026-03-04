@@ -193,7 +193,7 @@ class TestDefaultParser:
         session = Mock(team_id=team_with_users.id)
 
         # Local file that will be cited
-        FileFactory(external_id="file-123", team=team_with_users)
+        FileFactory.create(external_id="file-123", team=team_with_users)
 
         # Remote generated file content
         get_file_contents_mock.return_value = BytesIO(b"This is a generated file.")

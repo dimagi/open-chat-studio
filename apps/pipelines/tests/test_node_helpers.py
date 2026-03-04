@@ -9,8 +9,8 @@ from apps.utils.factories.team import TeamFactory, UserFactory
 @pytest.mark.django_db()
 def test_temporary_session_is_temporary():
     session_id = None
-    user = UserFactory()
-    with temporary_session(TeamFactory(), user.id) as session:
+    user = UserFactory.create()
+    with temporary_session(TeamFactory.create(), user.id) as session:
         session_id = session.id
         message = session.chat.messages.create(message_type=ChatMessageType.HUMAN, content="Hello, world!")
 
@@ -20,10 +20,10 @@ def test_temporary_session_is_temporary():
 
 @pytest.mark.django_db()
 def test_temporary_session_rolls_back_on_error():
-    user = UserFactory()
+    user = UserFactory.create()
 
     def _run_with_temp_session():
-        with temporary_session(TeamFactory(), user.id):
+        with temporary_session(TeamFactory.create(), user.id):
             raise Exception("error")
 
     with pytest.raises(Exception, match="error"):
