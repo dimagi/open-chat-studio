@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
-    from apps.chat.models import ChatMessage, ChatMessageType
+    from apps.chat.models import ChatMessage
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio
@@ -45,6 +45,7 @@ logger = logging.getLogger("ocs.channels")
 # ---------------------------------------------------------------------------
 # 1. Channel Capabilities
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ChannelCapabilities:
@@ -63,6 +64,7 @@ class ChannelCapabilities:
 # ---------------------------------------------------------------------------
 # 2. Channel Callbacks
 # ---------------------------------------------------------------------------
+
 
 class ChannelCallbacks:
     """Base class for channel-specific callback hooks.
@@ -92,6 +94,7 @@ class ChannelCallbacks:
 # 3. Channel Sender
 # ---------------------------------------------------------------------------
 
+
 class ChannelSender(ABC):
     """Abstracts how a channel delivers messages to the user."""
 
@@ -108,6 +111,7 @@ class ChannelSender(ABC):
 # ---------------------------------------------------------------------------
 # 4. Message Processing Context
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MessageProcessingContext:
@@ -159,6 +163,7 @@ class MessageProcessingContext:
 # 5. Processing Stage Base
 # ---------------------------------------------------------------------------
 
+
 class ProcessingStage(ABC):
     """Base class for stateless processing stages.
 
@@ -189,6 +194,7 @@ class ProcessingStage(ABC):
 # 6. Concrete Stages
 # ---------------------------------------------------------------------------
 
+
 class ParticipantValidationStage(ProcessingStage):
     """Validates the participant is allowed to interact with this experiment."""
 
@@ -202,9 +208,7 @@ class ParticipantValidationStage(ProcessingStage):
             ctx.participant_allowed = True
             return
 
-        ctx.participant_allowed = ctx.experiment.is_participant_allowed(
-            ctx.participant_identifier
-        )
+        ctx.participant_allowed = ctx.experiment.is_participant_allowed(ctx.participant_identifier)
         if not ctx.participant_allowed:
             ctx.early_exit_response = "Sorry, you are not allowed to chat to this bot"
 
@@ -259,6 +263,7 @@ class SessionResolutionStage(ProcessingStage):
 
     def _is_reset_request(self, ctx: MessageProcessingContext) -> bool:
         from apps.chat.channels import MESSAGE_TYPES
+
         return (
             ctx.message.content_type == MESSAGE_TYPES.TEXT
             and ctx.message.message_text.lower().strip() == self.RESET_COMMAND
@@ -266,6 +271,7 @@ class SessionResolutionStage(ProcessingStage):
 
     def _handle_reset(self, ctx: MessageProcessingContext) -> None:
         from apps.events.models import StaticTriggerType
+
         if ctx.experiment_session:
             ctx.experiment_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
         ctx.experiment_session = self._create_session(ctx)
@@ -275,6 +281,7 @@ class SessionResolutionStage(ProcessingStage):
         """Delegates to the existing _start_experiment_session helper."""
         from apps.chat.channels import _start_experiment_session
         from apps.experiments.models import SessionStatus
+
         return _start_experiment_session(
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
@@ -287,14 +294,13 @@ class MessageTypeValidationStage(ProcessingStage):
     """Validates the message type is supported by this channel."""
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        from apps.chat.channels import MESSAGE_TYPES
         if ctx.message.content_type not in ctx.capabilities.supported_message_types:
             # Use EventBot to generate a friendly response
             try:
                 response = self._generate_unsupported_response(ctx)
             except Exception:
                 response = f"Sorry, this channel only supports {ctx.capabilities.supported_message_types} messages."
-                ctx.processing_errors.append(f"Failed to generate unsupported message response")
+                ctx.processing_errors.append("Failed to generate unsupported message response")
             ctx.early_exit_response = response
 
     def _generate_unsupported_response(self, ctx: MessageProcessingContext) -> str:
@@ -308,10 +314,7 @@ class MessageTypeValidationStage(ProcessingStage):
         )
         trace_info = TraceInfo(name="unsupported message", metadata={"message_type": ctx.message.content_type})
         supported = ctx.capabilities.supported_message_types
-        prompt = (
-            "Tell the user that they sent an unsupported message. "
-            f"You only support {supported} messages types."
-        )
+        prompt = f"Tell the user that they sent an unsupported message. You only support {supported} messages types."
         return EventBot(ctx.experiment_session, ctx.experiment, trace_info, history_manager).get_user_message(prompt)
 
 
@@ -342,12 +345,14 @@ class ConsentFlowStage(ProcessingStage):
         # If consent is not enabled, just ensure session is ACTIVE and move on
         if not ctx.experiment.conversational_consent_enabled or not ctx.experiment.consent_form_id:
             from apps.experiments.models import SessionStatus
+
             if ctx.experiment_session:
                 ctx.experiment_session.update_status(SessionStatus.ACTIVE)
             return False
 
         # Only run if session is in a pre-conversation state
         from apps.experiments.models import SessionStatus
+
         return ctx.experiment_session and ctx.experiment_session.status in [
             SessionStatus.SETUP,
             SessionStatus.PENDING,
@@ -385,6 +390,7 @@ class ConsentFlowStage(ProcessingStage):
 
     def _user_gave_consent(self, ctx: MessageProcessingContext) -> bool:
         from apps.chat.channels import MESSAGE_TYPES
+
         return (
             ctx.message.content_type == MESSAGE_TYPES.TEXT
             and ctx.message.message_text.strip() == self.USER_CONSENT_TEXT
@@ -404,6 +410,7 @@ class ConsentFlowStage(ProcessingStage):
 
     def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
         from apps.experiments.models import SessionStatus
+
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)
         if ctx.experiment.seed_message:
             return self._process_seed_message(ctx)
@@ -412,6 +419,7 @@ class ConsentFlowStage(ProcessingStage):
     def _process_seed_message(self, ctx: MessageProcessingContext) -> str:
         """Invokes the bot with the seed message and returns the response text."""
         from apps.chat.bots import get_bot
+
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
         bot_response = ctx.bot.process_input(user_input=ctx.experiment.seed_message)
@@ -434,9 +442,8 @@ class QueryExtractionStage(ProcessingStage):
             except Exception as e:
                 # Issue 5: stage handles its own error
                 from apps.ocs_notifications.notifications import audio_transcription_failure_notification
-                audio_transcription_failure_notification(
-                    ctx.experiment, platform=ctx.experiment_channel.platform
-                )
+
+                audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
                 ctx.processing_errors.append(f"Voice transcription failed: {e}")
                 raise
         else:
@@ -456,6 +463,7 @@ class QueryExtractionStage(ProcessingStage):
 
     def _do_transcription(self, ctx: MessageProcessingContext, audio: BytesIO) -> str:
         from apps.chat.exceptions import UserReportableError
+
         if ctx.experiment.voice_provider:
             speech_service = ctx.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
@@ -497,9 +505,7 @@ class ChatMessageCreationStage(ProcessingStage):
 
         # Record attachment IDs
         if ctx.message.attachments:
-            metadata["ocs_attachment_file_ids"].extend(
-                [att.file_id for att in ctx.message.attachments]
-            )
+            metadata["ocs_attachment_file_ids"].extend([att.file_id for att in ctx.message.attachments])
 
         # Add trace metadata
         if ctx.trace_service:
@@ -588,9 +594,11 @@ class ResponseFormattingStage(ProcessingStage):
         should_reply_voice = False
         if ctx.capabilities.supports_voice and ctx.experiment.synthetic_voice:
             voice_config = ctx.experiment.voice_response_behaviour
-            if voice_config == VoiceResponseBehaviours.ALWAYS:
-                should_reply_voice = True
-            elif voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice:
+            if (
+                voice_config == VoiceResponseBehaviours.ALWAYS
+                or voice_config == VoiceResponseBehaviours.RECIPROCAL
+                and user_sent_voice
+            ):
                 should_reply_voice = True
 
         # Split files by channel support
@@ -782,6 +790,7 @@ class ActivityTrackingStage(ProcessingStage):
 # 7. Pipeline Orchestrator
 # ---------------------------------------------------------------------------
 
+
 class MessageProcessingPipeline:
     """Runs stages sequentially. Stops when early_exit_response is set."""
 
@@ -790,16 +799,14 @@ class MessageProcessingPipeline:
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
         for stage in self.stages:
-            # Early exit check — stop processing further stages
-            if ctx.early_exit_response is not None:
-                break
-            stage(ctx)  # __call__ handles should_run + timing
+            stage(ctx)  # __call__ checks should_run() → skips if early_exit_response is set
         return ctx
 
 
 # ---------------------------------------------------------------------------
 # 8. Channel Base
 # ---------------------------------------------------------------------------
+
 
 class ChannelBase(ABC):
     """Base channel — builds the pipeline and provides the entry point.
@@ -874,22 +881,25 @@ class ChannelBase(ABC):
         """Build the default processing pipeline. Subclasses can override entirely.
         ResponseSendingStage is the sole message-sending stage (always fires).
         """
-        return MessageProcessingPipeline([
-            ParticipantValidationStage(),
-            SessionResolutionStage(),
-            MessageTypeValidationStage(),
-            ConsentFlowStage(),
-            QueryExtractionStage(),
-            ChatMessageCreationStage(),
-            BotInteractionStage(),
-            ResponseFormattingStage(),
-            EarlyExitResponseStage(),
-            ResponseSendingStage(),
-            ActivityTrackingStage(),
-        ])
+        return MessageProcessingPipeline(
+            [
+                ParticipantValidationStage(),
+                SessionResolutionStage(),
+                MessageTypeValidationStage(),
+                ConsentFlowStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+                EarlyExitResponseStage(),
+                ResponseSendingStage(),
+                ActivityTrackingStage(),
+            ]
+        )
 
     def _create_trace_service(self):
         from apps.service_providers.tracing import TracingService
+
         return TracingService.create_for_experiment(self.experiment)
 
     def _get_capabilities(self) -> ChannelCapabilities:
@@ -919,6 +929,7 @@ class ChannelBase(ABC):
 # 9. Concrete Channel: Telegram
 # ---------------------------------------------------------------------------
 
+
 class TelegramCallbacks(ChannelCallbacks):
     """Telegram-specific callbacks: typing indicators, audio download, transcript echo."""
 
@@ -942,7 +953,9 @@ class TelegramCallbacks(ChannelCallbacks):
 
     def get_message_audio(self, message: BaseMessage) -> BytesIO:
         import httpx
+
         from apps.channels import audio as audio_utils
+
         file_url = self._bot.get_file_url(message.media_id)
         response = httpx.get(file_url)
         response.raise_for_status()
@@ -959,6 +972,7 @@ class TelegramSender(ChannelSender):
     def send_text(self, text: str, recipient: str) -> None:
         from telebot.apihelper import ApiTelegramException
         from telebot.util import antiflood, smart_split
+
         try:
             for chunk in smart_split(text):
                 antiflood(self._bot.send_message, recipient, text=chunk)
@@ -968,6 +982,7 @@ class TelegramSender(ChannelSender):
     def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
         from telebot.apihelper import ApiTelegramException
         from telebot.util import antiflood
+
         try:
             antiflood(
                 self._bot.send_voice,
@@ -980,6 +995,7 @@ class TelegramSender(ChannelSender):
 
     def send_file(self, file: File, recipient: str) -> None:
         from telebot.util import antiflood
+
         mime = file.content_type
         main_type = mime.split("/")[0]
         match main_type:
@@ -995,6 +1011,7 @@ class TelegramSender(ChannelSender):
 
     def _handle_api_error(self, e, recipient: str):
         from apps.chat.exceptions import ChannelException
+
         if e.error_code == 403 and "bot was blocked by the user" in e.description:
             # Could update participant consent here
             raise ChannelException("Bot was blocked by the user") from e
@@ -1009,8 +1026,9 @@ class TelegramChannel(ChannelBase):
     supports_multimedia = True
 
     def __init__(self, experiment, experiment_channel, experiment_session=None):
-        from apps.chat.channels import MESSAGE_TYPES
         from telebot import TeleBot
+
+        from apps.chat.channels import MESSAGE_TYPES
 
         # Telegram-specific setup before super().__init__
         self.telegram_bot = TeleBot(experiment_channel.extra_data["bot_token"], threaded=False)
@@ -1036,6 +1054,7 @@ class TelegramChannel(ChannelBase):
 
     def _get_capabilities(self) -> ChannelCapabilities:
         from apps.chat.channels import MESSAGE_TYPES
+
         return ChannelCapabilities(
             supports_voice=True,
             supports_files=True,
@@ -1059,6 +1078,7 @@ class TelegramChannel(ChannelBase):
 # The cleaner approach is to create callbacks inside _create_context, or make
 # callback methods accept ctx directly. Here's what that looks like:
 
+
 class TelegramCallbacksV2(ChannelCallbacks):
     """Alternative: callbacks that receive the full context."""
 
@@ -1074,6 +1094,7 @@ class TelegramCallbacksV2(ChannelCallbacks):
 # 10. Concrete Channel: WhatsApp
 # ---------------------------------------------------------------------------
 
+
 class WhatsappSender(ChannelSender):
     """Sends messages via the WhatsApp messaging service (Twilio or TurnIO)."""
 
@@ -1083,21 +1104,23 @@ class WhatsappSender(ChannelSender):
 
     def send_text(self, text: str, recipient: str) -> None:
         from apps.channels.models import ChannelPlatform
-        self._service.send_text_message(
-            message=text, from_=self._from, to=recipient, platform=ChannelPlatform.WHATSAPP
-        )
+
+        self._service.send_text_message(message=text, from_=self._from, to=recipient, platform=ChannelPlatform.WHATSAPP)
 
     def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
         from apps.channels.models import ChannelPlatform
-        self._service.send_voice_message(
-            audio, from_=self._from, to=recipient, platform=ChannelPlatform.WHATSAPP
-        )
+
+        self._service.send_voice_message(audio, from_=self._from, to=recipient, platform=ChannelPlatform.WHATSAPP)
 
     def send_file(self, file: File, recipient: str) -> None:
         from apps.channels.models import ChannelPlatform
+
         self._service.send_file_to_user(
-            from_=self._from, to=recipient, platform=ChannelPlatform.WHATSAPP,
-            file=file, download_link=file.download_link(experiment_session_id=None),
+            from_=self._from,
+            to=recipient,
+            platform=ChannelPlatform.WHATSAPP,
+            file=file,
+            download_link=file.download_link(experiment_session_id=None),
             # Note: session_id for download_link would come from ctx in real impl
         )
 
@@ -1150,6 +1173,7 @@ class WhatsappChannel(ChannelBase):
 # ---------------------------------------------------------------------------
 # 11. How it all fits together
 # ---------------------------------------------------------------------------
+
 
 def example_message_flow():
     """Pseudocode showing a complete message flow."""
