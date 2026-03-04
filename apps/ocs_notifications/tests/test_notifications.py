@@ -9,6 +9,8 @@ from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
     custom_action_health_check_failure_notification,
     custom_action_unexpected_error_notification,
+    deleted_model_notification,
+    deprecated_model_notification,
     file_delivery_failure_notification,
     message_delivery_failure_notification,
     tool_error_notification,
@@ -386,3 +388,114 @@ class TestTraceErrorNotification:
         call_kwargs = mock_create_notification.call_args.kwargs
         assert call_kwargs["slug"] == "seed-message"
         assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"
+
+
+class TestDeprecatedModelNotification:
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_with_replacement(self, mock_create_notification):
+        team = TeamFactory.create()
+        deprecated_model_notification(
+            team=team,
+            model_name="gpt-4",
+            replacement_model_name="gpt-4o",
+            affected_chatbots={"My Bot": "/chatbots/my-bot/"},
+            affected_pipelines={},
+            affected_assistants={},
+        )
+        mock_create_notification.assert_called_once_with(
+            title="LLM Model 'gpt-4' Deprecated",
+            message=(
+                "The model 'gpt-4' has been deprecated and will be removed soon. "
+                "1 chatbot(s) are still using it. "
+                "Please update to 'gpt-4o' before it is removed."
+            ),
+            level=LevelChoices.WARNING,
+            team=team,
+            slug="llm-model-deprecated",
+            event_data={"model_name": "gpt-4"},
+            permissions=["service_providers.change_llmprovidermodel"],
+            links={"My Bot": "/chatbots/my-bot/"},
+        )
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_without_replacement(self, mock_create_notification):
+        team = TeamFactory.create()
+        deprecated_model_notification(
+            team=team,
+            model_name="gpt-4",
+            replacement_model_name=None,
+            affected_chatbots={},
+            affected_pipelines={"My Pipeline": "/pipelines/1/"},
+            affected_assistants={"My Assistant": "/assistants/1/"},
+        )
+        mock_create_notification.assert_called_once_with(
+            title="LLM Model 'gpt-4' Deprecated",
+            message=(
+                "The model 'gpt-4' has been deprecated and will be removed soon. "
+                "1 pipeline(s), 1 assistant(s) are still using it."
+            ),
+            level=LevelChoices.WARNING,
+            team=team,
+            slug="llm-model-deprecated",
+            event_data={"model_name": "gpt-4"},
+            permissions=["service_providers.change_llmprovidermodel"],
+            links={"My Pipeline": "/pipelines/1/", "My Assistant": "/assistants/1/"},
+        )
+
+
+class TestDeletedModelNotification:
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_with_replacement(self, mock_create_notification):
+        team = TeamFactory.create()
+        deleted_model_notification(
+            team=team,
+            model_name="claude-2.0",
+            replacement_model_name="claude-3-5-sonnet-latest",
+            affected_chatbots={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
+            affected_pipelines={},
+            affected_assistants={},
+        )
+        mock_create_notification.assert_called_once_with(
+            title="LLM Model 'claude-2.0' Removed",
+            message=(
+                "The model 'claude-2.0' has been removed from the platform. "
+                "2 chatbot(s) were affected. "
+                "References have been automatically updated to use 'claude-3-5-sonnet-latest'."
+            ),
+            level=LevelChoices.WARNING,
+            team=team,
+            slug="llm-model-deleted",
+            event_data={"model_name": "claude-2.0"},
+            permissions=["service_providers.change_llmprovidermodel"],
+            links={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
+        )
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_without_replacement(self, mock_create_notification):
+        team = TeamFactory.create()
+        deleted_model_notification(
+            team=team,
+            model_name="claude-2.0",
+            replacement_model_name=None,
+            affected_chatbots={},
+            affected_pipelines={"Pipeline X": "/pipelines/1/"},
+            affected_assistants={"Assistant Y": "/assistants/1/"},
+        )
+        mock_create_notification.assert_called_once_with(
+            title="LLM Model 'claude-2.0' Removed",
+            message=(
+                "The model 'claude-2.0' has been removed from the platform. "
+                "1 pipeline(s), 1 assistant(s) were affected. "
+                "References have been cleared and will need to be updated manually."
+            ),
+            level=LevelChoices.WARNING,
+            team=team,
+            slug="llm-model-deleted",
+            event_data={"model_name": "claude-2.0"},
+            permissions=["service_providers.change_llmprovidermodel"],
+            links={"Pipeline X": "/pipelines/1/", "Assistant Y": "/assistants/1/"},
+        )

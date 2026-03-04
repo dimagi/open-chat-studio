@@ -29,6 +29,7 @@ class Model:
     deprecated: bool = False
     is_translation_default: bool = False
     parameters: type[BaseModel] = BasicParameters
+    replacement: str | None = None
 
 
 def k(n: int) -> int:
