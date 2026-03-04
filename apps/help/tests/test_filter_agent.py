@@ -107,6 +107,22 @@ class TestMakeGetOptionsTool:
         assert result["total"] == 2
         assert result["returned"] == 2
         assert all("Bot" in opt["label"] for opt in result["options"])
+        assert "search_matched" not in result  # field absent when search succeeds
+
+    def test_search_no_match_returns_all_options_with_flag(self):
+        choice_filter = self._make_choice_filter(
+            "experiment",
+            [{"id": 1, "label": "Alpha Bot"}, {"id": 2, "label": "Beta Bot"}],
+        )
+        filter_class = self._make_filter_class([choice_filter])
+        team = mock.Mock()
+
+        tool_fn = make_get_options_tool(filter_class, team)
+        result = tool_fn.invoke({"param": "experiment", "search": "zzz_no_match"})
+
+        assert result["search_matched"] is False
+        assert result["total"] == 2  # all options returned as fallback
+        assert len(result["options"]) == 2
 
     def test_limit_caps_results_but_total_reflects_full_count(self):
         options = [{"id": i, "label": f"Bot {i}"} for i in range(53)]

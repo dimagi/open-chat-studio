@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -13,6 +14,8 @@ from apps.help.registry import register_agent
 from apps.teams.models import Team
 from apps.web.dynamic_filters.base import ChoiceColumnFilter
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
+
+logger = logging.getLogger(__name__)
 
 
 @functools.cache
@@ -69,21 +72,31 @@ def make_get_options_tool(filter_class, team):
 
                 _options_cache[param] = normalized
             except Exception as exc:
+                logger.exception(
+                    "Failed to resolve options for filter param %r (filter_class=%s)",
+                    param,
+                    filter_class.__name__,
+                )
                 return {"error": f"Failed to resolve options for {param!r}: {exc}"}
 
         normalized = _options_cache[param]
 
+        search_matched = True
         if search:
             needle = search.lower()
             normalized = [opt for opt in normalized if needle in opt["label"].lower()]
-        if not normalized:
-            # return all if nothing found
-            normalized = _options_cache[param]
+            if not normalized:
+                # search found nothing — fall back to full list so the agent can still pick
+                search_matched = False
+                normalized = _options_cache[param]
 
         limit = 50
         total = len(normalized)
         limited = normalized[:limit]
-        return {"options": limited, "returned": len(limited), "total": total}
+        result = {"options": limited, "returned": len(limited), "total": total}
+        if not search_matched:
+            result["search_matched"] = False
+        return result
 
     return get_filter_options
 

@@ -19,7 +19,6 @@ Produce a list of filters. Each filter has three fields:
 - **Choice values** (for `any of`, `all of`, `excludes` operators): ALWAYS use a JSON array, even for a single value. Examples: `["active"]`, `["WhatsApp", "Telegram"]`. Never use a bare string with these operators.
 - **Timestamp ranges**: Use relative duration strings: `"1h"` (1 hour), `"1d"` (1 day), `"7d"` (7 days), `"15d"` (15 days), `"30d"` (30 days), `"90d"` (3 months), `"365d"` (1 year). Use these with the `range` operator.
 - **Specific dates**: Use ISO 8601 format with the `on`, `before`, or `after` operators.
-- **Version values**: Use the version name as the user says it, e.g. `"v5"`, `"v6"`. For multiple versions use a JSON array: `["v5", "v6"]`
 
 ## Default Date Range Column
 
@@ -57,20 +56,22 @@ call `get_filter_options` to discover valid IDs before setting the filter value.
 ### `get_filter_options`
 
 Use this tool to look up valid option values for `choice` or `exclusive_choice` filter types that
-have **no static `options` list in the schema** (e.g. `experiment`, `tags`, `channels`, `versions`).
+have **no static `options` list in the schema** (e.g. `experiment`, `tags`, `versions`).
 
 **When to call it:** When the user's query refers to a dynamic choice filter and you need to
 resolve a name or partial name to valid option IDs.
 
 **Arguments:**
-- `param` (required): The filter query_param from the schema (e.g. `"experiment"`, `"tags"`, `"channels"`)
+- `param` (required): The filter query_param from the schema (e.g. `"experiment"`, `"tags"`)
 - `search` (optional): A substring to narrow results (case-insensitive match on option label)
 
 **Returns:** `{{"options": [{{"id": ..., "label": ...}}, ...], "returned": N, "total": M}}`
 
+If `search_matched` is `false` in the response, your search term found no matches and all options are returned as a fallback — try a different search term or select from the full list.
+
 **Rules for tool use:**
 1. Call this tool for any dynamic choice filter (no `options` in schema) before using a value.
-2. **Call all needed tool lookups in parallel** — if the query requires resolving multiple dynamic filters (e.g. both `tags` and `channels`), issue all tool calls simultaneously, not one after another.
+2. **Call all needed tool lookups in parallel** — if the query requires resolving multiple dynamic filters (e.g. both `tags` and `versions`), issue all tool calls simultaneously, not one after another.
 3. Use the `search` parameter with the user's term to narrow results before selecting.
 4. Use option **IDs** (not labels) as filter values. IDs may be integers or differ from the label.
 5. If `total > returned`, the list is truncated — refine your search to find the right option.
