@@ -127,7 +127,10 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
         filter_class = registry.get(self.input.filter_slug)
         if filter_class is None:
             raise ValueError(f"Unknown filter slug: {self.input.filter_slug!r}. Available: {sorted(registry.keys())}")
-        team = Team.objects.get(id=self.input.team_id)
+        try:
+            team = Team.objects.get(id=self.input.team_id)
+        except Team.DoesNotExist as e:
+            raise ValueError(f"Team with id {self.input.team_id} not found") from e
         options_tool = make_get_options_tool(filter_class, team)
         agent = build_system_agent(
             self.mode,
