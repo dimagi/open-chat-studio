@@ -26,12 +26,12 @@ def provider_client_mock():
 
 @pytest.fixture()
 def local_index_instance(db):
-    return CollectionFactory(is_index=True, is_remote_index=False)
+    return CollectionFactory.create(is_index=True, is_remote_index=False)
 
 
 @pytest.fixture()
 def remote_collection_index(db):
-    return CollectionFactory(is_index=True, is_remote_index=True)
+    return CollectionFactory.create(is_index=True, is_remote_index=True)
 
 
 class LocalIndexManagerMock(LocalIndexManager):
@@ -69,7 +69,7 @@ class TestLocalIndexManager:
             yield manager
 
     def test_add_files_success(self, local_index_instance, index_manager):
-        file = FileFactory()
+        file = FileFactory.create()
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
@@ -88,7 +88,7 @@ class TestLocalIndexManager:
 
     def test_add_files_fails(self, local_index_instance, index_manager):
         """If anything goes wrong during local indexing, the file should be marked as failed"""
-        file = FileFactory()
+        file = FileFactory.create()
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
         collection_file.status = FileStatus.PENDING
@@ -103,7 +103,7 @@ class TestLocalIndexManager:
         assert collection_file.status == FileStatus.FAILED
 
     def test_delete_embeddings(self, local_index_instance):
-        file = FileFactory()
+        file = FileFactory.create()
         embedding = FileChunkEmbedding.objects.create(
             team=file.team,
             file=file,
@@ -131,7 +131,7 @@ class TestRemoteIndexManager:
             yield manager
 
     def test_add_files_success(self, remote_collection_index, index_manager):
-        file = FileFactory(external_id="test_file_id_3")
+        file = FileFactory.create(external_id="test_file_id_3")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING
@@ -144,7 +144,7 @@ class TestRemoteIndexManager:
         assert collection_file.status == FileStatus.COMPLETED
 
     def test_add_files_with_file_upload_failures(self, remote_collection_index, index_manager):
-        file = FileFactory()
+        file = FileFactory.create()
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING
@@ -161,7 +161,7 @@ class TestRemoteIndexManager:
         assert collection_file.status == FileStatus.FAILED
 
     def test_add_files_with_linking_failures(self, remote_collection_index, index_manager):
-        file = FileFactory(external_id="test_file_id")
+        file = FileFactory.create(external_id="test_file_id")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING
@@ -293,8 +293,8 @@ class TestOpenAIRemoteIndexManager:
 
     def test_delete_files_success(self, index_manager, provider_client_mock):
         """Test successful deletion of multiple files"""
-        file1 = FileFactory(external_id="file-1")
-        file2 = FileFactory(external_id="file-2")
+        file1 = FileFactory.create(external_id="file-1")
+        file2 = FileFactory.create(external_id="file-2")
         files = [file1, file2]
 
         index_manager.delete_files(files)
@@ -312,8 +312,8 @@ class TestOpenAIRemoteIndexManager:
 
     def test_delete_files_with_not_found_error(self, index_manager, provider_client_mock):
         """Test deletion of files when some files are not found"""
-        file1 = FileFactory(external_id="file-1")
-        file2 = FileFactory(external_id="file-2")
+        file1 = FileFactory.create(external_id="file-1")
+        file2 = FileFactory.create(external_id="file-2")
         files = [file1, file2]
 
         # First call succeeds, second call raises NotFoundError

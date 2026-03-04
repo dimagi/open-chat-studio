@@ -28,7 +28,7 @@ def team_with_users():
 
 @pytest.fixture()
 def dataset(team_with_users):
-    return EvaluationDatasetFactory(team=team_with_users)
+    return EvaluationDatasetFactory.create(team=team_with_users)
 
 
 @pytest.fixture()

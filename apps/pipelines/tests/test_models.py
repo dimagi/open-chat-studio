@@ -35,7 +35,7 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.mark.django_db()
 def test_archive_pipeline_archives_nodes_as_well():
-    pipeline = PipelineFactory()
+    pipeline = PipelineFactory.create()
     assert pipeline.node_set.count() > 0
     pipeline.archive()
     assert pipeline.node_set.count() == 0
@@ -51,12 +51,12 @@ class TestVersioningNodes:
         already a version
         """
         node_type = AssistantNode.__name__
-        assistant = OpenAiAssistantFactory()
+        assistant = OpenAiAssistantFactory.create()
         if versioned_assistant_linked:
             assistant = assistant.create_new_version()
 
-        pipeline = PipelineFactory()
-        NodeFactory(type=node_type, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
         assert pipeline.node_set.filter(type=node_type).exists()
 
         pipeline.create_new_version()
@@ -78,15 +78,15 @@ class TestVersioningNodes:
     @pytest.mark.parametrize("is_index", [True, False])
     def test_version_llm_with_prompt_node_with_collection(self, is_index):
         node_type = LLMResponseWithPrompt.__name__
-        collection = CollectionFactory(is_index=is_index)
-        pipeline = PipelineFactory()
+        collection = CollectionFactory.create(is_index=is_index)
+        pipeline = PipelineFactory.create()
         if is_index:
             param_name = "collection_index_ids"
             param_value = [collection.id]
         else:
             param_name = "collection_id"
             param_value = str(collection.id)
-        node = NodeFactory(type=node_type, pipeline=pipeline, params={param_name: param_value})
+        node = NodeFactory.create(type=node_type, pipeline=pipeline, params={param_name: param_value})
 
         # Versioning it should version the collection as well
         pipeline.create_new_version()
@@ -102,9 +102,9 @@ class TestVersioningNodes:
 
     def test_version_llm_with_prompt_node_with_source_material(self):
         node_type = LLMResponseWithPrompt.__name__
-        source_material = SourceMaterialFactory()
-        pipeline = PipelineFactory()
-        NodeFactory(type=node_type, pipeline=pipeline, params={"source_material_id": str(source_material.id)})
+        source_material = SourceMaterialFactory.create()
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"source_material_id": str(source_material.id)})
 
         pipeline_version = pipeline.create_new_version()
         source_material_version = source_material.latest_version
@@ -121,13 +121,13 @@ class TestVersioningNodes:
         If a dependency has not changed, it should attach the latest version of that dependency to the new node version.
         """
         node_type = LLMResponseWithPrompt.__name__
-        collection = CollectionFactory()
-        collection_index = CollectionFactory(is_index=True)
-        source_material = SourceMaterialFactory()
+        collection = CollectionFactory.create()
+        collection_index = CollectionFactory.create(is_index=True)
+        source_material = SourceMaterialFactory.create()
 
         # Create pipeline with node that has all three dependencies
-        pipeline = PipelineFactory()
-        NodeFactory(
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(
             type=node_type,
             pipeline=pipeline,
             params={
@@ -162,9 +162,9 @@ class TestArchivingNodes:
     @patch("apps.pipelines.models.Node._archive_related_params")
     def test_archive_related_objects_conditionally(self, archive_related_params):
         """Related objects should only be archived when the node is a version"""
-        pipeline = PipelineFactory()
-        node = NodeFactory(pipeline=pipeline)
-        node_version = NodeFactory(pipeline=pipeline, working_version=node)
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(pipeline=pipeline)
+        node_version = NodeFactory.create(pipeline=pipeline, working_version=node)
 
         node.archive()
         archive_related_params.assert_not_called()
@@ -176,19 +176,19 @@ class TestArchivingNodes:
     @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
     def test_archive_related_objects(self, create_remote_index):
         # Setup related objects
-        assistant = OpenAiAssistantFactory()
-        collection = CollectionFactory()
-        collection_index = CollectionFactory(
-            is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory()
+        assistant = OpenAiAssistantFactory.create()
+        collection = CollectionFactory.create()
+        collection_index = CollectionFactory.create(
+            is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
         )
 
         # Setup mocks
         create_remote_index.return_value = "v-456"
 
         # Build the pipeline
-        pipeline = PipelineFactory()
-        NodeFactory(type=AssistantNode.__name__, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
-        NodeFactory(
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(type=AssistantNode.__name__, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
             params={
@@ -229,7 +229,7 @@ class TestPipeline:
         """Test that the mock data is not being persisted when doing a simple invoke"""
         team = team_with_users
         requesting_user = team_with_users.members.first()
-        pipeline = PipelineFactory(team=team)
+        pipeline = PipelineFactory.create(team=team)
         temporary_instance_models = [
             ExperimentSession,
             Experiment,
@@ -257,8 +257,8 @@ class TestPipeline:
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_simple_invoke_with_pipeline(self, get_llm_service):
         """Test simple invoke with a pipeline that has an LLM node"""
-        provider = LlmProviderFactory()
-        provider_model = LlmProviderModelFactory()
+        provider = LlmProviderFactory.create()
+        provider_model = LlmProviderModelFactory.create()
         llm = FakeLlmEcho()
         service = build_fake_llm_service(None, [0], llm)
         get_llm_service.return_value = service
@@ -271,12 +271,12 @@ class TestPipeline:
             history_type="global",
         )
         nodes = [start_node(), llm_node, end_node()]
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         create_runnable(pipeline, nodes)
         pipeline.save()
 
         user_input = "The User Input"
-        user = UserFactory()
+        user = UserFactory.create()
         bot = PipelineTestBot(pipeline=pipeline, user_id=user.id)
         bot.process_input(user_input)
         expected_call_messages = [
@@ -293,18 +293,18 @@ class TestPipeline:
 
     @pytest.mark.django_db()
     def test_archive_pipeline(self):
-        assistant = OpenAiAssistantFactory()
-        pipeline = PipelineFactory()
-        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
-        start_pipeline__action = EventActionFactory(
+        assistant = OpenAiAssistantFactory.create()
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        start_pipeline__action = EventActionFactory.create(
             action_type=EventActionType.PIPELINE_START,
             params={
                 "pipeline_id": pipeline.id,
             },
         )
-        experiment1 = ExperimentFactory()
-        experiment2 = ExperimentFactory()
-        static_trigger = StaticTriggerFactory(experiment=experiment2, action=start_pipeline__action)
+        experiment1 = ExperimentFactory.create()
+        experiment2 = ExperimentFactory.create()
+        static_trigger = StaticTriggerFactory.create(experiment=experiment2, action=start_pipeline__action)
 
         # Experiment and Static trigger still uses it
         assert pipeline.archive() is False
@@ -359,7 +359,7 @@ class TestPipelineValidation:
         for node in nodes:
             flow_nodes.append({"id": node["id"], "data": node})
 
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
         pipeline.data = {"edges": edges, "nodes": flow_nodes}
         pipeline.update_nodes_from_data()
         errors = pipeline.validate()

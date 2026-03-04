@@ -19,17 +19,17 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.fixture()
 def experiment(pipeline):
-    return ExperimentFactory(team=pipeline.team, pipeline=pipeline)
+    return ExperimentFactory.create(team=pipeline.team, pipeline=pipeline)
 
 
 @pytest.fixture()
 def experiment_session(experiment):
-    return ExperimentSessionFactory(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment)
 
 
 @django_db_with_data()

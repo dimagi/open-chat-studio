@@ -29,7 +29,7 @@ def authed_client(authed_user):
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment)
 
 
 @pytest.mark.django_db()

@@ -19,7 +19,7 @@ def request_factory():
 @pytest.fixture()
 def user_with_team(db):
     """Create a user with a default team."""
-    user = UserFactory()
+    user = UserFactory.create()
     create_default_team_for_user(user, "User's Team")
     return user
 
@@ -27,7 +27,7 @@ def user_with_team(db):
 @pytest.fixture()
 def user_without_team(db):
     """Create a user without any teams."""
-    return UserFactory()
+    return UserFactory.create()
 
 
 @pytest.fixture()
@@ -97,7 +97,7 @@ def request_with_session(request_factory):
 @pytest.fixture()
 def oauth_applications_for_multiple_users(db, user_with_team):
     """Create OAuth applications for multiple users."""
-    other_user = UserFactory()
+    other_user = UserFactory.create()
 
     app_for_current_user = OAuth2Application.objects.create(
         name="Current User App",
@@ -177,7 +177,7 @@ def test_get_initial_with_multiple_teams_respects_parameter(
     """Test that team parameter is respected when user is member of multiple teams."""
     # Create another team and add user to it
     other_team = Team.objects.create(name="Other Team", slug="other-team")
-    MembershipFactory(team=other_team, user=user_with_team)
+    MembershipFactory.create(team=other_team, user=user_with_team)
 
     request = get_request_with_user("/?team=other-team", user_with_team)
     view_with_oauth2_data.request = request

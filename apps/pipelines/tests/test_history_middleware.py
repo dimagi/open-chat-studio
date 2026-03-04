@@ -16,7 +16,7 @@ from apps.utils.langchain import FakeLlmSimpleTokenCount
 
 @pytest.fixture()
 def experiment_session(db):
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.fixture()

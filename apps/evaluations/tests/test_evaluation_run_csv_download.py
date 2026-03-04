@@ -38,11 +38,11 @@ def test_download_evaluation_run_csv_with_different_context_columns(client, team
         generated_response="Generated Python response",
     )
 
-    result1 = EvaluationResultFactory(output=evaluator_result1.model_dump(), team=team_with_users)
-    result1.run.team = team_with_users  # ty: ignore[invalid-assignment]
+    result1 = EvaluationResultFactory.create(output=evaluator_result1.model_dump(), team=team_with_users)
+    result1.run.team = team_with_users
     result1.run.save()
 
-    EvaluationResultFactory(
+    EvaluationResultFactory.create(
         output=evaluator_result2.model_dump(), team=team_with_users, run=result1.run, evaluator=result1.evaluator
     )
 

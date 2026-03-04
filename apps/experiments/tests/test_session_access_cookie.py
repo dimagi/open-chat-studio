@@ -10,7 +10,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 
 @pytest.fixture()
 def session():
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     participant = Participant.objects.create(team=session.team, identifier="test@test.com", platform="web")
     session.participant = participant
     session.save()

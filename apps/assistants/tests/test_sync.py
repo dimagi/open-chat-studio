@@ -41,7 +41,7 @@ LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTI
 @patch("openai.resources.beta.Assistants.create", return_value=AssistantFactory.build(id="test_id"))
 @patch("openai.resources.Files.create", side_effect=FileObjectFactory.create_batch(3))
 def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_create):
-    local_assistant = OpenAiAssistantFactory(builtin_tools=["code_interpreter", "file_search"])
+    local_assistant = OpenAiAssistantFactory.create(builtin_tools=["code_interpreter", "file_search"])
     files = FileFactory.create_batch(3)
 
     code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=local_assistant)
@@ -71,7 +71,9 @@ def test_push_assistant_to_openai_create(mock_file_create, assistant_create, vs_
 @patch("openai.resources.vector_stores.VectorStores.retrieve", return_value=ObjectWithId(id="vs_123"))
 @patch("openai.resources.beta.Assistants.update")
 def test_push_assistant_to_openai_update(mock_update, vs_retrieve, vs_files_list, file_batches, experiment):
-    local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
+    local_assistant = OpenAiAssistantFactory.create(
+        assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"]
+    )
     files = FileFactory.create_batch(3)
     files[0].external_id = "test_id"
     files[0].external_source = "openai"
@@ -130,7 +132,7 @@ def test_sync_from_openai(mock_file_retrieve, _, mock_retrieve, mock_vector_stor
     file_search_files_expected = openai_files[2:]
 
     # mock assistant return value
-    remote_assistant = AssistantFactory()
+    remote_assistant = AssistantFactory.create()
     remote_assistant.tool_resources.code_interpreter.file_ids = [file.id for file in code_files_expected]
     vector_store_id = "vs_123"
     remote_assistant.tool_resources.file_search.vector_store_ids = [vector_store_id]
@@ -142,7 +144,7 @@ def test_sync_from_openai(mock_file_retrieve, _, mock_retrieve, mock_vector_stor
     mock_file_retrieve.side_effect = openai_files
 
     # mock the vector store file call
-    mock_vector_store_files.return_value = [FileObjectFactory(id=file.id) for file in file_search_files_expected]
+    mock_vector_store_files.return_value = [FileObjectFactory.create(id=file.id) for file in file_search_files_expected]
 
     # setup local assistant
     files = FileFactory.create_batch(2)
@@ -150,7 +152,9 @@ def test_sync_from_openai(mock_file_retrieve, _, mock_retrieve, mock_vector_stor
     files[1].external_id = "old_file"  # does not match remote file
     [file.save() for file in files]
 
-    local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
+    local_assistant = OpenAiAssistantFactory.create(
+        assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"]
+    )
     code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=local_assistant)
     code_resource.files.set([files[0]])
 
@@ -189,7 +193,7 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     file_search_files_expected = openai_files[2:]
 
     # mock assistant return value
-    remote_assistant = AssistantFactory()
+    remote_assistant = AssistantFactory.create()
     remote_assistant.tool_resources.code_interpreter.file_ids = [file.id for file in code_files_expected]
     vector_store_id = "vs_123"
     remote_assistant.tool_resources.file_search.vector_store_ids = [vector_store_id]
@@ -198,12 +202,12 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     mock_retrieve.return_value = remote_assistant
 
     # mock the vector store file call
-    mock_vector_store_files.return_value = [FileObjectFactory(id=file.id) for file in file_search_files_expected]
+    mock_vector_store_files.return_value = [FileObjectFactory.create(id=file.id) for file in file_search_files_expected]
 
     # this will return one file from the list on each call to the mock
     mock_file_retrieve.side_effect = openai_files
 
-    llm_provider = LlmProviderFactory()
+    llm_provider = LlmProviderFactory.create()
     imported_assistant = import_openai_assistant("123", llm_provider, llm_provider.team)
     assert imported_assistant.llm_provider == llm_provider
     assert imported_assistant.team == llm_provider.team
@@ -231,9 +235,9 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
 @pytest.mark.django_db()
 @patch("openai.resources.beta.Assistants.retrieve")
 def test_import_openai_assistant_raises_for_invalid_instructions(mock_retrieve):
-    remote_assistant = AssistantFactory(instructions="This is a test with a {invalid_variable}")
+    remote_assistant = AssistantFactory.create(instructions="This is a test with a {invalid_variable}")
     mock_retrieve.return_value = remote_assistant
-    llm_provider = LlmProviderFactory()
+    llm_provider = LlmProviderFactory.create()
 
     expected_error_msg = "{'instructions': ['Prompt contains unknown variables: invalid_variable']}"
     with pytest.raises(OpenAiSyncError, match=re.escape(expected_error_msg)):
@@ -246,7 +250,7 @@ def test_import_openai_assistant_raises_for_invalid_instructions(mock_retrieve):
 @patch("openai.resources.Files.delete")
 def test_delete_openai_assistant(mock_file_delete, mock_vector_store_delete, mock_delete):
     files = FileFactory.create_batch(3, external_id="test_id", external_source="openai")
-    local_assistant = OpenAiAssistantFactory(assistant_id="123")
+    local_assistant = OpenAiAssistantFactory.create(assistant_id="123")
 
     code_resource = ToolResources.objects.create(tool_type="code_interpreter", assistant=local_assistant)
     code_resource.files.set(files[:2])
@@ -270,7 +274,7 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
     tool_type = "code_interpreter"
     openai_files = FileObjectFactory.create_batch(2)
 
-    remote_assistant = AssistantFactory()
+    remote_assistant = AssistantFactory.create()
     remote_assistant.tool_resources.code_interpreter.file_ids = [file.id for file in openai_files]
     del remote_assistant.tool_resources.file_search
     mock_retrieve.return_value = remote_assistant
@@ -281,7 +285,7 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
     files[1].external_id = openai_files[1].id
     [file.save() for file in files]
 
-    local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=[tool_type])
+    local_assistant = OpenAiAssistantFactory.create(assistant_id="test_id", builtin_tools=[tool_type])
     resource = ToolResources.objects.create(tool_type=tool_type, assistant=local_assistant)
     resource.files.set([files[0]])
 
@@ -301,9 +305,9 @@ def test_code_interpreter_are_files_in_sync_with_openai(mock_retrieve):
 def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     tool_type = "file_search"
     openai_files = FileObjectFactory.create_batch(2)
-    file_list.return_value = [FileObjectFactory(id=file.id) for file in openai_files]
+    file_list.return_value = [FileObjectFactory.create(id=file.id) for file in openai_files]
 
-    remote_assistant = AssistantFactory()
+    remote_assistant = AssistantFactory.create()
     vector_store_id = "vs_123"
     remote_assistant.tool_resources.file_search.vector_store_ids = [vector_store_id]
     del remote_assistant.tool_resources.code_interpreter
@@ -315,7 +319,7 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
     files[1].external_id = openai_files[1].id
     [file.save() for file in files]
 
-    local_assistant = OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=[tool_type])
+    local_assistant = OpenAiAssistantFactory.create(assistant_id="test_id", builtin_tools=[tool_type])
     resource = ToolResources.objects.create(
         tool_type="file_search", assistant=local_assistant, extra={"vector_store_id": vector_store_id}
     )
@@ -340,7 +344,7 @@ def test_file_search_are_files_in_sync_with_openai(mock_retrieve, file_list):
 @patch("openai.resources.vector_stores.file_batches.FileBatches.create")
 def test_vector_store_create_batch_files(create_file_batch, create_vector_store, file_ids, expect_batch_api_called):
     """The `client.vector_stores.create` API can only handle 100 file_ids whereas the batch API can handle 500"""
-    local_assistant = OpenAiAssistantFactory(builtin_tools=["file_search"], assistant_id="")
+    local_assistant = OpenAiAssistantFactory.create(builtin_tools=["file_search"], assistant_id="")
 
     _update_or_create_vector_store(local_assistant, "test_v_store", vector_store_id=None, file_ids=file_ids)
     assert create_vector_store.call_count == 1
@@ -357,14 +361,14 @@ def test_vector_store_create_batch_files(create_file_batch, create_vector_store,
 @patch("apps.assistants.sync.delete_file_from_openai")
 @patch("apps.assistants.sync.OpenAIRemoteIndexManager.delete_file_from_index")
 def test_remove_files_from_tool(delete_file, delete_file_from_openai):
-    collection = CollectionFactory()
+    collection = CollectionFactory.create()
     resource = ToolResources.objects.create(
-        tool_type="file_search", assistant=OpenAiAssistantFactory(), extra={"vector_store_id": "vs-123"}
+        tool_type="file_search", assistant=OpenAiAssistantFactory.create(), extra={"vector_store_id": "vs-123"}
     )
-    file1 = FileFactory(external_id="file1")
+    file1 = FileFactory.create(external_id="file1")
     collection.files.add(file1)
 
-    file2 = FileFactory(external_id="file2")
+    file2 = FileFactory.create(external_id="file2")
     resource.files.add(*[file1.id, file2.id])
 
     remove_files_from_tool(resource, files=[file1, file2])
@@ -375,12 +379,12 @@ def test_remove_files_from_tool(delete_file, delete_file_from_openai):
 
 @pytest.mark.django_db()
 def test_get_files_to_delete():
-    collection = CollectionFactory()
+    collection = CollectionFactory.create()
     team = collection.team
     resource = ToolResources.objects.create(
-        tool_type="file_search", assistant=OpenAiAssistantFactory(team=team), extra={"vector_store_id": "vs-123"}
+        tool_type="file_search", assistant=OpenAiAssistantFactory.create(team=team), extra={"vector_store_id": "vs-123"}
     )
-    file = FileFactory(external_id="file1")
+    file = FileFactory.create(external_id="file1")
     collection.files.add(file)
     resource.files.add(file)
 

@@ -22,12 +22,12 @@ def _get_querydict(params: dict) -> QueryDict:
 def participants_with_various_data(django_db_setup, django_db_blocker):
     """Create participants with various identifier and name combinations"""
     with django_db_blocker.unblock():
-        team = TeamFactory()
-        p1 = ParticipantFactory(identifier="AP1", name="Alice Peterson", team=team)
-        p2 = ParticipantFactory(identifier="AP2", name="Bob Anderson", team=team)
-        p3 = ParticipantFactory(identifier="AP3", name="Charlie Brown", team=team)
-        p4 = ParticipantFactory(identifier="XYZ123", name="AP Smith", team=team)
-        p5 = ParticipantFactory(identifier="TEST001", name="David Jones", team=team)
+        team = TeamFactory.create()
+        p1 = ParticipantFactory.create(identifier="AP1", name="Alice Peterson", team=team)
+        p2 = ParticipantFactory.create(identifier="AP2", name="Bob Anderson", team=team)
+        p3 = ParticipantFactory.create(identifier="AP3", name="Charlie Brown", team=team)
+        p4 = ParticipantFactory.create(identifier="XYZ123", name="AP Smith", team=team)
+        p5 = ParticipantFactory.create(identifier="TEST001", name="David Jones", team=team)
         participants = [p1, p2, p3, p4, p5]
         yield participants
         delete_object_with_auditing_of_related_objects(team)

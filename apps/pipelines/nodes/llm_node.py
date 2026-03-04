@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import operator
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
@@ -153,7 +153,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
-    return tools  # ty: ignore[invalid-return-type]
+    return cast(list[dict | BaseTool], tools)
 
 
 def _get_search_tool(node):

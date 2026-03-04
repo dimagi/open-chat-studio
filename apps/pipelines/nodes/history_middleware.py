@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 from langchain_core.messages import BaseMessage, RemoveMessage
@@ -75,7 +75,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
                 return messages[i].additional_kwargs["id"]
 
     def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
-        return messages[1].content  # ty: ignore[invalid-return-type]
+        return cast(str, messages[1].content)
 
 
 class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):

@@ -2,9 +2,11 @@ import json
 
 import pytest
 from django.core.files.base import ContentFile
+from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
+from apps.events.models import EventActionType, TimePeriod
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
@@ -19,6 +21,7 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
+from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.pytest import django_db_with_data
@@ -26,12 +29,12 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 IMPORTS = """
@@ -292,14 +295,35 @@ def main(input, **kwargs):
     assert node_output.update["messages"][-1] == "content from file"  # ty: ignore[not-subscriptable]
 
 
+@pytest.mark.django_db()
 def test_get_participant_schedules():
     """
     Test that the get_participant_schedules function correctly retrieves
     scheduled messages for the experiment session's participant and experiment.
     """
+    experiment_session = ExperimentSessionFactory.create()
     repo = InMemoryPipelineRepository()
     repo.participant_schedules = [{"name": "Test Schedule", "next_trigger_date": "2024-01-01"}]
 
+    params = {
+        "name": "Test",
+        "time_period": TimePeriod.DAYS,
+        "frequency": 1,
+        "repetitions": 1,
+        "prompt_text": "",
+        "experiment_id": experiment_session.experiment.id,
+    }
+    event_action = EventActionFactory.create(params=params, action_type=EventActionType.SCHEDULETRIGGER)
+
+    ScheduledMessageFactory.create(
+        experiment=experiment_session.experiment,
+        team=experiment_session.team,
+        participant=experiment_session.participant,
+        action=event_action,
+        next_trigger_date=timezone.now(),
+        is_complete=False,
+        cancelled_at=None,
+    )
     code = """
 def main(input, **kwargs):
     schedules = get_participant_schedules()

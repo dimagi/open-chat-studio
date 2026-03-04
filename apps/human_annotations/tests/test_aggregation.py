@@ -13,7 +13,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def team():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.fixture()
@@ -43,7 +43,7 @@ def queue_with_choice_schema(team):
 
 
 def _make_item_and_annotate(queue, team, reviewer, data):
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
     item = AnnotationItem.objects.create(queue=queue, team=team, item_type=AnnotationItemType.SESSION, session=session)
     Annotation.objects.create(item=item, team=team, reviewer=reviewer, data=data)
     return item
@@ -129,7 +129,7 @@ def test_aggregates_auto_recompute_on_annotation_save(team, queue_with_int_schem
     user1 = team.members.first()
     user2 = team.members.last()
 
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
     item = AnnotationItem.objects.create(
         queue=queue_with_int_schema, team=team, item_type=AnnotationItemType.SESSION, session=session
     )
@@ -142,7 +142,7 @@ def test_aggregates_auto_recompute_on_annotation_save(team, queue_with_int_schem
     assert agg.aggregates["score"]["mean"] == 3.0
 
     # Second annotation on a new item updates aggregate
-    session2 = ExperimentSessionFactory(team=team, chat__team=team)
+    session2 = ExperimentSessionFactory.create(team=team, chat__team=team)
     item2 = AnnotationItem.objects.create(
         queue=queue_with_int_schema, team=team, item_type=AnnotationItemType.SESSION, session=session2
     )

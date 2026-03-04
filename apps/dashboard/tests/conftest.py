@@ -15,21 +15,21 @@ User = get_user_model()
 @pytest.fixture()
 def user():
     """Create a test user"""
-    return UserFactory()
+    return UserFactory.create()
 
 
 @pytest.fixture()
 def team(user):
     """Create a test team with the user as a member"""
-    team = TeamFactory()
-    MembershipFactory(team=team, user=user, groups=get_test_user_groups)
+    team = TeamFactory.create()
+    MembershipFactory.create(team=team, user=user, groups=get_test_user_groups)
     return team
 
 
 @pytest.fixture()
 def experiment_team():
     """Create a separate team for multi-team testing"""
-    return TeamFactory(name="Test Experiment", slug="test-experiment")
+    return TeamFactory.create(name="Test Experiment", slug="test-experiment")
 
 
 @pytest.fixture()

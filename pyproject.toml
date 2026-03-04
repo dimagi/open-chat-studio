@@ -6,7 +6,7 @@ description = "A web application for building and deploying chatbots."
 readme = "README.md"
 license = "BSD-3-Clause"
 dependencies = [
-    "Django",
+    "Django<6",
     "Markdown",
     "anthropic",
     "azure-cognitiveservices-speech",

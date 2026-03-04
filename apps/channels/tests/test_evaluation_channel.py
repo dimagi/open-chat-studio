@@ -15,7 +15,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def experiment(db):
-    return ExperimentFactory(team=TeamWithUsersFactory())
+    return ExperimentFactory.create(team=TeamWithUsersFactory.create())
 
 
 @pytest.fixture()
@@ -28,7 +28,7 @@ def evaluation_channel(experiment):
 @pytest.mark.django_db()
 def test_evaluation_channel_initialization_with_session(experiment, evaluation_channel):
     """Test EvaluationChannel can be initialized with a session"""
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=evaluation_channel)
 
     channel = EvaluationChannel(
         experiment=experiment,
@@ -47,7 +47,7 @@ def test_evaluation_channel_initialization_with_session(experiment, evaluation_c
 @pytest.mark.django_db()
 def test_evaluation_channel_disables_ocs_tracer(experiment, evaluation_channel):
     """Test that EvaluationChannel uses empty tracing service (no OCS tracer)"""
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=evaluation_channel)
 
     channel = EvaluationChannel(
         experiment=experiment,
@@ -83,7 +83,7 @@ def test_get_team_evaluations_channel_uniqueness(experiment):
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_evaluation_channel_processes_message(get_bot_response_mock, experiment, evaluation_channel):
     """Test that EvaluationChannel can process messages"""
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=evaluation_channel)
 
     get_bot_response_mock.return_value = ChatMessage(content="Bot response")
 
@@ -107,7 +107,7 @@ def test_evaluation_channel_processes_message(get_bot_response_mock, experiment,
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_handle_evaluation_message(get_bot_response_mock, experiment, evaluation_channel):
     get_bot_response_mock.return_value = ChatMessage(content="Bot response")
-    session = ExperimentSessionFactory(experiment=experiment, experiment_channel=evaluation_channel)
+    session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=evaluation_channel)
 
     result = handle_evaluation_message(
         experiment_version=experiment,
