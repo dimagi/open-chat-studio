@@ -65,7 +65,6 @@ resolve a name or partial name to valid option IDs.
 **Arguments:**
 - `param` (required): The filter query_param from the schema (e.g. `"experiment"`, `"tags"`, `"channels"`)
 - `search` (optional): A substring to narrow results (case-insensitive match on option label)
-- `limit` (optional): Max options to return, default 50
 
 **Returns:** `{{"options": [{{"id": ..., "label": ...}}, ...], "returned": N, "total": M}}`
 

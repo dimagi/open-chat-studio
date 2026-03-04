@@ -31,7 +31,7 @@ def make_get_options_tool(filter_class, team):
     _options_cache: dict[str, list[dict]] = {}  # param -> normalized options (cached per agent run)
 
     @tool
-    def get_filter_options(param: str, search: str = "", limit: int = 50) -> dict:
+    def get_filter_options(param: str, search: str = "") -> dict:
         """Get available options for a choice or exclusive_choice filter parameter.
 
         Call this tool before using a choice/exclusive_choice filter to look up
@@ -40,16 +40,12 @@ def make_get_options_tool(filter_class, team):
         Args:
             param: The filter query_param name (e.g. 'experiment', 'tags', 'channels').
             search: Optional case-insensitive substring to filter options by label.
-            limit: Maximum number of options to return (default 50).
 
         Returns:
             Dict with 'options' (list of {id, label}), 'returned' (count returned),
             'total' (total matching before limit is applied).
             On error, returns {'error': '<message>'}.
         """
-        if limit < 1:
-            return {"error": "limit must be >= 1"}
-
         filter_component = next(
             (f for f in filter_class.filters if f.query_param == param),
             None,
@@ -81,6 +77,7 @@ def make_get_options_tool(filter_class, team):
             needle = search.lower()
             normalized = [opt for opt in normalized if needle in opt["label"].lower()]
 
+        limit = 50
         total = len(normalized)
         limited = normalized[:limit]
         return {"options": limited, "returned": len(limited), "total": total}
