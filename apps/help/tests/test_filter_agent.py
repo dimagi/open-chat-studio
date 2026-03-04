@@ -109,17 +109,17 @@ class TestMakeGetOptionsTool:
         assert all("Bot" in opt["label"] for opt in result["options"])
 
     def test_limit_caps_results_but_total_reflects_full_count(self):
-        options = [{"id": i, "label": f"Bot {i}"} for i in range(10)]
+        options = [{"id": i, "label": f"Bot {i}"} for i in range(53)]
         choice_filter = self._make_choice_filter("experiment", options)
         filter_class = self._make_filter_class([choice_filter])
         team = mock.Mock()
 
         tool_fn = make_get_options_tool(filter_class, team)
-        result = tool_fn.invoke({"param": "experiment", "limit": 3})
+        result = tool_fn.invoke({"param": "experiment"})
 
-        assert result["total"] == 10
-        assert result["returned"] == 3
-        assert len(result["options"]) == 3
+        assert result["total"] == 53
+        assert result["returned"] == 50
+        assert len(result["options"]) == 50
 
     def test_error_for_unknown_param(self):
         filter_class = self._make_filter_class([])
