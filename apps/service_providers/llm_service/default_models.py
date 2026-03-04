@@ -113,7 +113,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
-        Model("gemini-3-pro-preview", 1048576),
+        Model("gemini-3.1-pro-preview", 1048576),
         Model("gemini-2.5-pro", 1048576, is_translation_default=True),
         Model("gemini-2.5-flash", 1048576, is_default=True),
         Model("gemini-2.5-flash-lite", 1048576),
@@ -161,6 +161,8 @@ DELETED_MODELS = [
     ("google", "gemini-1.5-flash"),
     ("google", "gemini-1.5-flash-8b"),
     ("google", "gemini-1.5-pro"),
+    # Google Vertex AI
+    ("google_vertex_ai", "gemini-3-pro-preview", "gemini-3.1-pro-preview"),
 ]
 
 
