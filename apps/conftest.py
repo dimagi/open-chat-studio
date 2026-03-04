@@ -1,4 +1,5 @@
 import os
+from collections.abc import Generator
 from unittest.mock import Mock, patch
 
 import pytest
@@ -44,7 +45,9 @@ def local_index_manager_mock():
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _django_db_restore_serialized(request: pytest.FixtureRequest, django_db_keepdb, django_db_blocker) -> None:  # ty: ignore[invalid-return-type]
+def _django_db_restore_serialized(
+    request: pytest.FixtureRequest, django_db_keepdb, django_db_blocker
+) -> Generator[None]:
     """Restore database data at the end of the session. This is needed because we use transaction test cases
     in certain places which flush the DB. Individual tests that require the default DB data should
     use `apps.utils.pytest.django_db_with_data`.
