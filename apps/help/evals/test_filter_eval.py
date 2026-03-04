@@ -5,6 +5,7 @@ import pytest
 from apps.help.agents.filter import FilterAgent, FilterInput
 from apps.help.evals.conftest import FIXTURES_DIR, load_fixtures, run_checks
 from apps.utils.factories.team import TeamFactory
+from apps.utils.pytest import django_db_with_data
 
 cases = load_fixtures(FIXTURES_DIR / "filter.yml")
 
@@ -20,7 +21,7 @@ def test_filter(case):
 
 
 @pytest.mark.eval()
-@pytest.mark.django_db()
+@django_db_with_data()
 def test_filter_experiment_uses_option_ids():
     """Agent must call get_filter_options('experiment') and use the returned integer ID.
 
@@ -33,9 +34,10 @@ def test_filter_experiment_uses_option_ids():
     team = TeamFactory()
     experiment = ChatbotFactory(team=team, name="Alpha Bot")
 
+    assert experiment.is_working_version
     agent = FilterAgent(
         input=FilterInput(
-            query="sessions for the 'Alpha Bot' chatbot",
+            query="alpha bot sessions",
             filter_slug="session",
             team_id=team.id,
         )
@@ -57,7 +59,7 @@ def test_filter_experiment_uses_option_ids():
 
 
 @pytest.mark.eval()
-@pytest.mark.django_db()
+@django_db_with_data()
 def test_filter_tags_tool_lookup():
     """Agent should call get_filter_options('tags') to discover available tag names.
 
@@ -68,10 +70,11 @@ def test_filter_tags_tool_lookup():
 
     team = TeamFactory()
     Tag.objects.create(name="urgent", slug="urgent", team=team, is_system_tag=False, category="")
+    Tag.objects.create(name="👎🏻", slug="👎🏻", team=team, is_system_tag=True, category="response_rating")
 
     agent = FilterAgent(
         input=FilterInput(
-            query="sessions tagged with 'urgent'",
+            query="sessions tagged with urgent or thumbs down",
             filter_slug="session",
             team_id=team.id,
         )
@@ -85,3 +88,4 @@ def test_filter_tags_tool_lookup():
 
     tag_values = json.loads(tags_filter.value)
     assert "urgent" in tag_values, f"Expected 'urgent' in tag values, got {tag_values!r}"
+    assert "👎🏻" in tag_values, f"Expected '👎🏻' in tag values, got {tag_values!r}"
