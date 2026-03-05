@@ -197,38 +197,8 @@ class TurnWhatsappMessage(BaseMessage):
         )
 
 
-class MetaCloudAPIMessage(BaseMessage):
-    """A wrapper class for user messages coming from the Meta Cloud API (WhatsApp)"""
-
-    media_id: str | None = Field(default=None)
-    content_type_unparsed: str | None = Field(default=None)
-
-    @field_validator("content_type", mode="before")
-    @classmethod
-    def determine_content_type(cls, value):
-        if MESSAGE_TYPES.is_member(value):
-            return MESSAGE_TYPES(value)
-
-    @staticmethod
-    def parse(value_data: dict) -> "MetaCloudAPIMessage":
-        """Parse the 'value' dict from entry[].changes[].value in the Meta webhook payload.
-
-        Args:
-            value_data: The 'value' dict containing metadata, contacts, and messages.
-        """
-        message = value_data["messages"][0]
-        message_type = message["type"]
-        body = ""
-        if message_type == "text":
-            body = message["text"]["body"]
-
-        return MetaCloudAPIMessage(
-            participant_id=value_data["contacts"][0]["wa_id"],
-            message_text=body,
-            content_type=message_type,
-            media_id=message.get(message_type, {}).get("id", None),
-            content_type_unparsed=message_type,
-        )
+# Meta Cloud API uses the same WhatsApp Business API message format as Turn.io
+MetaCloudAPIMessage = TurnWhatsappMessage
 
 
 class FacebookMessage(BaseMessage):

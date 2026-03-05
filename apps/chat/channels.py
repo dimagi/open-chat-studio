@@ -1169,9 +1169,7 @@ class WhatsappChannel(ChannelBase):
         )
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """
-        Uploads the synthesized voice to AWS and send the public link to twilio
-        """
+        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
         self.messaging_service.send_voice_message(
             synthetic_voice,
             from_=self.from_identifier,
@@ -1224,9 +1222,7 @@ class FacebookMessengerChannel(ChannelBase):
         self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """
-        Uploads the synthesized voice to AWS and send the public link to twilio
-        """
+        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK

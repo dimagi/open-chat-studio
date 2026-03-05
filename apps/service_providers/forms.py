@@ -256,8 +256,8 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["access_token", "app_secret", "verify_token"]
 
-    access_token = forms.CharField(label=_("System User Access Token"))
     business_id = forms.CharField(label=_("WhatsApp Business Account ID"))
+    access_token = forms.CharField(label=_("System User Access Token"))
     app_secret = forms.CharField(
         label=_("App Secret"),
         help_text=_("Used to verify incoming webhook signatures (X-Hub-Signature-256)."),

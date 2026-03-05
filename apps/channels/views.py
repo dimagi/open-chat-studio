@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import json
 import logging
 import uuid
@@ -34,6 +32,7 @@ from apps.channels import tasks
 from apps.channels.datamodels import TwilioMessage
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
+from apps.channels.meta_webhook import MetaCloudAPIWebhook
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.serializers import (
     ApiMessageSerializer,
@@ -427,26 +426,33 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
 def new_meta_cloud_api_message(request):
     # GET: Meta webhook verification
     if request.method == "GET":
-        return _verify_meta_webhook(request)
+        return MetaCloudAPIWebhook.verify_webhook(request)
 
     if request.method != "POST":
         return HttpResponseBadRequest("Unsupported method.")
 
-    data = json.loads(request.body)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Invalid JSON.")
+
     if data.get("object") != "whatsapp_business_account":
         return HttpResponse()
 
-    message_values = _extract_meta_message_values(data)
+    message_values = MetaCloudAPIWebhook.extract_message_values(data)
     if not message_values:
         return HttpResponse()
 
-    # All entries in a single webhook come from the same Meta app,
-    # so use the first phone_number_id to find the channel and verify the signature once.
+    # Look up the channel by phone_number_id, then verify signature before dispatching
     first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
-    channel = tasks.get_experiment_channel(
-        ChannelPlatform.WHATSAPP,
-        extra_data__phone_number_id=first_phone_number_id,
-        messaging_provider__type=MessagingProviderType.meta_cloud_api,
+    channel = (
+        ExperimentChannel.objects.filter(
+            platform=ChannelPlatform.WHATSAPP,
+            extra_data__phone_number_id=first_phone_number_id,
+            messaging_provider__type=MessagingProviderType.meta_cloud_api,
+        )
+        .select_related("experiment", "team", "messaging_provider")
+        .first()
     )
     if not channel:
         log.info("No channel found for phone_number_id: %s", first_phone_number_id)
@@ -454,7 +460,7 @@ def new_meta_cloud_api_message(request):
 
     app_secret = channel.messaging_provider.config.get("app_secret", "")
     signature = request.headers.get("X-Hub-Signature-256", "")
-    if not _verify_meta_signature(request.body, signature, app_secret):
+    if not MetaCloudAPIWebhook.verify_signature(request.body, signature, app_secret):
         return HttpResponseBadRequest("Invalid signature.")
 
     set_current_team(channel.team)
@@ -468,51 +474,3 @@ def new_meta_cloud_api_message(request):
         )
 
     return HttpResponse()
-
-
-def _extract_meta_message_values(data: dict) -> list[dict]:
-    """Extract value dicts that contain messages from Meta webhook payload."""
-    values = []
-    for entry in data.get("entry", []):
-        for change in entry.get("changes", []):
-            value = change.get("value", {})
-            if "messages" in value and value.get("metadata", {}).get("phone_number_id"):
-                values.append(value)
-    return values
-
-
-def _verify_meta_webhook(request):
-    mode = request.GET.get("hub.mode")
-    token = request.GET.get("hub.verify_token")
-    challenge = request.GET.get("hub.challenge")
-
-    if mode != "subscribe" or not token:
-        return HttpResponseBadRequest("Verification failed.")
-
-    # Find a Meta Cloud API channel whose provider config has a matching verify_token
-    channels = ExperimentChannel.objects.filter(
-        platform=ChannelPlatform.WHATSAPP,
-        messaging_provider__type=MessagingProviderType.meta_cloud_api,
-    ).select_related("messaging_provider")
-
-    for channel in channels:
-        config = channel.messaging_provider.config
-        # verify_token is a server side encrypted field, so we can't do lookup in the DB
-        if config.get("verify_token") == token:
-            return HttpResponse(challenge, content_type="text/plain")
-
-    return HttpResponseBadRequest("Verification failed.")
-
-
-def _verify_meta_signature(payload: bytes, signature_header: str, app_secret: str) -> bool:
-    """Verify the X-Hub-Signature-256 header from Meta webhooks."""
-    if not signature_header.startswith("sha256=") or not app_secret:
-        return False
-
-    expected_signature = signature_header[7:]
-    computed = hmac.new(
-        app_secret.encode(),
-        payload,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(computed, expected_signature)

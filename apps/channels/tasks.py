@@ -181,7 +181,7 @@ def handle_commcare_connect_message(self, experiment_id: int, participant_data_i
 
 def get_experiment_channel(platform, **query_kwargs):
     query = get_experiment_channel_base_query(platform, **query_kwargs)
-    return query.select_related("experiment", "team").first()
+    return query.select_related("experiment", "team", "messaging_provider").first()
 
 
 def get_experiment_channel_base_query(platform, **query_kwargs):
