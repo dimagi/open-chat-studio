@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from django.test import RequestFactory
 
-from apps.channels.meta_webhook import MetaCloudAPIWebhook
+from apps.channels import meta_webhook
 from apps.channels.models import ChannelPlatform
 from apps.channels.views import new_meta_cloud_api_message
 from apps.service_providers.models import MessagingProviderType
@@ -85,27 +85,27 @@ class TestMetaCloudAPIWebhookVerifySignature:
     def test_valid_signature(self):
         payload = b'{"test": "data"}'
         signature = _make_signature(payload)
-        assert MetaCloudAPIWebhook.verify_signature(payload, signature, APP_SECRET) is True
+        assert meta_webhook.verify_signature(payload, signature, APP_SECRET) is True
 
     def test_invalid_signature(self):
         payload = b'{"test": "data"}'
-        assert MetaCloudAPIWebhook.verify_signature(payload, "sha256=invalid", APP_SECRET) is False
+        assert meta_webhook.verify_signature(payload, "sha256=invalid", APP_SECRET) is False
 
     def test_missing_sha256_prefix(self):
         payload = b'{"test": "data"}'
         sig = hmac.new(APP_SECRET.encode(), payload, hashlib.sha256).hexdigest()
-        assert MetaCloudAPIWebhook.verify_signature(payload, sig, APP_SECRET) is False
+        assert meta_webhook.verify_signature(payload, sig, APP_SECRET) is False
 
     def test_empty_app_secret(self):
         payload = b'{"test": "data"}'
         signature = _make_signature(payload)
-        assert MetaCloudAPIWebhook.verify_signature(payload, signature, "") is False
+        assert meta_webhook.verify_signature(payload, signature, "") is False
 
 
 class TestMetaCloudAPIWebhookExtractMessageValues:
     def test_extracts_message_values(self):
         data = _meta_webhook_payload()
-        values = MetaCloudAPIWebhook.extract_message_values(data)
+        values = meta_webhook.extract_message_values(data)
         assert len(values) == 1
         assert values[0]["metadata"]["phone_number_id"] == "12345"
         assert values[0]["messages"][0]["text"]["body"] == "Hello"
@@ -124,7 +124,7 @@ class TestMetaCloudAPIWebhookVerifyWebhook:
                 "hub.challenge": "challenge_string",
             },
         )
-        response = MetaCloudAPIWebhook.verify_webhook(request)
+        response = meta_webhook.verify_webhook(request)
         assert response.status_code == 200
         assert response.content == b"challenge_string"
 
@@ -138,7 +138,39 @@ class TestMetaCloudAPIWebhookVerifyWebhook:
                 "hub.challenge": "challenge_string",
             },
         )
-        response = MetaCloudAPIWebhook.verify_webhook(request)
+        response = meta_webhook.verify_webhook(request)
+        assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+class TestNewMetaCloudApiMessageGetVerification:
+    """Test the GET verification flow through the view endpoint."""
+
+    def test_valid_verification_via_view(self, meta_cloud_api_provider):
+        factory = RequestFactory()
+        request = factory.get(
+            "/",
+            {
+                "hub.mode": "subscribe",
+                "hub.verify_token": VERIFY_TOKEN,
+                "hub.challenge": "challenge_string",
+            },
+        )
+        response = new_meta_cloud_api_message(request)
+        assert response.status_code == 200
+        assert response.content == b"challenge_string"
+
+    def test_invalid_token_via_view(self, meta_cloud_api_provider):
+        factory = RequestFactory()
+        request = factory.get(
+            "/",
+            {
+                "hub.mode": "subscribe",
+                "hub.verify_token": "wrong_token",
+                "hub.challenge": "challenge_string",
+            },
+        )
+        response = new_meta_cloud_api_message(request)
         assert response.status_code == 400
 
 
@@ -179,6 +211,18 @@ class TestNewMetaCloudApiMessage:
             data=body,
             content_type="application/json",
             HTTP_X_HUB_SIGNATURE_256="sha256=invalid",
+        )
+        response = new_meta_cloud_api_message(request)
+        assert response.status_code == 200
+
+    def test_missing_signature_header_returns_200(self, meta_cloud_api_channel):
+        """Missing signature header returns 200 to prevent Meta from retrying."""
+        factory = RequestFactory()
+        body = json.dumps(_meta_webhook_payload()).encode()
+        request = factory.post(
+            "/",
+            data=body,
+            content_type="application/json",
         )
         response = new_meta_cloud_api_message(request)
         assert response.status_code == 200

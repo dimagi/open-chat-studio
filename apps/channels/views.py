@@ -28,11 +28,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
-from apps.channels import tasks
+from apps.channels import meta_webhook, tasks
 from apps.channels.datamodels import TwilioMessage
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
-from apps.channels.meta_webhook import MetaCloudAPIWebhook
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.serializers import (
     ApiMessageSerializer,
@@ -426,7 +425,7 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
 def new_meta_cloud_api_message(request):
     # GET: Meta webhook verification
     if request.method == "GET":
-        return MetaCloudAPIWebhook.verify_webhook(request)
+        return meta_webhook.verify_webhook(request)
 
     if request.method != "POST":
         return HttpResponseBadRequest("Unsupported method.")
@@ -440,7 +439,7 @@ def new_meta_cloud_api_message(request):
         return HttpResponse()
 
     try:
-        message_values = MetaCloudAPIWebhook.extract_message_values(data)
+        message_values = meta_webhook.extract_message_values(data)
         if not message_values:
             return HttpResponse()
 
@@ -462,14 +461,18 @@ def new_meta_cloud_api_message(request):
         # Return a 200 so that Meta doesn't keep retrying for a channel we don't have
         return HttpResponse()
 
+    # Signature verification happens after the channel lookup because the app_secret
+    # needed to verify is stored in the channel's messaging provider (an encrypted field).
     app_secret = channel.messaging_provider.config.get("app_secret", "")
     signature = request.headers.get("X-Hub-Signature-256", "")
-    if not MetaCloudAPIWebhook.verify_signature(request.body, signature, app_secret):
+    if not meta_webhook.verify_signature(request.body, signature, app_secret):
         return HttpResponse()
 
     set_current_team(channel.team)
     request.experiment = channel.experiment
 
+    # A single Meta webhook payload is always scoped to one app, so all entries share
+    # the same app_secret. Verifying with the first channel's secret is sufficient.
     for value in message_values:
         phone_number_id = value["metadata"]["phone_number_id"]
         tasks.handle_meta_cloud_api_message.delay(
