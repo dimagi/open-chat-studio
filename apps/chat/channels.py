@@ -1154,34 +1154,35 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
+    @property
+    def from_identifier(self) -> str:
+        """Returns the phone number ID for Meta Cloud API, or the phone number for other providers."""
+        extra_data = self.experiment_channel.extra_data
+        return extra_data.get("phone_number_id") or extra_data["number"]
+
     def echo_transcript(self, transcript: str):
         self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
 
     def send_text_to_user(self, text: str):
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.participant_identifier
-
         self.messaging_service.send_text_message(
-            message=text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            message=text, from_=self.from_identifier, to=self.participant_identifier, platform=ChannelPlatform.WHATSAPP
         )
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
         """
         Uploads the synthesized voice to AWS and send the public link to twilio
         """
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.participant_identifier
-
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            synthetic_voice,
+            from_=self.from_identifier,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.WHATSAPP,
         )
 
     def send_file_to_user(self, file: File):
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.participant_identifier
         self.messaging_service.send_file_to_user(
-            from_=from_number,
-            to=to_number,
+            from_=self.from_identifier,
+            to=self.participant_identifier,
             platform=ChannelPlatform.WHATSAPP,
             file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
