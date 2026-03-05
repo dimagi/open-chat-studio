@@ -432,42 +432,53 @@ def new_meta_cloud_api_message(request):
     if request.method != "POST":
         return HttpResponseBadRequest("Unsupported method.")
 
-    signature = request.headers.get("X-Hub-Signature-256", "")
-    if not _verify_meta_signature(request.body, signature):
-        return HttpResponseBadRequest("Invalid signature.")
-
     data = json.loads(request.body)
     if data.get("object") != "whatsapp_business_account":
         return HttpResponse()
 
+    message_values = _extract_meta_message_values(data)
+    if not message_values:
+        return HttpResponse()
+
+    # All entries in a single webhook come from the same Meta app,
+    # so use the first phone_number_id to find the channel and verify the signature once.
+    first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
+    channel = tasks.get_experiment_channel(
+        ChannelPlatform.WHATSAPP,
+        extra_data__phone_number_id=first_phone_number_id,
+        messaging_provider__type=MessagingProviderType.meta_cloud_api,
+    )
+    if not channel:
+        log.info("No channel found for phone_number_id: %s", first_phone_number_id)
+        raise Http404()
+
+    app_secret = channel.messaging_provider.config.get("app_secret", "")
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_meta_signature(request.body, signature, app_secret):
+        return HttpResponseBadRequest("Invalid signature.")
+
+    set_current_team(channel.team)
+    request.experiment = channel.experiment
+
+    for value in message_values:
+        phone_number_id = value["metadata"]["phone_number_id"]
+        tasks.handle_meta_cloud_api_message.delay(
+            phone_number_id=phone_number_id,
+            message_data=value,
+        )
+
+    return HttpResponse()
+
+
+def _extract_meta_message_values(data: dict) -> list[dict]:
+    """Extract value dicts that contain messages from Meta webhook payload."""
+    values = []
     for entry in data.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            if "messages" not in value:
-                continue
-
-            phone_number_id = value.get("metadata", {}).get("phone_number_id")
-            if not phone_number_id:
-                continue
-
-            channel = tasks.get_experiment_channel(
-                ChannelPlatform.WHATSAPP,
-                extra_data__phone_number_id=phone_number_id,
-                messaging_provider__type=MessagingProviderType.meta_cloud_api,
-            )
-            if not channel:
-                log.info("No channel found for phone_number_id: %s", phone_number_id)
-                continue
-
-            set_current_team(channel.team)
-            request.experiment = channel.experiment
-
-            tasks.handle_meta_cloud_api_message.delay(
-                phone_number_id=phone_number_id,
-                message_data=value,
-            )
-
-    return HttpResponse()
+            if "messages" in value and value.get("metadata", {}).get("phone_number_id"):
+                values.append(value)
+    return values
 
 
 def _verify_meta_webhook(request):
@@ -492,34 +503,15 @@ def _verify_meta_webhook(request):
     return HttpResponseBadRequest("Verification failed.")
 
 
-def _verify_meta_signature(payload: bytes, signature_header: str) -> bool:
-    """Verify the X-Hub-Signature-256 header from Meta webhooks.
-
-    Tries each unique app_secret from Meta Cloud API messaging providers
-    until one matches.
-    """
-    if not signature_header.startswith("sha256="):
+def _verify_meta_signature(payload: bytes, signature_header: str, app_secret: str) -> bool:
+    """Verify the X-Hub-Signature-256 header from Meta webhooks."""
+    if not signature_header.startswith("sha256=") or not app_secret:
         return False
 
     expected_signature = signature_header[7:]
-
-    from apps.service_providers.models import MessagingProvider, MessagingProviderType
-
-    app_secrets = (
-        MessagingProvider.objects.filter(type=MessagingProviderType.meta_cloud_api)
-        .values_list("config__app_secret", flat=True)
-        .distinct()
-    )
-
-    for app_secret in app_secrets:
-        if not app_secret:
-            continue
-        computed = hmac.new(
-            app_secret.encode(),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
-        if hmac.compare_digest(computed, expected_signature):
-            return True
-
-    return False
+    computed = hmac.new(
+        app_secret.encode(),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(computed, expected_signature)
