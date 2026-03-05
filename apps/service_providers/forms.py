@@ -1,3 +1,5 @@
+import hashlib
+
 from django import forms
 from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
@@ -266,6 +268,14 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         label=_("Webhook Verify Token"),
         help_text=_("Token used by Meta to verify the webhook URL. Must match the token configured in your Meta app."),
     )
+
+    def save(self, instance):
+        instance = super().save(instance)
+        verify_token = self.cleaned_data["verify_token"]
+        instance.extra_data = {
+            "verify_token_hash": hashlib.sha256(verify_token.encode()).hexdigest(),
+        }
+        return instance
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

@@ -7,6 +7,10 @@ from apps.service_providers.models import MessagingProvider, MessagingProviderTy
 
 
 class MetaCloudAPIWebhook:
+    """
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint/
+    """
+
     @staticmethod
     def extract_message_values(data: dict) -> list[dict]:
         """Extract value dicts that contain messages from Meta webhook payload."""
@@ -28,12 +32,14 @@ class MetaCloudAPIWebhook:
         if mode != "subscribe" or not token or not challenge:
             return HttpResponseBadRequest("Verification failed.")
 
-        # verify_token is a server-side encrypted field, so we can't filter in the DB.
-        providers = MessagingProvider.objects.filter(type=MessagingProviderType.meta_cloud_api)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        exists = MessagingProvider.objects.filter(
+            type=MessagingProviderType.meta_cloud_api,
+            extra_data__verify_token_hash=token_hash,
+        ).exists()
 
-        for provider in providers:
-            if provider.config.get("verify_token") == token:
-                return HttpResponse(challenge, content_type="text/plain")
+        if exists:
+            return HttpResponse(challenge, content_type="text/plain")
 
         return HttpResponseBadRequest("Verification failed.")
 

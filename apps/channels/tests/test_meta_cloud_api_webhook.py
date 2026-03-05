@@ -65,6 +65,9 @@ def meta_cloud_api_provider():
             "app_secret": APP_SECRET,
             "verify_token": VERIFY_TOKEN,
         },
+        extra_data={
+            "verify_token_hash": hashlib.sha256(VERIFY_TOKEN.encode()).hexdigest(),
+        },
     )
 
 
@@ -167,7 +170,8 @@ class TestNewMetaCloudApiMessage:
             message_data=_meta_webhook_payload()["entry"][0]["changes"][0]["value"],
         )
 
-    def test_invalid_signature_returns_400(self, meta_cloud_api_channel):
+    def test_invalid_signature_returns_200(self, meta_cloud_api_channel):
+        """Invalid signature returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
         body = json.dumps(_meta_webhook_payload()).encode()
         request = factory.post(
@@ -177,7 +181,7 @@ class TestNewMetaCloudApiMessage:
             HTTP_X_HUB_SIGNATURE_256="sha256=invalid",
         )
         response = new_meta_cloud_api_message(request)
-        assert response.status_code == 400
+        assert response.status_code == 200
 
     def test_invalid_json_returns_400(self):
         factory = RequestFactory()

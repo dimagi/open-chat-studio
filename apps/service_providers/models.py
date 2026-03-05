@@ -435,6 +435,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    extra_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ("type", "name")

@@ -439,12 +439,16 @@ def new_meta_cloud_api_message(request):
     if data.get("object") != "whatsapp_business_account":
         return HttpResponse()
 
-    message_values = MetaCloudAPIWebhook.extract_message_values(data)
-    if not message_values:
+    try:
+        message_values = MetaCloudAPIWebhook.extract_message_values(data)
+        if not message_values:
+            return HttpResponse()
+
+        # Look up the channel by phone_number_id, then verify signature before dispatching
+        first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
+    except (KeyError, IndexError):
         return HttpResponse()
 
-    # Look up the channel by phone_number_id, then verify signature before dispatching
-    first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
     channel = (
         ExperimentChannel.objects.filter(
             platform=ChannelPlatform.WHATSAPP,
@@ -455,13 +459,13 @@ def new_meta_cloud_api_message(request):
         .first()
     )
     if not channel:
-        log.info("No channel found for phone_number_id: %s", first_phone_number_id)
-        raise Http404()
+        # Return a 200 so that Meta doesn't keep retrying for a channel we don't have
+        return HttpResponse()
 
     app_secret = channel.messaging_provider.config.get("app_secret", "")
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not MetaCloudAPIWebhook.verify_signature(request.body, signature, app_secret):
-        return HttpResponseBadRequest("Invalid signature.")
+        return HttpResponse()
 
     set_current_team(channel.team)
     request.experiment = channel.experiment
