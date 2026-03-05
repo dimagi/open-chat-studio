@@ -12,7 +12,7 @@ from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
 from apps.teams.models import Team
-from apps.web.dynamic_filters.base import ChoiceColumnFilter
+from apps.web.dynamic_filters.base import ChoiceColumnFilter, get_filter_registry, get_filter_schema
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 logger = logging.getLogger(__name__)
@@ -118,8 +118,6 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
 
     @classmethod
     def get_system_prompt(cls, input: FilterInput) -> str:
-        from apps.web.dynamic_filters.base import get_filter_registry, get_filter_schema
-
         registry = get_filter_registry()
         filter_class = registry.get(input.filter_slug)
         if filter_class is None:
@@ -134,8 +132,6 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
         return input.query
 
     def run(self) -> FilterOutput:
-        from apps.web.dynamic_filters.base import get_filter_registry
-
         registry = get_filter_registry()
         filter_class = registry.get(self.input.filter_slug)
         if filter_class is None:

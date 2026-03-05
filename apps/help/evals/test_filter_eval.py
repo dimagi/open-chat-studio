@@ -2,8 +2,10 @@ import json
 
 import pytest
 
+from apps.annotations.models import Tag
 from apps.help.agents.filter import FilterAgent, FilterInput
 from apps.help.evals.conftest import FIXTURES_DIR, load_fixtures, run_checks
+from apps.utils.factories.experiment import ChatbotFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.pytest import django_db_with_data
 
@@ -29,8 +31,6 @@ def test_filter_experiment_uses_option_ids():
     string like "Alpha Bot" would produce empty results. This test verifies the agent
     correctly resolves the experiment name to its numeric PK via the tool.
     """
-    from apps.utils.factories.experiment import ChatbotFactory
-
     team = TeamFactory()
     experiment = ChatbotFactory(team=team, name="Alpha Bot")
 
@@ -66,8 +66,6 @@ def test_filter_tags_tool_lookup():
     Creates a tag for the team so the tool returns a non-empty options list,
     then verifies the agent uses the correct tag name in the filter value.
     """
-    from apps.annotations.models import Tag
-
     team = TeamFactory()
     Tag.objects.create(name="urgent", slug="urgent", team=team, is_system_tag=False, category="")
     Tag.objects.create(name="👎🏻", slug="👎🏻", team=team, is_system_tag=False, category="response_rating")
