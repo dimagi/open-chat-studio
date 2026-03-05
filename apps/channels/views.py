@@ -497,6 +497,7 @@ def _verify_meta_webhook(request):
 
     for channel in channels:
         config = channel.messaging_provider.config
+        # verify_token is a server side encrypted field, so we can't do lookup in the DB
         if config.get("verify_token") == token:
             return HttpResponse(challenge, content_type="text/plain")
 
