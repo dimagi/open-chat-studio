@@ -16,7 +16,7 @@ def extract_message_values(data: dict) -> list[dict]:
     for entry in data.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            if "messages" in value and value.get("metadata", {}).get("phone_number_id"):
+            if value.get("messages") and value.get("metadata", {}).get("phone_number_id"):
                 values.append(value)
     return values
 

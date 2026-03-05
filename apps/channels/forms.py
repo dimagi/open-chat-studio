@@ -236,7 +236,12 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             number = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
             service = self.messaging_provider.get_messaging_service()
             if self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
-                phone_number_id = service.get_phone_number_id(number)
+                try:
+                    phone_number_id = service.get_phone_number_id(number)
+                except Exception:
+                    raise forms.ValidationError(
+                        "Could not validate this number with Meta right now. Please try again."
+                    ) from None
                 if not phone_number_id:
                     raise forms.ValidationError(
                         f"{number} was not found in the WhatsApp Business Account. "

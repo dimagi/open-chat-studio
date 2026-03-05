@@ -348,6 +348,7 @@ class MetaCloudAPIService(MessagingService):
     verify_token: str = ""
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
+    META_API_TIMEOUT: ClassVar[int] = 30
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
 
     @property
@@ -361,7 +362,9 @@ class MetaCloudAPIService(MessagingService):
         """Look up the phone number ID for the given E.164 phone number
         using the WhatsApp Business Account Phone Number Management API."""
         url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
-        response = httpx.get(url, headers=self._headers, params={"fields": "id,display_phone_number"})
+        response = httpx.get(
+            url, headers=self._headers, params={"fields": "id,display_phone_number"}, timeout=self.META_API_TIMEOUT
+        )
         response.raise_for_status()
         for entry in response.json().get("data", []):
             display = entry.get("display_phone_number", "")
@@ -384,7 +387,7 @@ class MetaCloudAPIService(MessagingService):
                 "type": "text",
                 "text": {"body": chunk},
             }
-            response = httpx.post(url, headers=self._headers, json=data)
+            response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
             response.raise_for_status()
 
 

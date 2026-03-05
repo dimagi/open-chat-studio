@@ -52,6 +52,7 @@ from apps.ocs_notifications.notifications import (
 )
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
+from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
@@ -1158,7 +1159,12 @@ class WhatsappChannel(ChannelBase):
     def from_identifier(self) -> str:
         """Returns the phone number ID for Meta Cloud API, or the phone number for other providers."""
         extra_data = self.experiment_channel.extra_data
-        return extra_data.get("phone_number_id") or extra_data["number"]
+        if self.experiment_channel.messaging_provider.type == MessagingProviderType.meta_cloud_api:
+            phone_number_id = extra_data.get("phone_number_id")
+            if not phone_number_id:
+                raise ValueError("Meta Cloud API channel is missing phone_number_id in extra_data")
+            return phone_number_id
+        return extra_data["number"]
 
     def echo_transcript(self, transcript: str):
         self._send_text_to_user_with_notification(f'I heard: "{transcript}"')

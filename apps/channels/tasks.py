@@ -200,7 +200,7 @@ def handle_meta_cloud_api_message(self, phone_number_id: str, message_data: dict
         messaging_provider__type=MessagingProviderType.meta_cloud_api,
     )
     if not experiment_channel:
-        log.info("No experiment channel found for phone_number_id: %s", phone_number_id)
+        log.info("No experiment channel found for incoming Meta Cloud API message")
         return
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, channel, message)
