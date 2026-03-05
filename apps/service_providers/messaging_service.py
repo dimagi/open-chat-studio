@@ -348,6 +348,7 @@ class MetaCloudAPIService(MessagingService):
     verify_token: str = ""
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
+    WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
 
     @property
     def _headers(self) -> dict:
@@ -375,14 +376,16 @@ class MetaCloudAPIService(MessagingService):
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
-        data = {
-            "messaging_product": "whatsapp",
-            "to": to,
-            "type": "text",
-            "text": {"body": message},
-        }
-        response = httpx.post(url, headers=self._headers, json=data)
-        response.raise_for_status()
+        chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
+        for chunk in chunks:
+            data = {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "text",
+                "text": {"body": chunk},
+            }
+            response = httpx.post(url, headers=self._headers, json=data)
+            response.raise_for_status()
 
 
 class SlackService(MessagingService):
