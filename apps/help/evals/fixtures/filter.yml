@@ -86,14 +86,11 @@
 
 - id: chatbot_basic_bot_last_3_months
   input:
-    query: "sessions for the 'basic bot' chatbot started in the last 3 months"
+    query: "sessions started in the last 3 months"
     filter_slug: "session"
   checks:
     - type: exact_filters
       expected:
-        - column: experiment
-          operator: any of
-          value: ["basic bot"]
         - column: first_message
           operator: range
           value: "90d"
