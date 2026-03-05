@@ -200,7 +200,6 @@ class TurnWhatsappMessage(BaseMessage):
 class MetaCloudAPIMessage(BaseMessage):
     """A wrapper class for user messages coming from the Meta Cloud API (WhatsApp)"""
 
-    phone_number_id: str
     media_id: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
 
@@ -217,7 +216,6 @@ class MetaCloudAPIMessage(BaseMessage):
         Args:
             value_data: The 'value' dict containing metadata, contacts, and messages.
         """
-        phone_number_id = value_data["metadata"]["phone_number_id"]
         message = value_data["messages"][0]
         message_type = message["type"]
         body = ""
@@ -226,7 +224,6 @@ class MetaCloudAPIMessage(BaseMessage):
 
         return MetaCloudAPIMessage(
             participant_id=value_data["contacts"][0]["wa_id"],
-            phone_number_id=phone_number_id,
             message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),
