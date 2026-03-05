@@ -344,6 +344,7 @@ class MetaCloudAPIService(MessagingService):
 
     access_token: str
     business_id: str
+    app_secret: str = ""
     verify_token: str = ""
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"

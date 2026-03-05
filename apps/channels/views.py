@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import logging
 import uuid
@@ -430,6 +432,10 @@ def new_meta_cloud_api_message(request):
     if request.method != "POST":
         return HttpResponseBadRequest("Unsupported method.")
 
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_meta_signature(request.body, signature):
+        return HttpResponseBadRequest("Invalid signature.")
+
     data = json.loads(request.body)
     if data.get("object") != "whatsapp_business_account":
         return HttpResponse()
@@ -484,3 +490,36 @@ def _verify_meta_webhook(request):
             return HttpResponse(challenge, content_type="text/plain")
 
     return HttpResponseBadRequest("Verification failed.")
+
+
+def _verify_meta_signature(payload: bytes, signature_header: str) -> bool:
+    """Verify the X-Hub-Signature-256 header from Meta webhooks.
+
+    Tries each unique app_secret from Meta Cloud API messaging providers
+    until one matches.
+    """
+    if not signature_header.startswith("sha256="):
+        return False
+
+    expected_signature = signature_header[7:]
+
+    from apps.service_providers.models import MessagingProvider, MessagingProviderType
+
+    app_secrets = (
+        MessagingProvider.objects.filter(type=MessagingProviderType.meta_cloud_api)
+        .values_list("config__app_secret", flat=True)
+        .distinct()
+    )
+
+    for app_secret in app_secrets:
+        if not app_secret:
+            continue
+        computed = hmac.new(
+            app_secret.encode(),
+            payload,
+            hashlib.sha256,
+        ).hexdigest()
+        if hmac.compare_digest(computed, expected_signature):
+            return True
+
+    return False
