@@ -3,8 +3,7 @@ import hmac
 
 from django.http import HttpResponse, HttpResponseBadRequest
 
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.service_providers.models import MessagingProviderType
+from apps.service_providers.models import MessagingProvider, MessagingProviderType
 
 
 class MetaCloudAPIWebhook:
@@ -29,15 +28,11 @@ class MetaCloudAPIWebhook:
         if mode != "subscribe" or not token or not challenge:
             return HttpResponseBadRequest("Verification failed.")
 
-        # Find a Meta Cloud API channel whose provider config has a matching verify_token.
         # verify_token is a server-side encrypted field, so we can't filter in the DB.
-        channels = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.WHATSAPP,
-            messaging_provider__type=MessagingProviderType.meta_cloud_api,
-        ).select_related("messaging_provider")
+        providers = MessagingProvider.objects.filter(type=MessagingProviderType.meta_cloud_api)
 
-        for channel in channels:
-            if channel.messaging_provider.config.get("verify_token") == token:
+        for provider in providers:
+            if provider.config.get("verify_token") == token:
                 return HttpResponse(challenge, content_type="text/plain")
 
         return HttpResponseBadRequest("Verification failed.")

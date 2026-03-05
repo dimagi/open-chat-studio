@@ -56,8 +56,8 @@ def _meta_webhook_payload(phone_number_id="12345"):
 
 
 @pytest.fixture()
-def meta_cloud_api_channel():
-    provider = MessagingProviderFactory.create(
+def meta_cloud_api_provider():
+    return MessagingProviderFactory.create(
         type=MessagingProviderType.meta_cloud_api,
         config={
             "access_token": "test_token",
@@ -66,10 +66,14 @@ def meta_cloud_api_channel():
             "verify_token": VERIFY_TOKEN,
         },
     )
+
+
+@pytest.fixture()
+def meta_cloud_api_channel(meta_cloud_api_provider):
     return ExperimentChannelFactory.create(
         platform=ChannelPlatform.WHATSAPP,
-        messaging_provider=provider,
-        experiment__team=provider.team,
+        messaging_provider=meta_cloud_api_provider,
+        experiment__team=meta_cloud_api_provider.team,
         extra_data={"number": "+15551234567", "phone_number_id": "12345"},
     )
 
@@ -106,7 +110,7 @@ class TestMetaCloudAPIWebhookExtractMessageValues:
 
 @pytest.mark.django_db()
 class TestMetaCloudAPIWebhookVerifyWebhook:
-    def test_valid_verification(self, meta_cloud_api_channel):
+    def test_valid_verification(self, meta_cloud_api_provider):
         """Simulate Meta's webhook verification process."""
         factory = RequestFactory()
         request = factory.get(
@@ -121,7 +125,7 @@ class TestMetaCloudAPIWebhookVerifyWebhook:
         assert response.status_code == 200
         assert response.content == b"challenge_string"
 
-    def test_invalid_token(self, meta_cloud_api_channel):
+    def test_invalid_token(self, meta_cloud_api_provider):
         factory = RequestFactory()
         request = factory.get(
             "/",
