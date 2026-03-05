@@ -235,13 +235,27 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             number_obj = phonenumbers.parse(self.cleaned_data["number"])
             number = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
             service = self.messaging_provider.get_messaging_service()
-            if not service.is_valid_number(number):
+            if self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
+                phone_number_id = service.get_phone_number_id(number)
+                if not phone_number_id:
+                    raise forms.ValidationError(
+                        f"{number} was not found in the WhatsApp Business Account. "
+                        "Please verify the number is registered with your business."
+                    )
+                self._phone_number_id = phone_number_id
+            elif not service.is_valid_number(number):
                 self.warning_message = (
                     f"{number} was not found at the provider. Please make sure it is there before proceeding"
                 )
             return number
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+
+    def post_save(self, channel: ExperimentChannel):
+        super().post_save(channel)
+        if hasattr(self, "_phone_number_id"):
+            channel.extra_data["phone_number_id"] = self._phone_number_id
+            channel.save(update_fields=["extra_data"])
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):

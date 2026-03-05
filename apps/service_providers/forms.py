@@ -257,6 +257,7 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["access_token"]
 
     access_token = forms.CharField(label=_("System User Access Token"))
+    business_id = forms.CharField(label=_("WhatsApp Business Account ID"))
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

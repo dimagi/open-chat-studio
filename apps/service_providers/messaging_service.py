@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 import backoff
 import httpx
+import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
@@ -342,22 +343,43 @@ class MetaCloudAPIService(MessagingService):
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
     access_token: str
+    business_id: str
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v23.0"
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
-        url = f"{self.META_API_BASE_URL}/{from_}/messages"
-        headers = {
+    @property
+    def _headers(self) -> dict:
+        return {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
+
+    def get_phone_number_id(self, phone_number: str) -> str | None:
+        """Look up the phone number ID for the given E.164 phone number
+        using the WhatsApp Business Account Phone Number Management API."""
+        url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
+        response = httpx.get(url, headers=self._headers, params={"fields": "id,display_phone_number"})
+        response.raise_for_status()
+        for entry in response.json().get("data", []):
+            display = entry.get("display_phone_number", "")
+            try:
+                parsed = phonenumbers.parse(display)
+                normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            except phonenumbers.NumberParseException:
+                continue
+            if normalized == phone_number:
+                return entry["id"]
+        return None
+
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
             "to": to,
             "type": "text",
             "text": {"body": message},
         }
-        response = httpx.post(url, headers=headers, json=data)
+        response = httpx.post(url, headers=self._headers, json=data)
         response.raise_for_status()
 
 
