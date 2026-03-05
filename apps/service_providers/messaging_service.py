@@ -344,8 +344,9 @@ class MetaCloudAPIService(MessagingService):
 
     access_token: str
     business_id: str
+    verify_token: str = ""
 
-    META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v23.0"
+    META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
 
     @property
     def _headers(self) -> dict:

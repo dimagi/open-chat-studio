@@ -418,3 +418,69 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
             "experiment": channel.experiment,
         },
     )
+
+
+@waf_allow(WafRule.NoUserAgent_HEADER)
+@csrf_exempt
+def new_meta_cloud_api_message(request):
+    # GET: Meta webhook verification
+    if request.method == "GET":
+        return _verify_meta_webhook(request)
+
+    if request.method != "POST":
+        return HttpResponseBadRequest("Unsupported method.")
+
+    data = json.loads(request.body)
+    if data.get("object") != "whatsapp_business_account":
+        return HttpResponse()
+
+    for entry in data.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            if "messages" not in value:
+                continue
+
+            phone_number_id = value.get("metadata", {}).get("phone_number_id")
+            if not phone_number_id:
+                continue
+
+            channel = tasks.get_experiment_channel(
+                ChannelPlatform.WHATSAPP,
+                extra_data__phone_number_id=phone_number_id,
+                messaging_provider__type=MessagingProviderType.meta_cloud_api,
+            )
+            if not channel:
+                log.info("No channel found for phone_number_id: %s", phone_number_id)
+                continue
+
+            set_current_team(channel.team)
+            request.experiment = channel.experiment
+
+            tasks.handle_meta_cloud_api_message.delay(
+                phone_number_id=phone_number_id,
+                message_data=value,
+            )
+
+    return HttpResponse()
+
+
+def _verify_meta_webhook(request):
+    mode = request.GET.get("hub.mode")
+    token = request.GET.get("hub.verify_token")
+    challenge = request.GET.get("hub.challenge")
+
+    if mode != "subscribe" or not token:
+        return HttpResponseBadRequest("Verification failed.")
+
+    # Find a Meta Cloud API channel whose provider config has a matching verify_token
+    channels = ExperimentChannel.objects.filter(
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider__type=MessagingProviderType.meta_cloud_api,
+    ).select_related("messaging_provider")
+
+    for channel in channels:
+        config = channel.messaging_provider.config
+        if config.get("verify_token") == token:
+            return HttpResponse(challenge, content_type="text/plain")
+
+    return HttpResponseBadRequest("Verification failed.")

@@ -15,6 +15,7 @@ urlpatterns = [
         name="new_sureadhere_message",
     ),
     path("whatsapp/turn/<uuid:experiment_id>/incoming_message", views.new_turn_message, name="new_turn_message"),
+    path("whatsapp/meta/incoming_message", views.new_meta_cloud_api_message, name="new_meta_cloud_api_message"),
     path("api/<uuid:experiment_id>/incoming_message", views.NewApiMessageView.as_view(), name="new_api_message"),
     path(
         "api/<uuid:experiment_id>/v<int:version>/incoming_message",
