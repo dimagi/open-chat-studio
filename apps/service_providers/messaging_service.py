@@ -335,6 +335,32 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
 
 
+class MetaCloudAPIService(MessagingService):
+    _type: ClassVar[str] = "meta_cloud_api"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    access_token: str
+
+    META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v23.0"
+
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "text",
+            "text": {"body": message},
+        }
+        response = httpx.post(url, headers=headers, json=data)
+        response.raise_for_status()
+
+
 class SlackService(MessagingService):
     _type: ClassVar[str] = "slack"
     supported_platforms: ClassVar[list] = [ChannelPlatform.SLACK]

@@ -253,6 +253,12 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["access_token"]
+
+    access_token = forms.CharField(label=_("System User Access Token"))
+
+
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["api_key"]
 
