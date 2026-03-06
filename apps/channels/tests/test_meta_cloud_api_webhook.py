@@ -8,7 +8,7 @@ from django.test import RequestFactory
 
 from apps.channels import meta_webhook
 from apps.channels.models import ChannelPlatform
-from apps.channels.views import new_meta_cloud_api_message
+from apps.channels.views import MetaCloudAPIWebhookView
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
@@ -156,7 +156,7 @@ class TestNewMetaCloudApiMessageGetVerification:
                 "hub.challenge": "challenge_string",
             },
         )
-        response = new_meta_cloud_api_message(request)
+        response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 200
         assert response.content == b"challenge_string"
 
@@ -170,7 +170,7 @@ class TestNewMetaCloudApiMessageGetVerification:
                 "hub.challenge": "challenge_string",
             },
         )
-        response = new_meta_cloud_api_message(request)
+        response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 400
 
 
@@ -186,7 +186,7 @@ class TestNewMetaCloudApiMessage:
             content_type="application/json",
             HTTP_X_HUB_SIGNATURE_256=signature,
         )
-        return new_meta_cloud_api_message(request)
+        return MetaCloudAPIWebhookView.as_view()(request)
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_valid_message_returns_200(self, mock_delay, meta_cloud_api_channel):
@@ -212,7 +212,7 @@ class TestNewMetaCloudApiMessage:
             content_type="application/json",
             HTTP_X_HUB_SIGNATURE_256="sha256=invalid",
         )
-        response = new_meta_cloud_api_message(request)
+        response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 200
 
     def test_missing_signature_header_returns_200(self, meta_cloud_api_channel):
@@ -224,7 +224,7 @@ class TestNewMetaCloudApiMessage:
             data=body,
             content_type="application/json",
         )
-        response = new_meta_cloud_api_message(request)
+        response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 200
 
     def test_invalid_json_returns_400(self):
@@ -237,5 +237,5 @@ class TestNewMetaCloudApiMessage:
             content_type="application/json",
             HTTP_X_HUB_SIGNATURE_256=signature,
         )
-        response = new_meta_cloud_api_message(request)
+        response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 400

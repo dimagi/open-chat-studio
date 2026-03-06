@@ -16,6 +16,7 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -420,64 +421,61 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
     )
 
 
-@waf_allow(WafRule.NoUserAgent_HEADER)
-@csrf_exempt
-def new_meta_cloud_api_message(request):
-    # GET: Meta webhook verification
-    if request.method == "GET":
+@method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
+class MetaCloudAPIWebhookView(View):
+    def get(self, request):
         return meta_webhook.verify_webhook(request)
 
-    if request.method != "POST":
-        return HttpResponseBadRequest("Unsupported method.")
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON.")
 
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return HttpResponseBadRequest("Invalid JSON.")
-
-    if data.get("object") != "whatsapp_business_account":
-        return HttpResponse()
-
-    try:
-        message_values = meta_webhook.extract_message_values(data)
-        if not message_values:
+        if data.get("object") != "whatsapp_business_account":
             return HttpResponse()
 
-        # Look up the channel by phone_number_id, then verify signature before dispatching
-        first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
-    except (KeyError, IndexError):
-        return HttpResponse()
+        try:
+            message_values = meta_webhook.extract_message_values(data)
+            if not message_values:
+                return HttpResponse()
 
-    channel = (
-        ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.WHATSAPP,
-            extra_data__phone_number_id=first_phone_number_id,
-            messaging_provider__type=MessagingProviderType.meta_cloud_api,
+            # Look up the channel by phone_number_id, then verify signature before dispatching
+            first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
+        except (KeyError, IndexError):
+            return HttpResponse()
+
+        channel = (
+            ExperimentChannel.objects.filter(
+                platform=ChannelPlatform.WHATSAPP,
+                extra_data__phone_number_id=first_phone_number_id,
+                messaging_provider__type=MessagingProviderType.meta_cloud_api,
+            )
+            .select_related("experiment", "team", "messaging_provider")
+            .first()
         )
-        .select_related("experiment", "team", "messaging_provider")
-        .first()
-    )
-    if not channel:
-        # Return a 200 so that Meta doesn't keep retrying for a channel we don't have
+        if not channel:
+            # Return a 200 so that Meta doesn't keep retrying for a channel we don't have
+            return HttpResponse()
+
+        # Signature verification happens after the channel lookup because the app_secret
+        # needed to verify is stored in the channel's messaging provider (an encrypted field).
+        app_secret = channel.messaging_provider.config.get("app_secret", "")
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        if not meta_webhook.verify_signature(request.body, signature, app_secret):
+            return HttpResponse()
+
+        set_current_team(channel.team)
+        request.experiment = channel.experiment
+
+        # A single Meta webhook payload is always scoped to one app, so all entries share
+        # the same app_secret. Verifying with the first channel's secret is sufficient.
+        for value in message_values:
+            phone_number_id = value["metadata"]["phone_number_id"]
+            tasks.handle_meta_cloud_api_message.delay(
+                phone_number_id=phone_number_id,
+                message_data=value,
+            )
+
         return HttpResponse()
-
-    # Signature verification happens after the channel lookup because the app_secret
-    # needed to verify is stored in the channel's messaging provider (an encrypted field).
-    app_secret = channel.messaging_provider.config.get("app_secret", "")
-    signature = request.headers.get("X-Hub-Signature-256", "")
-    if not meta_webhook.verify_signature(request.body, signature, app_secret):
-        return HttpResponse()
-
-    set_current_team(channel.team)
-    request.experiment = channel.experiment
-
-    # A single Meta webhook payload is always scoped to one app, so all entries share
-    # the same app_secret. Verifying with the first channel's secret is sufficient.
-    for value in message_values:
-        phone_number_id = value["metadata"]["phone_number_id"]
-        tasks.handle_meta_cloud_api_message.delay(
-            phone_number_id=phone_number_id,
-            message_data=value,
-        )
-
-    return HttpResponse()
