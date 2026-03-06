@@ -1,12 +1,22 @@
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+import time_machine
+from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
-from apps.evaluations.tasks import evaluate_single_message_task, run_bot_generation
+from apps.evaluations.tasks import (
+    EVAL_SESSIONS_TTL_DAYS,
+    cleanup_old_evaluation_data,
+    evaluate_single_message_task,
+    run_bot_generation,
+)
 from apps.experiments.models import ExperimentSession, Participant
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -14,7 +24,7 @@ from apps.utils.factories.evaluations import (
     EvaluationRunFactory,
     EvaluatorFactory,
 )
-from apps.utils.factories.experiment import ChatbotFactory
+from apps.utils.factories.experiment import ChatbotFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.langchain import build_fake_llm_service
 
@@ -205,3 +215,39 @@ def test_run_bot_generation_creates_session(get_llm_service, experiment, evaluat
     sessions = ExperimentSession.objects.filter(team=team_with_users)
     assert sessions.count() == 1
     session = sessions.first()
+
+
+@pytest.mark.django_db()
+def test_cleanup_old_evaluation_data_deletes_chats_and_messages():
+    """Test that cleanup deletes the Chat (and its messages) along with the ExperimentSession."""
+    eval_channel = ExperimentChannelFactory.create(platform=ChannelPlatform.EVALUATIONS)
+    session = ExperimentSessionFactory.create(experiment_channel=eval_channel, team=eval_channel.team)
+    chat = session.chat
+    ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+    ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="Hi there")
+
+    assert Chat.objects.filter(id=chat.id).exists()
+    assert ChatMessage.objects.filter(chat=chat).count() == 2
+
+    future = timezone.now() + timedelta(days=EVAL_SESSIONS_TTL_DAYS + 1)
+    with time_machine.travel(future, tick=False):
+        cleanup_old_evaluation_data()
+
+    assert not ExperimentSession.objects.filter(id=session.id).exists()
+    assert not Chat.objects.filter(id=chat.id).exists()
+    assert not ChatMessage.objects.filter(chat_id=chat.id).exists()
+
+
+@pytest.mark.django_db()
+def test_cleanup_old_evaluation_data_does_not_delete_recent_sessions():
+    """Test that cleanup leaves recent evaluation sessions untouched."""
+    eval_channel = ExperimentChannelFactory.create(platform=ChannelPlatform.EVALUATIONS)
+    session = ExperimentSessionFactory.create(experiment_channel=eval_channel, team=eval_channel.team)
+    chat = session.chat
+    ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+
+    cleanup_old_evaluation_data()
+
+    assert ExperimentSession.objects.filter(id=session.id).exists()
+    assert Chat.objects.filter(id=chat.id).exists()
+    assert ChatMessage.objects.filter(chat_id=chat.id).count() == 1
