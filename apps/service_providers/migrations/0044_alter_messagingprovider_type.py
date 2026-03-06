@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0042_add_claude_sonnet_4_6'),
+        ('service_providers', '0043_migrate_gemini_3_pro_preview'),
     ]
 
     operations = [
@@ -14,5 +14,10 @@ class Migration(migrations.Migration):
             model_name='messagingprovider',
             name='type',
             field=models.CharField(choices=[('twilio', 'Twilio'), ('turnio', 'Turn.io'), ('sureadhere', 'SureAdhere'), ('slack', 'Slack'), ('meta_cloud_api', 'Meta Cloud API (WhatsApp)')], max_length=255),
+        ),
+        migrations.AddField(
+            model_name='messagingprovider',
+            name='extra_data',
+            field=models.JSONField(blank=True, default=dict),
         ),
     ]
