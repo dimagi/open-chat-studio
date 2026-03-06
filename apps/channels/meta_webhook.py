@@ -12,7 +12,7 @@ def extract_message_values(data: dict) -> list[dict]:
 
     See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint/
 
-    See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview#fields for an
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview for an
     example of the payload
     """
 
