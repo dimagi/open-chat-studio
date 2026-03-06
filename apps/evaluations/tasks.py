@@ -255,9 +255,12 @@ def cleanup_old_evaluation_data():
     if sessions_count == 0:
         logger.info("No old evaluation sessions found to cleanup")
         return
-    deleted_sessions = old_evaluation_sessions.delete()
+    # Delete via Chat rather than ExperimentSession so the cascade also removes
+    # ChatMessage records. ExperimentSession.chat is a OneToOneField with
+    # on_delete=CASCADE, so deleting the Chat cascades to the session as well.
+    deleted_chats = Chat.objects.filter(experiment_session__in=old_evaluation_sessions).delete()
 
-    logger.info(f"Cleanup completed: deleted {deleted_sessions[0]} evaluation sessions")
+    logger.info(f"Cleanup completed: deleted {deleted_chats[0]} chat records and associated evaluation sessions")
 
 
 @shared_task(base=TaskbadgerTask)
