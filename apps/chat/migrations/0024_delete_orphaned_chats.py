@@ -10,7 +10,10 @@ def delete_orphaned_chats(apps, schema_editor):
     cleaned up without also deleting the linked Chat (and its messages).
     """
     Chat = apps.get_model("chat", "Chat")
-    Chat.objects.filter(experiment_session__isnull=True).delete()
+    batch_size = 1000
+    queryset = Chat.objects.filter(experiment_session__isnull=True)
+    for chat in queryset.iterator(chunk_size=batch_size):
+        chat.delete()
 
 
 class Migration(migrations.Migration):
