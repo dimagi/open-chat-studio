@@ -17,6 +17,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("chat", "0023_alter_chatattachment_unique_together"),
+        ("experiments", "0025_alter_experimentsession_chat"),
     ]
 
     operations = [
