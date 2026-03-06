@@ -71,7 +71,7 @@ Beyond LangChain's abstraction layer, the module uses official provider SDKs for
 
 ## Integration Points
 
-- **Pipelines** — use LLM nodes use adapters (`adapters.py`) to invoke services within DAG workflows
+- **Pipelines** — LLM nodes use adapters (`adapters.py`) to invoke services within DAG workflows
 - **Chat Sessions** — use message history and context management via `history_managers.py`
 - **[Evaluations](https://docs.openchatstudio.com/concepts/evaluations/?h=evalua)** — use token counting and cost tracking via callback handlers
 - **Vector Search** — uses Index management for RAG-enabled workflows
