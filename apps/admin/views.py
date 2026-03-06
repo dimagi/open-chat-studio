@@ -33,6 +33,7 @@ from apps.admin.queries import (
     whatsapp_message_stats_to_csv,
 )
 from apps.admin.serializers import StatsSerializer
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
 from apps.teams.flags import get_all_flag_info
 from apps.teams.models import Flag, Team
@@ -131,7 +132,9 @@ def usage_chart(request):
                 "message_data": usage_data.data,
                 "participant_data": {
                     "data": participant_data.data,
-                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp).count(),
+                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp)
+                    .exclude(platform=ChannelPlatform.EVALUATIONS)
+                    .count(),
                 },
                 "start": start.isoformat(),
                 "end": end.isoformat(),
