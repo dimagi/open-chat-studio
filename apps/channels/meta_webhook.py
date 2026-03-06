@@ -11,7 +11,40 @@ def extract_message_values(data: dict) -> list[dict]:
     """Extract value dicts that contain messages from Meta webhook payload.
 
     See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint/
+
+    Example payload structure:
+    {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "id": "BIZ_ID",
+                "changes": [
+                    {
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {
+                                "display_phone_number": "+15551234567",
+                                "phone_number_id": phone_number_id,
+                            },
+                            "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+                            "messages": [
+                                {
+                                    "from": "27456897512",
+                                    "id": "wamid.abc123",
+                                    "timestamp": "1706709716",
+                                    "text": {"body": "Hello"},
+                                    "type": "text",
+                                }
+                            ],
+                        },
+                        "field": "messages",
+                    }
+                ],
+            }
+        ],
+    }
     """
+
     values = []
     for entry in data.get("entry", []):
         for change in entry.get("changes", []):
