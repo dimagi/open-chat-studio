@@ -16,11 +16,10 @@ flowchart TD
     RD[("Redis<br>Broker / Cache")]
 
     LB --> WEB
-    WEB --> CW
-    WEB --> CB
+    WEB --> RD
     WEB --> PG
-    CW --> RD
-    CB --> RD
+    RD --> CW
+    RD --> CB
     CW --> PG
     CB --> PG
 ```

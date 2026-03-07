@@ -70,6 +70,6 @@ ENABLE_JSON_LOGGING=True
 
 The ALB health check should be configured to call `/status` with a token from `HEALTH_CHECK_TOKENS`. Example target group health check path:
 
-```
+```text
 /status?token=your-health-check-token
 ```
