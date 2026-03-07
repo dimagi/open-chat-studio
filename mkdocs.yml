@@ -87,6 +87,12 @@ nav:
     - Testing:
       - Integration Testing: developer_guides/integration_testing.md
       - developer_guides/twilio_testing.md
+  - Self-Hosting:
+    - Overview: hosting/index.md
+    - Configuration: hosting/configuration.md
+    - Docker Compose: hosting/docker.md
+    - Heroku: hosting/heroku.md
+    - AWS Fargate: hosting/aws.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md
