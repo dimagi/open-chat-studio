@@ -14,7 +14,7 @@ This guide covers deploying Open Chat Studio on a single server or small cluster
 
 ## Step 1: Build the Image
 
-Clone the repository and build the production image. No build args are required — the Dockerfile uses hardcoded dummy values for `collectstatic`.
+Clone the repository and build the production image.
 
 ```bash
 git clone https://github.com/dimagi/open-chat-studio.git

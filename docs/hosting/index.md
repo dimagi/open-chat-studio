@@ -53,10 +53,6 @@ The production Dockerfile is a multi-stage build:
 
 The image runs as a non-root `django` user.
 
-### Build-time arguments
-
-No build args are required. The Dockerfile uses hardcoded dummy values for `SECRET_KEY` and `DJANGO_ALLOWED_HOSTS` during the `collectstatic` step, so the image can be built without any arguments:
-
 ```bash
 docker build -t open-chat-studio:latest .
 ```
