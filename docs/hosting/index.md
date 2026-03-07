@@ -6,29 +6,23 @@ This section covers deploying Open Chat Studio in production for third-party hos
 
 A production deployment requires three process types and two backing services:
 
-```
-                        ┌─────────────────────────────────────┐
-                        │           Load Balancer / TLS       │
-                        └────────────────┬────────────────────┘
-                                         │
-                        ┌────────────────▼────────────────────┐
-                        │          web (gunicorn)             │
-                        │   Serves HTTP requests, Django app  │
-                        └────────────────┬────────────────────┘
-                                         │
-               ┌─────────────────────────┼──────────────────────────┐
-               │                         │                          │
-┌──────────────▼──────┐   ┌──────────────▼──────┐   ┌─────────────▼──────┐
-│  celery worker      │   │  celery beat        │   │  PostgreSQL         │
-│  Background tasks   │   │  Scheduled tasks    │   │  (with pgvector)    │
-└─────────────────────┘   └─────────────────────┘   └────────────────────┘
-               │                         │
-               └─────────────┬───────────┘
-                             │
-                 ┌───────────▼───────────┐
-                 │         Redis         │
-                 │  Celery broker/cache  │
-                 └───────────────────────┘
+```mermaid
+flowchart TD
+    LB[Load Balancer / TLS]
+    WEB["web<br>gunicorn"]
+    CW["celery_worker<br>Background tasks"]
+    CB["celery_beat<br>Scheduled tasks"]
+    PG[("PostgreSQL<br>+ pgvector")]
+    RD[("Redis<br>Broker / Cache")]
+
+    LB --> WEB
+    WEB --> CW
+    WEB --> CB
+    WEB --> PG
+    CW --> RD
+    CB --> RD
+    CW --> PG
+    CB --> PG
 ```
 
 ## Infrastructure Requirements
