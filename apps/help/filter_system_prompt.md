@@ -17,7 +17,7 @@ Produce a list of filters. Each filter has three fields:
 
 - **Single string values** (for `equals`, `contains`, `does not contain`, `starts with`, `ends with` operators): Use the plain string. Example: `"john"`
 - **Choice values** (for `any of`, `all of`, `excludes` operators): ALWAYS use a JSON array, even for a single value. Examples: `["active"]`, `["WhatsApp", "Telegram"]`. Never use a bare string with these operators.
-- **Timestamp ranges**: Use relative duration strings: `"1h"` (1 hour), `"1d"` (1 day), `"7d"` (7 days), `"15d"` (15 days), `"30d"` (30 days), `"90d"` (3 months), `"365d"` (1 year). Use these with the `range` operator.
+- **Timestamp ranges**: Use relative duration strings: `"1h"` (1 hour), `"1d"` (1 day), `"7d"` (7 days), `"14d"` (14 days), `"30d"` (30 days), `"90d"` (3 months), `"365d"` (1 year). Use these with the `range` operator.
 - **Specific dates**: Use ISO 8601 format with the `on`, `before`, or `after` operators.
 
 ## Default Date Range Column

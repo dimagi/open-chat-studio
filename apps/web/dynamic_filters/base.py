@@ -56,7 +56,7 @@ DATE_RANGE_OPTIONS = [
     {"label": "Last 1 Hour", "value": "1h"},
     {"label": "Last 1 Day", "value": "1d"},
     {"label": "Last 7 Days", "value": "7d"},
-    {"label": "Last 15 Days", "value": "15d"},
+    {"label": "Last 14 Days", "value": "14d"},
     {"label": "Last 30 Days", "value": "30d"},
     {"label": "Last 3 Months", "value": "90d"},
     {"label": "Last Year", "value": "365d"},
