@@ -89,7 +89,7 @@ The `web` service listens on port `8000` (or `$PORT`). Put a TLS-terminating rev
 
 ### Example: Caddy
 
-```
+```caddyfile
 yourdomain.com {
     reverse_proxy localhost:8000
 }

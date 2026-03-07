@@ -102,7 +102,7 @@ Required only if you want users to connect Slack channels to their chatbots.
 | `SLACK_SIGNING_SECRET` | Slack app signing secret |
 | `SLACK_BOT_NAME` | Display name for the Slack bot |
 
-### Observability
+## Observability
 
 | Variable | Description |
 |----------|-------------|
@@ -110,7 +110,7 @@ Required only if you want users to connect Slack channels to their chatbots.
 | `SENTRY_ENVIRONMENT` | Sentry environment tag, e.g. `production`. |
 | `ENABLE_JSON_LOGGING` | Set to `True` for structured JSON log output (recommended for log aggregation). |
 
-### Task Badger (optional)
+## Task Badger (optional)
 
 [Task Badger](https://taskbadger.net/) provides visibility into Celery task execution.
 
@@ -120,13 +120,13 @@ Required only if you want users to connect Slack channels to their chatbots.
 | `TASKBADGER_PROJECT` | Task Badger project slug |
 | `TASKBADGER_API_KEY` | Task Badger API key |
 
-### Analytics
+## Analytics
 
 | Variable | Description |
 |----------|-------------|
 | `GOOGLE_ANALYTICS_ID` | Google Analytics measurement ID |
 
-### Legal / Branding
+## Legal / Branding
 
 | Variable | Description |
 |----------|-------------|
