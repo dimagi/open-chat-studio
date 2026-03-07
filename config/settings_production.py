@@ -23,9 +23,9 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # Also see the submission requirements: https://hstspreload.org/#submission-requirements
 # SECURE_HSTS_PRELOAD = True
 
-USE_HTTPS_IN_ABSOLUTE_URLS = True
+USE_HTTPS_IN_ABSOLUTE_URLS: bool = True
 
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
 # Add the server's own hostname to ALLOWED_HOSTS
 ALLOWED_HOSTS.append(gethostbyname(gethostname()))
 
