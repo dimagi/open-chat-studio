@@ -76,6 +76,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
 
 
 class TraceFilter(MultiColumnFilter):
+    slug: ClassVar[str] = "trace"
     date_range_column: ClassVar[str] = "timestamp"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
