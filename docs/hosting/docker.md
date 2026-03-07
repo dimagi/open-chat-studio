@@ -14,16 +14,13 @@ This guide covers deploying Open Chat Studio on a single server or small cluster
 
 ## Step 1: Build the Image
 
-Clone the repository and build the production image. `SECRET_KEY` and `DJANGO_ALLOWED_HOSTS` are required at build time because `collectstatic` runs during the build using `config.settings_production`.
+Clone the repository and build the production image. No build args are required — the Dockerfile uses hardcoded dummy values for `collectstatic`.
 
 ```bash
 git clone https://github.com/dimagi/open-chat-studio.git
 cd open-chat-studio
 
-docker build \
-  --build-arg SECRET_KEY=any-value-used-only-for-build \
-  --build-arg DJANGO_ALLOWED_HOSTS=yourdomain.com \
-  -t open-chat-studio:latest .
+docker build -t open-chat-studio:latest .
 ```
 
 ## Step 2: Create the Environment File
@@ -132,10 +129,7 @@ docker compose -f docker-compose.prod.yml run --rm web python manage.py <command
 docker compose -f docker-compose.prod.yml run --rm migrate
 
 # Rebuild after a code update
-docker build \
-  --build-arg SECRET_KEY=build-only \
-  --build-arg DJANGO_ALLOWED_HOSTS=yourdomain.com \
-  -t open-chat-studio:latest .
+docker build -t open-chat-studio:latest .
 docker compose -f docker-compose.prod.yml up -d
 ```
 
