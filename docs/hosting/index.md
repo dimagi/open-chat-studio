@@ -55,15 +55,17 @@ The image runs as a non-root `django` user.
 
 ### Build-time arguments
 
-One `ARG` is required at `docker build` time because `collectstatic` runs during the build:
+Two `ARG` values are required at `docker build` time because `collectstatic` runs during the build using `config.settings_production`, which requires both to be set:
 
 | Argument | Description |
 |----------|-------------|
 | `SECRET_KEY` | A temporary secret key (can differ from production; only used for collectstatic). |
+| `DJANGO_ALLOWED_HOSTS` | Comma-separated list of allowed hostnames. Any non-empty value works for the build. |
 
 ```bash
 docker build \
   --build-arg SECRET_KEY=any-secret-for-build \
+  --build-arg DJANGO_ALLOWED_HOSTS=yourdomain.com \
   -t open-chat-studio:latest .
 ```
 

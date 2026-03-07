@@ -119,6 +119,7 @@ jobs:
         outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
         build-args: |
           SECRET_KEY=dummy-secret-key-for-build
+          DJANGO_ALLOWED_HOSTS=localhost
 
     - name: Update ECS task def for Django web container
       id: django-web-def
