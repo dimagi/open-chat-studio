@@ -69,7 +69,7 @@ docker build \
 
 ## Health Check
 
-The app exposes a `/status` endpoint. Secure it by setting `HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token as a query parameter or `Authorization: Bearer <token>` header.
+The app exposes a `/status` endpoint. Secure it by setting `HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token as a query parameter (`?token=...`).
 
 ## Deployment Options
 
