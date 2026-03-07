@@ -63,6 +63,7 @@ The app exposes a `/status` endpoint. Secure it by setting `HEALTH_CHECK_TOKENS`
 ## Deployment Options
 
 - [Docker Compose](./docker.md) — simplest path for a single-server or small-scale deployment
+- [Kamal](./kamal.md) — deploy Docker containers to any server via SSH with zero-downtime deploys
 - [Heroku](./heroku.md) — Platform-as-a-Service with minimal infrastructure management
 - [AWS Fargate](./aws.md) — container-native deployment on AWS, with full automation via `ocs-deploy`
 

@@ -93,6 +93,7 @@ nav:
     - Docker Compose: hosting/docker.md
     - Heroku: hosting/heroku.md
     - AWS Fargate: hosting/aws.md
+    - Kamal: hosting/kamal.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md
