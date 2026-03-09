@@ -14,6 +14,7 @@ from waffle.models import CACHE_EMPTY, AbstractUserFlag
 from waffle.utils import get_cache, keyfmt
 
 from apps.teams import model_audit_fields
+from apps.teams.helpers import get_next_unique_team_slug
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -38,8 +39,6 @@ class Team(BaseModel):
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
 
     def save(self, *args, **kwargs):
-        from .helpers import get_next_unique_team_slug  # noqa: PLC0415
-
         if not self.slug:
             self.slug = get_next_unique_team_slug(self.name)
         super().save(*args, **kwargs)

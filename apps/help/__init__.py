@@ -1,5 +1,6 @@
 from typing import Literal
 
+from langchain.chat_models import init_chat_model
 from pydantic import BaseModel
 
 
@@ -9,7 +10,6 @@ class SystemAgentModel(BaseModel):
     key: str
 
     def init_model(self):
-        from langchain.chat_models import init_chat_model  # noqa: PLC0415
 
         return init_chat_model(self.model, model_provider=self.provider, **self.model_kwargs)
 
