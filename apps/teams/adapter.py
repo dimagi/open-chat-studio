@@ -18,7 +18,7 @@ class AcceptInvitationAdapter(AccountAdapter):
 
         See `templates/teams/accept_invite.html` for the main way to redirect after login.
         """
-        from .models import Invitation
+        from .models import Invitation  # noqa: PLC0415
 
         if request.session.get("invitation_id"):
             invite_id = request.session.get("invitation_id")

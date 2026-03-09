@@ -304,7 +304,7 @@ def test_list_sessions_with_version_filter(experiment):
 
 @pytest.mark.django_db()
 def test_list_sessions_with_combined_filters(experiment):
-    from apps.annotations.models import TagCategories
+    from apps.annotations.models import TagCategories  # noqa: PLC0415
 
     team = experiment.team
     user = experiment.team.members.first()

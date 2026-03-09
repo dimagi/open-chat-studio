@@ -157,8 +157,8 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
 
 
 def _get_search_tool(node):
-    from apps.chat.agent.tools import SearchCollectionByIdTool
-    from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+    from apps.chat.agent.tools import SearchCollectionByIdTool  # noqa: PLC0415
+    from apps.service_providers.llm_service.main import OpenAIBuiltinTool  # noqa: PLC0415
 
     if not node.collection_index_ids:
         return None

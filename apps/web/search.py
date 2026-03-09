@@ -29,8 +29,8 @@ class SearchableModel:
 
 
 def get_searchable_models(model_name: str | None):
-    from apps.chat.models import ChatMessage
-    from apps.experiments.models import Experiment, ExperimentSession, Participant
+    from apps.chat.models import ChatMessage  # noqa: PLC0415
+    from apps.experiments.models import Experiment, ExperimentSession, Participant  # noqa: PLC0415
 
     searchable_models = [
         SearchableModel(Experiment, "public_id"),

@@ -29,6 +29,6 @@ def create_default_consent_for_team(team):
 @receiver(post_delete, sender=ExperimentSession)
 def delete_chat_on_session_delete(sender, instance, **kwargs):
     if instance.chat_id:
-        from apps.chat.models import Chat
+        from apps.chat.models import Chat  # noqa: PLC0415
 
         Chat.objects.filter(id=instance.chat_id).delete()

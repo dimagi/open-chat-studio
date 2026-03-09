@@ -2,7 +2,7 @@ from apps.audit.service import AuditService
 
 
 def test_serialize_schema_field():
-    from .models import ModelWithSchemaField, TestSchema
+    from .models import ModelWithSchemaField, TestSchema  # noqa: PLC0415
 
     model = ModelWithSchemaField(config=TestSchema(att1="value", att2=42, url_attr="http://example.com"))
 

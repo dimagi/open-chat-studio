@@ -30,7 +30,7 @@ class OCSTracer(Tracer):
         super().__init__(OCS_TRACE_PROVIDER, {})
         self.experiment = experiment
         self.team_id = team_id
-        self.start_time: float = None
+        self.start_time: float | None = None
         self.trace_record = None
         self.session: ExperimentSession | None = None
         self.error_detected = False
@@ -209,7 +209,7 @@ class OCSTracer(Tracer):
         """
         Bust any relevant caches when an error is detected in a span.
         """
-        from apps.experiments.models import Experiment
+        from apps.experiments.models import Experiment  # noqa: PLC0415
 
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)

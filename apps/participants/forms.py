@@ -43,8 +43,8 @@ class ParticipantImportForm(forms.Form):
 
         if file:
             # Check if CSV contains data.* columns
-            import csv
-            import io
+            import csv  # noqa: PLC0415
+            import io  # noqa: PLC0415
 
             file.seek(0)
             try:

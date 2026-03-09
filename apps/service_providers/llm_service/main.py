@@ -164,7 +164,7 @@ class OpenAIGenericService(LlmService):
     _use_responses_api: ClassVar[bool] = False
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_openai.chat_models import ChatOpenAI
+        from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415
 
         model_kwargs = self._get_model_kwargs(**kwargs)
         if "temperature" in model_kwargs and llm_model.startswith(("o3", "o4", "gpt-5", "o1")):
@@ -214,7 +214,7 @@ class OpenAILlmService(OpenAIGenericService):
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def get_assistant(self, assistant_id: str, as_agent=False):
-        from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
+        from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable  # noqa: PLC0415
 
         return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
 
@@ -237,12 +237,12 @@ class OpenAILlmService(OpenAIGenericService):
         return tools
 
     def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
+        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager  # noqa: PLC0415
 
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
+        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager  # noqa: PLC0415
 
         return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
 
@@ -342,7 +342,7 @@ class AzureLlmService(LlmService):
     openai_api_version: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_openai.chat_models import AzureChatOpenAI
+        from langchain_openai.chat_models import AzureChatOpenAI  # noqa: PLC0415
 
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
@@ -364,7 +364,7 @@ class AnthropicLlmService(LlmService):
     anthropic_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_anthropic import ChatAnthropic
+        from langchain_anthropic import ChatAnthropic  # noqa: PLC0415
 
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
@@ -418,7 +418,7 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_openai.chat_models import ChatOpenAI
+        from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415
 
         return ChatOpenAI(
             model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
@@ -435,7 +435,7 @@ class GoogleLlmService(LlmService):
     google_api_key: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415
 
         return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
@@ -457,7 +457,7 @@ class GoogleLlmService(LlmService):
         # return tools
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import GoogleLocalIndexManager
+        from apps.service_providers.llm_service.index_managers import GoogleLocalIndexManager  # noqa: PLC0415
 
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
 
@@ -468,7 +468,7 @@ class GoogleVertexAILlmService(LlmService):
     api_transport: Literal["grpc", "rest"] = "grpc"
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_google_vertexai import ChatVertexAI
+        from langchain_google_vertexai import ChatVertexAI  # noqa: PLC0415
 
         return ChatVertexAI(
             model=llm_model,
@@ -488,7 +488,7 @@ class GoogleVertexAILlmService(LlmService):
 
     @cached_property
     def credentials(self):
-        from google.oauth2 import service_account
+        from google.oauth2 import service_account  # noqa: PLC0415
 
         try:
             return service_account.Credentials.from_service_account_info(self.credentials_json)

@@ -25,7 +25,7 @@ class ExperimentFilter(ChoiceColumnFilter):
     )
 
     def prepare(self, team, **_):
-        from apps.experiments.models import Experiment
+        from apps.experiments.models import Experiment  # noqa: PLC0415
 
         experiments = (
             Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")

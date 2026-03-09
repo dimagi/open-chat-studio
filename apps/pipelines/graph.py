@@ -24,7 +24,7 @@ class Node(pydantic.BaseModel):
 
     @property
     def pipeline_node_class(self):
-        from apps.pipelines.nodes import nodes
+        from apps.pipelines.nodes import nodes  # noqa: PLC0415
 
         return getattr(nodes, self.type)
 
@@ -121,7 +121,7 @@ class PipelineGraph(pydantic.BaseModel):
         return cls(nodes=node_data, edges=edge_data)
 
     def build_runnable(self) -> CompiledStateGraph:
-        from apps.pipelines.nodes.base import PipelineState
+        from apps.pipelines.nodes.base import PipelineState  # noqa: PLC0415
 
         if not self.nodes:
             raise PipelineBuildError("There are no nodes in the graph")

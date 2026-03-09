@@ -11,14 +11,14 @@ class TestSanitizedJSONField:
     def setup_test_model(self):
         """Create a temporary test model for testing the field."""
         # We'll test using the existing EvaluationResult model since it uses SanitizedJSONField
-        from apps.evaluations.models import EvaluationResult
+        from apps.evaluations.models import EvaluationResult  # noqa: PLC0415
 
         self.model = EvaluationResult
 
     def test_sanitize_null_bytes(self, team_with_users):
         """Test that null bytes are removed from strings."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
-        from apps.utils.factories.evaluations import EvaluationConfigFactory
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator  # noqa: PLC0415
+        from apps.utils.factories.evaluations import EvaluationConfigFactory  # noqa: PLC0415
 
         # Create necessary objects
         config = EvaluationConfigFactory.create(team=team_with_users)
@@ -53,8 +53,8 @@ class TestSanitizedJSONField:
 
     def test_sanitize_control_characters(self, team_with_users):
         """Test that control characters (except whitespace) are removed."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
-        from apps.utils.factories.evaluations import EvaluationConfigFactory
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator  # noqa: PLC0415
+        from apps.utils.factories.evaluations import EvaluationConfigFactory  # noqa: PLC0415
 
         config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)
@@ -93,8 +93,8 @@ class TestSanitizedJSONField:
 
     def test_sanitize_nested_structures(self, team_with_users):
         """Test that sanitization works on nested dicts and lists."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
-        from apps.utils.factories.evaluations import EvaluationConfigFactory
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator  # noqa: PLC0415
+        from apps.utils.factories.evaluations import EvaluationConfigFactory  # noqa: PLC0415
 
         config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)
@@ -127,8 +127,8 @@ class TestSanitizedJSONField:
 
     def test_primitives_unchanged(self, team_with_users):
         """Test that non-string primitives are unchanged."""
-        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator
-        from apps.utils.factories.evaluations import EvaluationConfigFactory
+        from apps.evaluations.models import EvaluationMessage, EvaluationRun, Evaluator  # noqa: PLC0415
+        from apps.utils.factories.evaluations import EvaluationConfigFactory  # noqa: PLC0415
 
         config = EvaluationConfigFactory.create(team=team_with_users)
         run = EvaluationRun.objects.create(team=team_with_users, config=config)

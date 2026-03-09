@@ -293,7 +293,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
-        from django.conf import settings
+        from django.conf import settings  # noqa: PLC0415
 
         data = self.get_table_data()
         if not data:

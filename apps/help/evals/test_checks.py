@@ -95,7 +95,7 @@ class TestCheckMaxWords:
 
 class TestCheckFilterParams:
     def _make_filter(self, column):
-        from apps.web.dynamic_filters.datastructures import ColumnFilterData
+        from apps.web.dynamic_filters.datastructures import ColumnFilterData  # noqa: PLC0415
 
         return ColumnFilterData(column=column, operator="any of", value="x")
 

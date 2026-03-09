@@ -514,7 +514,7 @@ class DashboardService:
 
         # Get tags used in messages within the date range
 
-        from apps.annotations.models import CustomTaggedItem
+        from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
 
         message_ct = ContentType.objects.get_for_model(ChatMessage)
 

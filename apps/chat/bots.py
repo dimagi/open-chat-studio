@@ -132,8 +132,8 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.experiments.models import AgentTools
-        from apps.pipelines.graph import PipelineGraph
+        from apps.experiments.models import AgentTools  # noqa: PLC0415
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
 
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
@@ -237,7 +237,7 @@ class PipelineBot:
         return chat_message
 
     def get_synthetic_voice(self) -> SyntheticVoice | None:
-        from apps.experiments.models import SyntheticVoice
+        from apps.experiments.models import SyntheticVoice  # noqa: PLC0415
 
         if self.synthetic_voice_id is None:
             return None
@@ -273,8 +273,8 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import PipelineGraph
-        from apps.pipelines.nodes.helpers import temporary_session
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
+        from apps.pipelines.nodes.helpers import temporary_session  # noqa: PLC0415
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)

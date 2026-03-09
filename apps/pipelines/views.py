@@ -273,7 +273,7 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
 
 
 def _pipeline_node_schemas():
-    from apps.pipelines.nodes import nodes
+    from apps.pipelines.nodes import nodes  # noqa: PLC0415
 
     schemas = []
 
@@ -290,7 +290,7 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-    from apps.custom_actions.schema_utils import resolve_references
+    from apps.custom_actions.schema_utils import resolve_references  # noqa: PLC0415
 
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)

@@ -66,7 +66,7 @@ PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
 
 
 def get_python_node_coder_prompt(current_code: str, error: str) -> str:
-    from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION
+    from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION  # noqa: PLC0415
 
     if current_code == DEFAULT_FUNCTION:
         current_code = ""

@@ -330,7 +330,7 @@ class RestrictedHttpClient:
         if auth_name in self._auth_cache:
             return self._auth_cache[auth_name]
 
-        from apps.service_providers.models import AuthProvider
+        from apps.service_providers.models import AuthProvider  # noqa: PLC0415
 
         try:
             provider = AuthProvider.objects.get(team=self._team, name=auth_name)
@@ -411,7 +411,7 @@ class RestrictedHttpClient:
 
         Returns (httpx_tuple, size, opened_handles).
         """
-        from apps.channels.datamodels import Attachment
+        from apps.channels.datamodels import Attachment  # noqa: PLC0415
 
         if isinstance(value, Attachment):
             file_obj = value._file

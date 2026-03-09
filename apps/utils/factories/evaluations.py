@@ -38,8 +38,8 @@ class EvaluationMessageFactory(DjangoModelFactory):
     def create_chat_messages(self, create, extracted, **kwargs):
         """Optionally create associated chat messages"""
         if create and extracted:
-            from apps.chat.models import ChatMessageType
-            from apps.utils.factories.experiment import ChatFactory
+            from apps.chat.models import ChatMessageType  # noqa: PLC0415
+            from apps.utils.factories.experiment import ChatFactory  # noqa: PLC0415
 
             chat = ChatFactory.create()
             if self.input:

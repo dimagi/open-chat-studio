@@ -268,9 +268,9 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                 session.chat.add_tag(tag, request.team, added_by=request.user)
         elif request.method == "DELETE":
             # Remove tags (only user tags, not system tags)
-            from django.contrib.contenttypes.models import ContentType
+            from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
 
-            from apps.annotations.models import CustomTaggedItem
+            from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
 
             tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team, is_system_tag=False)
 

@@ -175,7 +175,7 @@ def sso_logout(request):
 
     user_logged_out.send(sender=sso_session.user.__class__, request=request, user=sso_session.user)
     if hasattr(request, "user"):
-        from django.contrib.auth.models import AnonymousUser
+        from django.contrib.auth.models import AnonymousUser  # noqa: PLC0415
 
         request.user = AnonymousUser()
 

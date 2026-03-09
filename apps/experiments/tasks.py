@@ -165,7 +165,7 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
 def _convert_prompt_builder_history(messages_history):
     # lazy import to avoid import on startup
-    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage  # noqa: PLC0415
 
     history = []
     for message in messages_history:

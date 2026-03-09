@@ -19,9 +19,9 @@ def get_affected_teams_data(db_model) -> dict:
     Returns a dict of the form:
         {team_id: {"chatbots": {name: url}, "pipelines": {name: url}, "assistants": {name: url}}}
     """
-    from apps.assistants.models import OpenAiAssistant
-    from apps.experiments.models import Experiment
-    from apps.utils.deletion import get_related_pipelines_queryset
+    from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415
+    from apps.experiments.models import Experiment  # noqa: PLC0415
+    from apps.utils.deletion import get_related_pipelines_queryset  # noqa: PLC0415
 
     teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
 

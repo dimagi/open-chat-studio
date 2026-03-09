@@ -130,7 +130,7 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredM
 
 def _evaluator_schemas():
     """Returns schemas for all available evaluator classes."""
-    from apps.evaluations import evaluators
+    from apps.evaluations import evaluators  # noqa: PLC0415
 
     schemas = []
 
@@ -148,7 +148,7 @@ def _evaluator_schemas():
 
 def _get_evaluator_schema(evaluator_class):
     """Get schema for a single evaluator class."""
-    from apps.custom_actions.schema_utils import resolve_references
+    from apps.custom_actions.schema_utils import resolve_references  # noqa: PLC0415
 
     schema = resolve_references(evaluator_class.model_json_schema())
     schema.pop("$defs", None)

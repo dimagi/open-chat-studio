@@ -188,8 +188,8 @@ class Command(BaseCommand):
 
     def _output_csv(self, usage_data):
         """Output in CSV format."""
-        import csv
-        import sys
+        import csv  # noqa: PLC0415
+        import sys  # noqa: PLC0415
 
         writer = csv.writer(sys.stdout)
 

@@ -93,7 +93,7 @@ class Command(BaseCommand):
         authenticators_to_create = []
 
         # Import User model
-        from apps.users.models import CustomUser
+        from apps.users.models import CustomUser  # noqa: PLC0415
 
         # De-duplicate to at most one confirmed device per user (choose first)
         devices_by_user_id = {}

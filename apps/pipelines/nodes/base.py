@@ -249,7 +249,7 @@ class BasePipelineNode(BaseModel, ABC):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
-        from apps.channels.datamodels import Attachment
+        from apps.channels.datamodels import Attachment  # noqa: PLC0415
 
         if not incoming_nodes:
             # This is the first node in the graph

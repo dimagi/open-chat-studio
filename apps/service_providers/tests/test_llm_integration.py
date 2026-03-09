@@ -67,7 +67,7 @@ def google_credentials():
 @pytest.fixture()
 def google_vertex_ai_credentials():
     """Get real Google Vertex AI credentials from environment"""
-    import json
+    import json  # noqa: PLC0415
 
     credentials_json_str = env.str("GOOGLE_VERTEX_AI_CREDENTIALS_JSON", default=None)
     if not credentials_json_str:

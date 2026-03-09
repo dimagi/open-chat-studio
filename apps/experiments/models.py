@@ -933,7 +933,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 self.pipeline.archive()
 
     def delete_experiment_channels(self):
-        from apps.channels.models import ExperimentChannel
+        from apps.channels.models import ExperimentChannel  # noqa: PLC0415
 
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
             channel.soft_delete()
@@ -1071,9 +1071,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
         - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
         the instance.
         """
-        from apps.assistants.models import OpenAiAssistant
-        from apps.pipelines.models import Node
-        from apps.pipelines.nodes.nodes import AssistantNode
+        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415
+        from apps.pipelines.models import Node  # noqa: PLC0415
+        from apps.pipelines.nodes.nodes import AssistantNode  # noqa: PLC0415
 
         if self.pipeline:
             node_name = AssistantNode.__name__
@@ -1146,7 +1146,7 @@ class Participant(BaseTeamModel):
         return self.identifier
 
     def get_platform_display(self):
-        from apps.channels.models import ChannelPlatform
+        from apps.channels.models import ChannelPlatform  # noqa: PLC0415
 
         try:
             return ChannelPlatform(self.platform).label
@@ -1220,7 +1220,7 @@ class Participant(BaseTeamModel):
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
         """
-        from apps.events.models import ScheduledMessage
+        from apps.events.models import ScheduledMessage  # noqa: PLC0415
 
         messages = (
             ScheduledMessage.objects.filter(
@@ -1351,7 +1351,7 @@ class ExperimentSessionObjectManager(models.Manager):
         return ExperimentSessionQuerySet(self.model, using=self._db)
 
     def get_table_queryset(self, team, experiment_id=None):
-        from apps.annotations.models import CustomTaggedItem
+        from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
 
         queryset = self.get_queryset().filter(team=team)
         if experiment_id:
@@ -1462,7 +1462,7 @@ class ExperimentSession(BaseTeamModel):
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
-        from apps.channels.models import ChannelPlatform
+        from apps.channels.models import ChannelPlatform  # noqa: PLC0415
 
         if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
             return False
@@ -1496,8 +1496,8 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
-        from apps.events.models import StaticTriggerType
-        from apps.events.tasks import enqueue_static_triggers
+        from apps.events.models import StaticTriggerType  # noqa: PLC0415
+        from apps.events.tasks import enqueue_static_triggers  # noqa: PLC0415
 
         if trigger_type and not commit:
             raise ValueError("Commit must be True when trigger_type is specified")
@@ -1574,8 +1574,8 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import EventBot
-        from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
+        from apps.chat.bots import EventBot  # noqa: PLC0415
+        from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager  # noqa: PLC0415
 
         experiment = use_experiment or self.experiment
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
@@ -1586,7 +1586,7 @@ class ExperimentSession(BaseTeamModel):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
-        from apps.chat.channels import ChannelBase
+        from apps.chat.channels import ChannelBase  # noqa: PLC0415
 
         channel = ChannelBase.from_experiment_session(self)
         channel.send_message_to_user(message)
@@ -1617,8 +1617,8 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.assistants.models import OpenAiAssistant
-        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode
+        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415
+        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode  # noqa: PLC0415
 
         if self.experiment.pipeline:
             assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")

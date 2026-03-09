@@ -229,7 +229,7 @@ else:
         }
     }
 
-db_options = DATABASES["default"].setdefault("OPTIONS", {})
+db_options: dict = DATABASES["default"].setdefault("OPTIONS", {})  # ty: ignore[invalid-assignment]
 if env.bool("DJANGO_DATABASE_USE_POOL", True):
     DATABASES["default"].pop("CONN_MAX_AGE", None)
     # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
@@ -572,7 +572,7 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     from taskbadger.systems.celery import CelerySystemIntegration
 
     def _before_create(task: dict):
-        from apps.teams.utils import get_current_team
+        from apps.teams.utils import get_current_team  # noqa: PLC0415
 
         if team := get_current_team():
             task.setdefault("tags", {})["team"] = team.slug
