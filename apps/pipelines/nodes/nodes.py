@@ -581,7 +581,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         )
 
         from langchain_openai.chat_models.base import (
-            OpenAIRefusalError,  # noqa: PLC0415  # langchain_openai is banned at module level by TID253 (slow import)
+            OpenAIRefusalError,  # noqa: TID253
         )
 
         is_default_keyword = False

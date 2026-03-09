@@ -172,7 +172,7 @@ class OpenAIGenericService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import (
-            ChatOpenAI,  # noqa: PLC0415  # langchain_openai is banned at module level by TID253 (slow import)
+            ChatOpenAI,  # noqa: TID253
         )
 
         model_kwargs = self._get_model_kwargs(**kwargs)
@@ -349,7 +349,7 @@ class AzureLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import (
-            AzureChatOpenAI,  # noqa: PLC0415  # langchain_openai is banned at module level by TID253 (slow import)
+            AzureChatOpenAI,  # noqa: TID253
         )
 
         return AzureChatOpenAI(
@@ -373,7 +373,7 @@ class AnthropicLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_anthropic import (
-            ChatAnthropic,  # noqa: PLC0415  # langchain_anthropic is banned at module level by TID253 (slow import)
+            ChatAnthropic,  # noqa: TID253
         )
 
         return ChatAnthropic(
@@ -429,7 +429,7 @@ class DeepSeekLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import (
-            ChatOpenAI,  # noqa: PLC0415  # langchain_openai is banned at module level by TID253 (slow import)
+            ChatOpenAI,  # noqa: TID253
         )
 
         return ChatOpenAI(
@@ -448,7 +448,7 @@ class GoogleLlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_genai import (
-            ChatGoogleGenerativeAI,  # noqa: PLC0415  # langchain_google_genai is banned at module level by TID253 (slow import)
+            ChatGoogleGenerativeAI,  # noqa: TID253
         )
 
         return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
@@ -482,7 +482,7 @@ class GoogleVertexAILlmService(LlmService):
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_vertexai import (
-            ChatVertexAI,  # noqa: PLC0415  # langchain_google_vertexai is banned at module level by TID253 (~45s import time)
+            ChatVertexAI,  # noqa: TID253
         )
 
         return ChatVertexAI(

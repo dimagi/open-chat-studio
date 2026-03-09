@@ -83,7 +83,7 @@ class TwilioService(MessagingService):
 
     @property
     def s3_client(self):
-        import boto3  # noqa: PLC0415  # boto3 is banned at module level by TID253 (slow import)
+        import boto3  # noqa: TID253
         from botocore.client import Config  # noqa: PLC0415  # botocore is part of the boto3 lazy-load bundle
 
         return boto3.client(

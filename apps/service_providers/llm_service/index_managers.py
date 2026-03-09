@@ -369,7 +369,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
     def get_embedding_vector(self, content: str) -> Vector:
         from langchain_openai import (
-            OpenAIEmbeddings,  # noqa: PLC0415  # langchain_openai is banned at module level by TID253 (slow import)
+            OpenAIEmbeddings,  # noqa: TID253
         )
 
         embeddings = OpenAIEmbeddings(
@@ -381,7 +381,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
 class GoogleLocalIndexManager(LocalIndexManager):
     def get_embedding_vector(self, content: str) -> Vector:
         from langchain_google_genai import (
-            GoogleGenerativeAIEmbeddings,  # noqa: PLC0415  # langchain_google_genai is banned at module level by TID253 (slow import)
+            GoogleGenerativeAIEmbeddings,  # noqa: TID253
         )
 
         embeddings = GoogleGenerativeAIEmbeddings(

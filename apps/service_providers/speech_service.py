@@ -79,7 +79,7 @@ class AWSSpeechService(SpeechService):
         """
         Calls AWS Polly to convert the text to speech using the synthetic_voice
         """
-        import boto3  # noqa: PLC0415  # boto3 is banned at module level by TID253 (slow import)
+        import boto3  # noqa: TID253
 
         polly_client = boto3.Session(
             aws_access_key_id=self.aws_access_key_id,

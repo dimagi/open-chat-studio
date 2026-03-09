@@ -15,7 +15,8 @@ from rest_framework.views import APIView, Request
 
 from apps.api.permissions import verify_hmac
 from apps.api.serializers import TriggerBotMessageRequest
-from apps.api.tasks import trigger_bot_message_task
+from apps.api.tasks import create_connect_channel_for_participant, trigger_bot_message_task
+from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, Participant, ParticipantData
 
@@ -180,9 +181,6 @@ class TriggerBotMessageView(APIView):
         if platform == ChannelPlatform.COMMCARE_CONNECT:
             if not participant_data.system_metadata.get("commcare_connect_channel_id"):
                 # Trigger the setup task to create the channel and get consent status from CCC
-                from apps.api.tasks import create_connect_channel_for_participant  # noqa: PLC0415
-                from apps.channels.clients.connect_client import CommCareConnectClient  # noqa: PLC0415
-
                 connect_client = CommCareConnectClient()
                 try:
                     create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)

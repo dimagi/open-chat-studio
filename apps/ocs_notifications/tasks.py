@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import TYPE_CHECKING
 
 from celery import shared_task
 from django.core.mail import send_mail
@@ -13,17 +12,14 @@ from django.utils import timezone
 from apps.ocs_notifications.models import (
     NotificationEvent,
 )
+from apps.users.models import CustomUser
 from apps.web.meta import absolute_url
-
-if TYPE_CHECKING:
-    from apps.users.models import CustomUser
 
 logger = logging.getLogger("ocs.notifications")
 
 
 @shared_task
 def send_notification_email_async(user_ids, notification_event_id):
-    from apps.users.models import CustomUser  # noqa: PLC0415
 
     try:
         users = CustomUser.objects.filter(id__in=user_ids)

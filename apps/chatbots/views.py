@@ -34,7 +34,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.forms import ExperimentVersionForm
+from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -661,7 +661,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-    from apps.experiments.forms import ExperimentInvitationForm  # noqa: PLC0415
 
     form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
     if request.method == "POST":
@@ -676,8 +675,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                from django.db import transaction  # noqa: PLC0415
-
                 with transaction.atomic():
                     session = WebChannel.start_new_session(
                         chatbot,
@@ -686,8 +683,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                         timezone=request.session.get("detected_tz", None),
                     )
                 if post_form.cleaned_data["invite_now"]:
-                    from apps.experiments.email import send_experiment_invitation  # noqa: PLC0415
-
                     send_experiment_invitation(session)
         else:
             form = post_form
