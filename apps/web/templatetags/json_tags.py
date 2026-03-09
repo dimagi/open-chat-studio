@@ -71,6 +71,31 @@ def highlight_json(value) -> str:
     return mark_safe(_pygments_highlight(json_str, JsonLexer(), formatter))
 
 
+def format_participant_data_diff(diff_list):
+    """Transform a dictdiffer-style diff list into a template-friendly list of dicts.
+
+    Each dict has: type ("add"/"remove"/"change"), path, and value/old/new.
+    """
+    result = []
+    for change_type, path, details in diff_list:
+        if isinstance(path, list):
+            path = ".".join(str(p) for p in path)
+        if change_type in ("add", "remove"):
+            for key, value in details:
+                full_path = f"{path}.{key}" if path else str(key)
+                result.append({"type": change_type, "path": full_path, "value": repr(value)})
+        elif change_type == "change":
+            old, new = details
+            result.append({"type": "change", "path": path, "old": repr(old), "new": repr(new)})
+    return result
+
+
+@register.filter
+def participant_data_diff_display(diff_list):
+    """Filter for use in templates: {{ trace.participant_data_diff|participant_data_diff_display }}"""
+    return format_participant_data_diff(diff_list)
+
+
 def _extract_text(content) -> str | None:
     """Extract plain text (and tool calls) from a string or list of content blocks.
 
