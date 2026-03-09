@@ -432,22 +432,26 @@ class MetaCloudAPIWebhookView(View):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
+            log.debug("Meta Cloud API webhook received invalid JSON")
             return HttpResponseBadRequest("Invalid JSON.")
 
         # Meta webhooks include an "object" field indicating the source product.
         # For the WhatsApp Business API it is always "whatsapp_business_account".
         # See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview
         if data.get("object") != "whatsapp_business_account":
+            log.debug("Meta Cloud API webhook ignored: object=%s", data.get("object"))
             return HttpResponse()
 
         try:
             message_values = meta_webhook.extract_message_values(data)
             if not message_values:
+                log.debug("Meta Cloud API webhook received payload with no messages")
                 return HttpResponse()
 
             # Look up the channel by phone_number_id, then verify signature before dispatching
             first_phone_number_id = message_values[0]["metadata"]["phone_number_id"]
         except (KeyError, IndexError):
+            log.debug("Meta Cloud API webhook payload missing expected fields")
             return HttpResponse()
 
         channel = (
@@ -461,6 +465,7 @@ class MetaCloudAPIWebhookView(View):
         )
         if not channel:
             # Return a 200 so that Meta doesn't keep retrying for a channel we don't have
+            log.info("Meta Cloud API webhook: no channel found for incoming payload")
             return HttpResponse()
 
         # Signature verification happens after the channel lookup because the app_secret
@@ -468,6 +473,7 @@ class MetaCloudAPIWebhookView(View):
         app_secret = channel.messaging_provider.config.get("app_secret", "")
         signature = request.headers.get("X-Hub-Signature-256", "")
         if not meta_webhook.verify_signature(request.body, signature, app_secret):
+            log.warning("Meta Cloud API webhook signature verification failed for channel %s", channel.id)
             return HttpResponse()
 
         set_current_team(channel.team)
@@ -475,6 +481,7 @@ class MetaCloudAPIWebhookView(View):
 
         # A single Meta webhook payload is always scoped to one app, so all entries share
         # the same app_secret. Verifying with the first channel's secret is sufficient.
+        log.debug("Meta Cloud API webhook dispatching %d message(s) for channel %s", len(message_values), channel.id)
         for value in message_values:
             tasks.handle_meta_cloud_api_message.delay(
                 channel_id=channel.id,
