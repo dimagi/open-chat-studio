@@ -1,6 +1,6 @@
 {% load i18n team_tags %}
 {% if team %}
-  {% if request.team_membership %}
+  {% if request.team_membership.is_team_admin %}
     <li>
       <a data-cy="nav-team-settings" href="{% url 'single_team:manage_team' team.slug %}">
         <i class="fa fa-gear"></i>
