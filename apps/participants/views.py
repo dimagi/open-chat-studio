@@ -63,7 +63,7 @@ def single_participant_home_context(team, context: dict, participant_id: int, ex
     return context
 
 
-class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class ParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_participant"
 
@@ -107,7 +107,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         }
 
 
-class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "experiments.add_participant"
     model = Participant
     form_class = ParticipantForm
@@ -127,7 +127,7 @@ class CreateParticipant(LoginAndTeamRequiredMixin, CreateView, PermissionRequire
         return super().form_valid(form)
 
 
-class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = Participant
     table_class = ParticipantTable
     template_name = "table/single_table.html"
@@ -141,7 +141,7 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, SingleTableView, Permissio
         return query
 
 
-class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class SingleParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "experiments.view_participant"
     template_name = "participants/single_participant_home.html"
 
@@ -154,7 +154,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionR
         )
 
 
-class EditParticipantData(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "experiments.change_participantdata"
 
     def post(self, request, team_slug, participant_id, experiment_id):
