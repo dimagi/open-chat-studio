@@ -428,8 +428,21 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         )
     )
 
-    recipient_list: str = Field(description="A comma-separated list of email addresses")
-    subject: str
+    recipient_list: str = Field(
+        description=(
+            "A comma-separated list of email addresses. Supports Python format strings, e.g. {participant_data.email}"
+        )
+    )
+    subject: str = Field(description="Email subject. Supports Python format strings, e.g. {participant_data.name}")
+    body: str = Field(
+        default="",
+        description=(
+            "Optional Jinja2 template for the email body. "
+            "If empty, the pipeline input is used. "
+            "Available variables: input, temp_state, session_state, participant_data, participant_details."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+    )
 
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):

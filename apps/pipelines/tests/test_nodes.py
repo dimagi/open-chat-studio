@@ -69,6 +69,23 @@ class TestSendEmailInputValidation:
         with pytest.raises(ValidationError, match="Invalid list of emails addresses"):
             SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")
 
+    def test_body_field_defaults_to_empty(self):
+        model = SendEmail(
+            node_id="test", django_node=None, name="email", recipient_list="test@example.com", subject="Hello"
+        )
+        assert model.body == ""
+
+    def test_body_field_accepts_template(self):
+        model = SendEmail(
+            node_id="test",
+            django_node=None,
+            name="email",
+            recipient_list="test@example.com",
+            subject="Hello",
+            body="Dear {{participant_data.name}}, your input was: {{input}}",
+        )
+        assert "participant_data.name" in model.body
+
 
 def test_optional_int_type():
     ta = TypeAdapter(OptionalInt)
