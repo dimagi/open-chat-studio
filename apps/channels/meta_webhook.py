@@ -51,7 +51,7 @@ def verify_signature(payload: bytes, signature_header: str, app_secret: str) -> 
     if not signature_header.startswith("sha256=") or not app_secret:
         return False
 
-    expected_signature = signature_header[7:]
+    expected_signature = signature_header.removeprefix("sha256=")
     computed = hmac.new(
         app_secret.encode(),
         payload,
