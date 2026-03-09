@@ -94,6 +94,37 @@ def main(input: str, **kwargs) -> str:
 """
 
 
+def _build_jinja_context(context: "NodeContext", repo) -> dict:
+    """Build the Jinja2 template context dict shared by RenderTemplate and SendEmail."""
+    content = {
+        "input": context.input,
+        "node_inputs": context.inputs,
+        "temp_state": context.state.temp,
+        "session_state": context.state.session_state,
+        "input_message_id": context.input_message_id,
+        "input_message_url": context.input_message_url,
+    }
+    session = context.session
+    if session:
+        participant = repo.participant
+        if participant:
+            content.update(
+                {
+                    "participant_details": {
+                        "identifier": getattr(participant, "identifier", None),
+                        "platform": getattr(participant, "platform", None),
+                    },
+                    "participant_schedules": repo.get_participant_schedules(
+                        as_dict=True,
+                        include_inactive=True,
+                    )
+                    or [],
+                }
+            )
+        content["participant_data"] = context.state.participant_data
+    return content
+
+
 class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
 
@@ -112,34 +143,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         env = SandboxedEnvironment()
         try:
-            content = {
-                "input": context.input,
-                "node_inputs": context.inputs,
-                "temp_state": context.state.temp,
-                "session_state": context.state.session_state,
-                "input_message_id": context.input_message_id,
-                "input_message_url": context.input_message_url,
-            }
-
-            session = context.session
-            if session:
-                participant = self.repo.participant
-                if participant:
-                    content.update(
-                        {
-                            "participant_details": {
-                                "identifier": getattr(participant, "identifier", None),
-                                "platform": getattr(participant, "platform", None),
-                            },
-                            "participant_schedules": self.repo.get_participant_schedules(
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or [],
-                        }
-                    )
-                content["participant_data"] = context.state.participant_data
-
+            content = _build_jinja_context(context, self.repo)
             template = env.from_string(self.template_string)
             output = template.render(content)
         except Exception as e:
