@@ -425,6 +425,7 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
 @method_decorator(csrf_exempt, name="dispatch")
 class MetaCloudAPIWebhookView(View):
     def get(self, request):
+        log.debug("Meta Cloud API webhook verification request received")
         return meta_webhook.verify_webhook(request)
 
     def post(self, request):
@@ -433,6 +434,9 @@ class MetaCloudAPIWebhookView(View):
         except json.JSONDecodeError:
             return HttpResponseBadRequest("Invalid JSON.")
 
+        # Meta webhooks include an "object" field indicating the source product.
+        # For the WhatsApp Business API it is always "whatsapp_business_account".
+        # See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview
         if data.get("object") != "whatsapp_business_account":
             return HttpResponse()
 
@@ -472,9 +476,9 @@ class MetaCloudAPIWebhookView(View):
         # A single Meta webhook payload is always scoped to one app, so all entries share
         # the same app_secret. Verifying with the first channel's secret is sufficient.
         for value in message_values:
-            phone_number_id = value["metadata"]["phone_number_id"]
             tasks.handle_meta_cloud_api_message.delay(
-                phone_number_id=phone_number_id,
+                channel_id=channel.id,
+                team_slug=channel.team.slug,
                 message_data=value,
             )
 

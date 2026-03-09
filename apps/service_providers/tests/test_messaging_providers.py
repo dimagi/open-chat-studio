@@ -116,7 +116,7 @@ def _mock_phone_numbers_response(data):
 @patch("apps.service_providers.messaging_service.httpx.get")
 def test_meta_cloud_api_get_phone_number_id(mock_get, meta_cloud_api_service, api_data, lookup_number, expected_id):
     mock_get.return_value = _mock_phone_numbers_response(api_data)
-    assert meta_cloud_api_service.get_phone_number_id(lookup_number) == expected_id
+    assert meta_cloud_api_service._fetch_phone_number_id(lookup_number) == expected_id
 
 
 def _test_messaging_provider(team, provider_type: MessagingProviderType, data):

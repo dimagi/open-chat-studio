@@ -108,20 +108,10 @@ def test_whatsapp_form_meta_cloud_api_resolves_phone_number_id(mock_httpx_get, m
     )
     assert form.is_valid(), f"Form errors: {form.errors}"
 
-    # Simulate what ChannelFormWrapper.save() does: it creates the channel with
-    # extra_data set to the extra form's cleaned_data, then calls post_save.
-    channel = ExperimentChannelFactory.create(
-        team=experiment.team,
-        experiment=experiment,
-        platform=ChannelPlatform.WHATSAPP,
-        messaging_provider=provider,
-        extra_data={"number": form.cleaned_data["number"]},
-    )
-    form.post_save(channel)
-
-    channel.refresh_from_db()
-    assert channel.extra_data["phone_number_id"] == "12345"
-    assert channel.extra_data["number"] == "+12125552368"
+    # ChannelFormWrapper.save() passes extra_form.cleaned_data as channel.extra_data,
+    # so phone_number_id should be in cleaned_data directly.
+    assert form.cleaned_data["phone_number_id"] == "12345"
+    assert form.cleaned_data["number"] == "+12125552368"
 
 
 @pytest.mark.django_db()

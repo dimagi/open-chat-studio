@@ -198,7 +198,8 @@ class TestNewMetaCloudApiMessage:
     def test_task_dispatched_with_correct_args(self, mock_delay, meta_cloud_api_channel):
         self._post(_meta_webhook_payload())
         mock_delay.assert_called_once_with(
-            phone_number_id="12345",
+            channel_id=meta_cloud_api_channel.id,
+            team_slug=meta_cloud_api_channel.team.slug,
             message_data=_meta_webhook_payload()["entry"][0]["changes"][0]["value"],
         )
 

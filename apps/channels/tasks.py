@@ -192,15 +192,18 @@ def get_experiment_channel_base_query(platform, **query_kwargs):
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_meta_cloud_api_message(self, phone_number_id: str, message_data: dict):
+def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: dict):
     message = MetaCloudAPIMessage.parse(message_data)
-    experiment_channel = get_experiment_channel(
-        ChannelPlatform.WHATSAPP,
-        extra_data__phone_number_id=phone_number_id,
-        messaging_provider__type=MessagingProviderType.meta_cloud_api,
+    experiment_channel = (
+        ExperimentChannel.objects.filter(
+            id=channel_id,
+            experiment__is_archived=False,
+        )
+        .select_related("experiment", "team", "messaging_provider")
+        .first()
     )
     if not experiment_channel:
-        log.info("No experiment channel found for incoming Meta Cloud API message")
+        log.info("No experiment channel found for channel_id=%s team=%s", channel_id, team_slug)
         return
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, channel, message)

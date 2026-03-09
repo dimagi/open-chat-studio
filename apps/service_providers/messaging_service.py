@@ -346,6 +346,7 @@ class MetaCloudAPIService(MessagingService):
     business_id: str
     app_secret: str = ""
     verify_token: str = ""
+    _phone_number_id: str | None = pydantic.PrivateAttr(default=None)
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
     META_API_TIMEOUT: ClassVar[int] = 30
@@ -358,7 +359,20 @@ class MetaCloudAPIService(MessagingService):
             "Content-Type": "application/json",
         }
 
-    def get_phone_number_id(self, phone_number: str) -> str | None:
+    def is_valid_number(self, number: str) -> bool:
+        self._phone_number_id = self._fetch_phone_number_id(number)
+        if not self._phone_number_id:
+            raise ValueError(
+                f"{number} was not found in the WhatsApp Business Account. "
+                "Please verify the number is registered with your business."
+            )
+        return True
+
+    def get_phone_number_id(self) -> str | None:
+        """Return the phone number ID resolved by a prior `is_valid_number` call."""
+        return self._phone_number_id
+
+    def _fetch_phone_number_id(self, phone_number: str) -> str | None:
         """Look up the phone number ID for the given E.164 phone number
         using the WhatsApp Business Account Phone Number Management API."""
         url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
