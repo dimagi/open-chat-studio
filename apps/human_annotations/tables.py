@@ -32,8 +32,14 @@ class AnnotationQueueTable(tables.Table):
     progress = columns.Column(verbose_name="Progress", empty_values=(), orderable=False)
     actions = actions.ActionsColumn(
         actions=[
-            actions.edit_action(url_name="human_annotations:queue_edit"),
-            actions.delete_action(url_name="human_annotations:queue_delete"),
+            actions.edit_action(
+                url_name="human_annotations:queue_edit",
+                required_permissions=["human_annotations.change_annotationqueue"],
+            ),
+            actions.delete_action(
+                url_name="human_annotations:queue_delete",
+                required_permissions=["human_annotations.delete_annotationqueue"],
+            ),
         ]
     )
 
