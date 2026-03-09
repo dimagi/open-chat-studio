@@ -1,13 +1,12 @@
 import pytest
 
 from apps.trace.models import Trace
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
 @pytest.mark.django_db()
 def test_trace_participant_data_diff_defaults_to_empty_list():
     """The new participant_data_diff field should default to an empty list."""
-    from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-
     experiment = ExperimentFactory()
     session = ExperimentSessionFactory(experiment=experiment)
     trace = Trace.objects.create(
@@ -25,8 +24,6 @@ def test_trace_participant_data_diff_defaults_to_empty_list():
 @pytest.mark.django_db()
 def test_trace_participant_data_diff_stores_and_retrieves_diff():
     """The field should round-trip a dictdiffer-style diff list through the DB."""
-    from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-
     experiment = ExperimentFactory()
     session = ExperimentSessionFactory(experiment=experiment)
     diff = [["change", "plan", ["free", "pro"]], ["add", "", [["score", 100]]]]

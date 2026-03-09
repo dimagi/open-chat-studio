@@ -3032,7 +3032,7 @@ requires-dist = [
     { name = "celery", extras = ["redis"] },
     { name = "celery-progress" },
     { name = "chardet" },
-    { name = "dictdiffer" },
+    { name = "dictdiffer", specifier = ">=0.9.0" },
     { name = "django", specifier = "<6" },
     { name = "django-allauth", extras = ["mfa"], specifier = ">=0.56.0" },
     { name = "django-anymail" },
