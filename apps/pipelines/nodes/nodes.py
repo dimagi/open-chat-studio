@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from string import Formatter
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
@@ -461,9 +462,46 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return value
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=context.input
+        extra = {
+            "input": context.input,
+            "temp_state": context.state.temp or {},
+            "session_state": context.state.session_state or {},
+        }
+        template_context = PromptTemplateContext(
+            session=context.session,
+            extra=extra,
+            participant_data=context.state.participant_data or {},
+            repo=self.repo,
         )
+
+        def render_format_string(template: str) -> str:
+            input_vars = {v for _, v, _, _ in Formatter().parse(template) if v is not None}
+            ctx = template_context.get_context(input_vars)
+            try:
+                return template.format(**ctx)
+            except KeyError as e:
+                raise PipelineNodeRunError(f"Unknown variable in email template: {e}") from e
+
+        subject = render_format_string(self.subject)
+        rendered_recipients = render_format_string(self.recipient_list)
+
+        recipients = [r.strip() for r in rendered_recipients.split(",")]
+        for email in recipients:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise PipelineNodeRunError(f"Invalid email address after rendering: {email!r}") from None
+
+        if self.body:
+            env = SandboxedEnvironment()
+            try:
+                message = env.from_string(self.body).render(_build_jinja_context(context, self.repo))
+            except Exception as e:
+                raise PipelineNodeRunError(f"Error rendering email body: {e}") from e
+        else:
+            message = context.input
+
+        send_email_from_pipeline.delay(recipient_list=recipients, subject=subject, message=message)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
