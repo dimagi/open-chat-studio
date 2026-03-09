@@ -936,15 +936,15 @@ def test_reviewer_queue_table_only_shows_assigned_queues(reviewer_client, review
 
 
 @pytest.mark.django_db()
-def test_reviewer_queue_table_shows_unassigned_queues(reviewer_client, team_with_users, user):
-    """Queues with no assignees are visible to all reviewers."""
+def test_reviewer_queue_table_hides_unassigned_queues(reviewer_client, team_with_users, user):
+    """Queues with no assignees are NOT visible to reviewers — only directly assigned queues are."""
     open_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
     assert not open_queue.assignees.exists()
 
     url = reverse("human_annotations:queue_table", args=[team_with_users.slug])
     response = reviewer_client.get(url)
     assert response.status_code == 200
-    assert open_queue.name in response.content.decode()
+    assert open_queue.name not in response.content.decode()
 
 
 @pytest.mark.django_db()
@@ -993,3 +993,35 @@ def test_reviewer_cannot_export_annotations(reviewer_client, team_with_users, qu
     url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
     response = reviewer_client.get(url)
     assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_reviewer_detail_url_returns_404_for_unassigned_queue(reviewer_client, team_with_users, user):
+    """Reviewer cannot access queue detail directly by PK if not assigned."""
+    unassigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, unassigned_queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_reviewer_detail_url_returns_200_for_assigned_queue(
+    reviewer_client, reviewer_membership, team_with_users, user
+):
+    """Reviewer can access queue detail directly if assigned."""
+    assigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    assigned_queue.assignees.add(reviewer_membership.user)
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, assigned_queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_reviewer_items_table_returns_empty_for_unassigned_queue(reviewer_client, team_with_users, user):
+    """Reviewer gets an empty items table (not 404) when accessing an unassigned queue's items by PK."""
+    unassigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    AnnotationItemFactory.create(queue=unassigned_queue, team=team_with_users)
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, unassigned_queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+    assert unassigned_queue.name not in response.content.decode()

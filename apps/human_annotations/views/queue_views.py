@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import IntegrityError
-from django.db.models import Count, Exists, OuterRef, Prefetch, Q, Subquery, Sum
+from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -41,6 +41,18 @@ def _safe_filename(name: str) -> str:
     return re.sub(r"[^\w\s\-.]", "_", name).strip()
 
 
+def _visible_queues_for_user(user, team):
+    """Return queues visible to the user within a team.
+
+    Admins (with add_annotationqueue) see all team queues.
+    Reviewers only see queues they are directly assigned to.
+    """
+    qs = AnnotationQueue.objects.filter(team=team)
+    if not user.has_perm("human_annotations.add_annotationqueue"):
+        qs = qs.filter(assignees=user)
+    return qs
+
+
 class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "human_annotations.view_annotationqueue"
@@ -64,11 +76,7 @@ class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        qs = AnnotationQueue.objects.filter(team=self.request.team)
-        if not self.request.user.has_perm("human_annotations.add_annotationqueue"):
-            # Reviewers only see queues they are assigned to, or queues with no assignees.
-            qs = qs.filter(Q(assignees=self.request.user) | Q(assignees__isnull=True)).distinct()
-        return qs.annotate(
+        return _visible_queues_for_user(self.request.user, self.request.team).annotate(
             _total_items=Count("items"),
             _reviews_done=Sum("items__review_count"),
         )
@@ -134,7 +142,7 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationQueue.objects.filter(team=self.request.team).select_related("aggregate")
+        return _visible_queues_for_user(self.request.user, self.request.team).select_related("aggregate")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -162,7 +170,7 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
         return (
             AnnotationItem.objects.filter(
                 queue_id=self.kwargs["pk"],
-                queue__team=self.request.team,
+                queue__in=_visible_queues_for_user(self.request.user, self.request.team),
             )
             .select_related("session", "message", "queue")
             .prefetch_related(
