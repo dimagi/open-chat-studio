@@ -32,8 +32,12 @@ def _model_setup():
         -> b3
     t3
     """
-    # inline import to avoid importing before app initialization
-    from apps.utils.tests.models import Bot, Collection, Param, Tool  # noqa: PLC0415
+    from apps.utils.tests.models import (  # noqa: PLC0415  # Must import after test app initialization
+        Bot,
+        Collection,
+        Param,
+        Tool,
+    )
 
     with enable_audit():
         c1 = Collection.objects.create(name="c1")

@@ -12,8 +12,13 @@ from django.db.models import Expression, Q
 from django.db.models.deletion import get_candidate_relations_to_delete
 from django.template.loader import render_to_string
 from django.utils.translation import gettext_lazy as _
-from field_audit import field_audit
+from field_audit import AuditService, field_audit
 from field_audit.field_audit import get_audited_models
+from field_audit.models import AuditAction, AuditEvent, AuditingManager
+
+from apps.experiments.models import Experiment
+from apps.pipelines.models import Node
+from apps.teams.models import Membership
 
 
 def delete_object_with_auditing_of_related_objects(obj):
@@ -22,7 +27,6 @@ def delete_object_with_auditing_of_related_objects(obj):
     Args:
         obj: The object to delete.
     """
-    from field_audit.models import AuditAction, AuditingManager  # noqa: PLC0415
 
     collector = NestedObjects(using="default")
     collector.collect([obj])
@@ -58,8 +62,6 @@ def _perform_updates_for_delete(updates_not_part_of_delete):
     """Copied from django.db.models.deletion.Collector.delete()
     to perform updates for objects that are not getting deleted but are affected by the delete operation.
     e.g. cascading updates to related objects that are not being deleted."""
-    from field_audit.models import AuditAction  # noqa: PLC0415
-
     for (field, value), instances_list in updates_not_part_of_delete.items():
         updates = []
         objs = []
@@ -82,8 +84,6 @@ def _queryset_update_with_auditing(queryset, **kw):
     Copied from `field_audit.models.AuditingQuerySet.update` so that it can be called with querysets
     that are not AuditingQuerySets.
     """
-    from field_audit import AuditService  # noqa: PLC0415
-    from field_audit.models import AuditEvent  # noqa: PLC0415
 
     audit_service = AuditService()
     fields_to_update = set(kw.keys())
@@ -186,7 +186,6 @@ def _get_m2m_related_models(model):
 
 
 def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
-    from apps.pipelines.models import Node  # noqa: PLC0415
 
     related_objects = []
 
@@ -214,7 +213,6 @@ def _get_related_objects_querysets(instance, pipeline_param_key: str | None = No
 
 
 def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = None):
-    from apps.pipelines.models import Node  # noqa: PLC0415
 
     pipelines = Node.objects.filter(
         Q(**{f"params__{pipeline_param_key}": instance.id}) | Q(**{f"params__{pipeline_param_key}": str(instance.id)})
@@ -223,7 +221,6 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = No
 
 
 def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
-    from apps.pipelines.models import Node  # noqa: PLC0415
 
     pipelines = Node.objects.filter(
         Q(**{f"params__{pipeline_param_key}__contains": instance.id})
@@ -247,7 +244,6 @@ def get_related_pipeline_experiments_queryset_list_param(instance_ids, pipeline_
 def _get_related_pipeline_experiments_queryset(
     instance_ids, pipeline_param_key: str, operator: Literal["__in", "__contains"]
 ):
-    from apps.experiments.models import Experiment  # noqa: PLC0415
 
     instance_ids_str = [str(instance_id) for instance_id in instance_ids]
     instance_ids_int = [int(instance_id) for instance_id in instance_ids]
@@ -262,7 +258,6 @@ def _get_related_pipeline_experiments_queryset(
 
 
 def get_admin_emails_with_delete_permission(team):
-    from apps.teams.models import Membership  # noqa: PLC0415
 
     return list(
         Membership.objects.filter(team__name=team.name, groups__permissions__codename="delete_team").values_list(

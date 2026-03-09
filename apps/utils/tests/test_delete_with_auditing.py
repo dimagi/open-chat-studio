@@ -20,8 +20,12 @@ from apps.utils.factories.team import TeamFactory
     ],
 )
 def test_delete_with_auditing(obj_name, delete_events, update_events, expected_stats):
-    # inline import to avoid importing before app initialization
-    from apps.utils.tests.models import MODEL_NAMES, Bot, Collection, Tool  # noqa: PLC0415
+    from apps.utils.tests.models import (  # noqa: PLC0415  # Must import after test app initialization
+        MODEL_NAMES,
+        Bot,
+        Collection,
+        Tool,
+    )
 
     with enable_audit():
         source_model = {
