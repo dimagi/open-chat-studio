@@ -4,6 +4,7 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import dictdiffer
 from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
@@ -204,6 +205,9 @@ class PipelineBot:
 
         out_pd = output.get("participant_data", None)
         if out_pd is not None and out_pd != input_state.get("participant_data"):
+            if self.trace_service:
+                diff = list(dictdiffer.diff(input_state.get("participant_data", {}), out_pd))
+                self.trace_service.set_participant_data_diff(diff)
             self.participant_data.data = out_pd
             self.participant_data.save(update_fields=["data"])
             self.session.participant.update_name_from_data(out_pd)
