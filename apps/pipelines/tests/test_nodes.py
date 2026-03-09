@@ -512,10 +512,7 @@ class TestSendEmailDynamicRendering:
             return mock_task
 
     def test_static_email_still_works(self, experiment_session, participant):
-        """Existing behaviour: static recipient/subject, body from input.
-
-        participant fixture sets experiment_session.participant (required by ORMRepository).
-        """
+        """Existing behaviour: static recipient/subject, body from input."""
         node = self._make_node("ops@example.com", "Weekly Report")
         state = self._make_state(experiment_session)
         mock_task = self._run_node(node, state, experiment_session)
@@ -526,7 +523,6 @@ class TestSendEmailDynamicRendering:
         )
 
     def test_dynamic_subject_from_participant_data(self, experiment_session, participant):
-        # participant fixture sets experiment_session.participant (required by ORMRepository)
         node = self._make_node(
             recipient_list="ops@example.com",
             subject="Hello {{ participant_data.name }}",
@@ -540,7 +536,6 @@ class TestSendEmailDynamicRendering:
         )
 
     def test_dynamic_recipient_from_temp_state(self, experiment_session, participant):
-        # participant fixture sets experiment_session.participant (required by ORMRepository)
         node = self._make_node(
             recipient_list="{{ temp_state.email_to }}",
             subject="Notification",
@@ -554,7 +549,6 @@ class TestSendEmailDynamicRendering:
         )
 
     def test_invalid_email_after_rendering_raises_error(self, experiment_session, participant):
-        # participant fixture sets experiment_session.participant (required by ORMRepository)
         node = self._make_node(
             recipient_list="{{ temp_state.bad_email }}",
             subject="Hi",
@@ -565,7 +559,6 @@ class TestSendEmailDynamicRendering:
             node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 
     def test_body_template_renders(self, experiment_session, participant):
-        # participant fixture sets experiment_session.participant (required by ORMRepository)
         node = self._make_node(
             recipient_list="ops@example.com",
             subject="Report",
@@ -580,7 +573,6 @@ class TestSendEmailDynamicRendering:
         )
 
     def test_empty_body_defaults_to_input(self, experiment_session, participant):
-        # participant fixture sets experiment_session.participant (required by ORMRepository)
         node = self._make_node("ops@example.com", "Report", body="")
         state = self._make_state(experiment_session)
         mock_task = self._run_node(node, state, experiment_session)
@@ -591,7 +583,6 @@ class TestSendEmailDynamicRendering:
         )
 
     def test_recipient_split_filter(self, experiment_session, participant):
-        # participant fixture sets experiment_session.participant (required by ORMRepository)
         # Tests the custom split filter: semicolon-delimited string → multiple recipients
         node = self._make_node(
             recipient_list="{{ participant_data.emails | split(';') | join(',') }}",
