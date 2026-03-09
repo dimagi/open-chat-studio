@@ -13,12 +13,12 @@
       "ui:widget": "node_name"
     },
     "recipient_list": {
-      "description": "A comma-separated list of email addresses. Supports Python format strings, e.g. {participant_data.email}",
+      "description": "A comma-separated list of email addresses. Supports Jinja2 templates, e.g. {{ participant_data.email }}. Use {{ participant_data.emails | join(',') }} for a list, or {{ participant_data.emails | split(';') | join(',') }} for a delimited string.",
       "title": "Recipient List",
       "type": "string"
     },
     "subject": {
-      "description": "Email subject. Supports Python format strings, e.g. {participant_data.name}",
+      "description": "Email subject. Supports Jinja2 templates, e.g. {{ participant_data.name }}",
       "title": "Subject",
       "type": "string"
     },

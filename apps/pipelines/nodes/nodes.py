@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-from string import Formatter
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
@@ -435,10 +434,13 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
 
     recipient_list: str = Field(
         description=(
-            "A comma-separated list of email addresses. Supports Python format strings, e.g. {participant_data.email}"
+            "A comma-separated list of email addresses. "
+            "Supports Jinja2 templates, e.g. {{ participant_data.email }}. "
+            "Use {{ participant_data.emails | join(',') }} for a list, "
+            "or {{ participant_data.emails | split(';') | join(',') }} for a delimited string."
         )
     )
-    subject: str = Field(description="Email subject. Supports Python format strings, e.g. {participant_data.name}")
+    subject: str = Field(description="Email subject. Supports Jinja2 templates, e.g. {{ participant_data.name }}")
     body: str = Field(
         default="",
         description=(
@@ -452,8 +454,8 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
         value = value or ""
-        if "{" in value:
-            return value  # template syntax — validate at runtime after rendering
+        if "{{" in value or "{%" in value:
+            return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
             try:
                 validate_email(email)
@@ -462,30 +464,24 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return value
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        extra = {
-            "input": context.input,
-            "temp_state": context.state.temp or {},
-            "session_state": context.state.session_state or {},
-        }
-        template_context = PromptTemplateContext(
-            session=context.session,
-            extra=extra,
-            participant_data=context.state.participant_data or {},
-            repo=self.repo,
-        )
+        env = SandboxedEnvironment()
+        env.filters["split"] = lambda value, sep=",": str(value).split(sep)
+        jinja_context = _build_jinja_context(context, self.repo)
 
-        def render_format_string(template: str) -> str:
-            input_vars = {v for _, v, _, _ in Formatter().parse(template) if v is not None}
-            ctx = template_context.get_context(input_vars)
-            try:
-                return template.format(**ctx)
-            except KeyError as e:
-                raise PipelineNodeRunError(f"Unknown variable in email template: {e}") from e
+        try:
+            subject = env.from_string(self.subject).render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(f"Error rendering email subject: {e}") from e
 
-        subject = render_format_string(self.subject)
-        rendered_recipients = render_format_string(self.recipient_list)
+        # Strip newlines to prevent email header injection
+        subject = subject.replace("\r", "").replace("\n", " ")
 
-        recipients = [r.strip() for r in rendered_recipients.split(",")]
+        try:
+            rendered_recipients = env.from_string(self.recipient_list).render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(f"Error rendering email recipient list: {e}") from e
+
+        recipients = [r.strip() for r in rendered_recipients.split(",") if r.strip()]
         for email in recipients:
             try:
                 validate_email(email)
@@ -493,9 +489,8 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
                 raise PipelineNodeRunError(f"Invalid email address after rendering: {email!r}") from None
 
         if self.body:
-            env = SandboxedEnvironment()
             try:
-                message = env.from_string(self.body).render(_build_jinja_context(context, self.repo))
+                message = env.from_string(self.body).render(jinja_context)
             except Exception as e:
                 raise PipelineNodeRunError(f"Error rendering email body: {e}") from e
         else:
