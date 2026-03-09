@@ -12,6 +12,8 @@ from uuid import UUID
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 
+from apps.service_providers.tracing.ocs_tracer import OCSTracer
+
 from .base import TraceContext, Tracer
 from .callback import wrap_callback
 
@@ -50,7 +52,6 @@ class TracingService:
 
     @classmethod
     def create_for_experiment(cls, experiment) -> Self:
-        from apps.service_providers.tracing.ocs_tracer import OCSTracer
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:

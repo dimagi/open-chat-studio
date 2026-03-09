@@ -9,13 +9,15 @@ import backoff
 import httpx
 import pydantic
 import requests
+from botocore.client import Config
 from django.conf import settings
+from slack_sdk.errors import SlackApiError
 from telebot.util import smart_split
+from turn import TurnClient
+from twilio.rest import Client
 
 if TYPE_CHECKING:
     from slack_sdk import WebClient
-    from turn import TurnClient
-    from twilio.rest import Client
     from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
@@ -26,6 +28,7 @@ from apps.files.models import File
 from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.slack.client import get_slack_client
 
 logger = logging.getLogger("ocs.messaging")
 
@@ -78,14 +81,11 @@ class TwilioService(MessagingService):
 
     @property
     def client(self) -> "Client":
-        from twilio.rest import Client
-
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
-        import boto3
-        from botocore.client import Config
+        import boto3  # noqa: PLC0415  # TID253: heavy lib, must be lazy
 
         return boto3.client(
             "s3",
@@ -225,8 +225,6 @@ class TurnIOService(MessagingService):
 
     @property
     def client(self) -> "TurnClient":
-        from turn import TurnClient
-
         return TurnClient(token=self.auth_token)
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
@@ -357,8 +355,6 @@ class SlackService(MessagingService):
     @property
     def client(self) -> "WebClient":
         if not self._client:
-            from apps.slack.client import get_slack_client
-
             self._client = get_slack_client(self.slack_installation_id)
         return self._client
 
@@ -376,7 +372,6 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
-        from slack_sdk.errors import SlackApiError
 
         try:
             self.client.conversations_info(channel=channel_id)

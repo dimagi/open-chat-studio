@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def _create_default_llm_provider_models(apps, schema_editor):
-    from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
+    from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS  # noqa: PLC0415  # migration: avoids issues with app registry state at migration time
     LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
     for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
         for provider_model in provider_models:

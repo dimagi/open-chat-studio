@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 
+from apps.experiments.models import Experiment
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.trace.models import Trace, TraceStatus
@@ -16,7 +17,7 @@ from apps.trace.models import Trace, TraceStatus
 from .base import SpanNotificationConfig, TraceContext, Tracer
 
 if TYPE_CHECKING:
-    from apps.experiments.models import Experiment, ExperimentSession
+    from apps.experiments.models import ExperimentSession
 
 logger = logging.getLogger("ocs.tracing")
 
@@ -209,8 +210,6 @@ class OCSTracer(Tracer):
         """
         Bust any relevant caches when an error is detected in a span.
         """
-        from apps.experiments.models import Experiment
-
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
 
