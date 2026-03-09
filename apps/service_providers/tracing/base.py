@@ -154,6 +154,10 @@ class Tracer(ABC):
     def set_input_message_id(self, input_message_id: str) -> None:
         pass
 
+    @abstractmethod
+    def set_participant_data_diff(self, diff: list) -> None:
+        pass
+
 
 @dataclasses.dataclass
 class TraceInfo:

@@ -169,6 +169,9 @@ class LangFuseTracer(Tracer):
     def set_input_message_id(self, input_message_id: str) -> None:
         pass
 
+    def set_participant_data_diff(self, diff: list) -> None:
+        pass
+
 
 class ClientManager:
     """This class manages the langfuse clients to avoid creating a new client for every request.

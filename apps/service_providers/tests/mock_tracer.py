@@ -127,3 +127,6 @@ class MockTracer(Tracer):
 
     def set_input_message_id(self, input_message_id: str) -> None:
         pass
+
+    def set_participant_data_diff(self, diff: list) -> None:
+        pass
