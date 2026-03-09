@@ -1,3 +1,5 @@
+import csv
+
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
@@ -188,10 +190,7 @@ class Command(BaseCommand):
 
     def _output_csv(self, usage_data):
         """Output in CSV format."""
-        import csv  # noqa: PLC0415
-        import sys  # noqa: PLC0415
-
-        writer = csv.writer(sys.stdout)
+        writer = csv.writer(self.stdout)
 
         # CSV header
         writer.writerow(

@@ -12,6 +12,7 @@ from django.utils import timezone
 from pytz.exceptions import UnknownTimeZoneError
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
@@ -243,7 +244,6 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
           at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
-        from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS  # noqa: PLC0415
 
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
         message_ordering = "created_at" if self.trigger_from_first_message else "-created_at"

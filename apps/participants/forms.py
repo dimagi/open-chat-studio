@@ -1,3 +1,5 @@
+import csv
+import io
 import logging
 
 from django import forms
@@ -43,9 +45,6 @@ class ParticipantImportForm(forms.Form):
 
         if file:
             # Check if CSV contains data.* columns
-            import csv  # noqa: PLC0415
-            import io  # noqa: PLC0415
-
             file.seek(0)
             try:
                 content = file.read().decode("utf-8")

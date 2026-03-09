@@ -830,8 +830,6 @@ class TestCSVUploadEdit:
 
     def test_csv_upload_with_nested_json_values(self, dataset):
         """Test CSV upload handles nested JSON values in participant_data and session_state."""
-        import json  # noqa: PLC0415
-
         mock_progress_recorder = MockProgressRecorder()
 
         nested_preferences = {"theme": "dark", "notifications": {"email": True, "sms": False}}
