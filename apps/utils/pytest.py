@@ -6,7 +6,7 @@ def django_db_with_data():
 
     See also `apps.conftest._django_db_restore_serialized`.
     """
-    import pytest
+    import pytest  # noqa: PLC0415
 
     def _inner(func):
         return pytest.mark.django_db(

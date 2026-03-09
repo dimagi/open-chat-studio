@@ -12,6 +12,7 @@ from django.utils import timezone
 from pytz.exceptions import UnknownTimeZoneError
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
@@ -243,7 +244,6 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
           at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
-        from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
         message_ordering = "created_at" if self.trigger_from_first_message else "-created_at"
@@ -359,7 +359,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             )
 
         if not self._has_triggers_left(working_version, session, reference_message):
-            from apps.events.tasks import enqueue_static_triggers
+            from apps.events.tasks import enqueue_static_triggers  # noqa: PLC0415
 
             enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
@@ -484,7 +484,7 @@ class ScheduledMessage(BaseTeamModel):
 
     def safe_trigger(self, attempt_number=1):
         """Wraps _trigger with attempt tracking and retry"""
-        from apps.events.tasks import retry_scheduled_message
+        from apps.events.tasks import retry_scheduled_message  # noqa: PLC0415
 
         trigger_number = self.total_triggers
         attempt = ScheduledMessageAttempt(

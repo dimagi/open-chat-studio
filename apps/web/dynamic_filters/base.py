@@ -192,7 +192,7 @@ class StringColumnFilter(ColumnFilter):
         lookup: The Django lookup to use (e.g., 'icontains', 'istartswith'), or None for exact match
         value: The value to filter by
         """
-        from django.db.models import Q
+        from django.db.models import Q  # noqa: PLC0415
 
         # Build Q object for OR logic
         q = Q()
@@ -210,7 +210,7 @@ class StringColumnFilter(ColumnFilter):
         return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-        from django.db.models import Q
+        from django.db.models import Q  # noqa: PLC0415
 
         # For exclusion: exclude if it matches ANY column
         q = Q()
@@ -227,7 +227,7 @@ class StringColumnFilter(ColumnFilter):
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
         if values := self.values_list(value):
-            from django.db.models import Q
+            from django.db.models import Q  # noqa: PLC0415
 
             # OR logic across multiple columns
             q = Q()
@@ -270,9 +270,9 @@ def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
     Imports known filter modules to ensure subclasses are registered
     regardless of import order.
     """
-    import apps.experiments.filters  # noqa: F401
-    import apps.ocs_notifications.filters  # noqa: F401
-    import apps.participants.filters  # noqa: F401
-    import apps.trace.filters  # noqa: F401
+    import apps.experiments.filters  # noqa: F401, PLC0415
+    import apps.ocs_notifications.filters  # noqa: F401, PLC0415
+    import apps.participants.filters  # noqa: F401, PLC0415
+    import apps.trace.filters  # noqa: F401, PLC0415
 
     return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}

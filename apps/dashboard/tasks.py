@@ -11,7 +11,7 @@ def cleanup_expired_cache_entries():
     Clean up expired cache entries to prevent database bloat.
     Should be run periodically (e.g., hourly).
     """
-    from .models import DashboardCache
+    from .models import DashboardCache  # noqa: PLC0415
 
     expired_count = DashboardCache.objects.filter(expires_at__lt=timezone.now()).delete()[0]
 

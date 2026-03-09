@@ -13,7 +13,6 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_openai.chat_models.base import OpenAIRefusalError
 from langgraph.constants import END
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator, model_validator
@@ -579,6 +578,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             response_format=self._create_router_schema(),
         )
 
+        from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: PLC0415
+
         is_default_keyword = False
         try:
             agent_input = {"messages": [HumanMessage(content=node_input)]}
@@ -628,7 +629,7 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     route_key: str = Field(..., description="The key in the data to use for routing")
 
     def _process_conditional(self, context: "NodeContext"):
-        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
+        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper  # noqa: PLC0415
 
         match self.data_source:
             case self.DataSource.participant_data:
@@ -911,7 +912,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 content: The file content as bytes
                 content_type: Optional MIME type. Auto-detected from filename if not provided.
             """
-            from io import BytesIO
+            from io import BytesIO  # noqa: PLC0415
 
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")

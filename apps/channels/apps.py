@@ -7,4 +7,4 @@ class BotChannelsAppConfig(AppConfig):
 
     def ready(self):
         # Register signal handlers
-        from . import signals  # noqa: F401
+        from . import signals  # noqa: F401, PLC0415

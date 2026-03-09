@@ -39,7 +39,7 @@ class CurrentThreadExecutor(Executor):
 def patch_executor(executor: type[Executor]) -> Generator[None, Any]:
     """Monkeypatch the langchain executor to run tasks in the current thread.
     This is used for pipeline tests where the DB transaction is not committed."""
-    from langchain_core.runnables import config
+    from langchain_core.runnables import config  # noqa: PLC0415
 
     original = config.ContextThreadPoolExecutor
     config.ContextThreadPoolExecutor = executor  # ty: ignore[invalid-assignment]
@@ -150,7 +150,7 @@ def _django_db_cleanup_wrapper(func: Callable) -> Callable:
 
 
 def close_db_connections():
-    from django.db import connections
+    from django.db import connections  # noqa: PLC0415
 
     try:
         connections.close_all()
