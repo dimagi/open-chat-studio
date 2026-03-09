@@ -84,7 +84,8 @@ dependencies = [
     "langchain-classic>=1.0.0",
     "langchain-google-vertexai",
     "python-json-logger>=3.2.1",
-    "chardet"
+    "chardet",
+    "dictdiffer"
 ]
 
 [project.urls]
