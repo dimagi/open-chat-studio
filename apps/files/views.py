@@ -195,7 +195,7 @@ class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
 
 
 # This view is not currently being used
-class CreateFile(LoginAndTeamRequiredMixin, CreateView):
+class CreateFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     template_name = "documents/file_form.html"
     model = File
     form_class = FileForm
@@ -217,7 +217,7 @@ class CreateFile(LoginAndTeamRequiredMixin, CreateView):
         return response
 
 
-class EditFile(LoginAndTeamRequiredMixin, UpdateView):
+class EditFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     template_name = "documents/file_form.html"
     model = File
     form_class = FileForm
@@ -248,7 +248,7 @@ class EditFile(LoginAndTeamRequiredMixin, UpdateView):
         return response
 
 
-class DeleteFile(LoginAndTeamRequiredMixin, View):
+class DeleteFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.delete_file"
 
     def delete(self, request, team_slug: str, pk: int):

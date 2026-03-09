@@ -34,7 +34,7 @@ class TagHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
         }
 
 
-class CreateTag(PermissionRequiredMixin, CreateView):
+class CreateTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "annotations.add_tag"
     model = Tag
     form_class = TagForm
@@ -61,7 +61,7 @@ class CreateTag(PermissionRequiredMixin, CreateView):
         return self.form_invalid(form)
 
 
-class EditTag(PermissionRequiredMixin, UpdateView):
+class EditTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "annotations.change_tag"
     model = Tag
     form_class = TagForm
@@ -98,7 +98,8 @@ class DeleteTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         return HttpResponse()
 
 
-class TagTableView(SingleTableView):
+class TagTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+    permission_required = "annotations.view_tag"
     model = Tag
     table_class = TagTable
     template_name = "table/single_table.html"

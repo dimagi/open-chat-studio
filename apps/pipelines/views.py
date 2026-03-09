@@ -312,6 +312,7 @@ def llm_model_parameter_context():
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
+@permission_required("pipelines.change_pipeline")
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
