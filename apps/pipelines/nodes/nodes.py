@@ -94,7 +94,7 @@ def main(input: str, **kwargs) -> str:
 """
 
 
-def _build_jinja_context(context: "NodeContext", repo) -> dict:
+def _build_jinja_context(context: "NodeContext", repo: "ORMRepository") -> dict:
     """Build the Jinja2 template context dict shared by RenderTemplate and SendEmail."""
     content = {
         "input": context.input,
@@ -446,7 +446,9 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         description=(
             "Optional Jinja2 template for the email body. "
             "If empty, the pipeline input is used. "
-            "Available variables: input, temp_state, session_state, participant_data, participant_details."
+            "Available variables: input, node_inputs, temp_state, session_state, "
+            "participant_data, participant_details, participant_schedules, "
+            "input_message_id, input_message_url."
         ),
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )

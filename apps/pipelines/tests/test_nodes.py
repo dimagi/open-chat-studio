@@ -6,7 +6,6 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import ValidationError
 
-from apps.experiments.models import Participant
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineState
@@ -483,14 +482,9 @@ class TestSendEmailDynamicRendering:
 
     @pytest.fixture()
     def participant(self, experiment_session):
-        p = Participant.objects.create(
-            identifier="user_001",
-            team=experiment_session.team,
-            platform="web",
-        )
-        experiment_session.participant = p
-        experiment_session.save()
-        return p
+        # Ensures experiment_session.participant is set (required by ORMRepository).
+        # ExperimentSessionFactory already creates a participant — reuse it.
+        return experiment_session.participant
 
     def _make_state(self, experiment_session, participant_data=None, temp_state=None):
         return PipelineState(

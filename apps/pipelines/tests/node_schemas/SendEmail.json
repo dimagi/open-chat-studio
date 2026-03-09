@@ -24,7 +24,7 @@
     },
     "body": {
       "default": "",
-      "description": "Optional Jinja2 template for the email body. If empty, the pipeline input is used. Available variables: input, temp_state, session_state, participant_data, participant_details.",
+      "description": "Optional Jinja2 template for the email body. If empty, the pipeline input is used. Available variables: input, node_inputs, temp_state, session_state, participant_data, participant_details, participant_schedules, input_message_id, input_message_url.",
       "title": "Body",
       "type": "string",
       "ui:widget": "expandable_text"
