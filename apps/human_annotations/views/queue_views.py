@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import IntegrityError
-from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery, Sum
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -46,13 +46,15 @@ class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
-        return {
+        ctx = {
             "active_tab": "annotation_queues",
             "title": "Annotation Queues",
-            "new_object_url": reverse("human_annotations:queue_new", args=[team_slug]),
             "table_url": reverse("human_annotations:queue_table", args=[team_slug]),
             "enable_search": True,
         }
+        if self.request.user.has_perm("human_annotations.add_annotationqueue"):
+            ctx["new_object_url"] = reverse("human_annotations:queue_new", args=[team_slug])
+        return ctx
 
 
 class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
@@ -62,7 +64,11 @@ class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationQueue.objects.filter(team=self.request.team).annotate(
+        qs = AnnotationQueue.objects.filter(team=self.request.team)
+        if not self.request.user.has_perm("human_annotations.add_annotationqueue"):
+            # Reviewers only see queues they are assigned to, or queues with no assignees.
+            qs = qs.filter(Q(assignees=self.request.user) | Q(assignees__isnull=True)).distinct()
+        return qs.annotate(
             _total_items=Count("items"),
             _reviews_done=Sum("items__review_count"),
         )
