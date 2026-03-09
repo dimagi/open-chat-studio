@@ -220,7 +220,9 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             return False
 
     def upload_file_to_remote(self, file: File):
-        from apps.assistants.sync import create_files_remote  # noqa: PLC0415
+        from apps.assistants.sync import (
+            create_files_remote,  # noqa: PLC0415  # Circular: assistants.sync imports index_managers at module level
+        )
 
         create_files_remote(self.client, files=[file])
 
@@ -366,7 +368,9 @@ class OpenAILocalIndexManager(LocalIndexManager):
     """
 
     def get_embedding_vector(self, content: str) -> Vector:
-        from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415
+        from langchain_openai import (
+            OpenAIEmbeddings,  # noqa: PLC0415  # langchain_openai is banned at module level by TID253 (slow import)
+        )
 
         embeddings = OpenAIEmbeddings(
             api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
@@ -376,7 +380,9 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 class GoogleLocalIndexManager(LocalIndexManager):
     def get_embedding_vector(self, content: str) -> Vector:
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings  # noqa: PLC0415
+        from langchain_google_genai import (
+            GoogleGenerativeAIEmbeddings,  # noqa: PLC0415  # langchain_google_genai is banned at module level by TID253 (slow import)
+        )
 
         embeddings = GoogleGenerativeAIEmbeddings(
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"

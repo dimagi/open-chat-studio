@@ -18,6 +18,7 @@ from apps.service_providers.llm_service.model_parameters import (
     GPT52Parameters,
     OpenAIReasoningParameters,
 )
+from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel, LlmProviderTypes
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
 
 
@@ -193,7 +194,6 @@ def get_default_translation_models_by_provider() -> dict:
     """
     Returns a dict mapping provider labels (e.g., "OpenAI") to their default translation model name.
     """
-    from apps.service_providers.models import LlmProviderTypes  # noqa: PLC0415
 
     defaults = {}
     for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items():
@@ -206,14 +206,12 @@ def get_default_translation_models_by_provider() -> dict:
 
 @transaction.atomic()
 def update_llm_provider_models():
-    from apps.service_providers.models import LlmProviderModel  # noqa: PLC0415
 
     _update_llm_provider_models(LlmProviderModel)
 
 
 @transaction.atomic()
 def update_embedding_provider_models():
-    from apps.service_providers.models import EmbeddingProviderModel  # noqa: PLC0415
 
     _update_embedding_provider_models(EmbeddingProviderModel)
 
@@ -290,7 +288,6 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
     If one does not exist, create a new custom model and add it to the mapping.
     Return the custom model (existing or new)
     """
-    from apps.service_providers.models import LlmProviderModel  # noqa: PLC0415
 
     id_key = (team_object.team_id,) + key
     custom_model = existing_custom_by_team.get(id_key)

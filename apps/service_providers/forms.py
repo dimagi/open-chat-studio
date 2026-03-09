@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
 from apps.service_providers.models import LlmProviderModel
+from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
 
 
@@ -287,7 +288,6 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     slack_installation_id = forms.CharField(widget=forms.HiddenInput())
 
     def get_slack_installation(self):
-        from apps.slack.models import SlackInstallation  # noqa: PLC0415
 
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()

@@ -28,7 +28,9 @@ def detangle_file_ids(file_ids: list[str]) -> list[str]:
 
 
 def extract_file_ids_from_ocs_citations(text: str) -> list[int]:
-    from apps.chat.agent.tools import OCS_CITATION_PATTERN  # noqa: PLC0415
+    from apps.chat.agent.tools import (
+        OCS_CITATION_PATTERN,  # noqa: PLC0415  # Circular: tools → llm_service → utils → tools
+    )
 
     file_ids = []
     for match in re.finditer(OCS_CITATION_PATTERN, text):
@@ -57,7 +59,10 @@ def populate_reference_section_from_citations(text: str, cited_files: list[File]
     [^2]: [file_456.pdf](http://example.com/file_456.pdf)
     ```
     """
-    from apps.chat.agent.tools import OCS_CITATION_PATTERN  # noqa: PLC0415
+
+    from apps.chat.agent.tools import (
+        OCS_CITATION_PATTERN,  # noqa: PLC0415  # Circular: tools → llm_service → utils → tools
+    )
 
     files = {file.id: file for file in cited_files}
     citation_pattern = re.compile(OCS_CITATION_PATTERN)
@@ -112,7 +117,9 @@ def remove_citations_from_text(text: str) -> str:
     # This is used as a cleanup step to prevent users from tricking the bot to generate citations.
     # While participants will not be able to download or really do anything with the citations, it will still reveal
     # file ids
-    from apps.chat.agent.tools import OCS_CITATION_PATTERN  # noqa: PLC0415
+    from apps.chat.agent.tools import (
+        OCS_CITATION_PATTERN,  # noqa: PLC0415  # Circular: tools → llm_service → utils → tools
+    )
 
     citation_pattern = re.compile(OCS_CITATION_PATTERN)
     return citation_pattern.sub("", text)

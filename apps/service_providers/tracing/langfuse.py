@@ -9,8 +9,10 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+from langfuse import Langfuse
 from langfuse._client.get_client import _create_client_from_instance
 from langfuse._client.resource_manager import LangfuseResourceManager
+from langfuse.api.client import FernLangfuse
 from langfuse.langchain import CallbackHandler
 
 from . import Tracer
@@ -19,8 +21,6 @@ from .const import SpanLevel
 
 if TYPE_CHECKING:
     from langchain_core.callbacks.base import BaseCallbackHandler
-    from langfuse import Langfuse
-    from langfuse.api.client import FernLangfuse
 
     from apps.experiments.models import ExperimentSession
 
@@ -30,8 +30,6 @@ logger = logging.getLogger("ocs.tracing.langfuse")
 
 def get_langfuse_api_client(config: dict) -> FernLangfuse:
     """Create a Langfuse management API client for reading trace data."""
-    from langfuse.api.client import FernLangfuse  # noqa: PLC0415
-
     return FernLangfuse(
         base_url=config["host"],
         username=config["public_key"],
@@ -183,8 +181,6 @@ class ClientManager:
         self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
-        from langfuse import Langfuse  # noqa: PLC0415
-
         public_key = config.get("public_key")
         with LangfuseResourceManager._lock:
             active_instances = LangfuseResourceManager._instances
