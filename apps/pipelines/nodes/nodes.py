@@ -288,7 +288,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         }
         # Only require collection_index_summaries variable if multiple indexes are selected
         if len(self.collection_index_ids) > 1:
-            context["collection_index_summaries"] = self.collection_index_ids
+            context["collection_index_summaries"] = [str(i) for i in self.collection_index_ids]
 
         try:
             known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
@@ -434,6 +434,8 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
         value = value or ""
+        if "{" in value:
+            return value  # template syntax — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
             try:
                 validate_email(email)

@@ -46,6 +46,8 @@ class TestSendEmailInputValidation:
             "test@example.com",
             "test@example.com,another@example.com",
             "test@example.com,another@example.com,yetanother@example.com",
+            "{participant_data.email}",  # single template
+            "{participant_data.email},{temp_state.cc_email}",  # multiple templates
         ],
     )
     def test_valid_recipient_list(self, recipient_list):
