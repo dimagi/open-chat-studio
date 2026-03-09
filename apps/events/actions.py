@@ -33,7 +33,7 @@ class LogAction(EventActionHandlerBase):
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import StaticTriggerType
+        from apps.events.models import StaticTriggerType  # noqa: PLC0415 - avoid circular import
 
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
@@ -41,7 +41,7 @@ class EndConversationAction(EventActionHandlerBase):
 
 class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import ScheduledMessage
+        from apps.events.models import ScheduledMessage  # noqa: PLC0415 - avoid circular import
 
         ScheduledMessage.objects.create(
             experiment=session.experiment, participant=session.participant, team=session.team, action=action
@@ -95,7 +95,8 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import Pipeline
+        from apps.chat.bots import PipelineBot  # noqa: PLC0415 - avoid circular import
+        from apps.pipelines.models import Pipeline  # noqa: PLC0415 - avoid circular import
 
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
@@ -132,8 +133,6 @@ class PipelineStartAction(EventActionHandlerBase):
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ) as span:
-            from apps.chat.bots import PipelineBot
-
             bot = PipelineBot(
                 session=session,
                 experiment=session.experiment_version,

@@ -26,6 +26,7 @@ from apps.files.models import File
 from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
 from apps.service_providers.speech_service import SynthesizedAudio
+from apps.slack.client import get_slack_client
 
 logger = logging.getLogger("ocs.messaging")
 
@@ -78,14 +79,14 @@ class TwilioService(MessagingService):
 
     @property
     def client(self) -> "Client":
-        from twilio.rest import Client
+        from twilio.rest import Client  # noqa: PLC0415 - lazy import for startup performance
 
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
-        import boto3
-        from botocore.client import Config
+        import boto3  # noqa: PLC0415 - lazy import for startup performance
+        from botocore.client import Config  # noqa: PLC0415 - lazy import for startup performance
 
         return boto3.client(
             "s3",
@@ -225,7 +226,7 @@ class TurnIOService(MessagingService):
 
     @property
     def client(self) -> "TurnClient":
-        from turn import TurnClient
+        from turn import TurnClient  # noqa: PLC0415 - lazy import for startup performance
 
         return TurnClient(token=self.auth_token)
 
@@ -357,8 +358,6 @@ class SlackService(MessagingService):
     @property
     def client(self) -> "WebClient":
         if not self._client:
-            from apps.slack.client import get_slack_client
-
             self._client = get_slack_client(self.slack_installation_id)
         return self._client
 
@@ -376,7 +375,7 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
-        from slack_sdk.errors import SlackApiError
+        from slack_sdk.errors import SlackApiError  # noqa: PLC0415 - lazy import for startup performance
 
         try:
             self.client.conversations_info(channel=channel_id)

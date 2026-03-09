@@ -3,7 +3,7 @@ import textwrap
 
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
-from apps.pipelines.nodes.nodes import CodeNode
+from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION, CodeNode
 from apps.pipelines.repository import InMemoryPipelineRepository
 
 PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
@@ -66,8 +66,6 @@ PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
 
 
 def get_python_node_coder_prompt(current_code: str, error: str) -> str:
-    from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION
-
     if current_code == DEFAULT_FUNCTION:
         current_code = ""
 

@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 import pytz
+from pydantic_core import PydanticUndefined
 from django.utils import timezone
 from langchain.tools import InjectedState
 from langchain_core.tools import InjectedToolCallId, StructuredTool
@@ -648,8 +649,6 @@ def _get_tool_schema_cls(tool_cls):
     Pydantic v2 stores field defaults in model_fields rather than as class attributes,
     so getattr(tool_cls, 'args_schema') doesn't reliably return the schema class.
     """
-    from pydantic_core import PydanticUndefined
-
     field_info = tool_cls.model_fields.get("args_schema")
     if field_info is None:
         return None

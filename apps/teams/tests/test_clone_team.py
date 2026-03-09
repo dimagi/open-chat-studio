@@ -3,6 +3,7 @@ from io import StringIO
 import pytest
 from allauth.account.models import EmailAddress
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluator
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
@@ -18,6 +19,8 @@ from apps.utils.factories.service_provider_factories import (
     TraceProviderFactory,
     VoiceProviderFactory,
 )
+from apps.teams.utils import current_team
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -25,8 +28,6 @@ from apps.utils.factories.user import UserFactory
 @pytest.fixture(scope="module")
 def source_team(django_db_blocker):
     """Create a source team with various related data."""
-    from apps.teams.utils import current_team
-    from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
     with django_db_blocker.unblock():
         # Clean up any leftover from previous runs
@@ -80,8 +81,6 @@ def source_team(django_db_blocker):
 @pytest.mark.django_db()
 def test_clone_team_nonexistent_source():
     """Test error when source team doesn't exist."""
-    from django.core.management.base import CommandError
-
     with pytest.raises(CommandError, match="does not exist"):
         call_command(
             "clone_team",

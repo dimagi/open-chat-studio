@@ -13,7 +13,7 @@ from apps.service_providers.llm_service.default_models import get_model_paramete
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.llm_service.retry import RATE_LIMIT_EXCEPTIONS
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
 
@@ -41,7 +41,6 @@ class LLMResponseMixin(BaseModel):
     )
 
     def get_llm_service(self) -> LlmService:
-        from apps.service_providers.models import LlmProvider
 
         try:
             provider = LlmProvider.objects.get(id=self.llm_provider_id)

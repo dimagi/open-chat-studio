@@ -5,12 +5,15 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 from field_audit import disable_audit
 
+from apps.assistants.models import OpenAiAssistant
 from apps.data_migrations.utils.migrations import (
     is_migration_applied,
     mark_migration_applied,
     run_once,
     update_migration_timestamp,
 )
+from apps.experiments.models import Experiment
+from apps.utils.deletion import get_related_pipelines_queryset
 
 
 def get_affected_teams_data(db_model) -> dict:
@@ -19,9 +22,6 @@ def get_affected_teams_data(db_model) -> dict:
     Returns a dict of the form:
         {team_id: {"chatbots": {name: url}, "pipelines": {name: url}, "assistants": {name: url}}}
     """
-    from apps.assistants.models import OpenAiAssistant
-    from apps.experiments.models import Experiment
-    from apps.utils.deletion import get_related_pipelines_queryset
 
     teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
 

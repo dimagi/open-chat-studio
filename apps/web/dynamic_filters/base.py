@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import Any, ClassVar, Literal
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
 from .datastructures import FilterParams
@@ -192,8 +192,6 @@ class StringColumnFilter(ColumnFilter):
         lookup: The Django lookup to use (e.g., 'icontains', 'istartswith'), or None for exact match
         value: The value to filter by
         """
-        from django.db.models import Q
-
         # Build Q object for OR logic
         q = Q()
 
@@ -210,8 +208,6 @@ class StringColumnFilter(ColumnFilter):
         return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-        from django.db.models import Q
-
         # For exclusion: exclude if it matches ANY column
         q = Q()
         for col in self.columns:
@@ -227,8 +223,6 @@ class StringColumnFilter(ColumnFilter):
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
         if values := self.values_list(value):
-            from django.db.models import Q
-
             # OR logic across multiple columns
             q = Q()
             for col in self.columns:
@@ -270,9 +264,9 @@ def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
     Imports known filter modules to ensure subclasses are registered
     regardless of import order.
     """
-    import apps.experiments.filters  # noqa: F401
-    import apps.ocs_notifications.filters  # noqa: F401
-    import apps.participants.filters  # noqa: F401
-    import apps.trace.filters  # noqa: F401
+    import apps.experiments.filters  # noqa: F401, PLC0415
+    import apps.ocs_notifications.filters  # noqa: F401, PLC0415
+    import apps.participants.filters  # noqa: F401, PLC0415
+    import apps.trace.filters  # noqa: F401, PLC0415
 
     return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}

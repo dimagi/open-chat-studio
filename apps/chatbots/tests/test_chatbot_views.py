@@ -1,4 +1,4 @@
-from datetime import UTC
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -478,8 +478,6 @@ def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
     recently-active one, causing the Last Activity column to appear blank even
     when real activity exists.
     """
-    from datetime import datetime
-
     team = team_with_users
     user = team.members.first()
     pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})

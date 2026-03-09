@@ -1,8 +1,9 @@
 from apps.audit.service import AuditService
 
+from .models import ModelWithSchemaField, TestSchema
+
 
 def test_serialize_schema_field():
-    from .models import ModelWithSchemaField, TestSchema
 
     model = ModelWithSchemaField(config=TestSchema(att1="value", att2=42, url_attr="http://example.com"))
 

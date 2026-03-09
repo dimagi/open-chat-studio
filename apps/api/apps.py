@@ -6,4 +6,4 @@ class APIConfig(AppConfig):
     label = "api"
 
     def ready(self):
-        from . import schema  # noqa
+        from . import schema  # noqa: F401

@@ -10,12 +10,14 @@ from typing import cast
 from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
+from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
@@ -33,6 +35,7 @@ from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
 from apps.teams.utils import current_team
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
@@ -175,7 +178,6 @@ def mark_evaluation_complete(results, evaluation_run_id):
         results: List of results from the group tasks (unused but required by chord)
         evaluation_run_id: ID of the evaluation run to mark complete
     """
-    from apps.evaluations.aggregation import compute_aggregates_for_run
 
     try:
         evaluation_run = EvaluationRun.objects.get(id=evaluation_run_id)
@@ -658,7 +660,6 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
 
 
 def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
-    from apps.evaluations.aggregation import compute_aggregates_for_run
 
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
@@ -802,9 +803,6 @@ def create_dataset_from_sessions_task(
         filter_query: Serialized filter parameters as query string (or None)
         timezone: Timezone for filtering
     """
-    from django.http import QueryDict
-
-    from apps.web.dynamic_filters.datastructures import FilterParams
 
     progress_recorder = ProgressRecorder(self)
     dataset = None

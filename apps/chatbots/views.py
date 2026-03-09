@@ -34,7 +34,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.forms import ExperimentVersionForm
+from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -661,7 +661,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-    from apps.experiments.forms import ExperimentInvitationForm
 
     form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
     if request.method == "POST":

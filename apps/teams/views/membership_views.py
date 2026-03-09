@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
+from apps.api.models import UserAPIKey
 from apps.teams.decorators import login_and_team_required
 from apps.teams.exceptions import TeamPermissionError
 from apps.teams.forms import MembershipForm
@@ -94,7 +95,5 @@ def remove_team_membership(request, team_slug, membership_id):
 
 @transaction.atomic
 def remove_user_from_team(membership):
-    from apps.api.models import UserAPIKey
-
     membership.delete()
     UserAPIKey.objects.filter(user=membership.user, team=membership.team).delete()

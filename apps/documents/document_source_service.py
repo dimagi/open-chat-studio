@@ -206,7 +206,7 @@ class DocumentSourceManager:
 
     def _index_files(self, file_ids: list[int]):
         """Trigger indexing for a collection file"""
-        from apps.documents.tasks import index_collection_files_task
+        from apps.documents.tasks import index_collection_files_task  # noqa: PLC0415 - avoid circular import
 
         index_collection_files_task.delay(file_ids)
 

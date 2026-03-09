@@ -30,7 +30,7 @@ logger = logging.getLogger("ocs.tracing.langfuse")
 
 def get_langfuse_api_client(config: dict) -> FernLangfuse:
     """Create a Langfuse management API client for reading trace data."""
-    from langfuse.api.client import FernLangfuse
+    from langfuse.api.client import FernLangfuse  # noqa: PLC0415 - lazy import for startup performance
 
     return FernLangfuse(
         base_url=config["host"],
@@ -183,7 +183,7 @@ class ClientManager:
         self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
-        from langfuse import Langfuse
+        from langfuse import Langfuse  # noqa: PLC0415 - lazy import for startup performance
 
         public_key = config.get("public_key")
         with LangfuseResourceManager._lock:
