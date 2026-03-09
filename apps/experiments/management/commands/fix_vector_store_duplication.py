@@ -5,6 +5,7 @@ from django.db import transaction
 
 from apps.assistants.models import OpenAiAssistant
 from apps.assistants.sync import push_assistant_to_openai
+from apps.teams.models import Team
 from apps.teams.utils import current_team
 
 
@@ -14,8 +15,6 @@ class Command(BaseCommand):
         parser.add_argument("--assistant", help="A specific assistant id", required=False)
 
     def handle(self, team, assistant, **options):
-        from apps.teams.models import Team  # noqa: PLC0415
-
         assistants = []
         if assistant:
             assistants = [OpenAiAssistant.objects.get(assistant_id=assistant)]

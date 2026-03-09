@@ -7,6 +7,7 @@ from django.urls import reverse
 from pydantic import TypeAdapter
 
 from apps.evaluations.field_definitions import FieldDefinition
+from apps.human_annotations.aggregation import compute_aggregates_for_queue
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
@@ -213,8 +214,6 @@ class Annotation(BaseTeamModel):
             item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
-
-        from apps.human_annotations.aggregation import compute_aggregates_for_queue  # noqa: PLC0415
 
         try:
             compute_aggregates_for_queue(item.queue)
