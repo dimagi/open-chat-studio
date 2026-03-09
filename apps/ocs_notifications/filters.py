@@ -55,6 +55,7 @@ class SeverityLevelFilter(ChoiceColumnFilter):
 class UserNotificationFilter(MultiColumnFilter):
     """Filter for user notifications using multiple column filters."""
 
+    slug: ClassVar[str] = "notification"
     date_range_column: ClassVar[str] = "notification_date"
     filters: ClassVar[Sequence] = [
         ReadFilter(),
