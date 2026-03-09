@@ -41,7 +41,7 @@ from ..generics.help import render_help_with_link
 from ..utils.prompt import PromptVars
 
 
-class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class PipelineHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     """View for listing event pipelines."""
 
     permission_required = "pipelines.view_pipeline"
@@ -64,7 +64,7 @@ class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         }
 
 
-class PipelineTableView(SingleTableView, PermissionRequiredMixin):
+class PipelineTableView(PermissionRequiredMixin, SingleTableView):
     """Displays a table of event pipelines for the current team."""
 
     permission_required = "pipelines.view_pipeline"
@@ -78,7 +78,7 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
         ).order_by("name")
 
 
-class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class CreatePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.add_pipeline"
     template_name = "pipelines/pipeline_builder.html"
 
@@ -87,7 +87,7 @@ class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
 
 
-class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.change_pipeline"
     template_name = "pipelines/pipeline_builder.html"
 
@@ -116,7 +116,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         }
 
 
-class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "pipelines.delete_pipeline"
 
     def delete(self, request, team_slug: str, pk: int):

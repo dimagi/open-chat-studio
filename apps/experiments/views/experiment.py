@@ -86,7 +86,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
 
-class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = Experiment
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
