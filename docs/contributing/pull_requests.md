@@ -46,8 +46,8 @@ Regardless of automated tests, ensure the quality of your changes:
 ## Documentation Policy
 
 * User-facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/).
-* Link the docs PR to the code PR.
-* Merge the docs PR after the code PR.
+* Check the **"This PR requires docs/changelog update"** checkbox in the PR description to trigger automated changelog and docs handling: when the PR is merged, automation will analyse the changes and open a PR in the docs repository on your behalf.
+* If you prefer to write the docs PR yourself, link it to the code PR and merge it after the code PR.
 
 See the [user docs guide](../developer_guides/user_docs.md) for more detail.
 

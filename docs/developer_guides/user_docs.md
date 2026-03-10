@@ -6,7 +6,9 @@ In principle, all user-facing changes should be accompanied by documentation upd
 
 ## Changelog process
 
-Ideally, when creating a PR, also create a PR in the [docs repo][docs_repo] with any documentation updates and a changelog entry and then add a link to the docs PR in your code changes PR.
+The easiest way to trigger a docs/changelog update is to check the **"This PR requires docs/changelog update"** checkbox in the PR description. When the PR is merged, automation will analyse the changes and open a PR in the [docs repo][docs_repo] with a changelog entry on your behalf. You can add notes in the PR description to help the automation write accurate changelog and docs content.
+
+Alternatively, you can create the docs PR yourself: open a PR in the [docs repo][docs_repo] with any documentation updates and a changelog entry, and then link it from the code PR.
 
 Changelog entries should be brief but should link to any relevant documentation for further details.
 
