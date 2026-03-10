@@ -1458,7 +1458,7 @@ export function JinjaWidget(props: WidgetParams) {
       <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
         {rows < 2 ? (
           <input
-            className="input input-bordered input-sm w-full font-mono"
+            className="input input-bordered input-sm w-full"
             name={props.name}
             value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
             onChange={(e) => onChangeCallback(e.target.value)}
@@ -1467,7 +1467,7 @@ export function JinjaWidget(props: WidgetParams) {
         ) : (
           <div className="relative w-full">
             <textarea
-              className="textarea textarea-bordered resize-none textarea-sm w-full font-mono"
+              className="textarea textarea-bordered resize-none textarea-sm w-full"
               readOnly={true}
               rows={rows}
               value={props.paramValue}
