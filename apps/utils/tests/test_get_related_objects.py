@@ -22,7 +22,8 @@ from apps.utils.deletion import get_related_m2m_objects
     ],
 )
 def test_get_related_objects(source, exclude, expected):
-    from apps.utils.tests.models import Bot, Tool  # noqa: PLC0415
+    # inline import to avoid importing before app initialization
+    from apps.utils.tests.models import Bot, Tool  # noqa: PLC0415  # avoid circular import
 
     if source:
         source_model = Bot if source and source[0][0] == "b" else Tool

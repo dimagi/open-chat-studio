@@ -10,7 +10,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.base import PipelineRouterNode
+from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState
 from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 from apps.service_providers.llm_service.retry import get_retry_policy
 
@@ -24,7 +24,7 @@ class Node(pydantic.BaseModel):
 
     @property
     def pipeline_node_class(self):
-        from apps.pipelines.nodes import nodes  # noqa: PLC0415
+        from apps.pipelines.nodes import nodes  # noqa: PLC0415  # avoid circular import
 
         return getattr(nodes, self.type)
 
@@ -121,7 +121,6 @@ class PipelineGraph(pydantic.BaseModel):
         return cls(nodes=node_data, edges=edge_data)
 
     def build_runnable(self) -> CompiledStateGraph:
-        from apps.pipelines.nodes.base import PipelineState  # noqa: PLC0415
 
         if not self.nodes:
             raise PipelineBuildError("There are no nodes in the graph")

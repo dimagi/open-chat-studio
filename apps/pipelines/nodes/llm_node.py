@@ -15,6 +15,7 @@ from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
     format_multimodal_input,
@@ -157,8 +158,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
 
 
 def _get_search_tool(node):
-    from apps.chat.agent.tools import SearchCollectionByIdTool  # noqa: PLC0415
-    from apps.service_providers.llm_service.main import OpenAIBuiltinTool  # noqa: PLC0415
+    from apps.chat.agent.tools import SearchCollectionByIdTool  # noqa: PLC0415  # avoid circular import
 
     if not node.collection_index_ids:
         return None

@@ -21,6 +21,7 @@ from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
+from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
@@ -273,7 +274,7 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
 
 
 def _pipeline_node_schemas():
-    from apps.pipelines.nodes import nodes  # noqa: PLC0415
+    from apps.pipelines.nodes import nodes  # noqa: PLC0415  # avoid circular import
 
     schemas = []
 
@@ -290,7 +291,6 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-    from apps.custom_actions.schema_utils import resolve_references  # noqa: PLC0415
 
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)

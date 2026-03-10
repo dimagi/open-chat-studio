@@ -3,6 +3,9 @@
 import logging
 from contextvars import ContextVar
 
+from apps.audit.transaction import get_audit_transaction_id
+from apps.teams.utils import get_current_team
+
 _celery_task_id: ContextVar[str | None] = ContextVar("celery_task_id", default=None)
 _celery_task_name: ContextVar[str | None] = ContextVar("celery_task_name", default=None)
 
@@ -11,8 +14,6 @@ class ContextVarFilter(logging.Filter):
     """Log filter that adds team and request_id from context vars."""
 
     def filter(self, record):
-        from apps.audit.transaction import get_audit_transaction_id  # noqa: PLC0415
-        from apps.teams.utils import get_current_team  # noqa: PLC0415
 
         team = get_current_team()
         record.team = team.slug if team else None

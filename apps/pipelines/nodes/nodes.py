@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from io import BytesIO
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
@@ -56,6 +57,7 @@ from apps.service_providers.llm_service.history_managers import AssistantPipelin
 from apps.service_providers.llm_service.prompt_context import (
     PipelineParticipantDataProxy,
     PromptTemplateContext,
+    SafeAccessWrapper,
 )
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
@@ -578,7 +580,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             response_format=self._create_router_schema(),
         )
 
-        from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: PLC0415
+        from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: PLC0415  # TID253: heavy lib
 
         is_default_keyword = False
         try:
@@ -629,7 +631,6 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     route_key: str = Field(..., description="The key in the data to use for routing")
 
     def _process_conditional(self, context: "NodeContext"):
-        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper  # noqa: PLC0415
 
         match self.data_source:
             case self.DataSource.participant_data:
@@ -912,7 +913,6 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 content: The file content as bytes
                 content_type: Optional MIME type. Auto-detected from filename if not provided.
             """
-            from io import BytesIO  # noqa: PLC0415
 
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
