@@ -1176,6 +1176,7 @@ export function HistoryModeWidget(props: WidgetParams) {
 
 function HelpBubble({ helpText }: { helpText: string }) {
   if (!helpText) return <></>;
+  const displayText = helpText.replace(/\{\{[^}]*\}\}/g, (m) => m.replace(/ /g, '\u00A0'));
   return (
     <div className="dropdown dropdown-right dropdown-hover">
       <div role="button" className="btn btn-circle btn-ghost btn-xs text-info" aria-label="Help">
@@ -1183,7 +1184,7 @@ function HelpBubble({ helpText }: { helpText: string }) {
       </div>
       <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
         <div tabIndex={0} className="card-body font-medium text-wrap normal-case">
-          <p>{helpText}</p>
+          <p>{displayText}</p>
         </div>
       </div>
     </div>
