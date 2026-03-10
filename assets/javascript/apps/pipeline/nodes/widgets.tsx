@@ -1475,7 +1475,10 @@ export function JinjaWidget(props: WidgetParams) {
             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
           </form>
           <div className="grow h-full w-full flex flex-col">
-            <h4 className="mb-4 font-bold text-lg capitalize">{props.label}</h4>
+            <div className="flex items-center gap-1 mb-4">
+              <h4 className="font-bold text-lg capitalize">{props.label}</h4>
+              <HelpBubble helpText={props.helpText} />
+            </div>
             <JinjaEditor
               value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
               onChange={onChangeCallback}
