@@ -55,8 +55,6 @@ def _parse_datetime(datetime_str):
 
 def _load_checkpoint(filepath: str) -> tuple[set, str | None]:
     """Load checkpoint state. Returns (migrated_ids, resume_from_timestamp)."""
-    from django.core.management.base import CommandError  # noqa: PLC0415
-
     if not os.path.exists(filepath):
         return set(), None
     try:
@@ -78,8 +76,8 @@ def _save_checkpoint(filepath: str, migrated_ids: set, resume_from_timestamp: st
 
 def _transform_trace_to_ingestion_batch(source_trace):
     """Transform a fetched TraceWithFullDetails into ingestion events for the batch endpoint."""
-    from langfuse.api.resources.commons.types import Usage  # noqa: PLC0415
-    from langfuse.api.resources.ingestion.types import (  # noqa: PLC0415
+    from langfuse.api.resources.commons.types import Usage  # noqa: PLC0415  # heavy lib, optional dependency
+    from langfuse.api.resources.ingestion.types import (  # noqa: PLC0415  # heavy lib, optional dependency
         CreateEventBody,
         CreateGenerationBody,
         CreateSpanBody,
@@ -207,7 +205,10 @@ def _transform_trace_to_ingestion_batch(source_trace):
             continue
 
         try:
-            from langfuse.api.resources.ingestion.types import IngestionEvent_ScoreCreate, ScoreBody  # noqa: PLC0415
+            from langfuse.api.resources.ingestion.types import (  # noqa: PLC0415  # heavy lib, optional dependency
+                IngestionEvent_ScoreCreate,
+                ScoreBody,
+            )
 
             score_body = ScoreBody(
                 id=str(uuid.uuid4()),
@@ -361,7 +362,7 @@ class Command(BaseCommand):
         dry_run=False,
         checkpoint_file=".migration_checkpoint.json",
     ):
-        from langfuse import Langfuse  # noqa: PLC0415
+        from langfuse import Langfuse  # noqa: PLC0415  # heavy lib, optional dependency
 
         try:
             langfuse_source = Langfuse(
