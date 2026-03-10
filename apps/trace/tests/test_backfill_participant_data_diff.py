@@ -50,7 +50,6 @@ class TestBackfillParticipantDataDiff:
             "backfill_participant_data_diff",
             team_slug,
             since_date,
-            force=True,
             **kwargs,
         )
 
@@ -183,7 +182,6 @@ class TestBackfillParticipantDataDiff:
             "backfill_participant_data_diff",
             team.slug,
             "2020-01-01",
-            force=True,
             dry_run=True,
         )
 
