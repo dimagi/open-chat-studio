@@ -12,6 +12,10 @@ from apps.trace.models import Trace
 
 
 class Command(IdempotentCommand):
+    # NOTE: Backfilled diffs are an approximation. Real-time diffs capture exactly what changed
+    # during a single trace's execution (before vs after). Backfilled diffs compare this trace's
+    # participant_data snapshot to the next trace's snapshot, which may include changes that were
+    # manually made by admins
     help = "Backfill participant_data_diff for traces by comparing participant data between consecutive traces"
     migration_name = "backfill_participant_data_diff_2026_03_09"
     atomic = False

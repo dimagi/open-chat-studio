@@ -54,8 +54,14 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
     csv_in_memory = io.StringIO()
     writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
+    # NOTE: This export is trace-driven rather than message-driven. Each trace produces two rows
+    # (input + output). Messages not associated with a trace will not appear in the export.
     traces = (
-        Trace.objects.filter(session__in=sessions_queryset)
+        Trace.objects.filter(
+            session__in=sessions_queryset,
+            input_message__isnull=False,
+            output_message__isnull=False,
+        )
         .select_related(
             "input_message",
             "output_message",
@@ -104,7 +110,7 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
 
     for trace in traces:
         start_data, end_data = _get_participant_data_for_trace(trace)
-        trace_id = _get_trace_id_for_export(trace.input_message)
+        trace_id = _get_trace_id_for_export(trace.input_message)  # safe: filtered out NULLs above
         session = trace.session
 
         for message, participant_data in [

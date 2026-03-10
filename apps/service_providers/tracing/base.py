@@ -155,7 +155,7 @@ class Tracer(ABC):
         pass
 
     @abstractmethod
-    def set_participant_data_diff(self, diff: list) -> None:
+    def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         pass
 
 

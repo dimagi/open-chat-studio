@@ -195,7 +195,7 @@ class OCSTracer(Tracer):
         if self.trace_record:
             self.trace_record.input_message_id = input_message_id
 
-    def set_participant_data_diff(self, diff: list) -> None:
+    def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         if self.trace_record:
             self.trace_record.participant_data_diff = diff
 
