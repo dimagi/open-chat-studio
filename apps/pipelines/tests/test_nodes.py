@@ -6,7 +6,9 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import ValidationError
 
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
+from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
 from apps.pipelines.nodes.mixins import (
     SummarizeHistoryMiddleware,
@@ -19,8 +21,10 @@ from apps.pipelines.nodes.nodes import (
     SendEmail,
     StructuredDataSchemaValidatorMixin,
 )
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
 
 
@@ -46,6 +50,8 @@ class TestSendEmailInputValidation:
             "test@example.com",
             "test@example.com,another@example.com",
             "test@example.com,another@example.com,yetanother@example.com",
+            "{{ participant_data.email }}",  # single template
+            "{{ participant_data.email }},{{ temp_state.cc_email }}",  # multiple templates
         ],
     )
     def test_valid_recipient_list(self, recipient_list):
@@ -66,6 +72,23 @@ class TestSendEmailInputValidation:
     def test_invalid_recipient_list(self, recipient_list):
         with pytest.raises(ValidationError, match="Invalid list of emails addresses"):
             SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")
+
+    def test_body_field_defaults_to_empty(self):
+        model = SendEmail(
+            node_id="test", django_node=None, name="email", recipient_list="test@example.com", subject="Hello"
+        )
+        assert model.body == ""
+
+    def test_body_field_accepts_template(self):
+        model = SendEmail(
+            node_id="test",
+            django_node=None,
+            name="email",
+            recipient_list="test@example.com",
+            subject="Hello",
+            body="Dear {{participant_data.name}}, your input was: {{input}}",
+        )
+        assert "participant_data.name" in model.body
 
 
 def test_optional_int_type():
@@ -449,3 +472,129 @@ class TestLLMResponseWithPromptValidation:
                 prompt="You are a helpful assistant.",
                 collection_index_ids=[collection1.id, collection2.id],
             )
+
+
+@pytest.mark.django_db()
+class TestSendEmailDynamicRendering:
+    @pytest.fixture()
+    def experiment_session(self):
+        return ExperimentSessionFactory.create()
+
+    @pytest.fixture()
+    def participant(self, experiment_session):
+        # Ensures experiment_session.participant is set (required by ORMRepository).
+        # ExperimentSessionFactory already creates a participant — reuse it.
+        return experiment_session.participant
+
+    def _make_state(self, experiment_session, participant_data=None, temp_state=None):
+        return PipelineState(
+            experiment_session=experiment_session,
+            messages=["hello"],
+            temp_state=temp_state or {},
+            outputs={},
+            participant_data=participant_data or {},
+        )
+
+    def _make_node(self, recipient_list, subject, body=""):
+        return SendEmail(
+            node_id="email-1",
+            django_node=None,
+            name="email",
+            recipient_list=recipient_list,
+            subject=subject,
+            body=body,
+        )
+
+    def _run_node(self, node, state, experiment_session):
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
+        with patch("apps.pipelines.nodes.nodes.send_email_from_pipeline") as mock_task:
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+            return mock_task
+
+    def test_static_email_still_works(self, experiment_session, participant):
+        """Existing behaviour: static recipient/subject, body from input."""
+        node = self._make_node("ops@example.com", "Weekly Report")
+        state = self._make_state(experiment_session)
+        mock_task = self._run_node(node, state, experiment_session)
+        mock_task.delay.assert_called_once_with(
+            recipient_list=["ops@example.com"],
+            subject="Weekly Report",
+            message="hello",
+        )
+
+    def test_dynamic_subject_from_participant_data(self, experiment_session, participant):
+        node = self._make_node(
+            recipient_list="ops@example.com",
+            subject="Hello {{ participant_data.name }}",
+        )
+        state = self._make_state(experiment_session, participant_data={"name": "Alice"})
+        mock_task = self._run_node(node, state, experiment_session)
+        mock_task.delay.assert_called_once_with(
+            recipient_list=["ops@example.com"],
+            subject="Hello Alice",
+            message="hello",
+        )
+
+    def test_dynamic_recipient_from_temp_state(self, experiment_session, participant):
+        node = self._make_node(
+            recipient_list="{{ temp_state.email_to }}",
+            subject="Notification",
+        )
+        state = self._make_state(experiment_session, temp_state={"email_to": "bob@example.com"})
+        mock_task = self._run_node(node, state, experiment_session)
+        mock_task.delay.assert_called_once_with(
+            recipient_list=["bob@example.com"],
+            subject="Notification",
+            message="hello",
+        )
+
+    def test_invalid_email_after_rendering_raises_error(self, experiment_session, participant):
+        node = self._make_node(
+            recipient_list="{{ temp_state.bad_email }}",
+            subject="Hi",
+        )
+        state = self._make_state(experiment_session, temp_state={"bad_email": "not-an-email"})
+        config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
+        with pytest.raises(PipelineNodeRunError, match="Invalid email address"):
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+
+    def test_body_template_renders(self, experiment_session, participant):
+        node = self._make_node(
+            recipient_list="ops@example.com",
+            subject="Report",
+            body="Input was: {{input}}. Name: {{participant_data.name}}",
+        )
+        state = self._make_state(experiment_session, participant_data={"name": "Carol"})
+        mock_task = self._run_node(node, state, experiment_session)
+        mock_task.delay.assert_called_once_with(
+            recipient_list=["ops@example.com"],
+            subject="Report",
+            message="Input was: hello. Name: Carol",
+        )
+
+    def test_empty_body_defaults_to_input(self, experiment_session, participant):
+        node = self._make_node("ops@example.com", "Report", body="")
+        state = self._make_state(experiment_session)
+        mock_task = self._run_node(node, state, experiment_session)
+        mock_task.delay.assert_called_once_with(
+            recipient_list=["ops@example.com"],
+            subject="Report",
+            message="hello",
+        )
+
+    def test_recipient_split_filter(self, experiment_session, participant):
+        # Tests the custom split filter: semicolon-delimited string → multiple recipients
+        node = self._make_node(
+            recipient_list="{{ participant_data.emails | split(';') | join(',') }}",
+            subject="Hi",
+        )
+        state = self._make_state(
+            experiment_session,
+            participant_data={"emails": "alice@example.com;bob@example.com"},
+        )
+        mock_task = self._run_node(node, state, experiment_session)
+        mock_task.delay.assert_called_once_with(
+            recipient_list=["alice@example.com", "bob@example.com"],
+            subject="Hi",
+            message="hello",
+        )
