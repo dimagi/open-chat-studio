@@ -40,7 +40,7 @@ class Trace(models.Model):
         default=dict, blank=True, help_text="Snapshot of participant data at the time of the trace"
     )
     participant_data_diff = SanitizedJSONField(
-        default=list, blank=True, help_text="Diff of participant data changes during this trace"
+        default=list, null=True, blank=True, help_text="Diff of participant data changes during this trace"
     )
     session_state = SanitizedJSONField(
         default=dict, blank=True, help_text="Snapshot of session state at the time of the trace"
