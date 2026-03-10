@@ -76,6 +76,9 @@ class Command(BaseCommand):
                 team=self.team,
                 timestamp__gte=self.since_datetime,
             )
+            .filter(
+                Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[]),
+            )
             .exclude(
                 session__isnull=True,
             )

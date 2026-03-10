@@ -193,6 +193,22 @@ class TestBackfillParticipantDataDiff:
         output = capsys.readouterr().err
         assert "not found" in output
 
+    def test_does_not_overwrite_existing_diff(self, team, experiment, participant):
+        """Traces with an existing participant_data_diff should not be overwritten."""
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team, participant=participant)
+
+        existing_diff = [["change", "name", ["Original", "Diff"]]]
+        trace1 = _make_trace(
+            session, {"name": "Alice"}, timestamp_offset_minutes=0, participant_data_diff=existing_diff
+        )
+        _make_trace(session, {"name": "Bob"}, timestamp_offset_minutes=1)
+
+        self._call_command(team.slug)
+
+        trace1.refresh_from_db()
+        # The existing diff should be preserved, not overwritten with the backfilled one
+        assert trace1.participant_data_diff == existing_diff
+
     def test_dictdiffer_format(self, team, experiment, participant):
         """Verify the diff format matches what dictdiffer produces."""
         session = ExperimentSessionFactory.create(experiment=experiment, team=team, participant=participant)
