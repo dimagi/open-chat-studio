@@ -930,9 +930,9 @@ def test_reviewer_queue_table_only_shows_assigned_queues(reviewer_client, review
     url = reverse("human_annotations:queue_table", args=[team_with_users.slug])
     response = reviewer_client.get(url)
     assert response.status_code == 200
-    content = response.content.decode()
-    assert assigned_queue.name in content
-    assert unassigned_queue.name not in content
+    queues = response.context["object_list"]
+    assert queues.filter(pk=assigned_queue.pk).exists()
+    assert not queues.filter(pk=unassigned_queue.pk).exists()
 
 
 @pytest.mark.django_db()
@@ -944,7 +944,7 @@ def test_reviewer_queue_table_hides_unassigned_queues(reviewer_client, team_with
     url = reverse("human_annotations:queue_table", args=[team_with_users.slug])
     response = reviewer_client.get(url)
     assert response.status_code == 200
-    assert open_queue.name not in response.content.decode()
+    assert not response.context["object_list"].filter(pk=open_queue.pk).exists()
 
 
 @pytest.mark.django_db()
