@@ -23,7 +23,7 @@ logger = logging.getLogger("ocs.notifications")
 
 @shared_task
 def send_notification_email_async(user_ids, notification_event_id):
-    from apps.users.models import CustomUser  # noqa: PLC0415
+    from apps.users.models import CustomUser  # noqa: PLC0415  # avoid circular import
 
     try:
         users = CustomUser.objects.filter(id__in=user_ids)
