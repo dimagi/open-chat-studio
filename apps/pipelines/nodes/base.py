@@ -425,6 +425,7 @@ class Widgets(StrEnum):
     key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
     voice_widget = "voice_widget"
+    jinja_template = "jinja_template"
 
 
 class OptionsSource(StrEnum):
@@ -439,6 +440,7 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
+    jinja_email_node = "jinja_email_node"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 

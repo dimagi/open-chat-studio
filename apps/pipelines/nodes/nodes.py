@@ -438,9 +438,13 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
             "Supports Jinja2 templates, e.g. {{ participant_data.email }}. "
             "Use {{ participant_data.emails | join(',') }} for a list, "
             "or {{ participant_data.emails | split(';') | join(',') }} for a delimited string."
-        )
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
     )
-    subject: str = Field(description="Email subject. Supports Jinja2 templates, e.g. {{ participant_data.name }}")
+    subject: str = Field(
+        description="Email subject. Supports Jinja2 templates, e.g. {{ participant_data.name }}",
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
+    )
     body: str = Field(
         default="",
         description=(
@@ -450,7 +454,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
             "participant_data, participant_details, participant_schedules, "
             "input_message_id, input_message_url."
         ),
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
     )
 
     @field_validator("recipient_list", mode="before")
