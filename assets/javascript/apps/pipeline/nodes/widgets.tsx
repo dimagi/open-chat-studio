@@ -90,7 +90,7 @@ function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input w-full"
+        className="input w-full nodrag"
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
@@ -122,7 +122,7 @@ function NodeNameWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input w-full"
+        className="input w-full nodrag"
         name={props.name}
         onChange={handleInputChange}
         value={inputValue}
@@ -137,7 +137,7 @@ function NodeNameWidget(props: WidgetParams) {
 function FloatWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input w-full"
+      className="input w-full nodrag"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -159,7 +159,7 @@ function RangeWidget(props: WidgetParams) {
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input w-full input-sm"
+      className="input w-full input-sm nodrag"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -215,7 +215,7 @@ function SelectWidget(props: WidgetParams) {
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
+        className="select appearance-none w-full nodrag"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -377,7 +377,7 @@ export function CodeWidget(props: WidgetParams) {
       <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
         <div className="relative w-full">
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
+            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y nodrag"
             readOnly={true}
             rows={3}
             wrap="off"
@@ -508,7 +508,7 @@ function GenerateCodeSection({
       {showGenerate && (
         <div className={"my-2"}>
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
             rows={2}
             wrap="off"
             placeholder="Describe what you want the Python Node to do or what issue you are facing"
@@ -582,7 +582,7 @@ export function TextModal(
             {humanName}
           </h4>
           <textarea
-            className="textarea textarea-bordered textarea-lg w-full grow resize-none"
+            className="textarea textarea-bordered textarea-lg w-full grow resize-none nodrag"
             name={name}
             onChange={onChange}
             value={value}
@@ -613,7 +613,7 @@ export function ExpandableTextWidget(props: WidgetParams) {
   return (
     <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
       <textarea
-        className="textarea textarea-bordered resize-none textarea-sm w-full"
+        className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
         rows={3}
         name={props.name}
         onChange={props.updateParamValue}
@@ -926,7 +926,7 @@ export function LlmWidget(props: WidgetParams) {
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
-          className="select appearance-none w-full"
+          className="select appearance-none w-full nodrag"
           name={props.name}
           onChange={updateParamValue}
           value={value}
@@ -1067,7 +1067,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
             <div className="w-64 relative">
               <input
                 type="text"
-                className="input w-full pr-8"
+                className="input w-full pr-8 nodrag"
                 value={displayValue}
                 onChange={handleInputChange}
                 onClick={handleInputClick}
@@ -1153,7 +1153,7 @@ export function HistoryModeWidget(props: WidgetParams) {
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
-          className="select appearance-none join-item w-full"
+          className="select appearance-none join-item w-full nodrag"
           name="history_mode"
           onChange={(e) => {
             setHistoryMode(e.target.value);
@@ -1358,7 +1358,7 @@ export function TextEditorWidget(props: WidgetParams) {
         inputError={props.inputError}
       >
         <div className="relative w-full">
-          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
+          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
             readOnly={true}
             rows={3}
             value={props.paramValue}
@@ -1467,7 +1467,7 @@ export function JinjaWidget(props: WidgetParams) {
         ) : (
           <div className="relative w-full">
             <textarea
-              className="textarea textarea-bordered resize-none textarea-sm w-full"
+              className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
               readOnly={true}
               rows={rows}
               value={props.paramValue}
@@ -1530,7 +1530,7 @@ export function VoiceWidget(props: WidgetParams) {
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
+        className="select appearance-none w-full nodrag"
         name={props.name}
         onChange={updateParamValue}
         value={syntheticVoiceId}
