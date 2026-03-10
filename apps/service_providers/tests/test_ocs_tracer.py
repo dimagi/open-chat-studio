@@ -213,3 +213,23 @@ class TestOCSTracerNotifications:
         assert tracer.error_notification_config is None
         assert tracer.error_detected is False
         assert tracer.error_message == ""
+
+
+class TestSetParticipantDataDiff:
+    def test_set_participant_data_diff_stores_diff_on_trace_record(self):
+        experiment = Mock()
+        tracer = OCSTracer(experiment=experiment, team_id=1)
+        tracer.trace_record = Mock()
+
+        diff = [["change", "plan", ["free", "pro"]]]
+        tracer.set_participant_data_diff(diff)
+
+        assert tracer.trace_record.participant_data_diff == diff
+
+    def test_set_participant_data_diff_noop_when_no_trace_record(self):
+        experiment = Mock()
+        tracer = OCSTracer(experiment=experiment, team_id=1)
+        tracer.trace_record = None
+
+        # Should not raise
+        tracer.set_participant_data_diff([["add", "", [["key", "val"]]]])
