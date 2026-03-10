@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from "axios";
+import Cookies from "js-cookie";
 import { PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
@@ -74,6 +75,9 @@ class ApiClient {
   private createClient(): AxiosInstance {
     return axios.create({
       baseURL: `/a/${this.team}`,
+      headers: {
+        "X-CSRFToken": Cookies.get("csrftoken") ?? "",
+      },
     });
   }
 
