@@ -225,7 +225,7 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
   const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
   const readOnly = usePipelineStore((state) => state.readOnly);
 
-  return getInputWidget(param, getNodeFieldError, readOnly, undefined, undefined, false);
+  return getInputWidget(param, getNodeFieldError, readOnly);
 }
 
 /**
@@ -236,9 +236,6 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
  * Callers that render widgets for a sub-schema (e.g. ModelParametersWidget)
  * should supply an `onHide` that writes to the correct nested path.
  *
- * Set `showHelpText` to false to suppress field descriptions (e.g. in the
- * compact node canvas view where space is limited).
- *
  * @returns The input widget for the specified parameter type.
  */
 export const getInputWidget = (
@@ -247,7 +244,6 @@ export const getInputWidget = (
   readOnly: boolean,
   onHide?: () => void,
   onShow?: () => void,
-  showHelpText = true,
 ) => {
   if (params.name == "llm_model" || params.name == "max_token_limit") {
     /*
@@ -296,7 +292,7 @@ export const getInputWidget = (
         nodeId={params.id}
         name={params.name}
         label={widgetSchema.title || params.name.replace(/_/g, " ")}
-        helpText={showHelpText ? (widgetSchema.description || "") : ""}
+        helpText={widgetSchema.description || ""}
         paramValue={paramValue ?? ""}
         inputError={fieldError}
         updateParamValue={params.updateParamValue}
