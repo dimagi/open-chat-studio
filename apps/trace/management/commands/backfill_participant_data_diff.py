@@ -1,11 +1,11 @@
 from datetime import datetime
 
 import dictdiffer
+from django.core.management.base import BaseCommand
 from django.db.models import Case, Exists, F, OuterRef, Q, Subquery, When
 from django.db.models.fields.json import JSONField
 from django.utils import timezone
 
-from apps.data_migrations.management.commands.base import BaseCommand
 from apps.experiments.models import ParticipantData
 from apps.teams.models import Team
 from apps.trace.models import Trace
@@ -17,12 +17,8 @@ class Command(BaseCommand):
     # participant_data snapshot to the next trace's snapshot, which may include changes that were
     # manually made by admins
     help = "Backfill participant_data_diff for traces by comparing participant data between consecutive traces"
-    migration_name = "backfill_participant_data_diff_2026_03_09"
-    atomic = False
-    disable_audit = True
 
     def add_arguments(self, parser):
-        super().add_arguments(parser)
         parser.add_argument("team_slug", type=str, help="The team slug to process")
         parser.add_argument(
             "since_date",
@@ -41,12 +37,18 @@ class Command(BaseCommand):
             default=1000,
             help="Number of traces to process per batch (default: 1000)",
         )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Preview changes without applying them",
+        )
 
     def handle(self, *args, **options):
         self.team_slug = options["team_slug"]
         self.since_date = options["since_date"]
         self.experiment_id = options.get("experiment_id")
         self.batch_size = options.get("batch_size", 1000)
+        dry_run = options.get("dry_run", False)
 
         try:
             self.team = Team.objects.get(slug=self.team_slug)
@@ -60,9 +62,15 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"Invalid date format: '{self.since_date}'. Use YYYY-MM-DD"))
             return
 
-        super().handle(*args, **options)
+        if dry_run:
+            self.stdout.write(self.style.NOTICE("DRY RUN MODE - No changes will be applied"))
 
-    def perform_migration(self, dry_run=False):
+        self._perform_backfill(dry_run=dry_run)
+
+        if dry_run:
+            self.stdout.write(self.style.NOTICE("DRY RUN COMPLETE - No changes were applied"))
+
+    def _perform_backfill(self, dry_run=False):
         base_qs = (
             Trace.objects.filter(
                 team=self.team,
