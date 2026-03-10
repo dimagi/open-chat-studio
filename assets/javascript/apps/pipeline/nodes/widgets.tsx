@@ -1458,7 +1458,7 @@ export function JinjaWidget(props: WidgetParams) {
       <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
         {rows < 2 ? (
           <input
-            className="input input-bordered input-sm w-full"
+            className="input input-bordered input-sm w-full nodrag"
             name={props.name}
             value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
             onChange={(e) => onChangeCallback(e.target.value)}
