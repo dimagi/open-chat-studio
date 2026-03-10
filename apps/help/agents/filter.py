@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from apps.help.agent import build_system_agent
@@ -29,7 +30,6 @@ def make_get_options_tool(filter_class, team):
     The tool is closed over filter_class and team so it can call prepare(team)
     on the appropriate ColumnFilter instance without needing extra arguments.
     """
-    from langchain_core.tools import tool  # lazy-loaded to keep Django startup fast  # noqa: PLC0415
 
     _options_cache: dict[str, list[dict]] = {}  # param -> normalized options (cached per agent run)
 

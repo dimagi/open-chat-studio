@@ -8,7 +8,7 @@ class WebConfig(AppConfig):
     label = "web"
 
     def ready(self):
-        from apps.utils.django_admin import export_as_csv  # noqa: PLC0415
+        from apps.utils.django_admin import export_as_csv  # noqa: PLC0415  # avoid AppRegistryNotReady
 
         admin.site.add_action(export_as_csv, "Export as CSV")
 

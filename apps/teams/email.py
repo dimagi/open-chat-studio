@@ -3,6 +3,8 @@ from django.core.mail import send_mail
 from django.template import Context, Template
 from django.template.loader import render_to_string
 
+from apps.teams.models import Team
+
 
 def send_bulk_team_admin_emails(
     teams_context: dict[int, dict], subject_template: str, body_template_path: str, fail_silently=False
@@ -32,7 +34,6 @@ def send_bulk_team_admin_emails(
             fail_silently=False
         )
     """
-    from apps.teams.models import Team  # noqa: PLC0415
 
     results = {"sent": 0, "failed": 0, "no_admins": 0, "errors": []}
 

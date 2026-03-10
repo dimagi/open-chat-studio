@@ -9,7 +9,7 @@ class SystemAgentModel(BaseModel):
     key: str
 
     def init_model(self):
-        from langchain.chat_models import init_chat_model  # noqa: PLC0415
+        from langchain.chat_models import init_chat_model  # noqa: PLC0415  # reduce startup time
 
         return init_chat_model(self.model, model_provider=self.provider, **self.model_kwargs)
 

@@ -28,7 +28,9 @@ class OcsAdminSite(admin.AdminSite):
 
                 # Inner import to prevent django.contrib.admin (app) from
                 # importing django.contrib.auth.models.User (unrelated model).
-                from django.contrib.auth.views import redirect_to_login  # noqa: PLC0415
+                from django.contrib.auth.views import (  # noqa: PLC0415  # avoid importing auth views at admin load time
+                    redirect_to_login,
+                )
 
                 return redirect_to_login(
                     request.get_full_path(),

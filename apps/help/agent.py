@@ -10,10 +10,13 @@ def build_system_agent(
     middleware: list | None = None,
     **kwargs,
 ):
-    from langchain.agents import create_agent  # noqa: PLC0415
-    from langchain.agents.middleware import ModelFallbackMiddleware, ModelRetryMiddleware  # noqa: PLC0415
+    from langchain.agents import create_agent  # noqa: PLC0415  # reduce startup time
+    from langchain.agents.middleware import (  # noqa: PLC0415  # reduce startup time
+        ModelFallbackMiddleware,
+        ModelRetryMiddleware,
+    )
 
-    from apps.service_providers.llm_service.retry import get_retry_middleware  # noqa: PLC0415
+    from apps.service_providers.llm_service.retry import get_retry_middleware  # noqa: PLC0415  # reduce startup time
 
     model_configs = settings.SYSTEM_AGENT_MODELS_HIGH if mode == "high" else settings.SYSTEM_AGENT_MODELS_LOW
     if not model_configs:

@@ -12,7 +12,7 @@ from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData, SyntheticVoice
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.pipelines.repository import ORMRepository
@@ -24,7 +24,6 @@ from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
-    from apps.experiments.models import SyntheticVoice
 
 
 def create_conversation(
@@ -132,8 +131,7 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.experiments.models import AgentTools  # noqa: PLC0415
-        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415  # avoid circular import
 
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
@@ -237,8 +235,6 @@ class PipelineBot:
         return chat_message
 
     def get_synthetic_voice(self) -> SyntheticVoice | None:
-        from apps.experiments.models import SyntheticVoice  # noqa: PLC0415
-
         if self.synthetic_voice_id is None:
             return None
         return SyntheticVoice.objects.filter(
@@ -273,8 +269,8 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
-        from apps.pipelines.nodes.helpers import temporary_session  # noqa: PLC0415
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415  # avoid circular import
+        from apps.pipelines.nodes.helpers import temporary_session  # noqa: PLC0415  # avoid circular import
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
