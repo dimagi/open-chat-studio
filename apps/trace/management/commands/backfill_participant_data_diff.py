@@ -1,11 +1,12 @@
 from datetime import datetime
 
 import dictdiffer
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Case, Exists, F, OuterRef, Q, Subquery, When
+from django.db.models.fields.json import JSONField
 from django.utils import timezone
 
 from apps.data_migrations.management.commands.base import IdempotentCommand
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import ParticipantData
 from apps.teams.models import Team
 from apps.trace.models import Trace
 
@@ -74,9 +75,8 @@ class Command(IdempotentCommand):
         if self.experiment_id:
             base_qs = base_qs.filter(experiment_id=self.experiment_id)
 
-        # Subquery: get the participant_data of the next trace in the same session.
-        # Note: if two traces share the same timestamp, ordering is non-deterministic.
-        next_trace_in_session = (
+        # Subquery: participant_data of the next trace in the same session
+        next_in_session = (
             Trace.objects.filter(
                 session_id=OuterRef("session_id"),
                 timestamp__gt=OuterRef("timestamp"),
@@ -85,10 +85,43 @@ class Command(IdempotentCommand):
             .values("participant_data")[:1]
         )
 
-        # Annotate each trace with the next trace's participant_data
+        # Subquery: participant_data of the first trace in the next session (same participant + experiment)
+        next_session_first_trace = (
+            Trace.objects.filter(
+                participant_id=OuterRef("participant_id"),
+                experiment_id=OuterRef("experiment_id"),
+                session__created_at__gt=OuterRef("session__created_at"),
+            )
+            .order_by("session__created_at", "timestamp")
+            .values("participant_data")[:1]
+        )
+
+        # Existence checks to drive the Case/When
+        has_next_in_session = Exists(
+            Trace.objects.filter(
+                session_id=OuterRef("session_id"),
+                timestamp__gt=OuterRef("timestamp"),
+            )
+        )
+
+        has_next_session_trace = Exists(
+            Trace.objects.filter(
+                participant_id=OuterRef("participant_id"),
+                experiment_id=OuterRef("experiment_id"),
+                session__created_at__gt=OuterRef("session__created_at"),
+            )
+        )
+
+        # ParticipantData.data is encrypted (bytea), so it can't be mixed with jsonb
+        # in a Case/When. Annotate only Trace-based sources; handle the global
+        # ParticipantData fallback in Python below.
         annotated_qs = base_qs.annotate(
-            next_participant_data=Subquery(next_trace_in_session),
-        ).order_by("timestamp")
+            next_participant_data=Case(
+                When(condition=has_next_in_session, then=Subquery(next_in_session)),
+                When(condition=has_next_session_trace, then=Subquery(next_session_first_trace)),
+                output_field=JSONField(),
+            ),
+        ).order_by("id")
 
         total_count = annotated_qs.count()
         self.stdout.write(f"Found {total_count} traces to evaluate")
@@ -97,41 +130,30 @@ class Command(IdempotentCommand):
             self.stdout.write(self.style.SUCCESS("No traces to process"))
             return
 
-        # Pass 1: Process traces that have a next trace in the same session
-        updated_count = self._process_same_session_traces(annotated_qs, dry_run)
-
-        # Pass 2: Process traces that are the last in their session (next_participant_data is NULL)
-        last_in_session_qs = base_qs.filter(
-            id__in=Subquery(
-                base_qs.filter(
-                    session_id=OuterRef("session_id"),
-                )
-                .order_by("-timestamp")
-                .values("id")[:1]
-            ),
+        # Process traces that have a next trace (same session or next session)
+        traces_with_next = annotated_qs.exclude(next_participant_data__isnull=True).exclude(
+            participant_data=F("next_participant_data")
         )
-        updated_count += self._process_last_in_session_traces(last_in_session_qs, dry_run)
+        updated_count = self._process_batched(traces_with_next, total_count, dry_run)
+
+        # Process traces that need the global ParticipantData fallback
+        # (no next trace in same session and no next session with traces)
+        fallback_qs = annotated_qs.filter(next_participant_data__isnull=True)
+        updated_count += self._process_global_pd_fallback(fallback_qs, total_count, dry_run)
 
         action = "Would update" if dry_run else "Updated"
         self.stdout.write(self.style.SUCCESS(f"{action} {updated_count} traces total"))
 
-    def _process_same_session_traces(self, annotated_qs, dry_run):
-        """Process traces that have a next trace in the same session."""
-        # Filter to traces where next_participant_data exists and differs from current
-        traces_with_next = annotated_qs.exclude(next_participant_data__isnull=True)
-
-        total = traces_with_next.count()
-        self.stdout.write(f"Pass 1: {total} traces with a next trace in the same session")
-
+    def _process_batched(self, qs, total_count, dry_run):
         updated_count = 0
         processed = 0
         last_id = 0
 
         while True:
             batch = list(
-                traces_with_next.filter(id__gt=last_id)
-                .order_by("id")
-                .values_list("id", "participant_data", "next_participant_data")[: self.batch_size]
+                qs.filter(id__gt=last_id).values_list("id", "participant_data", "next_participant_data")[
+                    : self.batch_size
+                ]
             )
 
             if not batch:
@@ -142,9 +164,6 @@ class Command(IdempotentCommand):
             traces_to_update = []
             for trace_id, current_pd, next_pd in batch:
                 processed += 1
-                if current_pd == next_pd:
-                    continue
-
                 diff = list(dictdiffer.diff(current_pd or {}, next_pd or {}))
                 if diff:
                     traces_to_update.append(Trace(id=trace_id, participant_data_diff=diff))
@@ -156,34 +175,20 @@ class Command(IdempotentCommand):
 
             if processed % (self.batch_size * 5) == 0 or len(batch) < self.batch_size:
                 action = "Would update" if dry_run else "Updated"
-                self.stdout.write(f"  Pass 1: {action} {updated_count} so far (processed {processed}/{total})")
+                self.stdout.write(f"  {action} {updated_count} so far (processed {processed}/{total_count})")
 
         return updated_count
 
-    def _process_last_in_session_traces(self, last_in_session_qs, dry_run):
-        """Process traces that are the last in their session.
-
-        For each such trace, find the end-state participant data by looking at:
-        1. The first trace of the participant's next session (same experiment)
-        2. The global ParticipantData record if no next session exists
-        """
-        total = last_in_session_qs.count()
-        self.stdout.write(f"Pass 2: {total} traces that are last in their session")
-
-        if total == 0:
-            return 0
-
+    def _process_global_pd_fallback(self, qs, total_count, dry_run):
         updated_count = 0
         processed = 0
         last_id = 0
 
         while True:
             batch = list(
-                last_in_session_qs.filter(id__gt=last_id)
+                qs.filter(id__gt=last_id)
                 .order_by("id")
-                .values_list("id", "participant_data", "participant_id", "experiment_id", "session__created_at")[
-                    : self.batch_size
-                ]
+                .values_list("id", "participant_data", "participant_id", "experiment_id")[: self.batch_size]
             )
 
             if not batch:
@@ -191,23 +196,20 @@ class Command(IdempotentCommand):
 
             last_id = batch[-1][0]
 
-            # Collect participant+experiment pairs we need to resolve
-            participant_experiment_pairs = {(t[2], t[3]) for t in batch}
+            # Batch-fetch global ParticipantData for all participant+experiment pairs in this batch
+            q_filter = Q()
+            for _, _, participant_id, experiment_id in batch:
+                q_filter |= Q(participant_id=participant_id, experiment_id=experiment_id)
 
-            # Prefetch: for each participant+experiment, get the next session's first trace participant_data
-            next_session_lookup = self._build_next_session_lookup(participant_experiment_pairs, batch)
-
-            # Prefetch: global ParticipantData for fallback
-            global_pd_lookup = self._build_global_pd_lookup(participant_experiment_pairs)
+            global_pd_lookup = {}
+            if q_filter:
+                for pd in ParticipantData.objects.filter(q_filter):
+                    global_pd_lookup[(pd.participant_id, pd.experiment_id)] = pd.data or {}
 
             traces_to_update = []
-            for trace_id, current_pd, participant_id, experiment_id, session_created_at in batch:
+            for trace_id, current_pd, participant_id, experiment_id in batch:
                 processed += 1
-
-                end_pd = self._resolve_end_participant_data(
-                    participant_id, experiment_id, session_created_at, next_session_lookup, global_pd_lookup
-                )
-
+                end_pd = global_pd_lookup.get((participant_id, experiment_id))
                 if end_pd is None or current_pd == end_pd:
                     continue
 
@@ -222,93 +224,6 @@ class Command(IdempotentCommand):
 
             if processed % (self.batch_size * 5) == 0 or len(batch) < self.batch_size:
                 action = "Would update" if dry_run else "Updated"
-                self.stdout.write(f"  Pass 2: {action} {updated_count} so far (processed {processed}/{total})")
+                self.stdout.write(f"  {action} {updated_count} so far (processed {processed}/{total_count})")
 
         return updated_count
-
-    def _build_next_session_lookup(self, participant_experiment_pairs, batch):
-        """Build a lookup of (participant_id, experiment_id) -> [(session_created_at, first_trace_pd)].
-
-        For each participant+experiment pair, fetch all sessions ordered by creation date,
-        then for each session get the first trace's participant_data.
-        """
-        # Compute the earliest session date per pair from the batch
-        earliest_dates = {}
-        for t in batch:
-            key = (t[2], t[3])
-            if key not in earliest_dates or t[4] < earliest_dates[key]:
-                earliest_dates[key] = t[4]
-
-        # Build a single Q filter for all pairs' next sessions
-        session_q = Q()
-        for (participant_id, experiment_id), earliest_date in earliest_dates.items():
-            session_q |= Q(
-                participant_id=participant_id,
-                experiment_id=experiment_id,
-                created_at__gt=earliest_date,
-            )
-
-        if not session_q:
-            return {}
-
-        # Single query: fetch all next sessions for all pairs
-        next_sessions = list(
-            ExperimentSession.objects.filter(session_q)
-            .order_by("created_at")
-            .values_list("id", "participant_id", "experiment_id", "created_at")
-        )
-
-        if not next_sessions:
-            return {}
-
-        next_session_ids = [s[0] for s in next_sessions]
-
-        # Single query: fetch the first trace's participant_data for each next session
-        first_traces = dict(
-            Trace.objects.filter(session_id__in=next_session_ids)
-            .order_by("session_id", "timestamp")
-            .distinct("session_id")
-            .values_list("session_id", "participant_data")
-        )
-
-        # Build lookup grouped by (participant_id, experiment_id)
-        lookup = {}
-        for session_id, participant_id, experiment_id, created_at in next_sessions:
-            key = (participant_id, experiment_id)
-            pd = first_traces.get(session_id)
-            if pd is not None:
-                lookup.setdefault(key, []).append((created_at, pd))
-
-        return lookup
-
-    def _build_global_pd_lookup(self, participant_experiment_pairs):
-        """Build a lookup of (participant_id, experiment_id) -> participant data dict."""
-        q_filter = Q()
-        for participant_id, experiment_id in participant_experiment_pairs:
-            q_filter |= Q(participant_id=participant_id, experiment_id=experiment_id)
-
-        lookup = {}
-        if q_filter:
-            for pd in ParticipantData.objects.filter(q_filter):
-                lookup[(pd.participant_id, pd.experiment_id)] = pd.data or {}
-        return lookup
-
-    def _resolve_end_participant_data(
-        self, participant_id, experiment_id, session_created_at, next_session_lookup, global_pd_lookup
-    ):
-        """Resolve the end-state participant data for a trace that's last in its session.
-
-        Priority:
-        1. First trace of the next session (same participant + experiment)
-        2. Global ParticipantData record
-        """
-        key = (participant_id, experiment_id)
-        next_sessions = next_session_lookup.get(key, [])
-
-        # Find the first session created after the current session
-        for created_at, pd in next_sessions:
-            if created_at > session_created_at:
-                return pd
-
-        # Fallback to global ParticipantData
-        return global_pd_lookup.get(key)

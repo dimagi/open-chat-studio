@@ -68,8 +68,7 @@ class TestBackfillParticipantDataDiff:
         trace2.refresh_from_db()
 
         # trace1's diff: {"name": "Alice"} -> {"name": "Alice", "age": 30}
-        assert trace1.participant_data_diff != []
-        assert any(d[0] == "add" for d in trace1.participant_data_diff)
+        assert trace1.participant_data_diff == [["add", "", [["age", 30]]]]
 
         # trace2's diff should be empty since trace2 and trace3 have same data
         assert trace2.participant_data_diff == []
@@ -98,8 +97,8 @@ class TestBackfillParticipantDataDiff:
         self._call_command(team.slug)
 
         trace1.refresh_from_db()
-        # Should have a diff since next session's first trace has different data
-        assert trace1.participant_data_diff != []
+        # {"name": "Alice"} -> {"name": "Alice", "score": 10}
+        assert trace1.participant_data_diff == [["add", "", [["score", 10]]]]
 
     def test_last_trace_falls_back_to_global_participant_data(self, team, experiment, participant):
         session = ExperimentSessionFactory.create(experiment=experiment, team=team, participant=participant)
@@ -117,7 +116,8 @@ class TestBackfillParticipantDataDiff:
         self._call_command(team.slug)
 
         trace1.refresh_from_db()
-        assert trace1.participant_data_diff != []
+        # {"name": "Alice"} -> {"name": "Alice", "updated": True}
+        assert trace1.participant_data_diff == [["add", "", [["updated", True]]]]
 
     def test_no_diff_when_global_data_matches(self, team, experiment, participant):
         session = ExperimentSessionFactory.create(experiment=experiment, team=team, participant=participant)
@@ -155,7 +155,8 @@ class TestBackfillParticipantDataDiff:
         trace1.refresh_from_db()
         trace2.refresh_from_db()
 
-        assert trace1.participant_data_diff != []
+        # {"name": "Alice"} -> {"name": "Bob"}
+        assert trace1.participant_data_diff == [["change", "name", ["Alice", "Bob"]]]
         # trace2 should not be updated since we filtered by exp1
         assert trace2.participant_data_diff == []
 
@@ -206,9 +207,8 @@ class TestBackfillParticipantDataDiff:
         self._call_command(team.slug)
 
         trace1.refresh_from_db()
-        diff = trace1.participant_data_diff
-
-        # Should contain a 'change' for name and an 'add' for age
-        diff_types = {d[0] for d in diff}
-        assert "change" in diff_types
-        assert "add" in diff_types
+        # {"name": "Alice"} -> {"name": "Bob", "age": 25}
+        assert trace1.participant_data_diff == [
+            ["change", "name", ["Alice", "Bob"]],
+            ["add", "", [["age", 25]]],
+        ]
