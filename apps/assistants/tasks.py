@@ -22,7 +22,7 @@ def delete_openai_assistant_task(self, assistant_id: int):
         UnprocessableEntityError,
     )
 
-    from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415  # circular: models→tasks→sync→models
+    from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415  # avoid circular import
 
     try:
         assistant = OpenAiAssistant.all_objects.get(id=assistant_id, is_archived=True)

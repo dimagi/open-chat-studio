@@ -69,12 +69,12 @@ class ChannelPlatform(models.TextChoices):
         return cast(dict[Self, bool], platform_availability)
 
     def form(self, experiment: Experiment):
-        from apps.channels.forms import ChannelForm  # noqa: PLC0415  # circular: forms imports channels.models
+        from apps.channels.forms import ChannelForm  # noqa: PLC0415  # avoid circular import
 
         return ChannelForm(initial={"platform": self}, experiment=experiment)
 
     def extra_form(self, **kwargs):
-        from apps.channels import forms  # noqa: PLC0415  # circular: forms imports channels.models
+        from apps.channels import forms  # noqa: PLC0415  # avoid circular import
 
         match self:
             case self.TELEGRAM:
