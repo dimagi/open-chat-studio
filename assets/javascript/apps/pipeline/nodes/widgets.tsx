@@ -1453,6 +1453,7 @@ export function JinjaWidget(props: WidgetParams) {
         <div className="relative w-full">
           <textarea
             className="textarea textarea-bordered resize-none textarea-sm w-full font-mono"
+            style={rows < 2 ? {minHeight: "auto"} : undefined}
             readOnly={true}
             rows={rows}
             value={props.paramValue}
