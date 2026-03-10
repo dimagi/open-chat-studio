@@ -14,7 +14,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
 
-class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluatorHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluator"
     template_name = "generic/object_home.html"
 
@@ -28,7 +28,7 @@ class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredM
         }
 
 
-class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluator"
     model = Evaluator
     table_class = EvaluatorTable
@@ -43,7 +43,7 @@ class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"
     model = Evaluator
@@ -80,7 +80,7 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredM
         return super().form_valid(form)
 
 
-class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluator"
     model = Evaluator
     form_class = EvaluatorForm
@@ -115,7 +115,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMix
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
 
-class DeleteEvaluator(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
     permission_required = "evaluations.delete_evaluator"
     model = Evaluator
 
