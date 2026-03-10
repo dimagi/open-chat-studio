@@ -1424,6 +1424,7 @@ function getAutoCompleteList(list: Array<Option>) {
 
 export function JinjaWidget(props: WidgetParams) {
   const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const rows: number = props.schema["ui:rows"] ?? 2;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1453,7 +1454,7 @@ export function JinjaWidget(props: WidgetParams) {
           <textarea
             className="textarea textarea-bordered resize-none textarea-sm w-full font-mono"
             readOnly={true}
-            rows={2}
+            rows={rows}
             value={props.paramValue}
             name={props.name}
           ></textarea>

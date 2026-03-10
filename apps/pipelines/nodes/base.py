@@ -479,6 +479,9 @@ class UiSchema(BaseModel):
     # when it becomes hidden.
     default_on_show: Any = None
 
+    # Number of rows for textarea-based widgets (e.g. jinja_template). Defaults to 2.
+    rows: int | None = None
+
     def __call__(self, schema: JsonDict):
         if self.widget:
             schema["ui:widget"] = self.widget
@@ -488,6 +491,8 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.rows is not None:
+            schema["ui:rows"] = self.rows
         if self.visible_when is not None:
             if isinstance(self.visible_when, list):
                 schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]

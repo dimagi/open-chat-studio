@@ -439,11 +439,15 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
             "Use {{ participant_data.emails | join(',') }} for a list, "
             "or {{ participant_data.emails | split(';') | join(',') }} for a delimited string."
         ),
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
+        json_schema_extra=UiSchema(
+            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
+        ),
     )
     subject: str = Field(
         description="Email subject. Supports Jinja2 templates, e.g. {{ participant_data.name }}",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
+        json_schema_extra=UiSchema(
+            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
+        ),
     )
     body: str = Field(
         default="",

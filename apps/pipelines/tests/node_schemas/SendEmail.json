@@ -17,6 +17,7 @@
       "title": "Recipient List",
       "type": "string",
       "ui:optionsSource": "jinja_email_node",
+      "ui:rows": 1,
       "ui:widget": "jinja_template"
     },
     "subject": {
@@ -24,6 +25,7 @@
       "title": "Subject",
       "type": "string",
       "ui:optionsSource": "jinja_email_node",
+      "ui:rows": 1,
       "ui:widget": "jinja_template"
     },
     "body": {
