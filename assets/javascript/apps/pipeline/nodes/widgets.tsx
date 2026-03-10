@@ -8,7 +8,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import {produce} from "immer";
-import {CodeNodeEditor, PromptEditor} from "../components/CodeMirrorEditor";
+import {CodeNodeEditor, JinjaEditor, PromptEditor} from "../components/CodeMirrorEditor";
 import {getInputWidget} from "./GetInputWidget";
 
 
@@ -47,6 +47,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return TextEditorWidget
     case "voice_widget":
         return VoiceWidget
+    case "jinja_template":
+        return JinjaWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -1147,7 +1149,7 @@ export function HistoryModeWidget(props: WidgetParams) {
 
   return (
     <div className="flex join">
-      <InputField label="History Mode" help_text="">
+      <InputField label="History Mode" help_text={historyModeHelpTexts[historyMode] ?? ""}>
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
@@ -1166,12 +1168,27 @@ export function HistoryModeWidget(props: WidgetParams) {
             </option>
           ))}
         </select>
-        <small className="text-muted mt-2">{historyModeHelpTexts[historyMode]}</small>
       </InputField>
     </div>
   );
 }
 
+
+function HelpBubble({ helpText }: { helpText: string }) {
+  if (!helpText) return <></>;
+  return (
+    <div className="dropdown dropdown-right dropdown-hover">
+      <div role="button" className="btn btn-circle btn-ghost btn-xs text-info">
+        <i className="text-xs fa-regular fa-circle-question"></i>
+      </div>
+      <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
+        <div className="card-body font-medium text-wrap">
+          <p>{helpText}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
   label: string | ReactNode,
@@ -1181,12 +1198,14 @@ export function InputField({label, help_text, inputError, children}: React.Props
   return (
     <>
       <div className="fieldset w-full capitalize">
-        <label className="label font-bold">{label}</label>
+        <div className="flex items-center gap-1">
+          <label className="label font-bold">{label}</label>
+          <HelpBubble helpText={help_text} />
+        </div>
         {children}
       </div>
-      <div className="flex flex-col">
+      <div>
         <small className="text-red-500">{inputError}</small>
-        <small className="text-muted">{help_text}</small>
       </div>
     </>
   );
@@ -1401,6 +1420,69 @@ function TextEditorModal({
 
 function getAutoCompleteList(list: Array<Option>) {
     return Array.isArray(list) ? list.map((v: Option) => v.value) : []
+}
+
+export function JinjaWidget(props: WidgetParams) {
+  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const modalId = useId();
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const onChangeCallback = (value: string) => {
+    setNode(props.nodeId, produce((draft) => {
+      draft.data.params[props.name] = value;
+    }));
+  };
+
+  const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+
+  const label = (
+    <>
+      {props.label}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button type="button" className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
+        <div className="relative w-full">
+          <textarea
+            className="textarea textarea-bordered resize-none textarea-sm w-full font-mono"
+            readOnly={true}
+            rows={2}
+            value={props.paramValue}
+            name={props.name}
+          ></textarea>
+          <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
+        </div>
+      </InputField>
+
+      <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+        <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
+          <form method="dialog">
+            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+          </form>
+          <div className="grow h-full w-full flex flex-col">
+            <h4 className="mb-4 font-bold text-lg capitalize">{props.label}</h4>
+            <JinjaEditor
+              value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+              onChange={onChangeCallback}
+              readOnly={props.readOnly}
+              autocompleteVars={autocomplete_vars_list}
+            />
+          </div>
+          {props.inputError && <div className="text-red-500">{props.inputError}</div>}
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
+    </>
+  );
 }
 
 export function VoiceWidget(props: WidgetParams) {
