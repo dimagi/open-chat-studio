@@ -433,31 +433,20 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
     )
 
     recipient_list: str = Field(
-        description=(
-            "A comma-separated list of email addresses. "
-            "Supports Jinja2 templates, e.g. {{ participant_data.email }}. "
-            "Use {{ participant_data.emails | join(',') }} for a list, "
-            "or {{ participant_data.emails | split(';') | join(',') }} for a delimited string."
-        ),
+        description="A comma-separated list of email addresses. Supports Jinja2 templates.",
         json_schema_extra=UiSchema(
             widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
         ),
     )
     subject: str = Field(
-        description="Email subject. Supports Jinja2 templates, e.g. {{ participant_data.name }}",
+        description="Email subject. Supports Jinja2 templates.",
         json_schema_extra=UiSchema(
             widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
         ),
     )
     body: str = Field(
         default="",
-        description=(
-            "Optional Jinja2 template for the email body. "
-            "If empty, the pipeline input is used. "
-            "Available variables: input, node_inputs, temp_state, session_state, "
-            "participant_data, participant_details, participant_schedules, "
-            "input_message_id, input_message_url."
-        ),
+        description="Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
         json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
     )
 
