@@ -129,7 +129,7 @@
 
   In `GetInputWidget.tsx`, find the JSDoc comment above `getInputWidget` (around lines 239–242):
 
-  ```
+  ```tsx
    * Set `showHelpText` to false to suppress field descriptions (e.g. in the
    * compact node canvas view where space is limited).
   ```

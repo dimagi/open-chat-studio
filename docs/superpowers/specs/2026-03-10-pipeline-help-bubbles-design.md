@@ -14,7 +14,7 @@ Replace inline `<small>` help text in pipeline editor fields with a DaisyUI hove
 - Props: `helpText: string`
 - Returns empty fragment when `helpText` is empty
 - Mirrors `templates/generic/help.html`: DaisyUI `dropdown dropdown-right dropdown-hover` with a `fa-regular fa-circle-question` icon
-- Popover is a 64-unit-wide card using `bg-slate-300 dark:bg-slate-700`
+- Popover is an 80-unit-wide card (`w-80`) using `bg-slate-300 dark:bg-slate-700`
 
 ### `InputField` (modified, in `widgets.tsx`)
 
