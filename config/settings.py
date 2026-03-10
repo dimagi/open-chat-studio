@@ -240,11 +240,12 @@ if env.bool("DJANGO_DATABASE_USE_POOL", True):
     }
 else:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
-    # RDS Proxy requires TLS. When not using the connection pool, psycopg3 defaults
-    # to sslmode=prefer which falls back to non-SSL on handshake failure, which the
-    # proxy rejects. sslmode=require forces SSL without the non-SSL fallback.
-    # Override with DJANGO_DATABASE_SSLMODE if needed (e.g. set to "prefer" for local dev).
-    db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="require")
+
+# RDS Proxy requires TLS. psycopg3 defaults to sslmode=prefer which falls back to
+# non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
+# without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
+# (e.g. set to "prefer" for local dev without TLS).
+db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="require")
 
 # Auth / login stuff
 
