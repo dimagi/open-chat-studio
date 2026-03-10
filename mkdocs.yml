@@ -87,6 +87,7 @@ nav:
     - Testing:
       - Integration Testing: developer_guides/integration_testing.md
       - developer_guides/twilio_testing.md
+      - Help Agent Evals: developer_guides/help_agent_evals.md
   - Self-Hosting:
     - Overview: hosting/index.md
     - Configuration: hosting/configuration.md
