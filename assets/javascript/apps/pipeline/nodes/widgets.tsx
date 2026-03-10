@@ -1456,17 +1456,26 @@ export function JinjaWidget(props: WidgetParams) {
   return (
     <>
       <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
-        <div className="relative w-full">
-          <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full font-mono"
-            style={rows < 2 ? {minHeight: "auto"} : undefined}
-            readOnly={true}
-            rows={rows}
-            value={props.paramValue}
+        {rows < 2 ? (
+          <input
+            className="input input-bordered input-sm w-full font-mono"
             name={props.name}
-          ></textarea>
-          <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
-        </div>
+            value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+            onChange={(e) => onChangeCallback(e.target.value)}
+            readOnly={props.readOnly}
+          />
+        ) : (
+          <div className="relative w-full">
+            <textarea
+              className="textarea textarea-bordered resize-none textarea-sm w-full font-mono"
+              readOnly={true}
+              rows={rows}
+              value={props.paramValue}
+              name={props.name}
+            ></textarea>
+            <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
+          </div>
+        )}
       </InputField>
 
       <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
