@@ -1179,7 +1179,7 @@ function HelpBubble({ helpText }: { helpText: string }) {
   const parts = helpText.split(/(\{\{[^}]*\}\})/g);
   const content = parts.map((part, i) =>
     /^\{\{.*\}\}$/.test(part)
-      ? <span key={i} style={{whiteSpace: "nowrap"}}>{part}</span>
+      ? <span key={i} style={{whiteSpace: "nowrap", overflowWrap: "anywhere"}}>{part}</span>
       : part
   );
   return (
@@ -1187,7 +1187,7 @@ function HelpBubble({ helpText }: { helpText: string }) {
       <div role="button" className="btn btn-circle btn-ghost btn-xs text-info" aria-label="Help">
         <i className="text-xs fa-regular fa-circle-question"></i>
       </div>
-      <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
+      <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-80 shadow-sm">
         <div tabIndex={0} className="card-body font-medium text-wrap normal-case">
           <p>{content}</p>
         </div>
