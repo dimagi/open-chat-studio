@@ -5,13 +5,13 @@ from django.db.models import Case, Exists, F, OuterRef, Q, Subquery, When
 from django.db.models.fields.json import JSONField
 from django.utils import timezone
 
-from apps.data_migrations.management.commands.base import IdempotentCommand
+from apps.data_migrations.management.commands.base import BaseCommand
 from apps.experiments.models import ParticipantData
 from apps.teams.models import Team
 from apps.trace.models import Trace
 
 
-class Command(IdempotentCommand):
+class Command(BaseCommand):
     # NOTE: Backfilled diffs are an approximation. Real-time diffs capture exactly what changed
     # during a single trace's execution (before vs after). Backfilled diffs compare this trace's
     # participant_data snapshot to the next trace's snapshot, which may include changes that were

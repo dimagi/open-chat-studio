@@ -60,7 +60,6 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
         Trace.objects.filter(
             session__in=sessions_queryset,
             input_message__isnull=False,
-            output_message__isnull=False,
         )
         .select_related(
             "input_message",
@@ -89,11 +88,11 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
         "Message Type",
         "Message Content",
         "Platform",
-        "Chat Tags",
-        "Chat Comments",
+        "Session Tags",
+        "Session Comments",
         "Session ID",
-        "Experiment ID",
-        "Experiment Name",
+        "Chatbot ID",
+        "Chatbot Name",
         "Participant Name",
         "Participant Identifier",
         "Participant Public ID",
@@ -117,6 +116,9 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
             (trace.input_message, start_data),
             (trace.output_message, end_data),
         ]:
+            if message is None:
+                continue
+
             if translation_language:
                 content = get_message_content(message, translation_language)
             else:
