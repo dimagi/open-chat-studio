@@ -145,6 +145,7 @@ def ngrok_url(c: Context):
     """Start ngrok tunnel for local development and return public URL."""
     #  You need to have ngrok installed on your system
     c.run("ngrok http 8000", echo=True, asynchronous=True)
+    public_url = None
     tries = 4
     while tries > 0:
         try:
@@ -157,6 +158,8 @@ def ngrok_url(c: Context):
             time.sleep(1)
             print("Trying to a public address from ngrok")
 
+    if not public_url:
+        raise Exit("Could not get public URL from ngrok", -1)
     print(f"Public address found: {public_url}")
     return public_url
 
@@ -250,6 +253,12 @@ def npm(c: Context, watch=False, install=False):
         c.run("npm install", echo=True)
     cmd = "dev-watch" if watch else "dev"
     c.run(f"npm run {cmd}", echo=True, pty=True)
+
+
+@task(help={"port": "Port to serve docs on (default: 8001)"})
+def docs(c: Context, port=8001):
+    """Serve the developer documentation site locally using MkDocs."""
+    c.run(f"mkdocs serve --dev-addr localhost:{port}", echo=True, pty=True)
 
 
 def _confirm(message, _exit=True, exit_message="Done"):
