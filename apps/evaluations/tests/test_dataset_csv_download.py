@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 
 import pytest
 from django.urls import reverse
@@ -240,8 +241,6 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
     assert row5["id"] == str(message5.id)
     assert row5["input_content"] == "Complex data"
     # Nested structures should be serialized as JSON strings
-    import json  # noqa: PLC0415
-
     assert json.loads(row5["context.nested"]) == {"foo": {"bar": [1, 2, "3"]}}
     assert json.loads(row5["participant_data.preferences"]) == {
         "theme": "dark",
