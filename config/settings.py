@@ -245,7 +245,7 @@ else:
 # non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
 # without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
 # (e.g. set to "prefer" for local dev without TLS).
-db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="prefer")
+db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="require")
 
 # Auth / login stuff
 
