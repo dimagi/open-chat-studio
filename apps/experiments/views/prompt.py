@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
+from django.contrib.auth.decorators import permission_required
 from django.http import JsonResponse
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -21,6 +22,7 @@ PROMPT_DATA_SESSION_KEY = "prompt_data"
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def prompt_builder_load_experiments(request, team_slug: str):
     experiments = list(Experiment.objects.filter(team=request.team).values("id", "name", "prompt_text"))
 
@@ -34,6 +36,7 @@ def prompt_builder_load_experiments(request, team_slug: str):
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def prompt_builder_load_source_material(request, team_slug: str):
     source_material = SourceMaterial.objects.filter(team=request.team)
     source_material_list = list(source_material.values())
@@ -48,6 +51,7 @@ def prompt_builder_load_source_material(request, team_slug: str):
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_prompt_builder(request, team_slug: str):
     llm_providers = list(request.team.llmprovider_set.all())
     default_llm_provider = llm_providers[0] if llm_providers else None
@@ -75,6 +79,7 @@ def experiments_prompt_builder(request, team_slug: str):
 
 @require_POST
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_prompt_builder_get_message(request, team_slug: str):
     data = json.loads(request.body.decode("utf-8"))
     user = get_real_user_or_none(request.user)
@@ -95,6 +100,7 @@ def get_prompt_builder_message_response(request, team_slug: str):
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def get_prompt_builder_history(request, team_slug: str):
     # Fetch history for the request user limited to last 30 days
     thirty_days_ago = timezone.now() - timedelta(days=30)
@@ -137,6 +143,7 @@ def get_prompt_builder_history(request, team_slug: str):
 
 
 @login_and_team_required
+@permission_required("experiments.view_experiment", raise_exception=True)
 def prompt_builder_start_save_process(request, team_slug: str):
     prompt_data = json.loads(request.body)
     request.session[PROMPT_DATA_SESSION_KEY] = prompt_data

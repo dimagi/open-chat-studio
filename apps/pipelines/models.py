@@ -283,9 +283,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             pipeline_version.data = data
         pipeline_version.save()
         for node in self.node_set.all():
-            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id))
-            node_version.pipeline = pipeline_version
-            node_version.save(update_fields=["pipeline"])
+            node.create_new_version(
+                is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id), pipeline=pipeline_version
+            )
 
         return pipeline_version
 
@@ -375,10 +375,14 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def name(self):
         return self.params.get("name", None)
 
-    def create_new_version(self, is_copy=False, new_flow_id=None):  # ty: ignore[invalid-method-override]
+    def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
+
+        Args:
+            pipeline: If provided, the new version will be assigned to this pipeline before saving,
+                avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
         from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415
         from apps.documents.models import Collection  # noqa: PLC0415
@@ -403,6 +407,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             _set_versioned_param_value(new_version, "collection_id", Collection)
             _set_versioned_param_list_values(new_version, "collection_index_ids", Collection)
 
+        if pipeline is not None:
+            new_version.pipeline = pipeline
         new_version.save()
         if self.params.get("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
@@ -624,7 +630,7 @@ class PipelineChatMessages(BaseModel):
         The `SystemMessage` represents the conversation summary and will only be
         included if it exists.
         """
-        langchain_messages = [
+        langchain_messages: list[BaseMessage] = [
             AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
             HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
         ]
