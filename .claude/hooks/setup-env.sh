@@ -34,3 +34,15 @@ fi
 "$ROOT_WORKTREE_PATH/scripts/bootstrap.sh" --force --yes
 
 echo "[ocs] Setup complete."
+
+# Ask the user if they want to run Claude Code
+read -r -p "[ocs] Do you want to run Claude Code? (y/N): " RUN_CLAUDE
+if [[ "$RUN_CLAUDE" =~ ^[Yy]$ ]]; then
+    read -rep "[ocs] Enter your prompt: " CLAUDE_PROMPT
+    read -rep "[ocs] Run with all permissions (--dangerously-skip-permissions)? (y/N): " SKIP_PERMS
+    if [[ "$SKIP_PERMS" =~ ^[Yy]$ ]]; then
+        claude --dangerously-skip-permissions "$CLAUDE_PROMPT"
+    else
+        claude "$CLAUDE_PROMPT"
+    fi
+fi
