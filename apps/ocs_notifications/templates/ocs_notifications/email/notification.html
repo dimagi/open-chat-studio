@@ -1,9 +1,12 @@
 {% extends "account/email/email_template_base.html" %}
 {% load i18n %}
 
-{% block cta_section %}{% endblock %}
+{% block cta_link %}{{ notification_url }}{% endblock %}
+
+{% block cta_text %}{% translate "View Notification" %}{% endblock %}
 
 {% block message_body %}
+  <p style="margin-bottom: 4px; color: #666; font-size: 13px;">{{ team_name }}</p>
   <p style="margin-bottom: 20px;">
     <strong>{{ title }}</strong>
   </p>
