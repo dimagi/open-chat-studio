@@ -65,7 +65,7 @@ def create_pipeline_with_nodes(team, name, middle_node=None):
 
 
 def _create_pipeline(team, name, all_flow_nodes, edges):
-    from apps.pipelines.models import Pipeline  # noqa: PLC0415
+    from apps.pipelines.models import Pipeline  # noqa: PLC0415  # circular import
 
     pipeline = Pipeline.objects.create(
         team=team, name=name, data={"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges}
@@ -75,7 +75,7 @@ def _create_pipeline(team, name, all_flow_nodes, edges):
 
 
 def _get_start_and_end_nodes(start_x=100, end_x=800):
-    from apps.pipelines.nodes.nodes import EndNode, StartNode  # noqa: PLC0415
+    from apps.pipelines.nodes.nodes import EndNode, StartNode  # noqa: PLC0415  # circular import
 
     start_node_id = str(uuid4())
     end_node_id = str(uuid4())

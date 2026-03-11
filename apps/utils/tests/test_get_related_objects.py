@@ -22,7 +22,7 @@ from apps.utils.deletion import get_related_m2m_objects
     ],
 )
 def test_get_related_objects(source, exclude, expected):
-    from apps.utils.tests.models import Bot, Tool  # noqa: PLC0415
+    from apps.utils.tests.models import Bot, Tool  # noqa: PLC0415  # must import after setup_test_app() in conftest
 
     if source:
         source_model = Bot if source and source[0][0] == "b" else Tool

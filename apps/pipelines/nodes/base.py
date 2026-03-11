@@ -15,6 +15,7 @@ from pydantic.config import JsonDict
 from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import TypedDict
 
+from apps.channels.datamodels import Attachment
 from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
@@ -249,8 +250,6 @@ class BasePipelineNode(BaseModel, ABC):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
-        from apps.channels.datamodels import Attachment  # noqa: PLC0415
-
         if not incoming_nodes:
             # This is the first node in the graph
             state["last_node_input"] = state["messages"][-1]

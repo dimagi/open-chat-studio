@@ -8,6 +8,8 @@ import httpx
 import tenacity
 from django.conf import settings
 
+from apps.channels.datamodels import Attachment
+from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 logger = logging.getLogger("restricted_http")
@@ -330,8 +332,6 @@ class RestrictedHttpClient:
         if auth_name in self._auth_cache:
             return self._auth_cache[auth_name]
 
-        from apps.service_providers.models import AuthProvider  # noqa: PLC0415
-
         try:
             provider = AuthProvider.objects.get(team=self._team, name=auth_name)
         except AuthProvider.DoesNotExist:
@@ -411,8 +411,6 @@ class RestrictedHttpClient:
 
         Returns (httpx_tuple, size, opened_handles).
         """
-        from apps.channels.datamodels import Attachment  # noqa: PLC0415
-
         if isinstance(value, Attachment):
             file_obj = value._file
             if not file_obj:
