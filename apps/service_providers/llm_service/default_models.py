@@ -143,7 +143,6 @@ DELETED_MODELS = [
     ("openai", "gpt-4-0125-preview", "gpt-4.1"),
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
-    ("openai", "gpt-3.5-turbo-1106", "gpt-4.1-mini"),
     # Groq
     ("groq", "whisper-large-v3"),
     ("groq", "llama3-groq-70b-8192-tool-use-preview"),
