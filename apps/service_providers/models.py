@@ -95,7 +95,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms  # noqa: PLC0415
+        from apps.service_providers import forms  # noqa: PLC0415  # circular: forms.py imports from this module
 
         match self:
             case LlmProviderTypes.openai:
@@ -115,7 +115,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> "llm_service.LlmService":
-        from . import llm_service  # noqa: PLC0415
+        from . import llm_service  # noqa: PLC0415  # circular: llm_service imports from this module
 
         config = {**config, **self.additional_config, "_type": self.slug}
         try:
@@ -265,7 +265,7 @@ class VoiceProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms  # noqa: PLC0415
+        from apps.service_providers import forms  # noqa: PLC0415  # circular: forms.py imports from this module
 
         match self:
             case VoiceProviderType.aws:
@@ -279,7 +279,7 @@ class VoiceProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
-        from . import speech_service  # noqa: PLC0415
+        from . import speech_service  # noqa: PLC0415  # circular: speech_service imports from this module
 
         try:
             match self:
@@ -385,7 +385,7 @@ class MessagingProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms  # noqa: PLC0415
+        from apps.service_providers import forms  # noqa: PLC0415  # circular: forms.py imports from this module
 
         match self:
             case MessagingProviderType.twilio:
@@ -399,7 +399,7 @@ class MessagingProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_messaging_service(self, config: dict) -> "messaging_service.MessagingService":
-        from . import messaging_service  # noqa: PLC0415
+        from . import messaging_service  # noqa: PLC0415  # circular: messaging_service imports from this module
 
         match self:
             case MessagingProviderType.twilio:
@@ -415,7 +415,7 @@ class MessagingProviderType(models.TextChoices):
     @staticmethod
     def platform_supported_provider_types(platform: ChannelPlatform) -> list["MessagingProviderType"]:
         """Finds all provider types supporting the platform specified by `platform`"""
-        from . import messaging_service  # noqa: PLC0415
+        from . import messaging_service  # noqa: PLC0415  # circular: messaging_service imports from this module
 
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():
@@ -453,7 +453,7 @@ class AuthProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms  # noqa: PLC0415
+        from apps.service_providers import forms  # noqa: PLC0415  # circular: forms.py imports from this module
 
         match self:
             case AuthProviderType.basic:
@@ -509,7 +509,7 @@ class TraceProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms  # noqa: PLC0415
+        from apps.service_providers import forms  # noqa: PLC0415  # circular: forms.py imports from this module
 
         match self:
             case TraceProviderType.langfuse:
@@ -517,7 +517,7 @@ class TraceProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_service(self, config: dict) -> "tracing.Tracer":
-        from . import tracing  # noqa: PLC0415
+        from . import tracing  # noqa: PLC0415  # circular: tracing imports from this module
 
         match self:
             case TraceProviderType.langfuse:

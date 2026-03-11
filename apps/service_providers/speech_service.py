@@ -79,9 +79,8 @@ class AWSSpeechService(SpeechService):
         """
         Calls AWS Polly to convert the text to speech using the synthetic_voice
         """
-        # keep heavy imports inline
-        import boto3  # noqa: PLC0415
-        from pydub import AudioSegment  # noqa: PLC0415
+        import boto3  # noqa: PLC0415  # lazy-loaded heavy library (TID253)
+        from pydub import AudioSegment  # noqa: PLC0415  # lazy-loaded provider SDK
 
         polly_client = boto3.Session(
             aws_access_key_id=self.aws_access_key_id,
@@ -114,9 +113,8 @@ class AzureSpeechService(SpeechService):
         """
         Calls Azure's cognitive speech services to convert the text to speech using the synthetic_voice
         """
-        # keep heavy imports inline
-        import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415
-        from pydub import AudioSegment  # noqa: PLC0415
+        import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415  # lazy-loaded provider SDK
+        from pydub import AudioSegment  # noqa: PLC0415  # lazy-loaded provider SDK
 
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
 
@@ -154,8 +152,7 @@ class AzureSpeechService(SpeechService):
             raise AudioSynthesizeException(f"Unexpected result: {result}")
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
-        # keep heavy imports inline
-        import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415
+        import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415  # lazy-loaded provider SDK
 
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
         speech_config.speech_recognition_language = "en-US"
@@ -193,8 +190,7 @@ class OpenAISpeechService(SpeechService):
 
     @property
     def _client(self) -> "OpenAI":
-        # keep heavy imports inline
-        from openai import OpenAI  # noqa: PLC0415
+        from openai import OpenAI  # noqa: PLC0415  # lazy-loaded provider SDK
 
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
@@ -202,8 +198,7 @@ class OpenAISpeechService(SpeechService):
         """
         Calls OpenAI to convert the text to speech using the synthetic_voice
         """
-        # keep heavy imports inline
-        from pydub import AudioSegment  # noqa: PLC0415
+        from pydub import AudioSegment  # noqa: PLC0415  # lazy-loaded provider SDK
 
         response = self._client.audio.speech.create(model="gpt-4o-mini-tts", voice=synthetic_voice.name, input=text)
         audio_data = response.read()
@@ -229,7 +224,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
 
     @property
     def _client(self) -> "OpenAI":
-        from openai import OpenAI  # noqa: PLC0415
+        from openai import OpenAI  # noqa: PLC0415  # lazy-loaded provider SDK
 
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
@@ -237,8 +232,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         """
         Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
         """
-        # keep heavy imports inline
-        from pydub import AudioSegment  # noqa: PLC0415
+        from pydub import AudioSegment  # noqa: PLC0415  # lazy-loaded provider SDK
 
         sample_audio = synthetic_voice.file
 
