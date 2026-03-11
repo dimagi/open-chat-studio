@@ -38,7 +38,7 @@ class Team(BaseModel):
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
 
     def save(self, *args, **kwargs):
-        from .helpers import get_next_unique_team_slug  # noqa: PLC0415
+        from .helpers import get_next_unique_team_slug  # noqa: PLC0415  # circular import
 
         if not self.slug:
             self.slug = get_next_unique_team_slug(self.name)

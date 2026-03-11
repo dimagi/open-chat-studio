@@ -10,6 +10,7 @@ from django.db import models
 from django.urls import reverse
 from pgvector.django import HalfVectorField
 
+from apps.documents.readers import Document
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
 from apps.teams.models import BaseTeamModel
@@ -212,7 +213,6 @@ class File(BaseTeamModel, VersionsMixin):
             self.delete()
 
     def read_content(self) -> str:
-        from apps.documents.readers import Document  # noqa: PLC0415
 
         document = Document.from_file(self)
         return document.get_contents_as_string()

@@ -26,7 +26,7 @@ def send_invitation(invitation):
 
 
 def process_invitation(invitation: Invitation, user: CustomUser):
-    from .tasks import send_invitation_accepted_notification  # noqa: PLC0415
+    from .tasks import send_invitation_accepted_notification  # noqa: PLC0415  # circular import
 
     with current_team(invitation.team):
         membership = Membership.objects.create(team=invitation.team, user=user)

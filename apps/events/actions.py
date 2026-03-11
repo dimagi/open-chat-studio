@@ -1,7 +1,7 @@
 from django.db.models import Case, DateTimeField, F, When
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.models import PipelineChatHistoryModes, PipelineEventInputs
+from apps.pipelines.models import Pipeline, PipelineChatHistoryModes, PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.utils.django_db import MakeInterval
@@ -33,7 +33,7 @@ class LogAction(EventActionHandlerBase):
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import StaticTriggerType  # noqa: PLC0415
+        from apps.events.models import StaticTriggerType  # noqa: PLC0415  # circular import
 
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
@@ -41,7 +41,7 @@ class EndConversationAction(EventActionHandlerBase):
 
 class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import ScheduledMessage  # noqa: PLC0415
+        from apps.events.models import ScheduledMessage  # noqa: PLC0415  # circular import
 
         ScheduledMessage.objects.create(
             experiment=session.experiment, participant=session.participant, team=session.team, action=action
@@ -95,7 +95,6 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import Pipeline  # noqa: PLC0415
 
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
@@ -132,7 +131,7 @@ class PipelineStartAction(EventActionHandlerBase):
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ) as span:
-            from apps.chat.bots import PipelineBot  # noqa: PLC0415
+            from apps.chat.bots import PipelineBot  # noqa: PLC0415  # circular import
 
             bot = PipelineBot(
                 session=session,

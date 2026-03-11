@@ -26,9 +26,10 @@ class OcsAdminSite(admin.AdminSite):
                     index_path = reverse("admin:index", current_app=self.name)
                     return HttpResponseRedirect(index_path)
 
-                # Inner import to prevent django.contrib.admin (app) from
-                # importing django.contrib.auth.models.User (unrelated model).
-                from django.contrib.auth.views import redirect_to_login  # noqa: PLC0415
+                # Inner import to prevent django.contrib.admin (app) from importing auth models.
+                from django.contrib.auth.views import (
+                    redirect_to_login,  # noqa: PLC0415  # avoid auth model import on admin startup
+                )
 
                 return redirect_to_login(
                     request.get_full_path(),

@@ -2,7 +2,10 @@ from apps.audit.service import AuditService
 
 
 def test_serialize_schema_field():
-    from .models import ModelWithSchemaField, TestSchema  # noqa: PLC0415
+    from .models import (  # noqa: PLC0415  # must import after setup_test_app() in conftest
+        ModelWithSchemaField,
+        TestSchema,
+    )
 
     model = ModelWithSchemaField(config=TestSchema(att1="value", att2=42, url_attr="http://example.com"))
 

@@ -107,7 +107,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     @transaction.atomic()
     def create_new_version(self):  # ty: ignore[invalid-method-override]
-        from .sync import push_assistant_to_openai  # noqa: PLC0415
+        from .sync import push_assistant_to_openai  # noqa: PLC0415  # circular import
 
         version_number = self.version_number
         self.version_number = version_number + 1
@@ -137,7 +137,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return assistant_version
 
     def archive(self):
-        from apps.assistants.tasks import delete_openai_assistant_task  # noqa: PLC0415
+        from apps.assistants.tasks import delete_openai_assistant_task  # noqa: PLC0415  # circular import
 
         if self._is_actively_used:
             return False
@@ -195,7 +195,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.experiments.models import VersionFieldDisplayFormatters  # noqa: PLC0415
+        from apps.experiments.models import VersionFieldDisplayFormatters  # noqa: PLC0415  # circular import
 
         return VersionDetails(
             instance=self,

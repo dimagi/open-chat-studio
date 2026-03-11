@@ -5,9 +5,10 @@ import pytest
 from django.http import QueryDict
 
 from apps.annotations.models import Tag
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.trace.filters import TraceFilter
 from apps.trace.models import Trace, TraceStatus
-from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+from apps.utils.factories.experiment import ChatFactory, ExperimentFactory, ParticipantFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -242,8 +243,6 @@ class TestTraceFilter:
     # Test message tags filter
     def test_message_tags_filter_any_of_input_message(self, trace, team):
         """Test message tags filter with tags on input message."""
-        from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
-        from apps.utils.factories.experiment import ChatFactory  # noqa: PLC0415
 
         # Create a chat and input message with tags
         chat = ChatFactory.create(team=team)
@@ -270,8 +269,6 @@ class TestTraceFilter:
 
     def test_message_tags_filter_any_of_output_message(self, trace, team):
         """Test message tags filter with tags on output message."""
-        from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
-        from apps.utils.factories.experiment import ChatFactory  # noqa: PLC0415
 
         # Create a chat and output message with tags
         chat = ChatFactory.create(team=team)
@@ -292,8 +289,6 @@ class TestTraceFilter:
 
     def test_message_tags_filter_all_of(self, trace, team):
         """Test message tags filter with ALL_OF operator."""
-        from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
-        from apps.utils.factories.experiment import ChatFactory  # noqa: PLC0415
 
         # Create messages with multiple tags
         chat = ChatFactory.create(team=team)
@@ -322,8 +317,6 @@ class TestTraceFilter:
 
     def test_message_tags_filter_excludes(self, trace, team):
         """Test message tags filter with EXCLUDES operator."""
-        from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
-        from apps.utils.factories.experiment import ChatFactory  # noqa: PLC0415
 
         # Create message with tags
         chat = ChatFactory.create(team=team)

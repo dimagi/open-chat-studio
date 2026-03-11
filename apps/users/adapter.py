@@ -33,7 +33,7 @@ class MfaAdapter(DefaultMFAAdapter):
         if not settings.CRYPTOGRAPHY_SALT:
             return text
 
-        from django_cryptography.utils.crypto import FernetBytes  # noqa: PLC0415
+        from django_cryptography.utils.crypto import FernetBytes  # noqa: PLC0415  # optional dependency
 
         return b64encode(FernetBytes().encrypt(force_bytes(text))).decode("ascii")
 
@@ -42,6 +42,6 @@ class MfaAdapter(DefaultMFAAdapter):
         if not settings.CRYPTOGRAPHY_SALT:
             return encrypted_text
 
-        from django_cryptography.utils.crypto import FernetBytes  # noqa: PLC0415
+        from django_cryptography.utils.crypto import FernetBytes  # noqa: PLC0415  # optional dependency
 
         return force_str(FernetBytes().decrypt(b64decode(encrypted_text)))
