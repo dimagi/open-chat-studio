@@ -241,6 +241,12 @@ if env.bool("DJANGO_DATABASE_USE_POOL", True):
 else:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
 
+# RDS Proxy requires TLS. psycopg3 defaults to sslmode=prefer which falls back to
+# non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
+# without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
+# (e.g. set to "prefer" for local dev without TLS).
+db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="prefer" if DEBUG else "require")
+
 # Auth / login stuff
 
 # Django recommends overriding the user model even if you don't think you need to because it makes
@@ -368,7 +374,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {
+    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -380,7 +386,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-    STORAGES["public"] = {
+    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
