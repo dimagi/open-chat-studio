@@ -59,6 +59,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Only create user and team, skip sample data (chatbots, files, etc.)",
         )
+        parser.add_argument(
+            "--reset",
+            action="store_true",
+            help="Delete the existing team and all its data before recreating it.",
+        )
 
     def handle(self, *args, **options):
         email = options["email"]
@@ -66,10 +71,14 @@ class Command(BaseCommand):
         team_slug = options["team_slug"]
         team_name = options["team_name"]
         skip_sample_data = options["skip_sample_data"]
+        reset = options["reset"]
 
         self.stdout.write("=" * 50)
         self.stdout.write("Seeding development data...")
         self.stdout.write("=" * 50)
+
+        if reset:
+            self._reset_team(team_slug)
 
         # Create user and team
         user, team = self._create_user_and_team(email, password, team_slug, team_name)
@@ -88,6 +97,15 @@ class Command(BaseCommand):
         if skip_sample_data:
             self.stdout.write("To add sample data later, run:")
             self.stdout.write(f"  python manage.py bootstrap_data --email {email} --team-slug {team_slug}")
+
+    def _reset_team(self, team_slug: str):
+        """Delete the team and all its associated data (cascades via FK)."""
+        try:
+            team = Team.objects.get(slug=team_slug)
+            team.delete()
+            self.stdout.write(self.style.SUCCESS(f"Deleted team '{team_slug}' and all associated data"))
+        except Team.DoesNotExist:
+            self.stdout.write(self.style.WARNING(f"Team '{team_slug}' does not exist, nothing to reset"))
 
     def _create_user_and_team(self, email: str, password: str, team_slug: str, team_name: str):
         """Create test user and team with owner permissions."""
