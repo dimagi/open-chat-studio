@@ -16,10 +16,10 @@ Jinja template errors in the Email and Template pipeline nodes provide poor feed
 
 #### Backend Endpoint
 
-A new API endpoint validates Jinja template syntax:
+A new team-scoped API endpoint validates Jinja template syntax. It follows the same URL pattern and auth as existing pipeline endpoints (`@login_and_team_required`, `@csrf_exempt`):
 
 ```
-POST /api/pipelines/validate-jinja/
+POST /api/pipelines/<team_slug>/validate-jinja/
 Content-Type: application/json
 
 {"template": "{{ foo }"}
@@ -35,28 +35,33 @@ Or when valid:
 {"errors": []}
 ```
 
-Implementation uses `SandboxedEnvironment().parse(template)` — the same environment used at runtime, ensuring parity. The endpoint requires an authenticated session (same auth as existing pipeline endpoints).
+Implementation uses `SandboxedEnvironment().parse(template)` — this only parses the template AST without rendering, so it catches syntax errors but not undefined variable errors (which are only knowable at runtime when the context is available). Using the same `SandboxedEnvironment` as runtime ensures parity.
+
+Empty template strings are valid (`parse("")` returns an empty AST) and return `{"errors": []}`.
 
 #### Frontend CodeMirror Linter
 
-Add a CodeMirror `linter()` extension to the `JinjaEditor` component. On each edit (debounced ~500ms), it calls the backend validation endpoint and maps returned errors to CodeMirror `Diagnostic` objects with line/column positions. This renders inline squiggles in the editor at the error location.
+Add a CodeMirror `linter()` extension to the `JinjaEditor` component. On each edit (debounced), it calls the backend validation endpoint and maps returned errors to CodeMirror `Diagnostic` objects with line/column positions. This renders inline squiggles in the editor at the error location.
 
 The linter function:
 - Debounces calls to avoid excessive requests during typing
 - Maps backend error responses to `{from, to, severity, message}` diagnostics
 - Shows "error" severity for syntax errors
+- Clears stale diagnostics while a request is in-flight
+
+Requires adding `@codemirror/lint` as an npm dependency.
 
 #### Pydantic Backstop Validator
 
-Add a shared `@field_validator` on Jinja template fields in both `RenderTemplate` and `SendEmail` nodes. This calls `SandboxedEnvironment().parse()` on save, catching syntax errors even when the frontend linter didn't fire (e.g. API-based pipeline updates). Errors surface as field-level validation errors in the existing error display mechanism.
+Add a shared `@field_validator` on Jinja template fields in both `RenderTemplate` and `SendEmail` nodes. This calls `SandboxedEnvironment().parse()` on save — **not** `render()`, since template variables are only available at runtime. This catches syntax errors even when the frontend linter didn't fire (e.g. API-based pipeline updates). Errors surface as field-level validation errors in the existing error display mechanism.
 
 ### 2. RenderTemplate Widget Upgrade
 
 Change `RenderTemplate.template_string` from `Widgets.expandable_text` to `Widgets.jinja_template`.
 
-Add a new `OptionsSource.jinja_template_node` enum value. Since `RenderTemplate` and `SendEmail` share the same Jinja context (via `_build_jinja_context`), the variable list is identical: `input`, `node_inputs`, `temp_state`, `session_state`, `participant_data`, `participant_details`, `participant_schedules`, `input_message_id`, `input_message_url`.
+Rename `OptionsSource.jinja_email_node` to `OptionsSource.jinja_node` since `RenderTemplate` and `SendEmail` share the same Jinja context (via `_build_jinja_context`) and the variable list is identical: `input`, `node_inputs`, `temp_state`, `session_state`, `participant_data`, `participant_details`, `participant_schedules`, `input_message_id`, `input_message_url`. Update references in both `SendEmail` field definitions and `views.py`.
 
-The `get_jinja_email_vars()` method can be reused (or renamed to be more generic) since the variable set is the same.
+Similarly rename `get_jinja_email_vars()` to `get_jinja_vars()` for clarity.
 
 ### 3. Structured Runtime Error Messages
 
@@ -87,24 +92,27 @@ Jinja2 error in field "body": <exception type>: <message>
 
 #### Implementation
 
-A utility function `format_jinja_error(exc: Exception, field_name: str, context: dict) -> str` that:
+A utility function `format_jinja_error(exc: Exception, field_name: str, context: dict | None = None) -> str` that:
 1. Categorizes the exception type (`UndefinedError`, `TemplateSyntaxError`, `SecurityError`, other)
 2. Extracts line number from `TemplateSyntaxError` when available
-3. Appends available top-level variable names for `UndefinedError`
+3. Appends available top-level variable names for `UndefinedError` (when `context` is provided)
 4. Returns the formatted string
 
-Both `RenderTemplate._process()` and `SendEmail._process()` call this in their except blocks before raising `PipelineNodeRunError`.
+The `context` parameter is optional because exceptions during `env.from_string()` (parsing phase) occur before the context dict is used. In that case, available variables are omitted from the message.
+
+Both `RenderTemplate._process()` and `SendEmail._process()` call this in their except blocks before raising `PipelineNodeRunError`. Field names match the Pydantic field names (e.g. `"template_string"`, `"subject"`, `"recipient_list"`, `"body"`).
 
 No changes to the `Trace` model or `format_exception_for_trace()` — the improved message is stored as-is in `Trace.error`.
 
 ## Files Modified
 
-- `apps/pipelines/nodes/nodes.py` — RenderTemplate widget upgrade, `format_jinja_error` helper, updated except blocks
-- `apps/pipelines/nodes/base.py` — add `OptionsSource.jinja_template_node`
-- `apps/pipelines/views.py` — add validate-jinja endpoint, add jinja_template_node to options source data
+- `apps/pipelines/nodes/nodes.py` — RenderTemplate widget upgrade, `format_jinja_error` helper, updated except blocks, Pydantic backstop validator
+- `apps/pipelines/nodes/base.py` — rename `OptionsSource.jinja_email_node` to `OptionsSource.jinja_node`
+- `apps/pipelines/views.py` — add validate-jinja endpoint, update options source key
 - `apps/pipelines/urls.py` — route for new endpoint
-- `apps/utils/prompt.py` — reuse or rename `get_jinja_email_vars` for shared use
+- `apps/utils/prompt.py` — rename `get_jinja_email_vars` to `get_jinja_vars`
 - `assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx` — add linter extension to `JinjaEditor`
+- `package.json` — add `@codemirror/lint` dependency
 
 ## Test Changes
 
