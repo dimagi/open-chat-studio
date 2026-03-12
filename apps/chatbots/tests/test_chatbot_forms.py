@@ -1,10 +1,12 @@
 import pytest
 from django.test import RequestFactory
 
-from apps.chatbots.forms import ChatbotForm
+from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
 from apps.teams.utils import set_current_team
+from apps.utils.factories.experiment import ConsentFormFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
@@ -66,3 +68,24 @@ def test_chatbot_form_pipeline_creation(team_with_users):
     experiment = form.save()
     assert Pipeline.objects.filter(name="Chatbot with Pipeline", team=team).exists()
     assert experiment.pipeline is not None
+
+
+@pytest.mark.django_db()
+def test_chatbot_settings_form_consent_form_queryset_is_team_scoped(team_with_users):
+    """Consent form choices in the settings form must be scoped to the current team."""
+    team = team_with_users
+    other_team = TeamFactory()
+    user = team.members.first()
+
+    own_consent = ConsentFormFactory(team=team)
+    other_consent = ConsentFormFactory(team=other_team)
+
+    request = RequestFactory().get("/")
+    request.team = team
+    request.user = user
+
+    form = ChatbotSettingsForm(request)
+
+    consent_qs = form.fields["consent_form"].queryset
+    assert own_consent in consent_qs
+    assert other_consent not in consent_qs
