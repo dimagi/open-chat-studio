@@ -103,9 +103,9 @@ class TeamSignupFormInvitationEmailTests(TestCase):
     def test_signup_with_matching_email_case(self):
         """Signup with the exact invitation email should pass validation."""
         form = TeamSignupForm(data=self._make_form_data("invited@example.com"))
-        assert "invitation_id" not in form.errors
+        assert form.is_valid(), form.errors
 
     def test_signup_with_different_email_case(self):
         """Signup with a different case of the invitation email should pass validation."""
         form = TeamSignupForm(data=self._make_form_data("INVITED@EXAMPLE.COM"))
-        assert "invitation_id" not in form.errors, form.errors.get("invitation_id")
+        assert form.is_valid(), form.errors
