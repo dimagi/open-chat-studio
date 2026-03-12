@@ -72,12 +72,13 @@ def test_chatbot_form_pipeline_creation(team_with_users):
 
 @pytest.mark.django_db()
 def test_chatbot_settings_form_consent_form_queryset_is_team_scoped(team_with_users):
-    """Consent form choices in the settings form must be scoped to the current team."""
+    """Consent form choices in the settings form must be scoped to the current team and exclude versioned records."""
     team = team_with_users
     other_team = TeamFactory()
     user = team.members.first()
 
     own_consent = ConsentFormFactory(team=team)
+    versioned_consent = ConsentFormFactory(team=team, working_version=own_consent)
     other_consent = ConsentFormFactory(team=other_team)
 
     request = RequestFactory().get("/")
@@ -86,6 +87,7 @@ def test_chatbot_settings_form_consent_form_queryset_is_team_scoped(team_with_us
 
     form = ChatbotSettingsForm(request)
 
-    consent_qs = form.fields["consent_form"].queryset
-    assert own_consent in consent_qs
-    assert other_consent not in consent_qs
+    consent_ids = set(form.fields["consent_form"].queryset.values_list("id", flat=True))
+    assert own_consent.id in consent_ids
+    assert versioned_consent.id not in consent_ids
+    assert other_consent.id not in consent_ids
