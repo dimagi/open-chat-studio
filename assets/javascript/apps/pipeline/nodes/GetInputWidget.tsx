@@ -140,6 +140,7 @@ const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],
   "LLMResponse": ["llm_model", "history_type"],
   "AssistantNode": ["assistant_id", "citations_enabled"],
+  "SendEmail": ["recipient_list", "subject", "body"],
 };
 
 /**

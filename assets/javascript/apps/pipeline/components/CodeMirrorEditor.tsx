@@ -6,6 +6,7 @@ import {autocompletion, CompletionContext, snippetCompletion as snip} from "@cod
 import {python} from "@codemirror/lang-python";
 import {EditorView} from "@codemirror/view";
 import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
+import {jinja} from "@codemirror/lang-jinja";
 
 const githubDark = githubDarkInit({
   "settings": {
@@ -250,6 +251,30 @@ export function PromptEditor(
       EditorView.editable.of(false),
       EditorState.readOnly.of(true),
     ]
+  }
+  return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
+}
+
+
+export function JinjaEditor(
+  {value, onChange, readOnly, autocompleteVars}: {
+    value: string;
+    onChange: (value: string) => void;
+    readOnly: boolean;
+    autocompleteVars: string[];
+  }
+) {
+  const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
+  let extensions = [
+    jinja({ variables: jinjaVariables }),
+    EditorView.lineWrapping,
+  ];
+  if (readOnly) {
+    extensions = [
+      ...extensions,
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+    ];
   }
   return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
 }
