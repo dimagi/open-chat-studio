@@ -339,8 +339,8 @@ class SureAdhereService(MessagingService):
 class MetaCloudAPIService(MessagingService):
     _type: ClassVar[str] = "meta_cloud_api"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
-    voice_replies_supported: ClassVar[bool] = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
+    voice_replies_supported: ClassVar[bool] = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
     access_token: str
     business_id: str
@@ -403,6 +403,68 @@ class MetaCloudAPIService(MessagingService):
             }
             response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
             response.raise_for_status()
+
+    def send_voice_message(
+        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+    ):
+        voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
+        media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg")
+
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        data = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "audio",
+            "audio": {"id": media_id},
+        }
+        response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+        response.raise_for_status()
+
+    def _upload_media(self, phone_number_id: str, file_bytes: bytes, mime_type: str) -> str:
+        url = f"{self.META_API_BASE_URL}/{phone_number_id}/media"
+        response = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {self.access_token}"},
+            data={"messaging_product": "whatsapp", "type": mime_type},
+            files={"file": ("audio.ogg", BytesIO(file_bytes), mime_type)},
+            timeout=self.META_API_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()["id"]
+
+    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
+        # Step 1: Get the media download URL from Meta's API
+        media_url = self._get_media_url(message.media_id)
+
+        # Step 2: Download the audio binary
+        response = httpx.get(
+            media_url,
+            headers=self._headers,
+            follow_redirects=True,
+            timeout=self.META_API_TIMEOUT,
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise AudioConversionError("Unable to fetch message media") from e
+
+        data = BytesIO(response.content)
+        content_type = response.headers["Content-Type"]
+        message.cached_media_data = MediaCache(content_type=content_type, data=data)
+
+        family, sub_type = content_type.split("/", 1)
+        if family != "audio":
+            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+
+        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
+        data.seek(0)
+        return converted
+
+    def _get_media_url(self, media_id: str) -> str:
+        url = f"{self.META_API_BASE_URL}/{media_id}"
+        response = httpx.get(url, headers=self._headers, timeout=self.META_API_TIMEOUT)
+        response.raise_for_status()
+        return response.json()["url"]
 
 
 class SlackService(MessagingService):
