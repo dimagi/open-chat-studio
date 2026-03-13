@@ -480,8 +480,8 @@ class MetaCloudAPIWebhookView(View):
             phone_number_id = value["metadata"]["phone_number_id"]
             ch = channel_map.get(phone_number_id)
             if not ch:
-                log.info("Meta Cloud API webhook: no channel found for phone_number_id=%s", phone_number_id)
                 continue
+
             tasks.handle_meta_cloud_api_message.delay(
                 channel_id=ch.id,
                 team_slug=ch.team.slug,
