@@ -18,11 +18,12 @@
 |------|--------|---------------|
 | `apps/pipelines/nodes/nodes.py` | Modify | `format_jinja_error` helper, updated except blocks, Pydantic backstop validator, RenderTemplate widget upgrade |
 | `apps/pipelines/nodes/base.py` | Modify | Rename `OptionsSource.jinja_email_node` to `jinja_node` |
-| `apps/pipelines/views.py` | Modify | Add `validate_jinja` view, update options source key |
+| `apps/pipelines/views.py` | Modify | Add `validate_jinja` view with `checks` parameter, update options source key |
 | `apps/pipelines/urls.py` | Modify | Add route for validate-jinja endpoint |
 | `apps/utils/prompt.py` | Modify | Rename `get_jinja_email_vars` to `get_jinja_vars` |
-| `assets/javascript/apps/pipeline/api/api.ts` | Modify | Add `validateJinja` method |
-| `assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx` | Modify | Add linter extension to `JinjaEditor` |
+| `assets/javascript/apps/pipeline/api/api.ts` | Modify | Add `validateJinja` method with `checks` parameter |
+| `assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx` | Modify | Add linter extension to `JinjaEditor` via `onValidate` prop |
+| `assets/javascript/apps/pipeline/nodes/widgets.tsx` | Modify | Pass `onValidate` prop with appropriate `checks` to `JinjaEditor` |
 | `apps/pipelines/tests/test_jinja_validation.py` | Create | Tests for `format_jinja_error`, backstop validator, validate-jinja endpoint |
 | `apps/pipelines/tests/test_template_node.py` | Modify | Add structured error message tests |
 | `apps/pipelines/tests/test_nodes.py` | Modify | Add structured error message tests for SendEmail |
@@ -41,58 +42,60 @@
 
 - [ ] **Step 1: Write failing tests for `format_jinja_error`**
 
-Create `apps/pipelines/tests/test_jinja_validation.py`:
+Create `apps/pipelines/tests/test_jinja_validation.py`. Tests construct exception objects directly rather than triggering them via Jinja — this is a pure unit test of the formatter:
 
 ```python
 import pytest
 from jinja2 import TemplateSyntaxError, UndefinedError
-from jinja2.sandbox import SandboxedEnvironment, SecurityError
+from jinja2.sandbox import SecurityError
 
 from apps.pipelines.nodes.nodes import format_jinja_error
 
 
 class TestFormatJinjaError:
     def test_undefined_error_with_context(self):
-        try:
-            SandboxedEnvironment().from_string("{{ foo }}").render({})
-        except UndefinedError as e:
-            result = format_jinja_error(e, "subject", context={"input": "", "temp_state": {}})
-        assert "UndefinedError" in result
-        assert 'field "subject"' in result
+        exc = UndefinedError("'foo' is undefined")
+        result = format_jinja_error(exc, "subject", context={"input": "", "temp_state": {}})
+        assert 'UndefinedError in field "subject"' in result
         assert "Available variables: input, temp_state" in result
 
     def test_undefined_error_without_context(self):
-        try:
-            SandboxedEnvironment().from_string("{{ foo }}").render({})
-        except UndefinedError as e:
-            result = format_jinja_error(e, "body")
-        assert "UndefinedError" in result
-        assert 'field "body"' in result
+        exc = UndefinedError("'foo' is undefined")
+        result = format_jinja_error(exc, "body")
+        assert 'UndefinedError in field "body"' in result
         assert "Available variables" not in result
 
     def test_syntax_error(self):
-        try:
-            SandboxedEnvironment().parse("{{ foo }")
-        except TemplateSyntaxError as e:
-            result = format_jinja_error(e, "template_string")
-        assert "TemplateSyntaxError" in result
-        assert 'field "template_string"' in result
+        exc = TemplateSyntaxError("unexpected '}'", lineno=3)
+        result = format_jinja_error(exc, "template_string")
+        assert 'TemplateSyntaxError in field "template_string"' in result
+        assert "(line 3)" in result
+
+    def test_syntax_error_no_lineno(self):
+        exc = TemplateSyntaxError("unexpected end of template", lineno=None)
+        result = format_jinja_error(exc, "body")
+        assert 'TemplateSyntaxError in field "body"' in result
+        assert "(line" not in result
 
     def test_security_error(self):
-        env = SandboxedEnvironment()
-        try:
-            env.from_string("{{ ''.__class__.__mro__ }}").render()
-        except SecurityError as e:
-            result = format_jinja_error(e, "body")
-        assert "SecurityError" in result
-        assert 'field "body"' in result
+        exc = SecurityError("access to attribute 'mro' of 'type' object is unsafe")
+        result = format_jinja_error(exc, "body")
+        assert 'SecurityError in field "body"' in result
 
     def test_generic_exception(self):
         exc = ValueError("something broke")
         result = format_jinja_error(exc, "body")
-        assert "Jinja2 error" in result
-        assert 'field "body"' in result
+        assert 'Jinja2 error in field "body"' in result
         assert "ValueError" in result
+
+    def test_context_keys_preserve_insertion_order(self):
+        """Available variables should appear in insertion order, not sorted."""
+        from collections import OrderedDict
+
+        ctx = OrderedDict([("zebra", 1), ("alpha", 2), ("middle", 3)])
+        exc = UndefinedError("'foo' is undefined")
+        result = format_jinja_error(exc, "body", context=ctx)
+        assert "Available variables: zebra, alpha, middle" in result
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -125,7 +128,7 @@ def format_jinja_error(exc: Exception, field_name: str, context: dict | None = N
     if isinstance(exc, UndefinedError):
         msg = f'Jinja2 UndefinedError in field "{field_name}": {exc}'
         if context:
-            var_names = ", ".join(sorted(context.keys()))
+            var_names = ", ".join(context.keys())
             msg += f"\nAvailable variables: {var_names}"
         return msg
 
@@ -183,25 +186,28 @@ def test_render_template_undefined_variable_error(pipeline, experiment_session):
         node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 ```
 
-Add the `PipelineNodeRunError` import at the top of the test file:
+Add imports at the top of the test file:
 ```python
 from apps.pipelines.exceptions import PipelineNodeRunError
 ```
 
-- [ ] **Step 2: Write failing test for SendEmail structured error**
+- [ ] **Step 2: Write failing tests for SendEmail structured errors**
 
-Add to `apps/pipelines/tests/test_nodes.py`, inside a new test class or after the existing `TestSendEmailInputValidation` class:
+Add to `apps/pipelines/tests/test_nodes.py`. Use `InMemoryPipelineRepository` to avoid DB access:
 
 ```python
+from apps.pipelines.repository import InMemoryPipelineRepository
+
+
 class TestSendEmailRuntimeErrors:
-    @pytest.mark.django_db()
+    def _make_state(self):
+        return PipelineState(messages=["hello"], outputs={})
+
+    def _make_config(self):
+        repo = InMemoryPipelineRepository()
+        return {"configurable": {"repo": repo}}
+
     def test_subject_undefined_error(self):
-        session = ExperimentSessionFactory.create()
-        state = PipelineState(
-            experiment_session=session,
-            messages=["hello"],
-            outputs={},
-        )
         node = SendEmail(
             name="email",
             node_id="test",
@@ -209,19 +215,10 @@ class TestSendEmailRuntimeErrors:
             recipient_list="test@example.com",
             subject="{{ nonexistent }}",
         )
-        config = {"configurable": {"repo": ORMRepository(session=session)}}
-
         with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "subject"'):
-            node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
 
-    @pytest.mark.django_db()
     def test_body_undefined_error(self):
-        session = ExperimentSessionFactory.create()
-        state = PipelineState(
-            experiment_session=session,
-            messages=["hello"],
-            outputs={},
-        )
         node = SendEmail(
             name="email",
             node_id="test",
@@ -230,19 +227,10 @@ class TestSendEmailRuntimeErrors:
             subject="Hi",
             body="{{ missing_var }}",
         )
-        config = {"configurable": {"repo": ORMRepository(session=session)}}
-
         with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "body"'):
-            node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
 
-    @pytest.mark.django_db()
     def test_recipient_list_undefined_error(self):
-        session = ExperimentSessionFactory.create()
-        state = PipelineState(
-            experiment_session=session,
-            messages=["hello"],
-            outputs={},
-        )
         node = SendEmail(
             name="email",
             node_id="test",
@@ -250,19 +238,9 @@ class TestSendEmailRuntimeErrors:
             recipient_list="{{ missing_var }}",
             subject="Hi",
         )
-        config = {"configurable": {"repo": ORMRepository(session=session)}}
-
         with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "recipient_list"'):
-            node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
 ```
-
-Add the `ORMRepository` import at the top of `test_nodes.py`:
-```python
-from apps.pipelines.repository import ORMRepository
-from apps.utils.factories.experiment import ExperimentSessionFactory
-```
-
-Note: `ExperimentSessionFactory` is already imported.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -375,9 +353,7 @@ class TestJinjaSyntaxBackstopValidator:
             RenderTemplate(name="test", node_id="1", django_node=None, template_string="{{ foo }")
 
     def test_render_template_empty_string(self):
-        """Empty strings are valid — the field is required but an empty template parses fine."""
-        # Note: this will fail Pydantic's required-field check, not the Jinja validator.
-        # If the field has a value (even empty), parse("") succeeds.
+        """Empty strings are valid — parse("") succeeds."""
         node = RenderTemplate(name="test", node_id="1", django_node=None, template_string="")
         assert node.template_string == ""
 
@@ -400,6 +376,16 @@ class TestJinjaSyntaxBackstopValidator:
                 django_node=None,
                 recipient_list="test@example.com",
                 subject="{{ broken }",
+            )
+
+    def test_send_email_recipient_list_invalid_syntax(self):
+        with pytest.raises(ValidationError, match="Invalid Jinja2 syntax"):
+            SendEmail(
+                name="email",
+                node_id="1",
+                django_node=None,
+                recipient_list="{{ broken }",
+                subject="Hi",
             )
 
     def test_send_email_valid_jinja_fields(self):
@@ -425,7 +411,11 @@ Add a shared validator function in `apps/pipelines/nodes/nodes.py`, near `format
 
 ```python
 def _validate_jinja_syntax(value: str) -> str:
-    """Pydantic validator that checks Jinja2 template syntax at save time."""
+    """Pydantic validator that checks Jinja2 template syntax at save time.
+
+    Uses env.parse() (AST only, no rendering) so it only catches syntax errors,
+    not undefined variable errors (which require runtime context).
+    """
     if not value:
         return value
     try:
@@ -434,11 +424,12 @@ def _validate_jinja_syntax(value: str) -> str:
         line_info = f" (line {e.lineno})" if e.lineno else ""
         raise PydanticCustomError(
             "invalid_jinja_syntax",
-            "Invalid Jinja2 syntax: {message}{line_info}",
-            {"message": e.message, "line_info": line_info},
+            f"Invalid Jinja2 syntax: {e.message}{line_info}",
         ) from None
     return value
 ```
+
+Note: The error message is pre-formatted (f-string, not PydanticCustomError template interpolation) because Jinja error messages frequently contain `{` and `}` which would cause double-interpolation issues.
 
 Then add the validator to `RenderTemplate`:
 
@@ -448,15 +439,29 @@ Then add the validator to `RenderTemplate`:
         return _validate_jinja_syntax(value)
 ```
 
-And to `SendEmail` (add as a new validator, keeping the existing `recipient_list_has_valid_emails`):
+For `SendEmail`, chain the Jinja check into the existing `recipient_list_has_valid_emails` validator (to avoid implicit ordering dependencies), and add a separate validator for `subject` and `body`:
 
 ```python
-    @field_validator("subject", "body", "recipient_list", mode="before")
+    @field_validator("subject", "body", mode="before")
     def validate_jinja_syntax(cls, value):
         return _validate_jinja_syntax(value)
+
+    @field_validator("recipient_list", mode="before")
+    def recipient_list_has_valid_emails(cls, value):
+        value = value or ""
+        # Check Jinja syntax first — if it's invalid, don't try email validation
+        _validate_jinja_syntax(value)
+        if "{{" in value or "{%" in value:
+            return value  # Jinja2 template — validate at runtime after rendering
+        for email in [email.strip() for email in value.split(",")]:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise PydanticCustomError("invalid_recipient_list", "Invalid list of emails addresses") from None
+        return value
 ```
 
-**Important:** The `validate_jinja_syntax` validator on SendEmail must run **before** the existing `recipient_list_has_valid_emails` validator. Since Pydantic runs validators in definition order per field, place `validate_jinja_syntax` before `recipient_list_has_valid_emails` in the class body. Alternatively, since they both use `mode="before"`, the Jinja check will only run on the raw input and the email validator runs after — this is fine because a Jinja syntax error in `recipient_list` will be caught before the email validator tries to parse addresses.
+This replaces the existing `recipient_list_has_valid_emails` method — the only change is the `_validate_jinja_syntax(value)` call at the top.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -630,31 +635,25 @@ class TestValidateJinjaEndpoint:
     def _url(self, team):
         return reverse("pipelines:validate_jinja", kwargs={"team_slug": team.slug})
 
-    def test_valid_template(self, authed_client, team_with_users):
-        response = authed_client.post(
-            self._url(team_with_users),
-            data=json.dumps({"template": "Hello {{ name }}"}),
+    def _post(self, client, team, data):
+        return client.post(
+            self._url(team),
+            data=json.dumps(data),
             content_type="application/json",
         )
+
+    def test_valid_template(self, authed_client, team_with_users):
+        response = self._post(authed_client, team_with_users, {"template": "Hello {{ name }}"})
         assert response.status_code == 200
-        data = response.json()
-        assert data["errors"] == []
+        assert response.json()["errors"] == []
 
     def test_empty_template(self, authed_client, team_with_users):
-        response = authed_client.post(
-            self._url(team_with_users),
-            data=json.dumps({"template": ""}),
-            content_type="application/json",
-        )
+        response = self._post(authed_client, team_with_users, {"template": ""})
         assert response.status_code == 200
         assert response.json()["errors"] == []
 
     def test_jinja_syntax_error(self, authed_client, team_with_users):
-        response = authed_client.post(
-            self._url(team_with_users),
-            data=json.dumps({"template": "{{ foo }"}),
-            content_type="application/json",
-        )
+        response = self._post(authed_client, team_with_users, {"template": "{{ foo }"})
         assert response.status_code == 200
         data = response.json()
         assert len(data["errors"]) >= 1
@@ -664,33 +663,58 @@ class TestValidateJinjaEndpoint:
         assert "message" in error
 
     def test_unclosed_html_tag(self, authed_client, team_with_users):
-        response = authed_client.post(
-            self._url(team_with_users),
-            data=json.dumps({"template": "<div><p>{{ foo }}</div>"}),
-            content_type="application/json",
-        )
+        response = self._post(authed_client, team_with_users, {"template": "<div><p>{{ foo }}</div>"})
         assert response.status_code == 200
         data = response.json()
-        # Should have HTML lint warning (H025 orphan tag)
         warnings = [e for e in data["errors"] if e["severity"] == "warning"]
         assert len(warnings) >= 1
         assert any("H025" in w["message"] for w in warnings)
 
     def test_valid_html_no_warnings(self, authed_client, team_with_users):
-        response = authed_client.post(
-            self._url(team_with_users),
-            data=json.dumps({"template": "<div><p>{{ foo }}</p></div>"}),
-            content_type="application/json",
-        )
+        response = self._post(authed_client, team_with_users, {"template": "<div><p>{{ foo }}</p></div>"})
         assert response.status_code == 200
         assert response.json()["errors"] == []
 
-    def test_missing_template_field(self, authed_client, team_with_users):
-        response = authed_client.post(
-            self._url(team_with_users),
-            data=json.dumps({}),
-            content_type="application/json",
+    def test_excluded_djlint_rules_not_reported(self, authed_client, team_with_users):
+        """H006 (img height/width) and H013 (img alt) should be filtered out."""
+        response = self._post(authed_client, team_with_users, {"template": '<img src="test.png">'})
+        assert response.status_code == 200
+        assert response.json()["errors"] == []
+
+    def test_checks_jinja_only(self, authed_client, team_with_users):
+        """When checks=["jinja"], HTML lint warnings should not be returned."""
+        response = self._post(
+            authed_client, team_with_users,
+            {"template": "<div><p>{{ foo }}</div>", "checks": ["jinja"]},
         )
+        assert response.status_code == 200
+        # No HTML warnings — only Jinja checks were requested, and this is valid Jinja
+        assert response.json()["errors"] == []
+
+    def test_checks_html_only(self, authed_client, team_with_users):
+        """When checks=["html"], Jinja syntax errors should not be returned."""
+        response = self._post(
+            authed_client, team_with_users,
+            {"template": "{{ foo }", "checks": ["html"]},
+        )
+        assert response.status_code == 200
+        # No Jinja error — only HTML checks were requested
+        # (djlint may or may not flag this, but there should be no "error" severity)
+        errors = [e for e in response.json()["errors"] if e["severity"] == "error"]
+        assert errors == []
+
+    def test_checks_defaults_to_both(self, authed_client, team_with_users):
+        """When checks is omitted, both Jinja and HTML checks run."""
+        response = self._post(
+            authed_client, team_with_users,
+            {"template": "<div><p>{{ foo }}</div>"},
+        )
+        assert response.status_code == 200
+        warnings = [e for e in response.json()["errors"] if e["severity"] == "warning"]
+        assert len(warnings) >= 1
+
+    def test_missing_template_field(self, authed_client, team_with_users):
+        response = self._post(authed_client, team_with_users, {})
         assert response.status_code == 400
 
     def test_unauthenticated_request(self, team_with_users):
@@ -728,15 +752,23 @@ Add to `apps/pipelines/views.py`:
 
 ```python
 import json
+import os
 import tempfile
 from pathlib import Path
 
 from djlint.lint import lint_file
 from djlint.settings import Config as DjlintConfig
+from jinja2 import TemplateSyntaxError
+from jinja2.sandbox import SandboxedEnvironment
 
 
-# Curated djlint rules relevant to template fragments
+# Curated djlint rules relevant to template fragments.
+# All other rules (H005 html lang, H007 DOCTYPE, H016 title, J004/J018 url_for, etc.)
+# are irrelevant for template fragments and would produce noise.
 DJLINT_ALLOWED_RULES = {"H020", "H021", "H025", "T027", "T034"}
+
+# Use /dev/shm (RAM-backed tmpfs) if available to avoid disk I/O for temp files
+_DJLINT_TMPDIR = "/dev/shm" if os.path.isdir("/dev/shm") else None
 
 
 @login_and_team_required
@@ -753,10 +785,11 @@ def validate_jinja(request, team_slug: str):
     if template is None:
         return JsonResponse({"error": "Missing 'template' field"}, status=400)
 
+    checks = set(body.get("checks", ["jinja", "html"]))
     errors = []
 
     # 1. Jinja syntax validation
-    if template:
+    if "jinja" in checks and template:
         try:
             SandboxedEnvironment().parse(template)
         except TemplateSyntaxError as e:
@@ -767,16 +800,22 @@ def validate_jinja(request, team_slug: str):
                 "severity": "error",
             })
 
-    # 2. HTML linting via djlint (only if no Jinja syntax errors)
-    if not errors and template:
+    # 2. HTML linting via djlint (only if requested and no Jinja syntax errors)
+    if "html" in checks and not errors and template:
         errors.extend(_djlint_check(template))
 
     return JsonResponse({"errors": errors})
 
 
 def _djlint_check(template: str) -> list[dict]:
-    """Run djlint on a template string and return lint issues as dicts."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False) as f:
+    """Run djlint on a template string and return lint issues as dicts.
+
+    Uses a curated allowlist of rules (DJLINT_ALLOWED_RULES) to filter out
+    rules that are irrelevant for template fragments.
+    """
+    # TODO: DjlintConfig re-parses pyproject.toml on every call. Profile and
+    # consider caching if this becomes a bottleneck.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, dir=_DJLINT_TMPDIR) as f:
         f.write(template)
         tmp_path = Path(f.name)
     try:
@@ -802,18 +841,6 @@ def _djlint_check(template: str) -> list[dict]:
                 "severity": "warning",
             })
     return errors
-```
-
-Add the required imports at the top of `views.py`:
-
-```python
-import tempfile
-from pathlib import Path
-
-from djlint.lint import lint_file
-from djlint.settings import Config as DjlintConfig
-from jinja2 import TemplateSyntaxError
-from jinja2.sandbox import SandboxedEnvironment
 ```
 
 Also ensure `require_POST` is imported (check if it already is):
@@ -869,11 +896,14 @@ git commit -m "chore: add @codemirror/lint dependency for Jinja editor linting"
 Add to the `ApiClient` class in `assets/javascript/apps/pipeline/api/api.ts`, after the `generateCode` method:
 
 ```typescript
-  public async validateJinja(template: string): Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}> {
+  public async validateJinja(
+    template: string,
+    checks: string[] = ["jinja", "html"],
+  ): Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}> {
     return this.makeRequest<{errors: Array<{line: number, column: number, message: string, severity: string}>}>(
       "post",
       `/pipelines/validate-jinja/`,
-      { template },
+      { template, checks },
     );
   }
 ```
@@ -891,30 +921,32 @@ git commit -m "feat: add validateJinja method to pipeline API client"
 
 ---
 
-### Task 8: Add linter extension to JinjaEditor
+### Task 8: Add linter extension to JinjaEditor and wire into JinjaWidget
 
 **Files:**
 - Modify: `assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx`
+- Modify: `assets/javascript/apps/pipeline/nodes/widgets.tsx`
 
-- [ ] **Step 1: Add linter to JinjaEditor**
+- [ ] **Step 1: Add linter to JinjaEditor via onValidate prop**
 
 In `assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx`, add the import:
 
 ```typescript
 import {linter, Diagnostic} from "@codemirror/lint";
-import {apiClient} from "../api/api";
 ```
 
 Then replace the `JinjaEditor` function (currently at line 259) with:
 
 ```typescript
-function jinjaLinter() {
+type ValidateFn = (template: string) => Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}>;
+
+function jinjaLinter(onValidate: ValidateFn) {
   return linter(async (view): Promise<Diagnostic[]> => {
     const doc = view.state.doc.toString();
     if (!doc.trim()) return [];
 
     try {
-      const result = await apiClient.validateJinja(doc);
+      const result = await onValidate(doc);
       return result.errors.map((err) => {
         const line = Math.min(err.line, view.state.doc.lines);
         const lineObj = view.state.doc.line(line);
@@ -934,19 +966,22 @@ function jinjaLinter() {
 }
 
 export function JinjaEditor(
-  {value, onChange, readOnly, autocompleteVars}: {
+  {value, onChange, readOnly, autocompleteVars, onValidate}: {
     value: string;
     onChange: (value: string) => void;
     readOnly: boolean;
     autocompleteVars: string[];
+    onValidate?: ValidateFn;
   }
 ) {
   const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
   let extensions = [
     jinja({ variables: jinjaVariables }),
-    jinjaLinter(),
     EditorView.lineWrapping,
   ];
+  if (onValidate) {
+    extensions.push(jinjaLinter(onValidate));
+  }
   if (readOnly) {
     extensions = [
       ...extensions,
@@ -958,20 +993,48 @@ export function JinjaEditor(
 }
 ```
 
-- [ ] **Step 2: Lint and type-check**
+- [ ] **Step 2: Wire JinjaWidget to pass onValidate**
 
-Run: `npm run lint assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx -- --fix`
+In `assets/javascript/apps/pipeline/nodes/widgets.tsx`, update the `JinjaWidget` function to pass `onValidate` to `JinjaEditor`. Import `apiClient` at the top (already imported) and add the callback:
+
+```typescript
+export function JinjaWidget(props: WidgetParams) {
+  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const rows: number = props.schema["ui:rows"] ?? 2;
+  const modalId = useId();
+
+  // Single-line fields (rows < 2) only get Jinja syntax checks, not HTML lint
+  const checks = rows < 2 ? ["jinja"] : ["jinja", "html"];
+  const onValidate = (template: string) => apiClient.validateJinja(template, checks);
+
+  // ... rest of the existing code, but pass onValidate to JinjaEditor:
+```
+
+Update the `<JinjaEditor>` usage in the modal to include the prop:
+```typescript
+            <JinjaEditor
+              value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+              onChange={onChangeCallback}
+              readOnly={props.readOnly}
+              autocompleteVars={autocomplete_vars_list}
+              onValidate={onValidate}
+            />
+```
+
+- [ ] **Step 3: Lint and type-check**
+
+Run: `npm run lint assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx assets/javascript/apps/pipeline/nodes/widgets.tsx -- --fix`
 Run: `npm run type-check`
 
-- [ ] **Step 3: Build frontend**
+- [ ] **Step 4: Build frontend**
 
 Run: `npm run dev`
 Expected: Build succeeds with no errors
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx
+git add assets/javascript/apps/pipeline/components/CodeMirrorEditor.tsx assets/javascript/apps/pipeline/nodes/widgets.tsx
 git commit -m "feat: add inline Jinja + HTML linting to JinjaEditor via CodeMirror"
 ```
 
