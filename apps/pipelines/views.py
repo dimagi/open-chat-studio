@@ -381,7 +381,7 @@ def get_pipeline_message_response(request, team_slug: str, pipeline_pk: int, tas
 
 
 @login_and_team_required
-@permission_required("pipelines.change_pipeline")
+@permission_required("pipelines.view_pipeline")
 @csrf_exempt
 @require_POST
 def validate_jinja(request, team_slug: str):
@@ -394,7 +394,10 @@ def validate_jinja(request, team_slug: str):
     if template is None:
         return JsonResponse({"error": "Missing 'template' field"}, status=400)
 
-    checks = set(body.get("checks", ["jinja", "html"]))
+    checks_raw = body.get("checks", ["jinja", "html"])
+    if not isinstance(checks_raw, list):
+        return JsonResponse({"error": "'checks' must be a list"}, status=400)
+    checks = set(checks_raw)
     errors = []
 
     # 1. Jinja syntax validation
