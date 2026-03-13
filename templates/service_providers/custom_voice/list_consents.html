@@ -1,0 +1,67 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+<div class="prose max-w-none">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="mb-0">{% translate "Voice Consents" %}</h1>
+    <a href="{% url 'service_providers:custom_voice_create_consent' request.team.slug provider.pk %}"
+       class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-plus mr-1"></i> {% translate "New Consent" %}
+    </a>
+  </div>
+
+  <p class="text-sm opacity-70">
+    {% translate "Provider:" %} {{ provider.name }}
+  </p>
+
+  {% if error_message %}
+    <div class="alert alert-warning mb-4">
+      <i class="fa-solid fa-exclamation-triangle mr-2"></i>
+      {% translate "Could not connect to OpenAI:" %} {{ error_message }}
+    </div>
+  {% endif %}
+
+  {% if consents %}
+    <div class="overflow-x-auto">
+      <table class="table table-zebra w-full">
+        <thead>
+          <tr>
+            <th>{% translate "Name" %}</th>
+            <th>{% translate "Consent ID" %}</th>
+            <th>{% translate "Language" %}</th>
+            <th>{% translate "Created" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for consent in consents %}
+            <tr>
+              <td>{{ consent.name }}</td>
+              <td><code class="text-xs">{{ consent.id }}</code></td>
+              <td>{{ consent.language }}</td>
+              <td>{{ consent.created_at|date:"Y-m-d H:i" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="alert alert-info">
+      <i class="fa-solid fa-info-circle mr-2"></i>
+      <div>
+        <p>{% translate "No consent recordings found." %}</p>
+        <p class="text-sm mt-2">
+          {% translate "You need to upload a consent recording before you can create a custom voice." %}
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="mt-8 flex gap-2">
+    <a href="{% url 'service_providers:custom_voice_list_voices' request.team.slug provider.pk %}"
+       class="btn btn-ghost btn-sm">
+      <i class="fa-solid fa-arrow-left mr-1"></i> {% translate "Back to Voices" %}
+    </a>
+  </div>
+</div>
+{% endblock app %}

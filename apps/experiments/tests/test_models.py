@@ -51,7 +51,8 @@ def experiment_session():
 class TestSyntheticVoice:
     @django_db_with_data()
     def test_team_scoped_services(self):
-        assert [SyntheticVoice.OpenAIVoiceEngine] == SyntheticVoice.TEAM_SCOPED_SERVICES
+        expected = [SyntheticVoice.OpenAIVoiceEngine, SyntheticVoice.OpenAICustomVoice]
+        assert expected == SyntheticVoice.TEAM_SCOPED_SERVICES
 
     @django_db_with_data()
     def test_get_for_team_returns_all_general_services(self):
