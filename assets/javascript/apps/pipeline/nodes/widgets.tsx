@@ -1,4 +1,4 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useState, useMemo} from "react";
 import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
@@ -1434,7 +1434,10 @@ export function JinjaWidget(props: WidgetParams) {
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
   const checks = rows < 2 ? ["jinja"] : ["jinja", "html"];
-  const onValidate = (template: string) => apiClient.validateJinja(template, checks);
+  const onValidate = useCallback(
+    (template: string) => apiClient.validateJinja(template, checks),
+    [checks]
+  );
 
   const onChangeCallback = (value: string) => {
     setNode(props.nodeId, produce((draft) => {

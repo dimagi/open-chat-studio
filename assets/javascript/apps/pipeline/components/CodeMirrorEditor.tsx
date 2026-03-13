@@ -298,7 +298,7 @@ export function JinjaEditor(
     jinja({ variables: jinjaVariables }),
     EditorView.lineWrapping,
   ];
-  if (onValidate) {
+  if (onValidate && !readOnly) {
     extensions.push(jinjaLinter(onValidate));
   }
   if (readOnly) {
