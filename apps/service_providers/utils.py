@@ -27,7 +27,7 @@ from .models import (
     VoiceProvider,
     VoiceProviderType,
 )
-from .tables import make_table
+from .tables import make_table, make_voice_table
 
 
 @dataclasses.dataclass
@@ -59,6 +59,8 @@ class ServiceProvider(ServiceProviderType, Enum):
 
     @property
     def table(self) -> tables.Table:
+        if self == ServiceProvider.voice:
+            return make_voice_table(self.slug, self.label, self.model, fields=self.primary_fields)
         return make_table(self.slug, self.label, self.model, fields=self.primary_fields)
 
     @property
