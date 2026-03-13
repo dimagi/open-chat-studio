@@ -481,11 +481,27 @@ class MetaCloudAPIWebhookView(View):
 
         # A single Meta webhook payload is always scoped to one app, so all entries share
         # the same app_secret. Verifying with the first channel's secret is sufficient.
-        log.debug("Meta Cloud API webhook dispatching %d message(s) for channel %s", len(message_values), channel.id)
+        # However, a payload may contain values for different phone numbers (e.g. a Business
+        # Account with multiple numbers), so each value must be routed to its own channel.
+        unique_phone_ids = {v["metadata"]["phone_number_id"] for v in message_values}
+        channel_map = {
+            ch.extra_data["phone_number_id"]: ch
+            for ch in ExperimentChannel.objects.filter(
+                platform=ChannelPlatform.WHATSAPP,
+                extra_data__phone_number_id__in=list(unique_phone_ids),
+                messaging_provider__type=MessagingProviderType.meta_cloud_api,
+            ).select_related("experiment", "team", "messaging_provider")
+        }
+        log.debug("Meta Cloud API webhook dispatching %d message(s)", len(message_values))
         for value in message_values:
+            phone_number_id = value["metadata"]["phone_number_id"]
+            ch = channel_map.get(phone_number_id)
+            if not ch:
+                log.info("Meta Cloud API webhook: no channel found for phone_number_id=%s", phone_number_id)
+                continue
             tasks.handle_meta_cloud_api_message.delay(
-                channel_id=channel.id,
-                team_slug=channel.team.slug,
+                channel_id=ch.id,
+                team_slug=ch.team.slug,
                 message_data=value,
             )
 
