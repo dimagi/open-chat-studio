@@ -34,6 +34,7 @@ from apps.pipelines.exceptions import (
     PipelineNodeRunError,
     WaitForNextInput,
 )
+from apps.pipelines.jinja_utils import parse_jinja_template
 from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
@@ -105,8 +106,6 @@ def format_jinja_error(exc: Exception, field_name: str, context: dict | None = N
         context: The Jinja template context dict, if available. Used to list
             available variables for UndefinedError.
     """
-    exc_type = type(exc).__name__
-
     if isinstance(exc, UndefinedError):
         msg = f'Jinja2 UndefinedError in field "{field_name}": {exc}'
         if context:
@@ -121,24 +120,19 @@ def format_jinja_error(exc: Exception, field_name: str, context: dict | None = N
     if isinstance(exc, JinjaSandboxSecurityError):
         return f'Jinja2 SecurityError in field "{field_name}": {exc}'
 
-    return f'Jinja2 error in field "{field_name}": {exc_type}: {exc}'
+    return f'Jinja2 error in field "{field_name}": {type(exc).__name__}: {exc}'
 
 
 def _validate_jinja_syntax(value: str) -> str:
-    """Pydantic validator that checks Jinja2 template syntax at save time.
-
-    Uses env.parse() (AST only, no rendering) so it only catches syntax errors,
-    not undefined variable errors (which require runtime context).
-    """
+    """Pydantic validator that checks Jinja2 template syntax at save time."""
     if not value:
         return value
-    try:
-        SandboxedEnvironment().parse(value)
-    except TemplateSyntaxError as e:
-        line_info = f" (line {e.lineno})" if e.lineno is not None else ""
+    error = parse_jinja_template(value)
+    if error:
+        line_info = f" (line {error.lineno})" if error.lineno is not None else ""
         raise PydanticCustomError(
             "invalid_jinja_syntax",
-            f"Invalid Jinja2 syntax: {e.message}{line_info}",
+            f"Invalid Jinja2 syntax: {error.message}{line_info}",
         ) from None
     return value
 
@@ -191,7 +185,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
 
     @field_validator("template_string", mode="before")
     @classmethod
-    def validate_template_syntax(cls, value):
+    def validate_jinja_syntax(cls, value):
         return _validate_jinja_syntax(value)
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
@@ -513,7 +507,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
     def recipient_list_has_valid_emails(cls, value):
         value = value or ""
         # Check Jinja syntax first — if it's invalid, don't try email validation
-        _validate_jinja_syntax(value)
+        value = _validate_jinja_syntax(value)
         if "{{" in value or "{%" in value:
             return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
