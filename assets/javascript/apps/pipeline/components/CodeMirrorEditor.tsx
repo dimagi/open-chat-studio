@@ -257,7 +257,7 @@ export function PromptEditor(
 }
 
 
-type ValidateFn = (template: string) => Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}>;
+export type ValidateFn = (template: string) => Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}>;
 
 function jinjaLinter(onValidate: ValidateFn) {
   return linter(async (view): Promise<Diagnostic[]> => {
@@ -278,7 +278,8 @@ function jinjaLinter(onValidate: ValidateFn) {
           message: err.message,
         } as Diagnostic;
       });
-    } catch (_e) {
+    } catch (e) {
+      console.warn("Jinja linter request failed:", e);
       return [];
     }
   }, {delay: 500});

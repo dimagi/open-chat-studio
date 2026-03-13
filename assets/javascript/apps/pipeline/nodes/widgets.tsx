@@ -1433,10 +1433,10 @@ export function JinjaWidget(props: WidgetParams) {
   const rows: number = props.schema["ui:rows"] ?? 2;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
-  const checks = rows < 2 ? ["jinja"] : ["jinja", "html"];
+  // Single-line fields (rows < 2) skip HTML lint — it's not meaningful for one-liner templates
   const onValidate = useCallback(
-    (template: string) => apiClient.validateJinja(template, checks),
-    [checks]
+    (template: string) => apiClient.validateJinja(template, rows < 2 ? ["jinja"] : ["jinja", "html"]),
+    [rows]
   );
 
   const onChangeCallback = (value: string) => {
