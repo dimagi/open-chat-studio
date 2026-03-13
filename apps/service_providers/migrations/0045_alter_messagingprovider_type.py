@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0043_migrate_gemini_3_pro_preview'),
+        ('service_providers', '0044_update_openai_models'),
     ]
 
     operations = [
