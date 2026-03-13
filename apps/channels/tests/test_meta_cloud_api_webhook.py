@@ -296,6 +296,51 @@ class TestNewMetaCloudApiMessage:
             message_data=_meta_webhook_payload("12345")["entry"][0]["changes"][0]["value"],
         )
 
+    @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
+    def test_cross_provider_payload_is_rejected(self, mock_delay, meta_cloud_api_channel):
+        """An attacker with their own legitimate channel cannot forge messages for a victim's
+        phone number by including it in a payload signed with their own app_secret."""
+        attacker_secret = "attacker_app_secret"
+        attacker_provider = MessagingProviderFactory.create(
+            type=MessagingProviderType.meta_cloud_api,
+            config={
+                "access_token": "attacker_token",
+                "business_id": "attacker_biz",
+                "app_secret": attacker_secret,
+                "verify_token": "attacker_verify",
+            },
+        )
+        ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=attacker_provider,
+            experiment__team=attacker_provider.team,
+            extra_data={"number": "+15550000001", "phone_number_id": "attacker_phone_id"},
+        )
+
+        # Payload targeting BOTH attacker's phone_number_id and victim's phone_number_id,
+        # signed with the attacker's app_secret.
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "BIZ_ID",
+                    "changes": [
+                        {
+                            "value": _meta_webhook_payload("attacker_phone_id")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                        {
+                            "value": _meta_webhook_payload("12345")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                    ],
+                }
+            ],
+        }
+        response = self._post(payload, app_secret=attacker_secret)
+        assert response.status_code == 200
+        mock_delay.assert_not_called()
+
     def test_invalid_json_returns_400(self):
         factory = RequestFactory()
         body = b"not json"
