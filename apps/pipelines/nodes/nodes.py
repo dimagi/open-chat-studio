@@ -8,7 +8,7 @@ from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
-from jinja2 import TemplateSyntaxError, UndefinedError
+from jinja2 import StrictUndefined, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
 from jinja2.sandbox import SecurityError as JinjaSandboxSecurityError
 from langchain.agents import create_agent
@@ -171,13 +171,16 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     )
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        env = SandboxedEnvironment()
+        env = SandboxedEnvironment(undefined=StrictUndefined)
+        jinja_context = _build_jinja_context(context, self.repo)
         try:
-            content = _build_jinja_context(context, self.repo)
             template = env.from_string(self.template_string)
-            output = template.render(content)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering template: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "template_string")) from e
+        try:
+            output = template.render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(format_jinja_error(e, "template_string", context=jinja_context)) from e
 
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
@@ -493,14 +496,14 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return value
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        env = SandboxedEnvironment()
+        env = SandboxedEnvironment(undefined=StrictUndefined)
         env.filters["split"] = lambda value, sep=",": str(value).split(sep)
         jinja_context = _build_jinja_context(context, self.repo)
 
         try:
             subject = env.from_string(self.subject).render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering email subject: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "subject", context=jinja_context)) from e
 
         # Strip newlines to prevent email header injection
         subject = subject.replace("\r", "").replace("\n", " ")
@@ -508,7 +511,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         try:
             rendered_recipients = env.from_string(self.recipient_list).render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering email recipient list: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "recipient_list", context=jinja_context)) from e
 
         recipients = [r.strip() for r in rendered_recipients.split(",") if r.strip()]
         for email in recipients:
@@ -521,7 +524,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
             try:
                 message = env.from_string(self.body).render(jinja_context)
             except Exception as e:
-                raise PipelineNodeRunError(f"Error rendering email body: {e}") from e
+                raise PipelineNodeRunError(format_jinja_error(e, "body", context=jinja_context)) from e
         else:
             message = context.input
 
