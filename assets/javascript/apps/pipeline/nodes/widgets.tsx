@@ -8,7 +8,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import {produce} from "immer";
-import {CodeNodeEditor, PromptEditor} from "../components/CodeMirrorEditor";
+import {CodeNodeEditor, JinjaEditor, PromptEditor} from "../components/CodeMirrorEditor";
 import {getInputWidget} from "./GetInputWidget";
 
 
@@ -47,6 +47,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return TextEditorWidget
     case "voice_widget":
         return VoiceWidget
+    case "jinja_template":
+        return JinjaWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -88,7 +90,7 @@ function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input w-full"
+        className="input w-full nodrag"
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
@@ -120,7 +122,7 @@ function NodeNameWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input w-full"
+        className="input w-full nodrag"
         name={props.name}
         onChange={handleInputChange}
         value={inputValue}
@@ -135,7 +137,7 @@ function NodeNameWidget(props: WidgetParams) {
 function FloatWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input w-full"
+      className="input w-full nodrag"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -157,7 +159,7 @@ function RangeWidget(props: WidgetParams) {
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input w-full input-sm"
+      className="input w-full input-sm nodrag"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -213,7 +215,7 @@ function SelectWidget(props: WidgetParams) {
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
+        className="select appearance-none w-full nodrag"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -375,7 +377,7 @@ export function CodeWidget(props: WidgetParams) {
       <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
         <div className="relative w-full">
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
+            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y nodrag"
             readOnly={true}
             rows={3}
             wrap="off"
@@ -482,16 +484,16 @@ function GenerateCodeSection({
     setGenerating(true);
     apiClient.generateCode(prompt, currentCode).then((generatedCode) => {
       setGenerating(false);
-      if (generatedCode.error || generatedCode.response === "") {
+      if (generatedCode.error || !generatedCode.response?.code) {
         setError(generatedCode.error || "No code generated. Please provide more information.");
         return;
-      } else if (generatedCode.response) {
-        setGenerated(generatedCode.response);
+      } else {
+        setGenerated(generatedCode.response.code);
         setShowGenerate(false);
       }
-    }).catch(() => {
+    }).catch((errorData) => {
       setGenerating(false);
-      setError("An error occurred while generating code. Please try again.");
+      setError(errorData?.error || "An error occurred while generating code. Please try again.");
     });
   }
 
@@ -506,7 +508,7 @@ function GenerateCodeSection({
       {showGenerate && (
         <div className={"my-2"}>
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
             rows={2}
             wrap="off"
             placeholder="Describe what you want the Python Node to do or what issue you are facing"
@@ -580,7 +582,7 @@ export function TextModal(
             {humanName}
           </h4>
           <textarea
-            className="textarea textarea-bordered textarea-lg w-full grow resize-none"
+            className="textarea textarea-bordered textarea-lg w-full grow resize-none nodrag"
             name={name}
             onChange={onChange}
             value={value}
@@ -611,7 +613,7 @@ export function ExpandableTextWidget(props: WidgetParams) {
   return (
     <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
       <textarea
-        className="textarea textarea-bordered resize-none textarea-sm w-full"
+        className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
         rows={3}
         name={props.name}
         onChange={props.updateParamValue}
@@ -783,32 +785,8 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params.llm_model_parameters = {...old.data.params.llm_model_parameters, [paramName]: paramValue};
-
-        // When reasoning effort changes away from "none", clear temperature and top_p
-        if (paramName === 'effort' && paramValue !== 'none') {
-          if ('temperature' in next.data.params.llm_model_parameters) {
-            delete next.data.params.llm_model_parameters.temperature;
-          }
-          if ('top_p' in next.data.params.llm_model_parameters) {
-            delete next.data.params.llm_model_parameters.top_p;
-          }
-        }
       })
     );
-  };
-
-  const hasReasoningEffort = 'effort' in props.schema.properties;
-  const reasoningEffort = hasReasoningEffort ? props.modelParameters['effort'] : null;
-
-  // Parameters that should be hidden when reasoning_effort != "none"
-  const conditionalParams = ['temperature', 'top_p'];
-
-  const shouldShowParameter = (paramName: string): boolean => {
-    // If this parameter is conditional and reasoning effort is not "none", hide it
-    if (conditionalParams.includes(paramName) && hasReasoningEffort && reasoningEffort !== 'none') {
-      return false;
-    }
-    return true;
   };
 
   return (
@@ -816,11 +794,32 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
       <div className="text-sm label font-bold">Model Parameters</div>
       <div className="p-4">
         {Object.getOwnPropertyNames(props.schema.properties).map((paramName) => {
-          if (!shouldShowParameter(paramName)) {
-            return null;
-          }
-
-          const currentParamValue = props.modelParameters[paramName];
+          const schemaDefault = props.schema.properties[paramName]?.default ?? null;
+          const onShowDefault = props.schema.properties[paramName]?.["ui:onShowDefault"] ?? null;
+          const onHide = () =>
+            setNode(props.nodeId, (old) =>
+              produce(old, (next) => {
+                next.data.params.llm_model_parameters = {
+                  ...next.data.params.llm_model_parameters,
+                  [paramName]: schemaDefault,
+                };
+              })
+            );
+          const onShow = onShowDefault !== null
+            ? () =>
+                setNode(props.nodeId, (old) => {
+                  const currentValue = old.data.params.llm_model_parameters?.[paramName];
+                  if (currentValue === null || currentValue === undefined) {
+                    return produce(old, (next) => {
+                      next.data.params.llm_model_parameters = {
+                        ...next.data.params.llm_model_parameters,
+                        [paramName]: onShowDefault,
+                      };
+                    });
+                  }
+                  return old;
+                })
+            : undefined;
           return (
             <div key={`${props.nodeId}_${paramName}`}>
               {getInputWidget(
@@ -828,13 +827,15 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
                   id: props.nodeId,
                   name: paramName,
                   schema: props.schema,
-                  params: {name: paramName, [paramName]: currentParamValue},
+                  params: {name: paramName, ...props.modelParameters},
                   updateParamValue: updateLLMParamValue,
                   nodeType: "",
                   required: true,
                 },
                 props.getNodeFieldError,
-                props.readOnly
+                props.readOnly,
+                onHide,
+                onShow,
               )}
             </div>
           );
@@ -851,7 +852,7 @@ export function LlmWidget(props: WidgetParams) {
   const readOnly = usePipelineStore((state) => state.readOnly);
 
   const getSelectedModelSchema = (selectedModelId: string) => {
-    const selectedModelName = parameterValues.LlmProviderModelId.find(model => 
+    const selectedModelName = parameterValues.LlmProviderModelId.find(model =>
       String(model.value) === String(selectedModelId)
     )?.label.split(": ")[1] || "";
 
@@ -873,7 +874,7 @@ export function LlmWidget(props: WidgetParams) {
         // Update the LLM parameters only when the model's parameter set changed
         const currModelParamSchema = getSelectedModelSchema(providerModelId);
         const prevModelParamSchema = getSelectedModelSchema(old.data.params.llm_provider_model_id);
-        
+
         if (currModelParamSchema && prevModelParamSchema != currModelParamSchema) {
           let defaultLlmParams = {};
           // Update the parameter set in the state with the new model's default parameters
@@ -907,7 +908,7 @@ export function LlmWidget(props: WidgetParams) {
     return acc;
   }, {} as ProviderModelsByType);
 
-  
+
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = props.nodeParams.llm_model_parameters || {};
@@ -925,7 +926,7 @@ export function LlmWidget(props: WidgetParams) {
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
-          className="select appearance-none w-full"
+          className="select appearance-none w-full nodrag"
           name={props.name}
           onChange={updateParamValue}
           value={value}
@@ -1066,7 +1067,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
             <div className="w-64 relative">
               <input
                 type="text"
-                className="input w-full pr-8"
+                className="input w-full pr-8 nodrag"
                 value={displayValue}
                 onChange={handleInputChange}
                 onClick={handleInputClick}
@@ -1138,79 +1139,60 @@ export function HistoryTypeWidget(props: WidgetParams) {
 
 export function HistoryModeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
-  const userMaxTokenLimit = concatenate(props.nodeParams["user_max_token_limit"]);
-  const maxHistoryLength = concatenate(props.nodeParams["max_history_length"]);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
-  const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
-  const {parameterValues} = getCachedData();
-  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
-  const model = models.filter(m => String(m.value) === String(llmProviderId));
-  const defaultMaxTokens = model.length > 0 && model[0].max_token_limit !== undefined ? model[0].max_token_limit : 0;
   const historyModeHelpTexts: Record<string, string> = {
-    summarize:"If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
-    truncate_tokens:"If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
-    max_history_length:"The chat history will always be truncated to the last N messages.",
+    summarize: "If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
+    truncate_tokens: "If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
+    max_history_length: "The chat history will always be truncated to the last N messages.",
   };
 
   return (
-    <>
-      <div className="flex join">
-        <InputField label="History Mode" help_text = "">
-          <select
-            // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
-            // Should be resolved in future versions of browsers.
-            className="select appearance-none join-item w-full"
-            name="history_mode"
-            onChange={(e) => {
-              setHistoryMode(e.target.value);
-              props.updateParamValue(e);
-            }}
-            value={historyMode}
-            disabled={props.readOnly}
-          >
-            {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <small className ="text-muted mt-2">{historyModeHelpTexts[historyMode]}</small>
-        </InputField>
+    <div className="flex join">
+      <InputField label="History Mode" help_text={historyModeHelpTexts[historyMode] ?? ""}>
+        <select
+          // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
+          // Should be resolved in future versions of browsers.
+          className="select appearance-none join-item w-full nodrag"
+          name="history_mode"
+          onChange={(e) => {
+            setHistoryMode(e.target.value);
+            props.updateParamValue(e);
+          }}
+          value={historyMode}
+          disabled={props.readOnly}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </InputField>
+    </div>
+  );
+}
+
+
+function HelpBubble({ helpText }: { helpText: string }) {
+  if (!helpText) return <></>;
+  const parts = helpText.split(/(\{\{[^}]*\}\})/g);
+  const content = parts.map((part, i) =>
+    /^\{\{.*\}\}$/.test(part)
+      ? <span key={i} style={{whiteSpace: "nowrap", overflowWrap: "anywhere"}}>{part}</span>
+      : part
+  );
+  return (
+    <div className="dropdown dropdown-right dropdown-hover">
+      <div role="button" className="btn btn-circle btn-ghost btn-xs text-info" aria-label="Help">
+        <i className="text-xs fa-regular fa-circle-question"></i>
       </div>
-
-      {(historyMode === "summarize" || historyMode === "truncate_tokens") && (
-        <div className="flex join mb-4">
-          <InputField label="Token Limit" help_text = "">
-            <input
-              className="input join-item w-full"
-              name="user_max_token_limit"
-              type="number"
-              onChange={props.updateParamValue}
-              value={userMaxTokenLimit || defaultMaxTokens || ""}
-              readOnly={props.readOnly}
-            />
-            <small className ="text-muted mt-2">Maximum number of tokens before messages are summarized or truncated.</small>
-          </InputField>
+      <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-80 shadow-sm">
+        <div tabIndex={0} className="card-body font-medium text-wrap normal-case">
+          <p>{content}</p>
         </div>
-      )}
-
-      {historyMode === "max_history_length" && (
-        <div className="flex join mb-4">
-          <InputField label="Max History Length" help_text = "">
-            <input
-              className="input join-item w-full"
-              name="max_history_length"
-              type="number"
-              onChange={props.updateParamValue}
-              value={maxHistoryLength || ""}
-              readOnly={props.readOnly}
-            />
-            <small className ="text-muted mt-2">Chat history will only keep the most recent messages up to max history length.</small>
-          </InputField>
-        </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -1222,12 +1204,14 @@ export function InputField({label, help_text, inputError, children}: React.Props
   return (
     <>
       <div className="fieldset w-full capitalize">
-        <label className="label font-bold">{label}</label>
+        <div className="flex items-center gap-1">
+          <label className="label font-bold">{label}</label>
+          <HelpBubble helpText={help_text} />
+        </div>
         {children}
       </div>
-      <div className="flex flex-col">
+      <div>
         <small className="text-red-500">{inputError}</small>
-        <small className="text-muted">{help_text}</small>
       </div>
     </>
   );
@@ -1374,7 +1358,7 @@ export function TextEditorWidget(props: WidgetParams) {
         inputError={props.inputError}
       >
         <div className="relative w-full">
-          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
+          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
             readOnly={true}
             rows={3}
             value={props.paramValue}
@@ -1444,6 +1428,83 @@ function getAutoCompleteList(list: Array<Option>) {
     return Array.isArray(list) ? list.map((v: Option) => v.value) : []
 }
 
+export function JinjaWidget(props: WidgetParams) {
+  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const rows: number = props.schema["ui:rows"] ?? 2;
+  const modalId = useId();
+  const setNode = usePipelineStore((state) => state.setNode);
+
+  const onChangeCallback = (value: string) => {
+    setNode(props.nodeId, produce((draft) => {
+      draft.data.params[props.name] = value;
+    }));
+  };
+
+  const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+
+  const label = (
+    <>
+      {props.label}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button type="button" className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
+        {rows < 2 ? (
+          <input
+            className="input input-bordered input-sm w-full nodrag"
+            name={props.name}
+            value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+            onChange={(e) => onChangeCallback(e.target.value)}
+            readOnly={props.readOnly}
+          />
+        ) : (
+          <div className="relative w-full">
+            <textarea
+              className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
+              readOnly={true}
+              rows={rows}
+              value={props.paramValue}
+              name={props.name}
+            ></textarea>
+            <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
+          </div>
+        )}
+      </InputField>
+
+      <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+        <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
+          <form method="dialog">
+            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+          </form>
+          <div className="grow h-full w-full flex flex-col">
+            <div className="flex items-center gap-1 mb-4">
+              <h4 className="font-bold text-lg capitalize">{props.label}</h4>
+              <HelpBubble helpText={props.helpText} />
+            </div>
+            <JinjaEditor
+              value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+              onChange={onChangeCallback}
+              readOnly={props.readOnly}
+              autocompleteVars={autocomplete_vars_list}
+            />
+          </div>
+          {props.inputError && <div className="text-red-500">{props.inputError}</div>}
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
+    </>
+  );
+}
+
 export function VoiceWidget(props: WidgetParams) {
   const { parameterValues } = getCachedData();
   const setNode = usePipelineStore((state) => state.setNode);
@@ -1469,7 +1530,7 @@ export function VoiceWidget(props: WidgetParams) {
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
+        className="select appearance-none w-full nodrag"
         name={props.name}
         onChange={updateParamValue}
         value={syntheticVoiceId}

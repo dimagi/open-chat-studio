@@ -1,3 +1,4 @@
+from datetime import UTC
 from unittest.mock import Mock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from django.urls import reverse
 
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
+    ChatbotExperimentTableView,
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
@@ -20,6 +22,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.utils import set_current_team
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -297,6 +300,7 @@ def test_chatbot_sessions_table_view(team_with_users):
     request.team = team
     request.team_membership = get_team_membership_for_request(request)
     attach_session_middleware_to_request(request)
+    set_current_team(team)
 
     view = ChatbotSessionsTableView.as_view()
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
@@ -312,7 +316,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
     user = team.members.first()
     client.force_login(user)
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         participant__platform="web",
         team=team,
@@ -360,13 +364,13 @@ def test_new_chatbot_session_view(
     user = team.members.first()
     client.force_login(user)
 
-    old_session = ExperimentSessionFactory(
+    old_session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         team=team,
         status=SessionStatus.ACTIVE,
     )
 
-    new_session = ExperimentSessionFactory(
+    new_session = ExperimentSessionFactory.create(
         participant=old_session.participant,
         experiment=old_session.experiment,
         experiment_channel=old_session.experiment_channel,
@@ -426,7 +430,7 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
     user = team.members.first()
     client.force_login(user)
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         experiment_channel__platform="web",
         team=team,
@@ -441,3 +445,64 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
     assert response.status_code == 302
     session.refresh_from_db()
     assert session.status == SessionStatus.ACTIVE  # Session should remain active
+
+
+@pytest.mark.django_db()
+def test_chatbot_table_view_embeds_trend_data_inline(client, team_with_users):
+    """The chatbot table embeds trend JSON directly in the HTML instead of generating per-experiment fetch URLs."""
+    team = team_with_users
+    user = team.members.first()
+    Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
+    Experiment.objects.create(
+        name="Test Chatbot",
+        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
+        owner=user,
+        team=team,
+    )
+
+    client.force_login(user)
+    url = reverse("chatbots:table", args=[team.slug])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # Inline data attribute should be present, not a per-experiment fetch URL
+    assert "data-trends=" in content
+    assert "trends_data" not in content
+
+
+@pytest.mark.django_db()
+def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
+    """The last_activity annotation must return the most recent non-null last_activity_at.
+
+    PostgreSQL ORDER BY col DESC defaults to NULLS FIRST, so without an explicit
+    NULLS LAST directive the subquery picks a NULL session instead of the most
+    recently-active one, causing the Last Activity column to appear blank even
+    when real activity exists.
+    """
+    from datetime import datetime  # noqa: PLC0415
+
+    team = team_with_users
+    user = team.members.first()
+    pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(name="Test Chatbot", owner=user, team=team, pipeline=pipeline)
+
+    # A bot-initiated session that never received a human message → last_activity_at is null
+    ExperimentSessionFactory.create(experiment=experiment, last_activity_at=None)
+
+    # A session with genuine user activity
+    activity_time = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
+    ExperimentSessionFactory.create(experiment=experiment, last_activity_at=activity_time)
+
+    request = RequestFactory().get(reverse("chatbots:table", args=[team.slug]))
+    request.team = team
+    request.user = user
+    request.GET = request.GET.copy()
+
+    view = ChatbotExperimentTableView()
+    view.request = request
+    view.kwargs = {}
+    view.args = []
+
+    result = view.get_queryset().get(id=experiment.id)
+    assert result.last_activity == activity_time

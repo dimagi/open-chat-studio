@@ -79,7 +79,7 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()
+        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
         result = manager.sync_collection()
 
         assert result.success
@@ -101,8 +101,8 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()
-        manager._update_file = Mock(wraps=manager._update_file)
+        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._update_file = Mock(wraps=manager._update_file)  # ty: ignore[invalid-assignment]
         result = manager.sync_collection()
 
         assert result.success
@@ -147,8 +147,8 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()
-        manager._remove_files = Mock()
+        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._remove_files = Mock()  # ty: ignore[invalid-assignment]
         result = manager.sync_collection()
 
         assert result.success
@@ -171,7 +171,7 @@ class TestDocumentSourceManager:
         manager = DocumentSourceManager(document_source)
 
         with patch.object(manager, "_sync_documents") as mock_sync:
-            from apps.documents.source_loaders.base import SyncResult
+            from apps.documents.source_loaders.base import SyncResult  # noqa: PLC0415
 
             mock_sync.return_value = SyncResult(success=True, files_added=1)
 

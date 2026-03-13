@@ -7,6 +7,7 @@
     {% translate "Dashboard" %}
   </a>
   </li>
+  {% if perms.experiments.view_experiment %}
   <li>
     <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>
       <i class="fas fa-comments"></i>
@@ -22,19 +23,19 @@
           </li>
       </ul>
     {% endif %}
-    {% flag "flag_tracing" %}
-      {% if perms.trace.view_trace %}
-        <ul>
-            <li>
-              <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
-                <i class="fa-solid fa-magnifying-glass-location"></i>
-                {% translate "Traces" %}
-              </a>
-            </li>
-        </ul>
-      {% endif %}
-    {% endflag %}
+    {% if perms.trace.view_trace %}
+      <ul>
+          <li>
+            <a href="{% url 'trace:home' request.team.slug %}" {% if active_tab == 'traces' %}class="menu-active"{% endif %}>
+              <i class="fa-solid fa-magnifying-glass-location"></i>
+              {% translate "Traces" %}
+            </a>
+          </li>
+      </ul>
+    {% endif %}
   </li>
+  {% endif %}
+  {% if perms.experiments.view_sourcematerial %}
   <li>
     <a href="{% url 'experiments:source_material_home' request.team.slug %}"
        {% if active_tab == 'source_material' %}class="menu-active"{% endif %}>
@@ -42,6 +43,8 @@
       {% translate "Source Material" %}
     </a>
   </li>
+  {% endif %}
+  {% if perms.experiments.view_survey %}
   <li>
     <a href="{% url 'experiments:survey_home' request.team.slug %}"
        {% if active_tab == 'survey' %}class="menu-active"{% endif %}>
@@ -49,6 +52,8 @@
       {% translate "Surveys" %}
     </a>
   </li>
+  {% endif %}
+  {% if perms.experiments.view_consentform %}
   <li>
     <a href="{% url 'experiments:consent_home' request.team.slug %}"
        {% if active_tab == 'consent_forms' %}class="menu-active"{% endif %}>
@@ -56,6 +61,7 @@
       {% translate "Consent Forms" %}
     </a>
   </li>
+  {% endif %}
   {% if perms.annotations.add_tag %}
     <li>
       <a href="{% url 'annotations:tag_home' request.team.slug %}"
@@ -92,37 +98,42 @@
     </a>
     </li>
   {% endif %}
+  {% if perms.experiments.view_experiment %}
   <li>
     <a href="{% url 'experiments:experiments_prompt_builder' request.team.slug %}" {% if active_tab == 'prompt_builder' %}class="active"{% endif %}>
       <i class="fa fa-ruler fa-fw"></i>
       {% translate "Prompt Builder" %}
     </a>
   </li>
+  {% endif %}
+  {% if perms.assistants.view_openaiassistant %}
   <li>
-    {% if perms.assistants.view_openaiassistant %}
-      <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="menu-active"{% endif %}>
-        <i class="fa-solid fa-robot"></i>
-        {% translate "Assistants" %}
-      </a>
-    {% endif %}
+    <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="menu-active"{% endif %}>
+      <i class="fa-solid fa-robot"></i>
+      {% translate "Assistants" %}
+    </a>
   </li>
+  {% endif %}
+  {% if perms.pipelines.view_pipeline %}
   <li>
-    {% if perms.pipelines.view_pipeline %}
-      <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>
-        <i class="fa-solid fa-puzzle-piece"></i>
-        {% translate "Event Pipelines" %}
-      </a>
-    {% endif %}
+    <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>
+      <i class="fa-solid fa-puzzle-piece"></i>
+      {% translate "Event Pipelines" %}
+    </a>
   </li>
+  {% endif %}
   {% flag "flag_session-analysis" %}
+    {% if perms.teams.delete_team %}
     <li>
       <a href="{% url 'analysis:list' request.team.slug %}" {% if active_tab == 'analysis' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-bar-chart"></i>
         {% translate "Session Analysis" %}
       </a>
     </li>
+    {% endif %}
   {% endflag %}
   {% flag "flag_evaluations" %}
+    {% if perms.evaluations.view_evaluationconfig %}
     <li>
       <a href="{% url 'evaluations:home' request.team.slug %}" {% if active_tab == 'evaluations' %}class="menu-active"{% endif %}>
         <i class="fa-solid fa-chart-simple"></i>
@@ -145,5 +156,17 @@
         </li>
       </ul>
     </li>
+    {% endif %}
+  {% endflag %}
+  {% flag "flag_human_annotations" %}
+    {% if perms.human_annotations.view_annotationqueue %}
+      <li>
+        <a href="{% url 'human_annotations:queue_home' request.team.slug %}"
+           {% if active_tab == 'annotation_queues' %}class="menu-active"{% endif %}>
+          <i class="fa-solid fa-pen-to-square"></i>
+          {% translate "Annotations" %}
+        </a>
+      </li>
+    {% endif %}
   {% endflag %}
 {% endif %}

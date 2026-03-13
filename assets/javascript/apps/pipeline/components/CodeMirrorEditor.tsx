@@ -6,6 +6,7 @@ import {autocompletion, CompletionContext, snippetCompletion as snip} from "@cod
 import {python} from "@codemirror/lang-python";
 import {EditorView} from "@codemirror/view";
 import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
+import {jinja} from "@codemirror/lang-jinja";
 
 const githubDark = githubDarkInit({
   "settings": {
@@ -153,6 +154,14 @@ export function CodeNodeEditor(
       section: "Node Outputs"
     }),
 
+    add_file_attachment: snip("add_file_attachment(\"${filename}\", ${content})", {
+      label: "add_file_attachment",
+      type: "function",
+      detail: "Attach a file to the AI response message. Content must be bytes.",
+      boost: 1,
+      section: "Files",
+    }),
+
     add_message_tag: snip("add_message_tag(\"${tag_name}\")", {
       label: "add_message_tag",
       type: "function",
@@ -242,6 +251,30 @@ export function PromptEditor(
       EditorView.editable.of(false),
       EditorState.readOnly.of(true),
     ]
+  }
+  return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
+}
+
+
+export function JinjaEditor(
+  {value, onChange, readOnly, autocompleteVars}: {
+    value: string;
+    onChange: (value: string) => void;
+    readOnly: boolean;
+    autocompleteVars: string[];
+  }
+) {
+  const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
+  let extensions = [
+    jinja({ variables: jinjaVariables }),
+    EditorView.lineWrapping,
+  ];
+  if (readOnly) {
+    extensions = [
+      ...extensions,
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+    ];
   }
   return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
 }

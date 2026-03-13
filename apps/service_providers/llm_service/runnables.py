@@ -20,6 +20,12 @@ from langchain_core.runnables import (
 from langchain_core.runnables.config import merge_configs
 from pydantic import ConfigDict
 
+from apps.assistants.sync import (
+    _openai_create_file_with_retries,
+    convert_to_openai_tool,
+    create_files_remote,
+    get_and_store_openai_file,
+)
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.experiments.models import Experiment
 from apps.files.models import File
@@ -30,7 +36,7 @@ from apps.service_providers.llm_service.history_managers import (
 )
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 
-lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message
+lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message  # ty: ignore[invalid-assignment]
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
     from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
@@ -55,7 +61,7 @@ class ChainOutput(Serializable):
     completion_tokens: int
     """Number of tokens in the completion."""
 
-    type: Literal["OcsChainOutput"] = "ChainOutput"
+    type: Literal["ChainOutput"] = "ChainOutput"
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -75,7 +81,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     input_key: str = "content"
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def invoke(
+    def invoke(  # ty: ignore[invalid-method-override]
         self, input: str, config: RunnableConfig | None = None, attachments: list[Attachment] | None = None
     ) -> ChainOutput:
         callback = self.adapter.callback_handler
@@ -157,7 +163,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         - Those of type `file_path` are generated and can be downloaded. A file is created in OCS for each of these
 
         """
-        from apps.assistants.sync import get_and_store_openai_file
 
         client = self.adapter.assistant_client
 
@@ -255,7 +260,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         have extentions, so we'll need to guess it based on the content. We know it will be an image, but not which
         extension to use.
         """
-        from apps.assistants.sync import get_and_store_openai_file
 
         try:
             file_id = image_file_message.file_id
@@ -314,7 +318,6 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
         Returns a mapping of resource to OpenAI file ids. Example:
             {'code_interpreter': ["file_id1", "file_id2"]}
         """
-        from apps.assistants.sync import create_files_remote
 
         resource_file_ids = {}
         if not attachments:
@@ -332,6 +335,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
     def _get_response_with_retries(self, config, input_dict, thread_id) -> tuple[str, str]:
         assistant_runnable = self.adapter.get_openai_assistant()
+        error: Exception | None = None
 
         for _i in range(3):
             error = None
@@ -456,7 +460,6 @@ class AgentAssistantChat(AssistantChat):
 
         Instead, we create a new run with a new message and add the artifacts as attachments.
         """
-        from apps.assistants.sync import _openai_create_file_with_retries
 
         logger.info(
             "Cancelling run %s. Starting new run for thread %s with attachments",
@@ -506,7 +509,6 @@ class AgentAssistantChat(AssistantChat):
         )
 
     def _get_allowed_tools(self, disabled_tools: set[str]):
-        from apps.assistants.sync import convert_to_openai_tool
 
         allowed_tools = [{"type": tool} for tool in self.adapter.assistant_builtin_tools if tool not in disabled_tools]
         if unused_tools := [tool for tool in self.adapter.get_allowed_tools() if tool.name not in disabled_tools]:

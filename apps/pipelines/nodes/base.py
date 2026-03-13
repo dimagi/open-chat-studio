@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, cast
 
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
@@ -18,6 +18,10 @@ from typing_extensions import TypedDict
 from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.nodes.context import NodeContext
+
+if TYPE_CHECKING:
+    from apps.pipelines.repository import ORMRepository
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -160,13 +164,6 @@ class PipelineState(dict):
         """Adds the tag to the chat session."""
         self.setdefault("session_tags", []).append((tag, ""))
 
-    def get_node_id(self, node_name: str) -> str | None:
-        """
-        Helper method to get a node ID from a node name.
-        """
-        outputs = self.get_node_outputs_by_name(node_name)
-        return outputs[-1]["node_id"] if outputs else None
-
     def get_node_name(self, node_id: str) -> str | None:
         """
         Helper method to get a node name from a node ID.
@@ -178,39 +175,6 @@ class PipelineState(dict):
                 return name
         return None
 
-    def get_selected_route(self, node_name: str) -> str | None:
-        """
-        Returns the route keyword selected by a specific router node with the given name.
-        If the node does not exist or has no route defined, it returns `None`.
-        """
-        outputs = self.get_node_outputs_by_name(node_name)
-        return outputs[-1].get("route") if outputs else None
-
-    def get_node_path(self, node_name: str) -> list | None:
-        """
-        Gets the path (list of node names) leading to the specified node.
-        Returns:
-            A list containing the sequence of nodes leading to the target node.
-            If the node is not found in the pipeline path, returns a list containing
-            only the specified node name.
-        """
-        path = []
-        current_name = node_name
-        while current_name:
-            path.insert(0, current_name)
-            current_node_id = self.get_node_id(current_name)
-            if not current_node_id:
-                break
-
-            for _, current, targets in self.get("path", []):
-                if current_node_id in targets:
-                    current_name = self.get_node_name(current)
-                    break
-            else:
-                break
-
-        return path
-
     def get_execution_flow(self):
         """Returns the execution flow of the pipeline as a list of tuples.
         Each tuple contains the previous node name, the current node name, and a list of destination node names.
@@ -219,42 +183,6 @@ class PipelineState(dict):
             (self.get_node_name(prev), self.get_node_name(source), [self.get_node_name(x) for x in dest])
             for prev, source, dest in self.get("path", [])
         ]
-
-    def get_all_routes(self) -> dict:
-        """
-        Returns a dictionary containing all routing decisions made in the pipeline up to the current node.
-        The keys are the node names and the values are the route keywords chosen by each router node.
-
-        Note that in parallel workflows only the most recent route for a particular node will be returned.
-        """
-        routes_dict = {}
-        outputs = self.get("outputs", {})
-        for node_name, node_data in outputs.items():
-            if isinstance(node_data, list):
-                # Unclear how to handle the case where a router gets called twice due to parallel execution
-                # Take the last one for now
-                node_data = node_data[-1]
-            if "route" in node_data:
-                routes_dict[node_name] = node_data["route"]
-
-        return routes_dict
-
-    def get_node_output_by_name(self, node_name: str) -> Any:
-        """
-        Returns the output of the specified node if it has been executed.
-        If the node has not been executed, it returns `None`.
-        """
-        outputs = self.get_node_outputs_by_name(node_name)
-        return outputs[-1]["message"] if outputs else None
-
-    def get_node_outputs_by_name(self, node_name: str) -> list[dict] | None:
-        """
-        Get the outputs of a node by its name.
-        """
-        outputs = self["outputs"].get(node_name)
-        if outputs is not None:
-            return outputs if isinstance(outputs, list) else [outputs]
-        return None
 
     def get_node_outputs(self, node_id: str) -> list[str] | None:
         """
@@ -307,9 +235,10 @@ class PipelineState(dict):
 class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _config: RunnableConfig = None
-    _incoming_nodes: list[str] = None
-    _outgoing_nodes: list[str] = None
+    _config: RunnableConfig | None = None
+    _repo: "ORMRepository | None" = None
+    _incoming_nodes: list[str] | None = None
+    _outgoing_nodes: list[str] | None = None
 
     node_id: SkipJsonSchema[str] = Field(exclude=True)
     django_node: SkipJsonSchema[Any] = Field(exclude=True)
@@ -320,7 +249,6 @@ class BasePipelineNode(BaseModel, ABC):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
-        from apps.channels.datamodels import Attachment
 
         if not incoming_nodes:
             # This is the first node in the graph
@@ -330,6 +258,8 @@ class BasePipelineNode(BaseModel, ABC):
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
             state["temp_state"]["user_input"] = state["last_node_input"]
+            from apps.channels.datamodels import Attachment  # noqa: PLC0415 - circular: channels.datamodels→events→base
+
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
@@ -359,6 +289,13 @@ class BasePipelineNode(BaseModel, ABC):
         return state
 
     @property
+    def repo(self) -> "ORMRepository":
+        """Access the pipeline repository. Always available during _process()."""
+        if self._repo is None:
+            raise PipelineNodeRunError("ORMRepository not set")
+        return self._repo
+
+    @property
     def disabled_tools(self) -> set[str] | None:
         if disabled := self._config.get("configurable", {}).get("disabled_tools"):
             return set(disabled)
@@ -374,15 +311,14 @@ class PipelineNode(BasePipelineNode, ABC):
             required_parameter_1: str
             optional_parameter_1: int | None = None
 
-            def _process(self, state: PipelineState) -> PipelineState:
-                input = state["messages"][-1]
-                output = ... # do something
+            def _process(self, state: PipelineState, context: NodeContext) -> PipelineState:
+                output = ... # do something with context.input
                 return output # The state will be updated with output
 
-       class FunLambdaNode(PipelineNode):
+        class FunLambdaNode(PipelineNode):
             required_parameter_1: str
 
-            def _process(self, state: PipelineState) -> PipelineState:
+            def _process(self, state: PipelineState, context: NodeContext) -> PipelineState:
                 ...
                 return # The state will not be updated, since None is returned
 
@@ -392,6 +328,7 @@ class PipelineNode(BasePipelineNode, ABC):
         self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState | Command:
         self._config = config
+        self._repo = config.get("configurable", {}).get("repo")
         self._incoming_nodes = incoming_nodes
         self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
@@ -407,6 +344,8 @@ class PipelineNode(BasePipelineNode, ABC):
         }
         sentry_sdk.set_context("Node", sentry_context)
 
+        context = NodeContext(state)
+        process_params["context"] = context
         output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
             return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
@@ -422,7 +361,7 @@ class PipelineNode(BasePipelineNode, ABC):
             output["output_message_tags"].extend(get_output_tags_fn())
         return output
 
-    def _process(self, state: PipelineState) -> PipelineState | Command:
+    def _process(self, state: PipelineState, context: NodeContext) -> PipelineState | Command:
         """The method that executes node specific functionality"""
         raise NotImplementedError
 
@@ -436,11 +375,12 @@ class PipelineRouterNode(BasePipelineNode):
 
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
+            self._repo = config.get("configurable", {}).get("repo")
 
             state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
-
-            conditional_branch, is_default_keyword = self._process_conditional(state)
+            context = NodeContext(state)
+            conditional_branch, is_default_keyword = self._process_conditional(context)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)
             # edge map won't contain the conditional branch if that handle isn't connected to another node
@@ -462,7 +402,7 @@ class PipelineRouterNode(BasePipelineNode):
     def get_output_tags(self, selected_route, is_default_keyword) -> list[str]:
         raise NotImplementedError()
 
-    def _process_conditional(self, state: PipelineState):
+    def _process_conditional(self, context: NodeContext):
         raise NotImplementedError()
 
 
@@ -486,6 +426,7 @@ class Widgets(StrEnum):
     key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
     voice_widget = "voice_widget"
+    jinja_template = "jinja_template"
 
 
 class OptionsSource(StrEnum):
@@ -500,20 +441,47 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
+    jinja_email_node = "jinja_email_node"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 
 
+class VisibleWhen(BaseModel):
+    """Defines a condition under which a field should be visible in the UI.
+
+    Supported operators: "==", "!=", "in", "not_in", "is_empty", "is_not_empty"
+
+    For "is_empty" and "is_not_empty", the `value` field is ignored.
+    """
+
+    field: str
+    value: Any = None
+    operator: Literal["==", "!=", "in", "not_in", "is_empty", "is_not_empty"] = "=="
+
+
 class UiSchema(BaseModel):
-    widget: Widgets = None
+    widget: Widgets | None = None
 
     # Use this with Enum fields to provide label text
-    enum_labels: list[str] = None
+    enum_labels: list[str] | None = None
 
     # Use this with 'select' type fields to indicate where the options should come from
     # See `apps.pipelines.views._pipeline_node_parameter_values`
-    options_source: OptionsSource = None
-    flag_required: str = None
+    options_source: OptionsSource | None = None
+    flag_required: str | None = None
+
+    # Use this to conditionally show/hide a field based on another field's value.
+    # Can be a single condition or a list of conditions (all must be satisfied).
+    visible_when: VisibleWhen | list[VisibleWhen] | None = None
+
+    # When set, the frontend will populate this field with this value when the field
+    # transitions from hidden to visible and its current value is null/undefined.
+    # Distinct from the JSON schema `default`, which is what the field is cleared to
+    # when it becomes hidden.
+    default_on_show: Any = None
+
+    # Number of rows for textarea-based widgets (e.g. jinja_template). Defaults to 2.
+    rows: int | None = None
 
     def __call__(self, schema: JsonDict):
         if self.widget:
@@ -524,18 +492,27 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.rows is not None:
+            schema["ui:rows"] = self.rows
+        if self.visible_when is not None:
+            if isinstance(self.visible_when, list):
+                schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
+            else:
+                schema["ui:visibleWhen"] = self.visible_when.model_dump()
+        if self.default_on_show is not None:
+            schema["ui:onShowDefault"] = self.default_on_show
 
 
 class NodeSchema(BaseModel):
     label: str
-    icon: str = None
+    icon: str | None = None
     flow_node_type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
-    can_delete: bool = None
-    can_add: bool = None
+    can_delete: bool | None = None
+    can_add: bool | None = None
     deprecated: bool = False
-    deprecation_message: str = None
-    documentation_link: str = None
-    field_order: list[str] = Field(
+    deprecation_message: str | None = None
+    documentation_link: str | None = None
+    field_order: list[str] | None = Field(
         None,
         description=(
             "The order of the fields in the UI. "

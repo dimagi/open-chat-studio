@@ -1,0 +1,15 @@
+{% with annotations=record.submitted_annotations %}
+  {% if annotations %}
+    {% for ann in annotations|slice:":3" %}
+      <div class="text-xs">
+        <span class="font-medium">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>:
+        {% for key, value in ann.data.items %}{% if forloop.counter <= 3 %}{% if not forloop.first %}, {% endif %}{{ key }}: {{ value }}{% endif %}{% endfor %}
+      </div>
+    {% endfor %}
+    {% if annotations|length > 3 %}
+      <div class="text-xs text-gray-400">+{{ annotations|length|add:"-3" }} more</div>
+    {% endif %}
+  {% else %}
+    <span class="text-gray-400 text-xs">No annotations</span>
+  {% endif %}
+{% endwith %}

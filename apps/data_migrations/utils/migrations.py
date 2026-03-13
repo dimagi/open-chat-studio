@@ -1,14 +1,15 @@
 from contextlib import ContextDecorator, ExitStack
 
 from django.core.management import call_command
-from django.db import migrations, transaction
+from django.db import transaction
+from django.db.migrations.operations import base as migration_ops_base
 from django.db.migrations.operations.base import OperationCategory
 from django.utils import timezone
 
 from apps.data_migrations.models import CustomMigration
 
 
-class RunDataMigration(migrations.operations.base.Operation):
+class RunDataMigration(migration_ops_base.Operation):
     """
     Custom migration operation to run a data migration management command.
 

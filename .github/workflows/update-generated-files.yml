@@ -1,0 +1,104 @@
+# This workflow automatically updates generated files when relevant code changes:
+# - API schema (api-schema.yml) when API-related code changes
+# - Django migrations when model files change
+# Both are generated using Django management commands and committed back to the PR branch if changes are detected.
+# This ensures generated files stay in sync with code changes and prevents CI failures.
+
+name: Update Generated Files
+permissions:
+  contents: write
+
+on:
+  pull_request:
+    paths:
+      - 'apps/api/**'
+      - 'apps/**/models.py'
+      - 'apps/**/models/**.py'
+      - 'apps/**/serializers.py'
+      - 'apps/**/views.py'
+      - 'apps/**/views/**.py'
+      - 'apps/**/urls.py'
+      - 'config/urls.py'
+      - 'config/settings.py'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-generated-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHON_VERSION: '3.13'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Dependencies
+        run: |
+          uv venv
+          uv sync --locked --dev
+
+      - name: Generate API Schema
+        env:
+          DJANGO_DATABASE_USER: postgres
+          DJANGO_DATABASE_PASSWORD: postgres_password
+          SECRET_KEY: secret-test-key
+        run: uv run python manage.py spectacular --file api-schema.yml
+
+      - name: Create Missing Migrations
+        env:
+          SECRET_KEY: secret-test-key
+        run: uv run python manage.py makemigrations --noinput
+
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          git add api-schema.yml apps/
+          if git diff --cached --exit-code; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -m "Update API schema and missing migrations"
+          git push

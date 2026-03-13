@@ -14,8 +14,8 @@ from apps.utils.factories.service_provider_factories import MessagingProviderFac
 
 @pytest.mark.django_db()
 def test_new_integration_does_not_raise_exception():
-    channel = ExperimentChannelFactory()
-    new_experiment = ExperimentFactory()
+    channel = ExperimentChannelFactory.create()
+    new_experiment = ExperimentFactory.create()
 
     ExperimentChannel.check_usage_by_another_experiment(
         channel.platform, identifier="321", new_experiment=new_experiment
@@ -24,8 +24,8 @@ def test_new_integration_does_not_raise_exception():
 
 @pytest.mark.django_db()
 def test_duplicate_integration_raises_exception():
-    channel = ExperimentChannelFactory()
-    new_experiment = ExperimentFactory()
+    channel = ExperimentChannelFactory.create()
+    new_experiment = ExperimentFactory.create()
 
     with pytest.raises(ChannelAlreadyUtilizedException):
         ExperimentChannel.check_usage_by_another_experiment(
@@ -38,16 +38,16 @@ def test_duplicate_integration_raises_exception():
 @pytest.mark.django_db()
 def test_channel_webhook_url():
     # Setup providers
-    twilio_provider = MessagingProviderFactory(type=MessagingProviderType.twilio)
-    turnio_provider = MessagingProviderFactory(type=MessagingProviderType.turnio)
+    twilio_provider = MessagingProviderFactory.create(type=MessagingProviderType.twilio)
+    turnio_provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio)
 
     # Setup channels with their respective providers
-    no_provider_channel = ExperimentChannelFactory()
-    twilio_channel = ExperimentChannelFactory(messaging_provider=twilio_provider)
-    turnio_channel = ExperimentChannelFactory(messaging_provider=turnio_provider)
+    no_provider_channel = ExperimentChannelFactory.create()
+    twilio_channel = ExperimentChannelFactory.create(messaging_provider=twilio_provider)
+    turnio_channel = ExperimentChannelFactory.create(messaging_provider=turnio_provider)
 
     # Let's check out each one's webhook url
-    assert no_provider_channel.webhook_url is None
+    assert not no_provider_channel.webhook_url
     assert reverse("channels:new_twilio_message") in twilio_channel.webhook_url
     turnio_uri = reverse("channels:new_turn_message", kwargs={"experiment_id": turnio_channel.experiment.public_id})
     assert turnio_uri in turnio_channel.webhook_url
@@ -56,11 +56,11 @@ def test_channel_webhook_url():
 @pytest.mark.django_db()
 def test_deleting_experiment_channel_only_removes_the_experiment_channel():
     """Test to make sure that removing an experiment channel does not remove important related records"""
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    experiment_channel = ExperimentChannelFactory(experiment=experiment)
+    experiment = ExperimentFactory.create(conversational_consent_enabled=True)
+    experiment_channel = ExperimentChannelFactory.create(experiment=experiment)
     chat = Chat.objects.create(team=experiment.team)
     chat_messsage = ChatMessage.objects.create(chat=chat, content="Hi", message_type=ChatMessageType.HUMAN)
-    experiment_session = ExperimentSessionFactory(
+    experiment_session = ExperimentSessionFactory.create(
         experiment=experiment, experiment_channel=experiment_channel, participant__user=experiment.owner
     )
     experiment_session.chat = chat
@@ -159,7 +159,7 @@ def _build_provider(provider_type: MessagingProviderType, team):
             config = {"client_id": "", "client_secret": "", "client_scope": "", "base_url": "", "auth_url": ""}
         case MessagingProviderType.slack:
             config = {"slack_team_id": "", "slack_installation_id": 123}
-    MessagingProviderFactory(type=provider_type, team=team, config=config)
+    MessagingProviderFactory.create(type=provider_type, team=team, config=config)
 
 
 @override_settings(WAFFLE_CREATE_MISSING_FLAGS=True)

@@ -1,10 +1,8 @@
 import pytest
 
-from apps.custom_actions.models import CustomActionOperation
-from apps.experiments.models import Experiment, SafetyLayer
+from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
-from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, SourceMaterialFactory
 from apps.utils.factories.files import FileFactory
@@ -14,7 +12,7 @@ from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
 @pytest.mark.django_db()
 def test_compare_models():
-    experiment = ExperimentFactory(temperature=0.1)
+    experiment = ExperimentFactory.create(temperature=0.1)
     instance1 = Experiment.objects.get(id=experiment.id)
     instance2 = Experiment.objects.get(id=experiment.id)
     assert instance1.compare_with_model(instance2, exclude_fields=[]) == set()
@@ -25,8 +23,8 @@ def test_compare_models():
 
 @pytest.mark.django_db()
 def test_differs():
-    experiment1 = ExperimentFactory(temperature=0.1)
-    experiment2 = ExperimentFactory(temperature=0.1)
+    experiment1 = ExperimentFactory.create(temperature=0.1)
+    experiment2 = ExperimentFactory.create(temperature=0.1)
     assert (
         differs(
             experiment1,
@@ -85,7 +83,7 @@ class TestVersion:
         assert changed_field.previous_field_version.raw_value == 0.2
 
     def test_early_abort(self):
-        experiment = ExperimentFactory(name="One", temperature=0.1)
+        experiment = ExperimentFactory.create(name="One", temperature=0.1)
         exp_version = experiment.create_new_version()
 
         experiment.name = "Two"
@@ -109,7 +107,7 @@ class TestVersion:
         assert len(changed_fields) == 1
 
     def test_compare_querysets_with_equal_results(self):
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory.create()
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with itself
         version_field = VersionField(queryset=queryset)
@@ -122,7 +120,7 @@ class TestVersion:
         assert queryset_result_version.previous_field_version.raw_value == experiment
 
     def test_compare_querysets_with_results_of_differing_versions(self):
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory.create()
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with new version
         new_version = experiment.create_new_version()
@@ -143,10 +141,10 @@ class TestVersion:
         not having a match in the previous queryset and one for the previous queryset not having a match in the current
         queryset
         """
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory.create()
         queryset = Experiment.objects.filter(id=experiment.id)
         # Compare with a totally different queryset
-        another_experiment = ExperimentFactory()
+        another_experiment = ExperimentFactory.create()
         version_field = VersionField(queryset=queryset)
         version_field.previous_field_version = VersionField(
             queryset=Experiment.objects.filter(id=another_experiment.id)
@@ -206,11 +204,11 @@ class TestVersion:
     def test_new_queryset_is_empty(self):
         """This tests the case where a queryset's previous results are not empty, but the current results are"""
         # Let's use experiment sessions as an example
-        experiment = ExperimentFactory()
-        ExperimentSessionFactory(experiment=experiment)
+        experiment = ExperimentFactory.create()
+        ExperimentSessionFactory.create(experiment=experiment)
         previous_queryset = experiment.sessions
         # Compare with a totally different queryset
-        new_experiment = ExperimentFactory()
+        new_experiment = ExperimentFactory.create()
         new_queryset = new_experiment.sessions
         # sanity check
         assert new_queryset.count() == 0
@@ -223,8 +221,8 @@ class TestVersion:
         assert version_field.changed is True
 
     def test_compare_unversioned_models(self):
-        trace_provider = TraceProviderFactory()
-        experiment = ExperimentFactory()
+        trace_provider = TraceProviderFactory.create()
+        experiment = ExperimentFactory.create()
         experiment_version = experiment.create_new_version()
         experiment.trace_provider = trace_provider
         experiment.save()
@@ -236,13 +234,13 @@ class TestVersion:
         into separate versioned fields. If some of those parameters are removed in a new version, they should still
         show up as a versioned field in `version_details`, but only with an empty value.
         """
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory.create()
         first_version_params = {"pipeline_id": 1}
-        start_pipeline_action = EventActionFactory(
+        start_pipeline_action = EventActionFactory.create(
             action_type=EventActionType.PIPELINE_START,
             params=first_version_params,
         )
-        static_trigger = StaticTriggerFactory(experiment=experiment, action=start_pipeline_action)
+        static_trigger = StaticTriggerFactory.create(experiment=experiment, action=start_pipeline_action)
         experiment.create_new_version()
 
         # Now change the params
@@ -284,7 +282,7 @@ class TestVersion:
 @pytest.mark.django_db()
 class TestCopyExperiment:
     def test_basic_copy(self):
-        experiment = ExperimentFactory(version_number=3)
+        experiment = ExperimentFactory.create(version_number=3)
         experiment_copy = experiment.create_new_version(name="test copy", is_copy=True)
         assert experiment_copy.id != experiment.id
         assert experiment_copy.public_id != experiment.public_id
@@ -303,21 +301,14 @@ class TestCopyExperiment:
         assert experiment_copy.voice_provider_id == experiment.voice_provider_id
 
     def test_related_models(self, team):
-        source_material = SourceMaterialFactory()
-        experiment = ExperimentFactory(team=team, source_material=source_material)
+        source_material = SourceMaterialFactory.create()
+        experiment = ExperimentFactory.create(team=team, source_material=source_material)
 
-        static_trigger = StaticTriggerFactory(experiment=experiment)
-        timeout_trigger = TimeoutTriggerFactory(experiment=experiment)
-        safety_layer = SafetyLayer.objects.create(
-            prompt_text="Is this message safe?", team=team, prompt_to_bot="Unsafe reply"
-        )
-        experiment.safety_layers.add(safety_layer)
+        static_trigger = StaticTriggerFactory.create(experiment=experiment)
+        timeout_trigger = TimeoutTriggerFactory.create(experiment=experiment)
 
         experiment_copy = experiment.create_new_version(is_copy=True)
         assert experiment_copy.source_material == source_material
-
-        assert experiment_copy.safety_layers.count() == 1
-        assert experiment_copy.safety_layers.first() == safety_layer
 
         assert experiment_copy.static_triggers.count() == 1
         static_trigger_copy = experiment_copy.static_triggers.first()
@@ -330,22 +321,6 @@ class TestCopyExperiment:
         assert timeout_trigger_copy != timeout_trigger
         assert timeout_trigger_copy.is_working_version
         assert timeout_trigger_copy.action != timeout_trigger.action
-
-    def test_custom_action_operations(self):
-        experiment = ExperimentFactory()
-        custom_action = CustomActionFactory(team=experiment.team)
-        weather_get = CustomActionOperation.objects.create(
-            custom_action=custom_action, experiment=experiment, operation_id="weather_get"
-        )
-
-        experiment_copy = experiment.create_new_version(is_copy=True)
-        assert experiment_copy.custom_action_operations.count() == 1
-        operation_copy = experiment_copy.custom_action_operations.first()
-        assert operation_copy != weather_get
-        assert operation_copy.is_working_version
-        assert operation_copy.operation_id == weather_get.operation_id
-        assert operation_copy.custom_action == custom_action
-        assert operation_copy._operation_schema == {}
 
     def test_copy_pipeline(self):
         pipeline_data = {
@@ -393,8 +368,8 @@ class TestCopyExperiment:
             "errors": {"test": "value"},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
-        pipeline = PipelineFactory(data=pipeline_data)
-        experiment = ExperimentFactory(team=pipeline.team, pipeline=pipeline)
+        pipeline = PipelineFactory.create(data=pipeline_data)
+        experiment = ExperimentFactory.create(team=pipeline.team, pipeline=pipeline)
 
         experiment_copy = experiment.create_new_version(is_copy=True)
         assert experiment_copy.pipeline != pipeline

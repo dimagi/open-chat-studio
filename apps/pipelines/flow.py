@@ -39,4 +39,4 @@ class Flow(pydantic.BaseModel):
 class FlowPipelineData(pydantic.BaseModel):
     name: str
     data: Flow
-    experiment_name: str = Field(default=None, min_length=1)
+    experiment_name: str | None = Field(default=None, min_length=1)

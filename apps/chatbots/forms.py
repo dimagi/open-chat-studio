@@ -2,7 +2,7 @@ from django import forms
 from django.db import transaction
 from waffle import flag_is_active
 
-from apps.experiments.models import Experiment, SyntheticVoice
+from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 
@@ -89,9 +89,10 @@ class ChatbotSettingsForm(forms.ModelForm):
         )
         self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
         self.fields["trace_provider"].queryset = team.traceprovider_set
+        self.fields["consent_form"].queryset = ConsentForm.objects.filter(team=team, is_version=False)
         self.fields["pre_survey"].queryset = team.survey_set.exclude(is_version=True)
         self.fields["post_survey"].queryset = team.survey_set.exclude(is_version=True)
-        self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"  # ty: ignore[invalid-assignment]
         self.fields["voice_provider"].widget.attrs = {
             "x-model.fill": "voiceProvider",
         }

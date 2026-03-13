@@ -18,6 +18,7 @@ ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 PIPELINE_ADMIN_GROUP = "Pipeline Admin"
 EVALUATION_ADMIN_GROUP = "Evaluation Admin"
+ANNOTATION_REVIEWER_GROUP = "Annotation Reviewer"
 
 NORMAL_USER_GROUPS = [
     EXPERIMENT_ADMIN_GROUP,
@@ -65,12 +66,10 @@ CONTENT_TYPES = {
     "experiments": [
         "consentform",
         "experiment",
-        "experimentroute",
         "experimentsession",
         "participant",
         "participantdata",
         "promptbuilderhistory",
-        "safetylayer",
         "sourcematerial",
         "survey",
         "syntheticvoice",
@@ -101,9 +100,16 @@ CONTENT_TYPES = {
         "evaluationresult",
         "evaluationrunaggregate",
     ],
-    "trace": ["trace", "span"],
+    "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
+    "trace": ["trace"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
+    "ocs_notifications": [
+        "usernotificationpreferences",
+        "eventtype",
+        "notificationevent",
+        "eventuser",
+    ],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -186,6 +192,7 @@ GROUPS = [
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("bot_channels", ALL),
+            AppPermSetDef("human_annotations", ALL),
             ModelPermSetDef("annotations", "tag", [VIEW]),
             ModelPermSetDef("annotations", "customtaggeditem", ALL),
             ModelPermSetDef("annotations", "usercomment", ALL),
@@ -223,6 +230,15 @@ GROUPS = [
         EVALUATION_ADMIN_GROUP,
         [
             AppPermSetDef("evaluations", ALL),
+        ],
+    ),
+    GroupDef(
+        ANNOTATION_REVIEWER_GROUP,
+        [
+            ModelPermSetDef("human_annotations", "annotationqueue", [VIEW]),
+            ModelPermSetDef("human_annotations", "annotationitem", [VIEW, CHANGE]),
+            ModelPermSetDef("human_annotations", "annotation", [ADD]),
+            ModelPermSetDef("human_annotations", "annotationqueueaggregate", [VIEW]),
         ],
     ),
 ]

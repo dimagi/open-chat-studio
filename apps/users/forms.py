@@ -19,7 +19,7 @@ class CustomUserChangeForm(UserChangeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if settings.USE_I18N and len(settings.LANGUAGES) > 1:
-            language = self.fields.get("language")
+            language = self.fields["language"]
             language.choices = settings.LANGUAGES
         else:
             self.fields.pop("language")
@@ -48,7 +48,7 @@ class ApiKeyForm(forms.ModelForm):
         self.fields["team"].queryset = Team.objects.filter(membership__user=request.user)
         self.fields["team"].initial = request.team
 
-    def save(self):
+    def save(self):  # ty: ignore[invalid-method-override]
         instance = super().save(commit=False)
         instance.user = self.user
         instance.read_only = not self.cleaned_data["allow_write"]

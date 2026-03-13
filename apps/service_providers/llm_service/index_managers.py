@@ -25,8 +25,8 @@ class IndexManager(metaclass=ABCMeta):
     def add_files(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         pass
 
@@ -113,8 +113,8 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
     def add_files(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         uploaded_files: list[File] = []
         for collection_file in collection_files:
@@ -220,7 +220,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             return False
 
     def upload_file_to_remote(self, file: File):
-        from apps.assistants.sync import create_files_remote
+        from apps.assistants.sync import create_files_remote  # noqa: PLC0415 - circular: assistants.sync→index_managers
 
         create_files_remote(self.client, files=[file])
 
@@ -264,8 +264,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     def add_files(
         self,
         collection_files: Iterator[CollectionFile],
-        chunk_size: int = None,
-        chunk_overlap: int = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         for collection_file in collection_files:
             file = collection_file.file
@@ -366,7 +366,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
     """
 
     def get_embedding_vector(self, content: str) -> Vector:
-        from langchain_openai import OpenAIEmbeddings
+        from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         embeddings = OpenAIEmbeddings(
             api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
@@ -376,7 +376,9 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 class GoogleLocalIndexManager(LocalIndexManager):
     def get_embedding_vector(self, content: str) -> Vector:
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+            GoogleGenerativeAIEmbeddings,
+        )
 
         embeddings = GoogleGenerativeAIEmbeddings(
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"

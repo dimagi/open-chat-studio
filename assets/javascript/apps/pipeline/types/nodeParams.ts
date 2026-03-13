@@ -3,6 +3,12 @@ export type NodeParams = {
   [key: string]: any;
 }
 
+export type VisibleWhenCondition = {
+  field: string;
+  value: any;
+  operator?: "==" | "!=" | "in" | "not_in" | "is_empty" | "is_not_empty";
+}
+
 export type PropertySchema = {
   type: string;
   title?: string | undefined;
@@ -13,6 +19,7 @@ export type PropertySchema = {
   "ui:widget"?: string | undefined;
   "ui:enumLabels"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
+  "ui:visibleWhen"?: VisibleWhenCondition | VisibleWhenCondition[] | undefined;
   [k: string]: any;
 }
 

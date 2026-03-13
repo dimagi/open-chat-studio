@@ -21,8 +21,8 @@ from apps.utils.factories.team import TeamWithUsersFactory
 def test_channel_form_reveals_provider_types(experiment, platform, expected_widget_cls):
     """Test that the message provider field is being hidden when not applicable to a certain platform"""
     # First create a messaging provider
-    message_provider = MessagingProviderFactory(type=MessagingProviderType("twilio"), team=experiment.team)
-    MessagingProviderFactory(type=MessagingProviderType("twilio"))
+    message_provider = MessagingProviderFactory.create(type=MessagingProviderType("twilio"), team=experiment.team)
+    MessagingProviderFactory.create(type=MessagingProviderType("twilio"))
 
     form = ChannelForm(initial={"platform": ChannelPlatform(platform)}, experiment=experiment)
     widget = form.fields["messaging_provider"].widget
@@ -71,7 +71,7 @@ def test_whatsapp_form_checks_number(
     _get_account_numbers, messaging_provider, provider_type, number, number_found_at_provider, experiment
 ):
     _get_account_numbers.return_value = ["+12125552368"]
-    provider = MessagingProviderFactory(type=provider_type, config={"account_sid": "123", "auth_token": "123"})
+    provider = MessagingProviderFactory.create(type=provider_type, config={"account_sid": "123", "auth_token": "123"})
     messaging_provider.return_value = provider
     form = WhatsappChannelForm(experiment=experiment, data={"number": number, "messaging_provider": provider.id})
     assert form.is_valid(), f"Form errors: {form.errors}"
@@ -87,7 +87,7 @@ def test_slack_channel_new_with_keywords_succeeds(team_with_users, experiment):
     """Test creating a new Slack channel with keywords succeeds"""
 
     # Create messaging provider
-    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+    provider = MessagingProviderFactory.create(type=MessagingProviderType.slack, team=team_with_users)
 
     # Mock the messaging service
     mock_service = Mock()
@@ -117,10 +117,10 @@ def test_slack_channel_edit_keeping_some_keywords_succeeds(team_with_users, expe
     """Test editing existing channel keeping some keywords succeeds"""
 
     # Create messaging provider
-    provider = MessagingProviderFactory(type=MessagingProviderType.slack, team=team_with_users)
+    provider = MessagingProviderFactory.create(type=MessagingProviderType.slack, team=team_with_users)
 
     # Create the channel we want to edit - this simulates the Health Bot from browser
-    health_bot = ExperimentChannelFactory(
+    health_bot = ExperimentChannelFactory.create(
         team=team_with_users,
         platform=ChannelPlatform.SLACK,
         messaging_provider=provider,
@@ -164,12 +164,12 @@ def test_slack_channel_duplicate_keywords_fails(team_with_users, experiment):
     """Test creating new channel with existing keywords fails"""
 
     # Create messaging provider
-    provider = MessagingProviderFactory(
+    provider = MessagingProviderFactory.create(
         type=MessagingProviderType.slack, team=team_with_users, config={"slack_team_id": "123"}
     )
 
     # Create existing channel with keywords
-    ExperimentChannelFactory(
+    ExperimentChannelFactory.create(
         team=team_with_users,
         platform=ChannelPlatform.SLACK,
         messaging_provider=provider,
@@ -202,7 +202,7 @@ def test_slack_channel_cross_team_keyword_conflicts(team_with_users, experiment)
     """Test that keyword conflicts are validated system-wide across teams"""
 
     # Create messaging provider
-    provider = MessagingProviderFactory(
+    provider = MessagingProviderFactory.create(
         type=MessagingProviderType.slack, team=team_with_users, config={"slack_team_id": "123"}
     )
 
@@ -210,7 +210,7 @@ def test_slack_channel_cross_team_keyword_conflicts(team_with_users, experiment)
     other_team = TeamWithUsersFactory.create()
 
     # Create existing channel in the OTHER team with keywords
-    ExperimentChannelFactory(
+    ExperimentChannelFactory.create(
         team=other_team,  # Different team!
         platform=ChannelPlatform.SLACK,
         messaging_provider=provider,  # Same messaging provider (same Slack workspace)

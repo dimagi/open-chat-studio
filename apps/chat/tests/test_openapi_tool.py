@@ -381,7 +381,7 @@ def _get_openai_function_from_openapi_spec(spec: dict, path: str, method: str):
     """This does a round trip from OpenAPI spec to OpenAI function definition because it's hard
     to validate the pydantic model that's produced by `openapi_spec_op_to_function_def`.
     """
-    spec = OpenAPISpec.from_spec_dict(spec)
+    spec = OpenAPISpec.from_spec_dict(spec)  # ty: ignore[invalid-assignment]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     tool = Tool(
         name=function_def.name,

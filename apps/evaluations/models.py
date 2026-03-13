@@ -115,7 +115,7 @@ class EvaluationMessage(BaseModel):
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
     ) -> list[EvaluationMessage]:
-        from apps.experiments.filters import ChatMessageFilter
+        from apps.experiments.filters import ChatMessageFilter  # noqa: PLC0415
 
         base_queryset = (
             ChatMessage.objects.filter(
@@ -295,7 +295,7 @@ class EvaluationConfig(BaseTeamModel):
             type=run_type,
         )
 
-        from apps.evaluations.tasks import run_evaluation_task
+        from apps.evaluations.tasks import run_evaluation_task  # noqa: PLC0415
 
         run_evaluation_task.delay(run.id)
         return run

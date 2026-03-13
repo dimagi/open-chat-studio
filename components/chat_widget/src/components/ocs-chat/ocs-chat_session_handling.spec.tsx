@@ -329,3 +329,125 @@ describe('ocs-chat session creation', () => {
     expect(textarea).toBeTruthy();
   });
 });
+
+describe('ocs-chat progress message during polling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    const localStorageMock = {
+      getItem: jest.fn(),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+      clear: jest.fn(),
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    jest.restoreAllMocks();
+  });
+
+  it('should display progress message in typing indicator when set', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const component = page.rootInstance;
+    component.sessionId = 'test-session';
+    component.isTyping = true;
+    component.typingProgressMessage = 'Searching documents...';
+
+    await page.waitForChanges();
+
+    const typingText = page.root?.shadowRoot?.querySelector('.typing-text span');
+    expect(typingText?.textContent).toBe('Searching documents...');
+  });
+
+  it('should display default typing text when no progress message is set', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const component = page.rootInstance;
+    component.sessionId = 'test-session';
+    component.isTyping = true;
+    component.typingProgressMessage = '';
+
+    await page.waitForChanges();
+
+    const typingText = page.root?.shadowRoot?.querySelector('.typing-text span');
+    expect(typingText?.textContent).toBeTruthy();
+    expect(typingText?.textContent).not.toBe('');
+  });
+
+  it('should update displayed text when progress message changes', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const component = page.rootInstance;
+    component.sessionId = 'test-session';
+    component.isTyping = true;
+    component.typingProgressMessage = 'Step 1...';
+
+    await page.waitForChanges();
+
+    let typingText = page.root?.shadowRoot?.querySelector('.typing-text span');
+    expect(typingText?.textContent).toBe('Step 1...');
+
+    component.typingProgressMessage = 'Step 2...';
+    await page.waitForChanges();
+
+    typingText = page.root?.shadowRoot?.querySelector('.typing-text span');
+    expect(typingText?.textContent).toBe('Step 2...');
+  });
+
+  it('should fall back to default text when progress message is cleared', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const component = page.rootInstance;
+    component.sessionId = 'test-session';
+    component.isTyping = true;
+    component.typingProgressMessage = 'Working...';
+
+    await page.waitForChanges();
+
+    let typingText = page.root?.shadowRoot?.querySelector('.typing-text span');
+    expect(typingText?.textContent).toBe('Working...');
+
+    // Clear the progress message
+    component.typingProgressMessage = '';
+    await page.waitForChanges();
+
+    typingText = page.root?.shadowRoot?.querySelector('.typing-text span');
+    expect(typingText?.textContent).toBeTruthy();
+    expect(typingText?.textContent).not.toBe('Working...');
+  });
+
+  it('should not show typing indicator or progress message when not typing', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const component = page.rootInstance;
+    component.sessionId = 'test-session';
+    component.isTyping = false;
+    component.typingProgressMessage = 'Should not appear';
+
+    await page.waitForChanges();
+
+    const typingText = page.root?.shadowRoot?.querySelector('.typing-text');
+    expect(typingText).toBeFalsy();
+  });
+});

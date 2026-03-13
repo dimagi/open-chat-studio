@@ -36,7 +36,7 @@ def live_server(request):
 
 @pytest.fixture()
 def experiment(team_with_users):
-    return ExperimentFactory(team=team_with_users)
+    return ExperimentFactory.create(team=team_with_users)
 
 
 @pytest.fixture()
@@ -78,7 +78,7 @@ def test_chat_completion(bot_process_input, experiment, api_key, live_server):
 
     session = ExperimentSession.objects.first()
     assert completion.id == session.external_id
-    assert completion.model == experiment.llm_provider_model.name
+    assert completion.model == ""
     assert completion.choices[0].message.content == "So, this ain't the end, I saw you again today"
     assert bot_process_input.call_args_list[0][0] == ("Sing a song for me Barracuda",)
     assert [(m.message_type, m.content) for m in session.chat.messages.all()] == [

@@ -10,8 +10,6 @@
                  {% if tag.added_by == request.user.email %}
                    ring-1 ring-blue-400
                  {% endif %}
-               {% elif tag.category == 'safety_layer_response' %}
-                 badge-error
                {% else %}
                  badge-warning
                {% endif %}
@@ -52,11 +50,7 @@
       {% if object.system_tags_names %}
         <span class="text-gray-500 text-sm">System tags: </span>
         {% for tag, category in object.system_tags_names %}
-          {% if category == 'safety_layer_response' %}
-            <div class="badge badge-error">{{ tag }}</div>
-          {% else %}
-            <div class="badge badge-warning">{{ tag }}</div>
-          {% endif %}
+          <div class="badge badge-warning">{{ tag }}</div>
         {% endfor %}
       {% endif %}
     </div>

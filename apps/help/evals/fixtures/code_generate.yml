@@ -1,0 +1,61 @@
+- id: basic_hello_world
+  input:
+    query: "Write a function that returns 'Hello, World!'"
+    context: ""
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: execute
+      input: "anything"
+      expected: "Hello, World!"
+
+- id: echo_input
+  input:
+    query: "Write a function that echoes back the user's input unchanged"
+    context: ""
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: execute
+      input: "test input"
+      expected: "test input"
+
+- id: fix_syntax_error
+  input:
+    query: "Fix this code"
+    context: "def main(input: str, **kwargs) -> str:\n    return input.upper("
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: execute
+      input: "hello"
+      expected: "HELLO"
+
+- id: use_participant_data
+  input:
+    query: "Write a function that reads the participant's name from participant data and greets them"
+    context: ""
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: llm_judge
+      criteria: "The code calls get_participant_data() to read data and returns a greeting string that includes the participant's name"
+
+- id: modify_existing_code
+  input:
+    query: "Add error handling so it returns 'Error' if the input is empty"
+    context: "def main(input: str, **kwargs) -> str:\n    return input.upper()"
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: execute
+      input: ""
+      expected: "Error"
+    - type: execute
+      input: "hello"
+      expected: "HELLO"

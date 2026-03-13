@@ -14,7 +14,7 @@ logger = get_task_logger("ocs.openai_sync")
 )
 def delete_openai_assistant_task(self, assistant_id: int):
     # lazy import to avoid import on startup
-    from openai import (
+    from openai import (  # noqa: PLC0415
         APIError,
         APIResponseValidationError,
         BadRequestError,
@@ -23,7 +23,7 @@ def delete_openai_assistant_task(self, assistant_id: int):
         UnprocessableEntityError,
     )
 
-    from apps.assistants.models import OpenAiAssistant
+    from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415
 
     try:
         assistant = OpenAiAssistant.all_objects.get(id=assistant_id, is_archived=True)
@@ -53,4 +53,6 @@ def delete_openai_assistant_task(self, assistant_id: int):
             raise cause from None
         if isinstance(cause, APIError):
             raise self.retry(exc=cause) from None
-        raise cause from None
+        if cause is not None:
+            raise cause from None
+        raise

@@ -14,20 +14,21 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
 
-class EvaluatorHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluatorHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluator"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluators",
             "title": "Evaluators",
+            "page_title": "Evaluators",
             "new_object_url": reverse("evaluations:evaluator_new", args=[team_slug]),
             "table_url": reverse("evaluations:evaluator_table", args=[team_slug]),
         }
 
 
-class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluator"
     model = Evaluator
     table_class = EvaluatorTable
@@ -42,13 +43,14 @@ class EvaluatorTableView(SingleTableView, PermissionRequiredMixin):
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"
     model = Evaluator
     form_class = EvaluatorForm
     extra_context = {
         "title": "Create Evaluator",
+        "page_title": "Create Evaluator",
         "button_text": "Create",
         "active_tab": "evaluators",
     }
@@ -78,13 +80,14 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredM
         return super().form_valid(form)
 
 
-class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluator"
     model = Evaluator
     form_class = EvaluatorForm
     template_name = "evaluations/evaluator_form.html"
     extra_context = {
         "title": "Update Evaluator",
+        "page_title": "Update Evaluator",
         "button_text": "Update",
         "active_tab": "evaluators",
     }
@@ -112,7 +115,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMix
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
 
-class DeleteEvaluator(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
     permission_required = "evaluations.delete_evaluator"
     model = Evaluator
 
@@ -127,7 +130,7 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredM
 
 def _evaluator_schemas():
     """Returns schemas for all available evaluator classes."""
-    from apps.evaluations import evaluators
+    from apps.evaluations import evaluators  # noqa: PLC0415
 
     schemas = []
 
@@ -145,7 +148,7 @@ def _evaluator_schemas():
 
 def _get_evaluator_schema(evaluator_class):
     """Get schema for a single evaluator class."""
-    from apps.custom_actions.schema_utils import resolve_references
+    from apps.custom_actions.schema_utils import resolve_references  # noqa: PLC0415
 
     schema = resolve_references(evaluator_class.model_json_schema())
     schema.pop("$defs", None)

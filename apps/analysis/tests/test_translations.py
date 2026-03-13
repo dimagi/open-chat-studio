@@ -51,6 +51,7 @@ class TestTranslateMessagesWithLLM(TestCase):
         assert result == messages
         self.mock_llm_provider.get_llm_service.assert_not_called()
 
+    @patch("apps.analysis.translation.with_llm_retry", lambda x: x)
     @patch("apps.analysis.tasks.current_team")
     def test_successful_translation(self, mock_current_team):
         """Test successful translation of messages"""
@@ -79,6 +80,7 @@ class TestTranslateMessagesWithLLM(TestCase):
         assert "spa" in self.mock_chat.translated_languages
         self.mock_chat.save.assert_called_once_with(update_fields=["translated_languages"])
 
+    @patch("apps.analysis.translation.with_llm_retry", lambda x: x)
     @patch("apps.analysis.tasks.current_team")
     def test_partial_translation_existing_messages(self, mock_current_team):
         # message 1 already has translation

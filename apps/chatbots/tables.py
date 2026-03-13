@@ -1,3 +1,5 @@
+import json
+
 import django_tables2 as tables
 from django.conf import settings
 from django.db.models import F
@@ -54,7 +56,7 @@ class ChatbotTable(tables.Table):
     session_count = ColumnWithHelp(verbose_name="Total Sessions", orderable=True)
     interaction_count = ColumnWithHelp(verbose_name="Total Interactions", orderable=True)
     trends = columns.TemplateColumn(
-        verbose_name="Trends (last 48h)",
+        verbose_name="Trends (last 24h)",
         template_name="table/trends_chart.html",
     )
     actions = columns.TemplateColumn(
@@ -71,6 +73,16 @@ class ChatbotTable(tables.Table):
         }
         orderable = False
         empty_text = "No chatbots found."
+
+    def render_trends(self, record):
+        successes, errors = getattr(record, "trend_data", ([], []))
+        template = get_template("table/trends_chart.html")
+        return template.render(
+            {
+                "record": record,
+                "trends_json": json.dumps({"successes": successes, "errors": errors}),
+            }
+        )
 
     def order_last_message(self, queryset, is_descending):
         order = F("last_message")

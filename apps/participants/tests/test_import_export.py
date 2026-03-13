@@ -67,7 +67,7 @@ def invalid_csv_content():
     """CSV content with validation errors"""
     return """identifier,channel,name
 ,web,Missing Identifier
-user@example.com,,Missing Platform  
+user@example.com,,Missing Platform
 user@example.com,invalid_platform,Invalid Platform"""
 
 
@@ -377,6 +377,7 @@ class TestExportParticipantDataToResponse:
         web_row = next(row for row in rows if row["channel"] == "web")
 
         # Complex data types should be exported as their string representation
+        assert csv_reader.fieldnames is not None
         assert "data.preferences" in csv_reader.fieldnames
         assert "data.tags" in csv_reader.fieldnames
         assert "data.metadata" in csv_reader.fieldnames

@@ -57,7 +57,7 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         """Fetch messages from the database until a marker is found. The marker must be one of the
         PipelineChatHistoryModes values.
         """
-        from apps.pipelines.models import PipelineChatHistoryModes
+        from apps.pipelines.models import PipelineChatHistoryModes  # noqa: PLC0415
 
         messages = []
         include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
@@ -152,7 +152,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def make_summary_message(cls, message):
         """A 'summary message' is a special message only ever exists in memory. It is
         not saved to the database. It is used to represent the summary of a chat up to a certain point."""
-        from apps.pipelines.models import PipelineChatHistoryModes
+        from apps.pipelines.models import PipelineChatHistoryModes  # noqa: PLC0415
 
         return ChatMessage(
             created_at=message.created_at,
@@ -183,7 +183,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_summary(self):
-        from apps.pipelines.models import PipelineChatHistoryModes
+        from apps.pipelines.models import PipelineChatHistoryModes  # noqa: PLC0415
 
         return self.metadata.get("compression_marker") == PipelineChatHistoryModes.SUMMARIZE
 
@@ -291,11 +291,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
             return tag.name
 
-    def get_safety_layer_tag_name(self) -> str | None:
-        """Returns the name of the safety layer tag, if there is one"""
-        if tag := self.tags.filter(category=TagCategories.SAFETY_LAYER_RESPONSE).first():
-            return tag.name
-
     def get_absolute_url(self):
         if not self.chat_id or not self.chat.team_id:
             return None
@@ -330,3 +325,6 @@ class ChatAttachment(BaseModel):
 
     def __str__(self):
         return f"Tool Resources for chat {self.chat.id}: {self.tool_type}"
+
+    class Meta:
+        unique_together = ("chat", "tool_type")

@@ -6,6 +6,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import ExperimentSession
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import PipelineAccessor
 
 
 def test_pipline_state_json_serializable():
@@ -48,8 +49,9 @@ def test_route_info():
         pipeline_version=1,
         temp_state={},
     )
-    assert state.get_all_routes() == {"node2": "B", "node4": "A"}
+    accessor = PipelineAccessor(state)
+    assert accessor.get_all_routes() == {"node2": "B", "node4": "A"}
 
-    assert state.get_selected_route("node4") == "A"
-    assert state.get_selected_route("node3") is None
-    assert state.get_node_path("node4") == ["node1", "node2", "node3", "node4"]
+    assert accessor.get_selected_route("node4") == "A"
+    assert accessor.get_selected_route("node3") is None
+    assert accessor.get_node_path("node4") == ["node1", "node2", "node3", "node4"]

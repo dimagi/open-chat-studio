@@ -41,11 +41,20 @@ class Flags(FlagInfo, Enum):
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
 
-    TRACING = ("flag_tracing", "Enables users to see OCS traces", "", [], True)
-
     EVALS = ("flag_evaluations", "Chatbot Evaluations (beta)", "evals", [], True)
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
+
+    NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
+
+    CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
+
+    TESTING_CUSTOM_ACTIONS = (
+        "flag_custom_actions_test_endpoints",
+        "Testing endpoints for custom actions (internal use only)",
+    )
+
+    HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
     @property
     def docs_url(self):

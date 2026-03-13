@@ -3,7 +3,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from django.core.cache import cache
-from django.core.validators import validate_domain_name
+from django.core.validators import validate_domain_name  # ty: ignore[unresolved-import]
 
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform

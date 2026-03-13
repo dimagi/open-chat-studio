@@ -1,0 +1,10 @@
+<div class="space-y-1">
+  <div class="text-sm text-gray-600 dark:text-gray-400">{{ record.message }}</div>
+  {% if record.links %}
+    <div class="mt-2">
+      {% for label, url in record.links.items %}
+        {% include "generic/chip_button.html" with label=label url=url %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n waffle_tags %}
 <li class="menu-title">
   <span>{% translate "Application" %}</span>
 </li>
@@ -7,6 +7,14 @@
   <span>{% translate "My Account" %}</span>
 </li>
 <ul class="menu">
+  {% if request.team %}
+  <li>
+    <a href="{% url 'ocs_notifications:notifications_home' request.team.slug %}" {% if active_tab == 'notifications' %}class="menu-active"{% endif %}>
+      <i class="fa-solid fa-bell"></i>
+      {% translate "Notifications" %} {% if unread_notifications_count %}<span class="badge badge-xs badge-error">{{ unread_notifications_count }}</span>{% endif %}
+    </a>
+  </li>
+  {% endif %}
   <li>
     <a href="{% url 'users:user_profile' %}" {% if active_tab == 'profile' %}class="menu-active"{% endif %}>
       <i class="fa fa-user h-4 w-4"></i>

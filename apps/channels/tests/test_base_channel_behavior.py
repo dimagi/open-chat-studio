@@ -20,7 +20,7 @@ from apps.chat.channels import (
     ChannelBase,
     strip_urls_and_emojis,
 )
-from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
+from apps.chat.exceptions import AudioSynthesizeException, VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import (
     ExperimentSession,
@@ -61,8 +61,8 @@ class TestChannel(ChannelBase):
 
 @pytest.fixture()
 def test_channel(db):
-    experiment = ExperimentFactory(conversational_consent_enabled=False)
-    channel = ExperimentChannelFactory(experiment=experiment)
+    experiment = ExperimentFactory.create(conversational_consent_enabled=False)
+    channel = ExperimentChannelFactory.create(experiment=experiment)
     channel = TestChannel(experiment=experiment, experiment_channel=channel)
     return channel
 
@@ -94,7 +94,7 @@ def test_incoming_message_adds_channel_info(test_channel):
 def test_incoming_message_adds_version_on_session(test_channel):
     """When a `message` is sent, the experiment version should be added saved on `experiment_session`"""
     chat_id = "123123"
-    experiment = ExperimentFactory()
+    experiment = ExperimentFactory.create()
 
     # Creating the v1 and send msg on experiment
     exp_v1 = experiment.create_new_version(is_copy=False)
@@ -209,12 +209,12 @@ def test_different_participants_created_for_same_user_in_different_teams():
     chat_id = "00000"
     user_message = base_messages.text_message(participant_id=chat_id)
 
-    experiment1 = ExperimentFactory()
-    exp_channel1 = ExperimentChannelFactory(experiment=experiment1)
+    experiment1 = ExperimentFactory.create()
+    exp_channel1 = ExperimentChannelFactory.create(experiment=experiment1)
     channel1 = TestChannel(experiment1, exp_channel1)
 
-    experiment2 = ExperimentFactory()
-    exp_channel2 = ExperimentChannelFactory(experiment=experiment2)
+    experiment2 = ExperimentFactory.create()
+    exp_channel2 = ExperimentChannelFactory.create(experiment=experiment2)
     channel2 = TestChannel(experiment2, exp_channel2)
 
     assert experiment1.team != experiment2.team
@@ -282,13 +282,13 @@ def test_pre_conversation_flow(_send_seed_message):
     - The user must give consent
     - The user must indicate that they filled out the survey
     """
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
+    experiment = ExperimentFactory.create(conversational_consent_enabled=True)
+    channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
     pre_survey = experiment.pre_survey
     assert pre_survey
 
     def _user_message(message: str):
-        message = base_messages.text_message(message_text=message)
+        message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
         return channel.new_user_message(message)
 
     experiment = channel.experiment
@@ -336,9 +336,9 @@ def test_pre_conversation_flow(_send_seed_message):
 
 @pytest.mark.django_db()
 def test_unsupported_message_type_creates_ai_message():
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    LlmProviderFactory(team=experiment.team)  # needed for EventBot
-    channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
+    experiment = ExperimentFactory.create(conversational_consent_enabled=True)
+    LlmProviderFactory.create(team=experiment.team)  # needed for EventBot
+    channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
     assert channel.experiment_session is None
     with mock_llm(["error"]):
         channel.new_user_message(base_messages.unsupported_content_type_message())
@@ -354,8 +354,8 @@ def test_unsupported_message_type_creates_ai_message():
 def test_unsupported_message_type_triggers_bot_response(_unsupported_message_type_response):
     bot_response = "Nope, not supported laddy"
     _unsupported_message_type_response.return_value = bot_response
-    experiment = ExperimentFactory(conversational_consent_enabled=True)
-    channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
+    experiment = ExperimentFactory.create(conversational_consent_enabled=True)
+    channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
     assert channel.experiment_session is None
 
     channel.new_user_message(base_messages.unsupported_content_type_message())
@@ -503,10 +503,10 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
 
     This test simply makes sure that we are able to get the user query when we need it.
     """
-    experiment = ExperimentFactory(conversational_consent_enabled=True, seed_message="Hi human")
-    experiment_session = ExperimentSessionFactory(experiment=experiment)
+    experiment = ExperimentFactory.create(conversational_consent_enabled=True, seed_message="Hi human")
+    experiment_session = ExperimentSessionFactory.create(experiment=experiment)
 
-    channel = TestChannel(experiment, ExperimentChannelFactory(experiment=experiment))
+    channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
     channel.experiment_session = experiment_session
     pre_survey = experiment.pre_survey
     assert pre_survey
@@ -537,7 +537,7 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     """
     if platform == ChannelPlatform.EVALUATIONS:
         pytest.skip("Evaluations channel can't be instantiated from a session")
-    session = ExperimentSessionFactory(experiment_channel__platform=platform)
+    session = ExperimentSessionFactory.create(experiment_channel__platform=platform)
     ParticipantData.objects.create(
         team=session.team,
         experiment=session.experiment,
@@ -551,11 +551,11 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
 
 @pytest.mark.django_db()
 def test_missing_channel_raises_error(twilio_provider):
-    experiment = ExperimentFactory()
-    experiment_channel = ExperimentChannelFactory(
+    experiment = ExperimentFactory.create()
+    experiment_channel = ExperimentChannelFactory.create(
         messaging_provider=twilio_provider, experiment=experiment, platform="whatsapp"
     )
-    session = ExperimentSessionFactory(experiment_channel=experiment_channel)
+    session = ExperimentSessionFactory.create(experiment_channel=experiment_channel)
     session.experiment_channel.platform = "snail_mail"
     with pytest.raises(Exception, match="Unsupported platform type snail_mail"):
         ChannelBase.from_experiment_session(session)
@@ -567,20 +567,20 @@ def test_participant_reused_across_experiments():
     chat_id = "123"
 
     # User chats to experiment 1
-    experiment1 = ExperimentFactory()
+    experiment1 = ExperimentFactory.create()
     team1 = experiment1.team
-    tele_channel1 = TestChannel(experiment1, ExperimentChannelFactory(experiment=experiment1))
+    tele_channel1 = TestChannel(experiment1, ExperimentChannelFactory.create(experiment=experiment1))
     _send_user_message_on_channel(tele_channel1, base_messages.text_message(participant_id=chat_id))
 
     # User chats to experiment 2 that is in the same teamparticipant_id
-    experiment2 = ExperimentFactory(team=team1)
-    tele_channel2 = TestChannel(experiment2, ExperimentChannelFactory(experiment=experiment2))
+    experiment2 = ExperimentFactory.create(team=team1)
+    tele_channel2 = TestChannel(experiment2, ExperimentChannelFactory.create(experiment=experiment2))
     _send_user_message_on_channel(tele_channel2, base_messages.text_message(participant_id=chat_id))
 
     # User chats to experiment 3 that is in a different team
-    experiment3 = ExperimentFactory()
+    experiment3 = ExperimentFactory.create()
     team2 = experiment3.team
-    tele_channel3 = TestChannel(experiment3, ExperimentChannelFactory(experiment=experiment3))
+    tele_channel3 = TestChannel(experiment3, ExperimentChannelFactory.create(experiment=experiment3))
     _send_user_message_on_channel(tele_channel3, base_messages.text_message(participant_id=chat_id))
 
     # There should be 1 participant with identifier = chat_id per team
@@ -717,7 +717,7 @@ def test_voice_tag_created_on_message(
     experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
     experiment.save()
 
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     test_channel.experiment_session = session
     test_channel.new_user_message(base_messages.audio_message())
     query_messages = session.chat.messages.all()
@@ -751,11 +751,11 @@ def test_send_message_to_user_with_single_bot(
     will be used
     """
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         experiment__use_processor_bot_voice=use_processor_bot_voice,
         experiment__voice_response_behaviour=response_behaviour,
     )
-    session.experiment_channel = ExperimentChannelFactory(experiment=session.experiment)
+    session.experiment_channel = ExperimentChannelFactory.create(experiment=session.experiment)
 
     channel = TestChannel(session.experiment, session.experiment_channel, session)
 
@@ -784,7 +784,7 @@ def test_participant_authorization(whitelist, is_external_user, identifier, is_a
     message = base_messages.text_message(participant_id=identifier)
     experiment = test_channel.experiment
     if not is_external_user:
-        MembershipFactory(team=experiment.team, user__email=identifier)
+        MembershipFactory.create(team=experiment.team, user__email=identifier)
 
     experiment.participant_allowlist = whitelist
     test_channel.message = message
@@ -802,8 +802,8 @@ def test_participant_identifier_determination():
     Test participant identifier is fetched from the cached value, otherwise from the session, and lastly from the
     user message
     """
-    session = ExperimentSessionFactory(participant__identifier="Alpha")
-    exp_channel = ExperimentChannelFactory(experiment=session.experiment)
+    session = ExperimentSessionFactory.create(participant__identifier="Alpha")
+    exp_channel = ExperimentChannelFactory.create(experiment=session.experiment)
     channel_base = TestChannel(experiment=session.experiment, experiment_channel=exp_channel)
     channel_base.message = base_messages.text_message(participant_id="Beta")
 
@@ -818,7 +818,7 @@ def test_participant_identifier_determination():
 
 def test_new_sessions_are_linked_to_the_working_experiment(experiment):
     working_version = experiment
-    channel = ExperimentChannelFactory(experiment=working_version)
+    channel = ExperimentChannelFactory.create(experiment=working_version)
     new_version = working_version.create_new_version()
 
     test_channel = TestChannel(experiment=new_version, experiment_channel=channel)
@@ -831,13 +831,13 @@ def test_new_sessions_are_linked_to_the_working_experiment(experiment):
 
 def test_can_start_a_session_with_working_experiment(experiment):
     assert experiment.is_a_version is False
-    channel = ExperimentChannelFactory(experiment=experiment)
+    channel = ExperimentChannelFactory.create(experiment=experiment)
     session = ChannelBase.start_new_session(experiment, channel, participant_identifier="testy-pie")
     assert session.experiment == experiment
 
 
 def test_cannot_start_a_session_with_an_experiment_version(experiment):
-    channel = ExperimentChannelFactory(experiment=experiment)
+    channel = ExperimentChannelFactory.create(experiment=experiment)
     new_version = experiment.create_new_version()
     assert new_version.is_a_version is True
     with pytest.raises(VersionedExperimentSessionsNotAllowedException):
@@ -846,9 +846,9 @@ def test_cannot_start_a_session_with_an_experiment_version(experiment):
 
 @pytest.mark.parametrize("new_session", [True, False])
 def test_ensure_session_exists_for_participant(new_session, experiment):
-    experiment_channel = ExperimentChannelFactory(experiment=experiment)
+    experiment_channel = ExperimentChannelFactory.create(experiment=experiment)
     if new_session:
-        ExperimentSessionFactory(
+        ExperimentSessionFactory.create(
             experiment=experiment, participant__identifier="testy-pie", experiment_channel=experiment_channel
         )
     channel_base = TestChannel(experiment=experiment, experiment_channel=experiment_channel)
@@ -875,13 +875,13 @@ def test_supported_and_unsupported_attachments(experiment):
         def _can_send_file(self, file: File):
             return file.name in ["f1", "f2"]
 
-    session = ExperimentSessionFactory(experiment=experiment)
+    session = ExperimentSessionFactory.create(experiment=experiment)
     channel = CustomChannel(experiment, experiment_channel=Mock(), experiment_session=session)
-    channel.send_text_to_user = Mock()
-    channel.send_file_to_user = Mock()
+    channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+    channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
 
-    file1 = FileFactory(name="f1", content_type="image/jpeg")
-    file2 = FileFactory(name="f2", content_type="image/jpeg")
+    file1 = FileFactory.create(name="f1", content_type="image/jpeg")
+    file2 = FileFactory.create(name="f2", content_type="image/jpeg")
     # This file is too large to be sent as a message and should be sent as a link
     file3 = Mock(
         spec=File, name="f3", content_type="image/jpeg", download_link=lambda *args, **kwargs: "https://example.com"
@@ -896,12 +896,100 @@ def test_supported_and_unsupported_attachments(experiment):
 
 @pytest.mark.django_db()
 def test_chat_message_returned_for_cancelled_generate():
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     channel = TestChannel(session.experiment, None, session)
-    channel._add_message = Mock()
-    channel._new_user_message = Mock()
+    channel._add_message = Mock()  # ty: ignore[invalid-assignment]
+    channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
 
     assert type(response) is ChatMessage
+
+
+class TestNotifications:
+    @patch("apps.chat.channels.audio_synthesis_failure_notification")
+    def test_audio_synthesis_failure_creates_notification(self, mock_create_notification):
+        """Test that AudioSynthesizeException triggers a notification."""
+        session = ExperimentSessionFactory.build(experiment__voice_response_behaviour=VoiceResponseBehaviours.ALWAYS)
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel._send_text_to_user_with_notification = Mock()
+
+        # Mock voice synthesis to raise AudioSynthesizeException
+        with patch.object(channel, "_reply_voice_message", side_effect=AudioSynthesizeException("Synthesis failed")):
+            channel.send_message_to_user("Hello")
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(session.experiment, session=session)
+
+    @patch("apps.chat.channels.file_delivery_failure_notification")
+    def test_file_delivery_failure_creates_notification(self, mock_create_notification):
+        """Test that file delivery exception triggers a notification."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+
+        # Create a test file
+        test_file = FileFactory.build(name="test.jpg", content_type="image/jpeg")
+        test_file.download_link = lambda *args, **kwargs: "https://example.com/test.jpg"
+
+        # Mock send_file_to_user to raise an exception
+        with patch.object(channel, "send_file_to_user", side_effect=Exception("File delivery failed")):
+            channel._send_files_to_user([test_file])
+
+        # Verify notification was created with correct parameters
+        platform_title = channel.experiment_channel.platform_enum.title()
+        mock_create_notification.assert_called_once_with(
+            session.experiment,
+            platform_title=platform_title,
+            content_type="image/jpeg",
+            session=session,
+        )
+
+    @patch("apps.chat.channels.audio_transcription_failure_notification")
+    def test_audio_transcription_failure_creates_notification(self, mock_create_notification):
+        """Test that audio transcription exception triggers a notification."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+
+        # Mock transcription_started and get_message_audio
+        channel.transcription_started = Mock()  # ty: ignore[invalid-assignment]
+        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))  # ty: ignore[invalid-assignment]
+
+        # Mock _transcribe_audio to raise an exception
+        with patch.object(channel, "_transcribe_audio", side_effect=Exception("Transcription failed")):
+            with pytest.raises(Exception, match="Transcription failed"):
+                channel._get_voice_transcript()
+
+        # Verify notification was created with correct parameters
+        mock_create_notification.assert_called_once_with(
+            session.experiment, platform=channel.experiment_channel.platform
+        )
+
+    @patch("apps.chat.channels.file_delivery_failure_notification")
+    def test_multiple_file_delivery_failures_create_separate_notifications(self, mock_create_notification):
+        """Test that multiple file delivery failures create separate notifications."""
+        session = ExperimentSessionFactory.build()
+        channel = TestChannel(session.experiment, session.experiment_channel, session)
+        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+
+        # Create test files
+        file1 = FileFactory.build(name="test1.jpg", content_type="image/jpeg")
+        file2 = FileFactory.build(name="test2.pdf", content_type="application/pdf")
+        file1.download_link = lambda *args, **kwargs: "https://example.com/test1.jpg"
+        file2.download_link = lambda *args, **kwargs: "https://example.com/test2.jpg"
+
+        # Mock send_file_to_user to raise exceptions for both files
+        with patch.object(channel, "send_file_to_user", side_effect=Exception("File delivery failed")):
+            channel._send_files_to_user([file1, file2])
+
+        # Verify two separate notifications were created
+        assert mock_create_notification.call_count == 2
+
+        # Check first notification (for file1)
+        first_call = mock_create_notification.call_args_list[0][1]
+        assert first_call["content_type"] == "image/jpeg"
+
+        # Check second notification (for file2)
+        second_call = mock_create_notification.call_args_list[1][1]
+        assert second_call["content_type"] == "application/pdf"

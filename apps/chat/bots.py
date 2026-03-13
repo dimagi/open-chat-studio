@@ -4,6 +4,7 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import dictdiffer
 from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
@@ -15,9 +16,11 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
+from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
@@ -68,7 +71,11 @@ class PipelineBot:
             input_state["input_message_id"] = human_message.id
             input_state["input_message_url"] = get_global_search_url(human_message)
 
-        with self.trace_service.span("Run Pipeline", inputs={"input_state": input_state.json_safe()}) as span:
+        with self.trace_service.span(
+            "Run Pipeline",
+            inputs={"input_state": input_state.json_safe()},
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
+        ) as span:
             ai_message = self.invoke_pipeline(
                 input_state=input_state, human_message=human_message, save_run_to_history=True
             )
@@ -126,12 +133,13 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.experiments.models import AgentTools
-        from apps.pipelines.graph import PipelineGraph
+        from apps.experiments.models import AgentTools  # noqa: PLC0415
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
 
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
+                "repo": ORMRepository(session=self.session),
                 "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
             },
             run_name_map=graph.node_id_to_name_mapping,
@@ -197,6 +205,9 @@ class PipelineBot:
 
         out_pd = output.get("participant_data", None)
         if out_pd is not None and out_pd != input_state.get("participant_data"):
+            if self.trace_service:
+                diff = list(dictdiffer.diff(input_state.get("participant_data", {}), out_pd))
+                self.trace_service.set_participant_data_diff(diff)
             self.participant_data.data = out_pd
             self.participant_data.save(update_fields=["data"])
             self.session.participant.update_name_from_data(out_pd)
@@ -218,7 +229,7 @@ class PipelineBot:
         message: str,
         type_: ChatMessageType,
         metadata: dict,
-        tags: list[tuple] = None,
+        tags: list[tuple] | None = None,
     ) -> ChatMessage:
         chat_message = ChatMessage.objects.create(
             chat=self.session.chat, message_type=type_.value, content=message, metadata=metadata
@@ -230,7 +241,7 @@ class PipelineBot:
         return chat_message
 
     def get_synthetic_voice(self) -> SyntheticVoice | None:
-        from apps.experiments.models import SyntheticVoice
+        from apps.experiments.models import SyntheticVoice  # noqa: PLC0415
 
         if self.synthetic_voice_id is None:
             return None
@@ -266,14 +277,15 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import PipelineGraph
-        from apps.pipelines.nodes.helpers import temporary_session
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
+        from apps.pipelines.nodes.helpers import temporary_session  # noqa: PLC0415
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
-            input = PipelineState(messages=[input], experiment_session=session)
+            state = PipelineState(messages=[input], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
-            output = runner.invoke(runnable, input)
+            output = runner.invoke(runnable, state, config)
             output = PipelineState(**output).json_safe()
         return output
 
@@ -284,7 +296,7 @@ class EventBot:
         Your role is to generate messages to send to users. These could be reminders
         or prompts to help them complete their tasks or error messages. The text that you generate will be sent
         to the user in a chat message.
-        
+
         <example>
         Input: Remember to brush your teeth.
         Output: Don't forget to brush your teeth.
@@ -297,19 +309,19 @@ class EventBot:
         Input: The message was inappropriate.
         Output: Unfortunately I can't respond to your last message because it goes against my usage policy.
         </example>
-    
+
         You should generate the message in same language as the recent conversation history shown below.
         If there is no history use English.
 
         #### Conversation history
         {conversation_history}
-    
+
         #### User data
         {participant_data}
-    
+
         #### Current date and time
         {current_datetime}
-        
+
         Output only the final message, no additional text. Do not put the message in quotes.
         """
     )
@@ -351,6 +363,7 @@ class EventBot:
             session=self.session,
             inputs={"input": event_prompt},
             metadata=self.trace_info.metadata,
+            notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
         ) as span:
             config = self.trace_service.get_langchain_config()
             response = llm.invoke(
@@ -369,15 +382,12 @@ class EventBot:
 
     @property
     def llm_provider(self):
-        if self.experiment.llm_provider:
-            return self.experiment.llm_provider
-
-        # If no LLM provider is set, use the first one in the team
         return self.experiment.team.llmprovider_set.first()
 
     @property
     def system_prompt(self):
-        context = PromptTemplateContext(self.session, None).get_context(["participant_data", "current_datetime"])
+        repo = ORMRepository(session=self.session)
+        context = PromptTemplateContext(self.session, repo=repo).get_context(["participant_data", "current_datetime"])
         context["conversation_history"] = self.get_conversation_history()
         return self.SYSTEM_PROMPT.format(**context)
 

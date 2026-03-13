@@ -43,6 +43,7 @@ from apps.experiments.models import Experiment, ExperimentSession, ParticipantDa
 from apps.experiments.views.utils import get_channels_context
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.decorators import login_and_team_required
+from apps.teams.utils import set_current_team
 from apps.web.waf import WafRule, waf_allow
 
 log = logging.getLogger("ocs.channels")
@@ -55,12 +56,12 @@ def new_telegram_message(request, channel_external_id: uuid):
     if token != settings.TELEGRAM_SECRET_TOKEN:
         return HttpResponseBadRequest("Invalid request.")
 
-    channel_exists = tasks.get_experiment_channel_base_query(
-        ChannelPlatform.TELEGRAM, external_id=channel_external_id
-    ).exists()
-    if not channel_exists:
+    channel = tasks.get_experiment_channel(ChannelPlatform.TELEGRAM, external_id=channel_external_id)
+    if not channel:
         raise Http404()
 
+    set_current_team(channel.team)
+    request.experiment = channel.experiment  # used by RequestLoggingMiddleware
     data = json.loads(request.body)
     tasks.handle_telegram_message.delay(message_data=data, channel_external_id=channel_external_id)
     return HttpResponse()
@@ -90,6 +91,8 @@ def new_twilio_message(request):
         log.info(f"No channel found for {channel_id_key}: {message.to}")
         raise Http404()
 
+    set_current_team(experiment_channel.team)
+    request.experiment = experiment_channel.experiment  # used by RequestLoggingMiddleware
     if not tasks.validate_twillio_request(
         experiment_channel, message_data, request.build_absolute_uri(), request.headers.get("X-Twilio-Signature")
     ):
@@ -103,13 +106,15 @@ def new_twilio_message(request):
 @csrf_exempt
 @require_POST
 def new_sureadhere_message(request, sureadhere_tenant_id: int):
-    channel_exists = tasks.get_experiment_channel_base_query(
+    channel = tasks.get_experiment_channel(
         ChannelPlatform.SUREADHERE,
         extra_data__sureadhere_tenant_id=sureadhere_tenant_id,
-    ).exists()
-    if not channel_exists:
+    )
+    if not channel:
         raise Http404()
 
+    set_current_team(channel.team)
+    request.experiment = channel.experiment  # used by RequestLoggingMiddleware
     message_data = json.loads(request.body)
     tasks.handle_sureadhere_message.delay(sureadhere_tenant_id=sureadhere_tenant_id, message_data=message_data)
     return HttpResponse()
@@ -117,14 +122,16 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
 @csrf_exempt
 def new_turn_message(request, experiment_id: uuid):
-    channel_exists = tasks.get_experiment_channel_base_query(
+    channel = tasks.get_experiment_channel(
         ChannelPlatform.WHATSAPP,
         experiment__public_id=experiment_id,
         messaging_provider__type=MessagingProviderType.turnio,
-    ).exists()
-    if not channel_exists:
+    )
+    if not channel:
         raise Http404()
 
+    set_current_team(channel.team)
+    request.experiment = channel.experiment  # used by RequestLoggingMiddleware
     message_data = json.loads(request.body.decode("utf-8"))
     if "messages" not in message_data:
         # Normal inbound messages should have a "messages" key, so ignore everything else
@@ -250,11 +257,14 @@ def new_connect_message(request: HttpRequest):
     except ParticipantData.DoesNotExist:
         return JsonResponse({"detail": "No participant data found"}, status=404)
 
-    channel_exists = tasks.get_experiment_channel_base_query(
+    channel = tasks.get_experiment_channel(
         ChannelPlatform.COMMCARE_CONNECT, experiment__id=participant_data.experiment_id
-    ).exists()
-    if not channel_exists:
+    )
+    if not channel:
         return JsonResponse({"detail": "No experiment channel found"}, status=404)
+
+    set_current_team(channel.team)
+    request.experiment = channel.experiment  # used by RequestLoggingMiddleware
 
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)

@@ -40,5 +40,18 @@
         user-name="{{ request.user.get_display_name }}"
     >
     </open-chat-studio-widget>
+    <script type="module">
+      import { initChatWidgetPageContext } from '{% static "js/modules/chat-widget-context.js" %}';
+      initChatWidgetPageContext({
+        team: {% if request.team %}"{{ request.team.slug }}"{% else %}null{% endif %},
+        activeTab: {% if active_tab %}"{{ active_tab }}"{% else %}null{% endif %},
+        pageTitle: {% if page_title %}"{{ page_title|escapejs }}"{% else %}null{% endif %},
+        messages: [
+          {% for message in messages %}
+            { text: "{{ message.message|escapejs }}", level: "{{ message.tags|escapejs }}" }{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ]
+      });
+    </script>
   {% endif %}
 {% endblock footer %}

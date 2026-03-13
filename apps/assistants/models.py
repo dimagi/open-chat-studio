@@ -106,8 +106,8 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return self.custom_action_operations.exists()
 
     @transaction.atomic()
-    def create_new_version(self):
-        from .sync import push_assistant_to_openai
+    def create_new_version(self):  # ty: ignore[invalid-method-override]
+        from .sync import push_assistant_to_openai  # noqa: PLC0415
 
         version_number = self.version_number
         self.version_number = version_number + 1
@@ -137,7 +137,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return assistant_version
 
     def archive(self):
-        from apps.assistants.tasks import delete_openai_assistant_task
+        from apps.assistants.tasks import delete_openai_assistant_task  # noqa: PLC0415
 
         if self._is_actively_used:
             return False
@@ -157,7 +157,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         delete_openai_assistant_task.delay(self.id)
         return True
 
-    def get_related_pipeline_node_queryset(self, assistant_ids: list = None):
+    def get_related_pipeline_node_queryset(self, assistant_ids: list | None = None):
         """Returns working version pipelines with assistant nodes containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
         return Node.objects.assistant_nodes().filter(
@@ -167,7 +167,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
             pipeline__is_archived=False,
         )
 
-    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list = None):
+    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list | None = None):
         """Returns published experiment versions referenced by versioned pipelines with assistant nodes
         containing the assistant ids"""
         assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
@@ -195,7 +195,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.experiments.models import VersionFieldDisplayFormatters
+        from apps.experiments.models import VersionFieldDisplayFormatters  # noqa: PLC0415
 
         return VersionDetails(
             instance=self,

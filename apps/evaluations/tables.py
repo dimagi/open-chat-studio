@@ -56,7 +56,7 @@ class EvaluationConfigTable(tables.Table):
 
     def render_evaluators(self, value, record):
         """Render the evaluators column with icons and labels in an unordered list."""
-        from apps.evaluations.utils import get_evaluator_type_display
+        from apps.evaluations.utils import get_evaluator_type_display  # noqa: PLC0415
 
         if not value.exists():
             return "—"
@@ -334,6 +334,11 @@ class DatasetMessagesTable(tables.Table):
         verbose_name="Source",
         orderable=False,
     )
+    link = TemplateColumn(
+        template_name="evaluations/dataset_message_link_column.html",
+        verbose_name="",
+        orderable=False,
+    )
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
@@ -350,13 +355,15 @@ class DatasetMessagesTable(tables.Table):
         ]
     )
 
-    def __init__(self, *args, highlight_message_id=None, **kwargs):
+    def __init__(self, *args, highlight_message_id=None, dataset_id=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.highlight_message_id = highlight_message_id
+        self.dataset_id = dataset_id
 
     class Meta:
         model = EvaluationMessage
         fields = (
+            "link",
             "source",
             "human_message_content",
             "ai_message_content",

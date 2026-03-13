@@ -38,7 +38,7 @@ LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTI
 @pytest.fixture()
 def session(request):
     chat = Chat()
-    chat.save = lambda: None
+    chat.save = lambda: None  # ty: ignore[invalid-assignment]
     session = ExperimentSessionFactory.build(chat=chat)
     session.participant_data_from_experiment = {}
     return session
@@ -55,13 +55,13 @@ def assistant(request):
 
 @pytest.fixture()
 def db_session(request):
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     return session
 
 
 @pytest.fixture(params=[True, False], ids=["with_tools", "without_tools"])
 def db_assistant(request):
-    local_assistant = OpenAiAssistantFactory(
+    local_assistant = OpenAiAssistantFactory.create(
         assistant_id=ASSISTANT_ID, tools=LEGACY_EXPERIMENT_TOOLS if request.param else []
     )
     return local_assistant
@@ -270,7 +270,7 @@ def test_assistant_runnable_cancels_existing_run(
 
 
 @pytest.mark.django_db()
-@patch("apps.assistants.sync.create_files_remote")
+@patch("apps.service_providers.llm_service.runnables.create_files_remote")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -313,7 +313,7 @@ def test_assistant_uploads_new_file(
 @pytest.mark.django_db()
 @pytest.mark.parametrize("cited_file_missing", [False, True])
 @patch("openai.resources.files.Files.retrieve")
-@patch("apps.assistants.sync.get_and_store_openai_file")
+@patch("apps.service_providers.llm_service.runnables.get_and_store_openai_file")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -338,7 +338,7 @@ def test_assistant_response_with_annotations(
     session.team.save()
     chat = session.chat
     openai_generated_file_id = "openai-file-1"
-    openai_generated_file = FileFactory(external_id=openai_generated_file_id, id=10, name="test.png")
+    openai_generated_file = FileFactory.create(external_id=openai_generated_file_id, id=10, name="test.png")
     get_and_store_openai_file.return_value = openai_generated_file
 
     thread_id = "test_thread_id"
@@ -358,7 +358,7 @@ def test_assistant_response_with_annotations(
             status_details=None,
         )
     else:
-        local_file = FileFactory(external_id=local_file_openai_id, team=session.team, name="existing.txt", id=9)
+        local_file = FileFactory.create(external_id=local_file_openai_id, team=session.team, name="existing.txt", id=9)
         # Attach the local file to the chat
         attachment, _created = chat.attachments.get_or_create(tool_type="file_path")
         attachment.files.add(local_file)
@@ -438,11 +438,13 @@ def test_assistant_response_with_annotations_and_assistant_file(
 ):
     """Test that cited files are rendered correctly in AI messsages"""
 
-    local_assistant = OpenAiAssistantFactory(assistant_id=ASSISTANT_ID, allow_file_downloads=allow_file_downloads)
-    session = ExperimentSessionFactory()
+    local_assistant = OpenAiAssistantFactory.create(
+        assistant_id=ASSISTANT_ID, allow_file_downloads=allow_file_downloads
+    )
+    session = ExperimentSessionFactory.create()
     chat = session.chat
     external_file_id = "openai-file-1"
-    assistant_file = FileFactory(team=session.team, external_id=external_file_id, name="test.png")
+    assistant_file = FileFactory.create(team=session.team, external_id=external_file_id, name="test.png")
     search_resource = ToolResources.objects.create(
         tool_type="file_search", assistant=local_assistant, extra={"vector_store_id": "123"}
     )
@@ -490,7 +492,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
 
 @pytest.mark.django_db()
 @patch("openai.resources.files.Files.retrieve")
-@patch("apps.assistants.sync.get_and_store_openai_file")
+@patch("apps.service_providers.llm_service.runnables.get_and_store_openai_file")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -517,7 +519,7 @@ def test_assistant_response_with_image_file_content_block(
         status="processed",
         status_details=None,
     )
-    openai_generated_file = FileFactory(external_id="openai-file-1", id=10, team=db_session.team)
+    openai_generated_file = FileFactory.create(external_id="openai-file-1", id=10, team=db_session.team)
     get_and_store_openai_file.return_value = openai_generated_file
 
     thread_id = "test_thread_id"
@@ -547,7 +549,7 @@ def test_assistant_response_with_image_file_content_block(
 def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_created):
     adapter = Mock(spec=AssistantAdapter)
     adapter.get_messages_to_sync_to_thread.return_value = messages
-    session = ExperimentSessionFactory()
+    session = ExperimentSessionFactory.create()
     history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant_runnable = AssistantChat(adapter=adapter, history_manager=history_manager)
     assistant_runnable._sync_messages_to_thread(thread_id)
@@ -562,15 +564,17 @@ def test_sync_messages_to_thread(messages, thread_id, thread_created, messages_c
 
 @pytest.mark.django_db()
 def test_get_messages_to_sync_to_thread():
-    assistant = OpenAiAssistantFactory()
-    session = ExperimentSessionFactory()
+    assistant = OpenAiAssistantFactory.create()
+    session = ExperimentSessionFactory.create()
     chat = session.chat
-    ChatMessage.objects.bulk_create([
-        ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
-        ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
-        ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
-        ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
-    ])
+    ChatMessage.objects.bulk_create(
+        [
+            ChatMessage(chat=chat, message_type="human", content="hello0", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello1", metadata={"openai_thread_checkpoint": True}),
+            ChatMessage(chat=chat, message_type="human", content="hello2", metadata={}),
+            ChatMessage(chat=chat, message_type="ai", content="hello3", metadata={}),
+        ]
+    )
     adapter = AssistantAdapter(session, assistant, citations_enabled=False)
     to_sync = adapter.get_messages_to_sync_to_thread()
     assert to_sync == [
@@ -583,8 +587,8 @@ def _get_assistant_mocked_history_recording(session, assistant, get_attachments_
     adapter = AssistantAdapter(session, assistant, citations_enabled=True)
     history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant = AssistantChat(adapter=adapter, history_manager=history_manager)
-    history_manager.save_message_to_history = Mock()
-    adapter.get_attachments = lambda _type: get_attachments_return_value or []
+    history_manager.save_message_to_history = Mock()  # ty: ignore[invalid-assignment]
+    adapter.get_attachments = lambda _type: get_attachments_return_value or []  # ty: ignore[invalid-assignment]
     return assistant
 
 

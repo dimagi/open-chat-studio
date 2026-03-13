@@ -13,8 +13,8 @@ class TestParticipantDataProxy:
 
     def test_initialization(self):
         """Test that ParticipantDataProxy initializes correctly"""
-        experiment = ExperimentFactory()
-        session = ExperimentSessionFactory(experiment=experiment)
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment)
         proxy = ParticipantDataProxy({}, session)
 
         assert proxy.session == session
@@ -22,29 +22,11 @@ class TestParticipantDataProxy:
         assert proxy._participant_data == {}
         assert proxy._scheduled_messages is None
 
-    def test_from_state(self):
-        """Test creating a ParticipantDataProxy from pipeline state"""
-        session = ExperimentSessionFactory()
-        pipeline_state = {"experiment_session": session, "participant_data": {"test": 1}}
-        proxy = ParticipantDataProxy.from_state(pipeline_state)
-
-        assert proxy.session == session
-        assert proxy.experiment_id == session.experiment.id
-        assert proxy._participant_data == {"test": 1}
-
-    def test_from_state_with_missing_session(self):
-        """Test handling when state doesn't have experiment_session"""
-        pipeline_state = {}
-        proxy = ParticipantDataProxy.from_state(pipeline_state)
-
-        assert proxy.session is None
-        assert proxy.experiment_id is None
-
     def test_get_returns_merged_data(self):
         """Test that get() merges participant global data with participant data"""
-        participant = ParticipantFactory(name="Test User")
-        experiment = ExperimentFactory()
-        session = ExperimentSessionFactory(experiment=experiment, participant=participant)
+        participant = ParticipantFactory.create(name="Test User")
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment, participant=participant)
 
         proxy = ParticipantDataProxy({"participant_data": {"favorite_color": "blue"}}, session)
 
@@ -54,7 +36,7 @@ class TestParticipantDataProxy:
 
     def test_set_validates_data_type(self):
         """Test that set() validates the data type"""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         proxy = ParticipantDataProxy({}, session)
 
         with pytest.raises(ValueError, match="Data must be a dictionary"):
@@ -62,7 +44,7 @@ class TestParticipantDataProxy:
 
     def test_set_updates_participant_data(self):
         """Test that set() updates the participant data"""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         input_state = {}
         proxy = ParticipantDataProxy(input_state, session)
@@ -75,9 +57,9 @@ class TestParticipantDataProxy:
 
     def test_get_schedules(self):
         """Test that get_schedules() returns scheduled messages for the participant"""
-        participant = ParticipantFactory()
-        experiment = ExperimentFactory()
-        session = ExperimentSessionFactory(experiment=experiment, participant=participant)
+        participant = ParticipantFactory.create()
+        experiment = ExperimentFactory.create()
+        session = ExperimentSessionFactory.create(experiment=experiment, participant=participant)
         proxy = ParticipantDataProxy({}, session)
 
         # Mock the get_schedules_for_experiment method on participant
@@ -97,7 +79,7 @@ class TestParticipantDataProxy:
 
     def test_get_timezone(self):
         """Test that get_timezone returns the participant's timezone"""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         proxy = ParticipantDataProxy({"participant_data": {"timezone": "America/New_York"}}, session)
 
@@ -109,7 +91,7 @@ class TestParticipantDataProxy:
 
     def test_set_key(self):
         """Test that set_key() updates a single key in the participant data."""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         input_state = {"participant_data": {"name": "jack"}}
         proxy = ParticipantDataProxy(input_state, session)
@@ -125,7 +107,7 @@ class TestParticipantDataProxy:
         Test that append_to_key() adds a value to a list at the specified key.
         If the current value is not a list, it should convert it to a list.
         """
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         input_state = {}
         proxy = ParticipantDataProxy(input_state, session)
@@ -145,7 +127,7 @@ class TestParticipantDataProxy:
         Test that increment_key() increments a numeric value at the specified key.
         If the current value is not a number, it should initialize to 0 before incrementing.
         """
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         input_state = {}
         proxy = ParticipantDataProxy(input_state, session)

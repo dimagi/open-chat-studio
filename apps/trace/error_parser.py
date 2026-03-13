@@ -37,7 +37,7 @@ def get_tags_from_error(error: Exception):
     return tags
 
 
-def _parse_openai_error(error: OpenAIError) -> ErrorCategory:
+def _parse_openai_error(error: OpenAIError) -> list[ErrorCategory]:
     tags = [ErrorCategory.LLM_PROVIDER]
     if isinstance(error, BadRequestError):
         tags.append(ErrorCategory.BAD_API_CALL)

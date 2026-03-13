@@ -118,7 +118,7 @@ class AssistantPipelineHistoryManager(BaseHistoryManager):
         self.input_message_metadata = {}
         self.output_message_metadata = {}
 
-    def add_messages_to_history(
+    def add_messages_to_history(  # ty: ignore[invalid-method-override]
         self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
     ):
         self.input_message_metadata = input_message_metadata

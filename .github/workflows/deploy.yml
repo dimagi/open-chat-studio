@@ -85,7 +85,7 @@ jobs:
         description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
 
     - name: configure aws credentials
-      uses: aws-actions/configure-aws-credentials@v5.1.1
+      uses: aws-actions/configure-aws-credentials@v6.0.0
       with:
         role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)[env.DEPLOY_ENV] }}:role/github_deploy"
         role-session-name: GithubDeploy
@@ -117,9 +117,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
-        build-args: |
-          SECRET_KEY=dummy-secret-key-for-build
-          DJANGO_ALLOWED_HOSTS=localhost
+
 
     - name: Update ECS task def for Django web container
       id: django-web-def
@@ -164,10 +162,10 @@ jobs:
 
         SUBNETS=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("PrivateSubnets")) | .OutputValue')
         SG=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey | endswith("ServiceSecurityGroup")) | .OutputValue')
-        
+
         [[ -z "$SUBNETS" ]] && { echo "Error: Could not find subnets in stack outputs"; exit 1; }
         [[ -z "$SG" ]] && { echo "Error: Could not find security group in stack outputs"; exit 1; }
-        
+
         echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
         echo "security_group=$SG" >> $GITHUB_OUTPUT
 

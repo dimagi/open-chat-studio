@@ -12,17 +12,17 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.fixture()
 def pipeline_chat_history(experiment_session):
-    return PipelineChatHistoryFactory(session=experiment_session)
+    return PipelineChatHistoryFactory.create(session=experiment_session)
 
 
 @django_db_with_data()

@@ -58,7 +58,7 @@ class AuthedRequest:
 @dataclass
 class User:
     username: str = "test@example.com"
-    is_authenticated: str = True
+    is_authenticated: bool = True
 
 
 @dataclass

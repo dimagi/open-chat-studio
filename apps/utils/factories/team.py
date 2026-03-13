@@ -1,6 +1,7 @@
 from inspect import isfunction
 
 import factory
+import factory.django
 from django.contrib.auth.models import Group
 
 from apps.teams.backends import NORMAL_USER_GROUPS, get_team_owner_groups

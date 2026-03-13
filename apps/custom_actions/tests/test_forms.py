@@ -46,10 +46,12 @@ class TestCustomActionForm:
         request.team = team_with_users
 
         # Schema with health endpoint
-        schema_with_health = _make_openapi_schema({
-            "/test": {"get": {}},
-            "/health": {"get": {"summary": "Health check"}},
-        })
+        schema_with_health = _make_openapi_schema(
+            {
+                "/test": {"get": {}},
+                "/health": {"get": {"summary": "Health check"}},
+            }
+        )
 
         data = {
             "name": "Test Action",
@@ -76,10 +78,12 @@ class TestCustomActionForm:
         request.team = team_with_users
 
         # Schema with health endpoint
-        schema_with_health = _make_openapi_schema({
-            "/test": {"get": {}},
-            "/health": {"get": {"summary": "Health check"}},
-        })
+        schema_with_health = _make_openapi_schema(
+            {
+                "/test": {"get": {}},
+                "/health": {"get": {"summary": "Health check"}},
+            }
+        )
 
         data = {
             "name": "Test Action",

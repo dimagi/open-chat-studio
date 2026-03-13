@@ -166,7 +166,7 @@ class ParticipantScheduleSerializer(serializers.Serializer):
     date = serializers.DateTimeField(label="Schedule Date", required=False)
     delete = serializers.BooleanField(label="Delete Schedule", required=False, default=False)
 
-    def validate(self, data):
+    def validate(self, data):  # ty: ignore[invalid-method-override]
         if data.get("delete"):
             if not data.get("id"):
                 raise serializers.ValidationError("Schedule ID is required to delete a schedule")
@@ -194,6 +194,12 @@ class ParticipantDataUpdateRequest(serializers.Serializer):
 
 class ChatStartSessionRequest(serializers.Serializer):
     chatbot_id = serializers.UUIDField(label="Chatbot ID")
+    version_number = serializers.IntegerField(
+        label="Version Number",
+        required=False,
+        allow_null=True,
+        help_text="Optional version number of the chatbot to use. Requires authentication.",
+    )
     session_data = serializers.DictField(
         label="Initial session data",
         required=False,
@@ -220,7 +226,13 @@ class ChatStartSessionResponse(serializers.Serializer):
 class ChatSendMessageRequest(serializers.Serializer):
     message = serializers.CharField(label="Message content")
     context = serializers.DictField(
-        label="Context", required=False, help_text="Additional context data to include with the message such as details about the page the user is on or the action they are trying to perform. This is stored in the session state under the `remote_context` key."
+        label="Context",
+        required=False,
+        help_text=(
+            "Additional context data to include with the message such as details about the page the user is on"
+            " or the action they are trying to perform. This is stored in the session state under the"
+            " `remote_context` key."
+        ),
     )
 
 

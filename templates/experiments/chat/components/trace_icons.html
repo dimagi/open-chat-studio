@@ -3,11 +3,9 @@
 {% for trace_info in trace_infos %}
   <div class="tooltip tooltip-right" data-tip="Open Trace on {{ trace_info.trace_provider|title }}">
     {% if trace_info.trace_provider == "ocs" %}
-      {% flag 'flag_tracing' %}
-        <a class="btn btn-sm btn-square btn-ghost" href="{{ trace_info.trace_url }}" target="_blank">
-          <img class="rounded-md max-w-4 max-h-4" src="{% static 'images/favicons/favicon.svg' %}" alt="OCS Trace">
-        </a>
-      {% endflag %}
+      <a class="btn btn-sm btn-square btn-ghost" href="{{ trace_info.trace_url }}" target="_blank">
+        <img class="rounded-md max-w-4 max-h-4" src="{% static 'images/favicons/favicon.svg' %}" alt="OCS Trace">
+      </a>
     {% else %}
       <a class="btn btn-sm btn-square btn-ghost" href="{{ trace_info.trace_url }}" target="_blank">
         {% if trace_info.trace_provider == "langfuse" %}

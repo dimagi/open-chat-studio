@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -13,10 +14,11 @@ from apps.generics.help import render_help_with_link
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
+class SurveyHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
+    permission_required = "experiments.view_survey"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "survey",
             "title": "Survey",
@@ -26,24 +28,27 @@ class SurveyHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class SurveyTableView(SingleTableView):
+class SurveyTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = Survey
     table_class = SurveyTable
     template_name = "table/single_table.html"
+    permission_required = "experiments.view_survey"
 
     def get_queryset(self):
         return Survey.objects.filter(team=self.request.team, is_version=False)
 
 
-class CreateSurvey(CreateView):
+class CreateSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Survey
     form_class = SurveyForm
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Create Survey",
+        "page_title": "Create Survey",
         "button_text": "Create",
         "active_tab": "survey",
     }
+    permission_required = "experiments.add_survey"
 
     def get_success_url(self):
         return reverse("experiments:survey_home", args=[self.request.team.slug])
@@ -54,15 +59,17 @@ class CreateSurvey(CreateView):
         return super().form_valid(form)
 
 
-class EditSurvey(UpdateView):
+class EditSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = Survey
     form_class = SurveyForm
     template_name = "generic/object_form.html"
     extra_context = {
         "title": "Update Survey",
+        "page_title": "Update Survey",
         "button_text": "Update",
         "active_tab": "survey",
     }
+    permission_required = "experiments.change_survey"
 
     def get_queryset(self):
         return Survey.objects.filter(team=self.request.team)
@@ -71,7 +78,9 @@ class EditSurvey(UpdateView):
         return reverse("experiments:survey_home", args=[self.request.team.slug])
 
 
-class DeleteSurvey(LoginAndTeamRequiredMixin, View):
+class DeleteSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "experiments.delete_survey"
+
     def delete(self, request, team_slug: str, pk: int):
         survey = get_object_or_404(Survey, id=pk, team=request.team)
         survey.archive()

@@ -5,6 +5,7 @@ from celery.app import shared_task
 from django.utils import timezone
 
 from apps.custom_actions.models import CustomAction, HealthCheckStatus
+from apps.ocs_notifications.notifications import custom_action_health_check_failure_notification
 
 logger = logging.getLogger("ocs.custom_actions")
 
@@ -40,6 +41,7 @@ def check_single_custom_action_health(action_id: int):
         logger.warning(f"CustomAction {action.name} (id={action_id}) has no health endpoint configured")
         return
 
+    failure_reason = ""
     try:
         response = httpx.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)
 
@@ -49,13 +51,22 @@ def check_single_custom_action_health(action_id: int):
             logger.info(f"Health check passed for {action.name}: {response.status_code}")
         else:
             new_status = HealthCheckStatus.DOWN
+            failure_reason = f"HTTP {response.status_code}"
             logger.warning(f"Health check failed for {action.name}: {response.status_code}")
 
     except httpx.RequestError as e:
         new_status = HealthCheckStatus.DOWN
+        failure_reason = str(e)
         logger.warning(f"Health check error for {action.name}: {str(e)}")
+
+    # Notify team members if status changed to DOWN from a non-DOWN state
+    should_notify = new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN
 
     # Update the action's health status
     action.health_status = new_status
     action.last_health_check = timezone.now()
     action.save(update_fields=["health_status", "last_health_check"])
+
+    # Send notification only on DOWN transition
+    if should_notify:
+        custom_action_health_check_failure_notification(action, failure_reason)

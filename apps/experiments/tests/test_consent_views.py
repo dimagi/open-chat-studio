@@ -23,10 +23,10 @@ class TestConsentFormTableView:
 
 @pytest.mark.django_db()
 def test_delete(client):
-    team = TeamWithUsersFactory()
+    team = TeamWithUsersFactory.create()
     user = team.members.first()
-    form = ConsentFormFactory(team=team, is_default=False)
-    experiment = ExperimentFactory(consent_form=form)
+    form = ConsentFormFactory.create(team=team, is_default=False)
+    experiment = ExperimentFactory.create(consent_form=form)
     client.force_login(user)
     url = reverse("experiments:consent_delete", args=[team.slug, form.id])
     response = client.delete(url)

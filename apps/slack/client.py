@@ -8,6 +8,8 @@ from apps.slack.slack_app import app
 
 def get_slack_client(installation_id: int, do_retries: bool = False) -> WebClient:
     installation = SlackInstallation.objects.get(id=installation_id)
+    if app._authorize is None:
+        raise Exception("Slack app authorization is not configured")
     # this handles token expiration and rotation
     auth_result = app._authorize(
         context=BoltContext({"client": app.client, "is_enterprise_install": installation.is_enterprise_install}),

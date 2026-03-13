@@ -13,9 +13,9 @@
     </h3>
     <form method="post"
       {% if channel %}
-        hx-post="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+        hx-post="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}"
       {% else %}
-        hx-post="{% url "channels:channel_create_dialog" request.team.slug experiment.id platform.value %}?origin={{ request.GET.origin|default:'chatbots' }}"
+        hx-post="{% url "channels:channel_create_dialog" request.team.slug experiment.id platform.value %}"
       {% endif %}
       hx-target="#channel_create_edit_modal_placeholder"
       hx-disabled-elt="input, select, button"
@@ -45,7 +45,7 @@
         {% if channel %}
           <button class="btn btn-primary" type="submit">Update</button>
           <button class="btn btn-error"
-                  hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}?origin={{ request.GET.origin|default:'chatbots' }}"
+                  hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}"
                   hx-target="#channel_create_edit_modal_placeholder"
                   hx-disabled-elt="input, select, button"
                   hx-swap="innerHTML"

@@ -56,26 +56,6 @@ class SourceMaterialAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     )
 
 
-class SafetyLayerInline(admin.TabularInline):
-    model = models.Experiment.safety_layers.through
-    extra = 1
-    # If needed, add fields to be shown in the inline form:
-    # fields = ('prompt', )
-    # autocomplete_fields = ['author']
-
-
-@admin.register(models.SafetyLayer)
-class SafetyLayerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = (
-        "team",
-        "name",
-        "messages_to_review",
-        "version_family",
-        "is_archived",
-    )
-    list_filter = ("team",)
-
-
 class ParticipantDataInline(admin.TabularInline):
     model = models.ParticipantData
 
@@ -112,29 +92,13 @@ class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "team",
         "owner",
         "source_material",
-        "llm_provider",
-        "llm_provider_model",
         "version_family",
         "version_number",
         "is_archived",
     )
     list_filter = ("team", "owner", "source_material")
-    inlines = [SafetyLayerInline]
-    exclude = ["safety_layers"]
     readonly_fields = ("public_id",)
     search_fields = ("public_id", "name")
-
-
-@admin.register(models.ExperimentRoute)
-class ExperimentRouteAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = (
-        "parent",
-        "child",
-        "keyword",
-        "is_default",
-        "version_family",
-        "is_archived",
-    )
 
 
 @admin.register(models.ExperimentSession)

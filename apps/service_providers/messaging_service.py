@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 from urllib.parse import urljoin
 
 import backoff
@@ -78,14 +78,14 @@ class TwilioService(MessagingService):
 
     @property
     def client(self) -> "Client":
-        from twilio.rest import Client
+        from twilio.rest import Client  # noqa: PLC0415 - lazy: optional provider dep (twilio SDK)
 
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
-        import boto3
-        from botocore.client import Config
+        import boto3  # noqa: PLC0415 - TID253: heavy lib, slow startup
+        from botocore.client import Config  # noqa: PLC0415 - lazy: used with boto3
 
         return boto3.client(
             "s3",
@@ -130,7 +130,7 @@ class TwilioService(MessagingService):
         interval=2,
         jitter=None,
     )
-    def block_until_delivered(self, current_chunk_sid: str) -> bool:
+    def block_until_delivered(self, current_chunk_sid: str) -> str:
         """
         Checks if the current message chunk has been delivered.
 
@@ -138,7 +138,7 @@ class TwilioService(MessagingService):
         """
         message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
-        return message.status
+        return cast(str, message.status)
 
     def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         """
@@ -174,7 +174,7 @@ class TwilioService(MessagingService):
         public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=from_, to=to, media_url=[public_url])
 
-    def get_message_audio(self, message: TwilioMessage) -> BytesIO:
+    def get_message_audio(self, message: TwilioMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         auth = (self.account_sid, self.auth_token)
         response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
         try:
@@ -196,7 +196,7 @@ class TwilioService(MessagingService):
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
-        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]
+        return [num.phone_number for num in self.client.incoming_phone_numbers.list() if num.phone_number is not None]
 
     def is_valid_number(self, number: str) -> bool:
         if settings.DEBUG:
@@ -225,7 +225,7 @@ class TurnIOService(MessagingService):
 
     @property
     def client(self) -> "TurnClient":
-        from turn import TurnClient
+        from turn import TurnClient  # noqa: PLC0415 - lazy: optional provider dep (Turn SDK)
 
         return TurnClient(token=self.auth_token)
 
@@ -244,7 +244,7 @@ class TurnIOService(MessagingService):
             whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
         )
 
-    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:
+    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         response = self.client.media.get_media(message.media_id)
 
         try:
@@ -326,7 +326,7 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, to: str, platform: ChannelPlatform, from_: str = None):
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
@@ -346,7 +346,7 @@ class SlackService(MessagingService):
     _client: "WebClient | None" = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
-        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str = None, **kwargs
+        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str | None = None, **kwargs
     ):
         self.client.chat_postMessage(
             channel=to,
@@ -357,7 +357,7 @@ class SlackService(MessagingService):
     @property
     def client(self) -> "WebClient":
         if not self._client:
-            from apps.slack.client import get_slack_client
+            from apps.slack.client import get_slack_client  # noqa: PLC0415 - lazy: optional slack_sdk/slack_bolt deps
 
             self._client = get_slack_client(self.slack_installation_id)
         return self._client
@@ -376,7 +376,7 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
-        from slack_sdk.errors import SlackApiError
+        from slack_sdk.errors import SlackApiError  # noqa: PLC0415 - lazy: optional provider dep (slack_sdk)
 
         try:
             self.client.conversations_info(channel=channel_id)

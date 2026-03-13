@@ -98,12 +98,16 @@
 }
 
 open-chat-studio-widget {
-  z-index: 9999;
+  z-index: 100;
   right: 30px;
   bottom: 30px;
   --button-font-size: 1.2rem;
   --button-border-color: #d1d5db;
   --button-border-color-hover: #6b7280;
+}
+
+#chatbot-widget {
+  z-index: 200;
 }
 
 /* Tom-select styling */

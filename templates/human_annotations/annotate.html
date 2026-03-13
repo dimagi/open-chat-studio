@@ -1,0 +1,178 @@
+{% extends "web/app/app_base.html" %}
+{% load chat_tags json_tags %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'human_annotations:queue_home' request.team.slug %}">Annotation Queues</a></li>
+      <li><a href="{% url 'human_annotations:queue_detail' request.team.slug queue.pk %}">{{ queue.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Annotate</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+<div class="flex flex-col gap-4">
+  <div class="flex justify-between items-center">
+    <h2 class="text-xl font-bold">{{ queue.name }}</h2>
+    <span class="badge badge-lg">{{ progress.reviewed }} of {{ progress.total }} reviewed</span>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    {# Left: Item Content #}
+    <div class="flex flex-col gap-4 min-w-0">
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title text-sm">Item Content</h3>
+          {% if item_content.type == "session" %}
+            <p class="text-xs text-gray-500 mb-2">Participant: {{ item_content.participant }}</p>
+            <div class="border rounded-2xl overflow-hidden max-h-[70vh] overflow-y-auto">
+              <table class="min-w-full divide-y divide-gray-300">
+                <tbody class="divide-y divide-gray-200">
+                  {% for msg in item_content.messages %}
+                    <tr class="{% if msg.role != 'human' %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}">
+                      <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium align-top">{{ forloop.counter }}</td>
+                      <td class="px-3 py-2 text-sm">
+                        <div class="flex place-items-start gap-1">
+                          {% if msg.role != 'human' %}
+                            {% include "experiments/chat/components/system_icon.html" %}
+                          {% else %}
+                            {% include "experiments/chat/components/user_icon.html" %}
+                          {% endif %}
+                          <div class="grow min-w-0">
+                            <div class="message-contents">
+                              {{ msg.content|render_markdown }}
+                            </div>
+                            <div class="mt-2 pg-text-muted">
+                              <i class="fa-solid fa-clock mr-1"></i>
+                              <time datetime="{{ msg.created_at.isoformat }}" title="{{ msg.created_at.isoformat }}">
+                                {{ msg.created_at|date:"DATETIME_FORMAT" }}
+                              </time>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% elif item_content.type == "message" %}
+            <div class="prose text-sm">
+              <strong>{{ item_content.role }}:</strong> {{ item_content.content|render_markdown }}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+
+    {# Right: Annotation Form + Session Info (sticky so it floats alongside content) #}
+    <div class="sticky top-4 h-fit flex flex-col gap-4">
+      {% if can_annotate %}
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h3 class="card-title text-sm">Annotation</h3>
+          <form method="post"
+                action="{% url 'human_annotations:submit_annotation' request.team.slug queue.pk item.pk %}">
+            {% csrf_token %}
+            {% for field in form %}
+              <div class="form-control mb-3">
+                <label class="label">
+                  <span class="label-text font-medium">{{ field.label }}</span>
+                </label>
+                {% if field.help_text %}
+                  <span class="text-xs text-gray-500 -mt-1 mb-1">{{ field.help_text }}</span>
+                {% endif %}
+                {{ field }}
+                {% if field.errors %}
+                  <span class="text-error text-xs">{{ field.errors.0 }}</span>
+                {% endif %}
+              </div>
+            {% endfor %}
+            <div class="flex gap-2 mt-4">
+              <button type="submit" class="btn btn-primary btn-sm">Submit</button>
+              <a href="{% url 'human_annotations:annotate_queue' request.team.slug queue.pk %}?skip={{ item.pk }}"
+                 class="btn btn-ghost btn-sm">Skip</a>
+              <button type="button"
+                      class="btn btn-warning btn-sm btn-outline"
+                      onclick="document.getElementById('flag-dialog').showModal()">Flag</button>
+            </div>
+          </form>
+
+          <dialog id="flag-dialog" class="modal">
+            <div class="modal-box">
+              <h3 class="text-lg font-bold">Flag Item</h3>
+              <p class="py-2 text-sm text-gray-500">Provide a reason for flagging this item (optional).</p>
+              <form method="post"
+                    action="{% url 'human_annotations:flag_item' request.team.slug queue.pk item.pk %}">
+                {% csrf_token %}
+                <textarea name="flag_reason"
+                          class="textarea textarea-bordered w-full"
+                          rows="3"
+                          placeholder="Reason for flagging..."></textarea>
+                <div class="modal-action">
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('flag-dialog').close()">Cancel</button>
+                  <button type="submit" class="btn btn-warning btn-sm">Flag Item</button>
+                </div>
+              </form>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+              <button>close</button>
+            </form>
+          </dialog>
+        </div>
+        </div>
+      {% elif annotations %}
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h3 class="card-title text-sm">Annotations ({{ annotations|length }})</h3>
+            <div class="flex flex-col gap-3">
+              {% for ann in annotations %}
+                <div class="border rounded-lg p-3">
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="font-medium text-sm">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>
+                    <span class="text-xs text-gray-500">{{ ann.created_at|date:"DATETIME_FORMAT" }}</span>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    {% for field_name, field_value in ann.fields %}
+                      <div class="flex gap-2 text-sm">
+                        <span class="font-medium text-gray-500 min-w-24">{{ field_name }}:</span>
+                        <span>{{ field_value|default:"—" }}</span>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if item_content.type == "session" %}
+        {# Participant Data & Session State #}
+        <div class="card bg-base-100 shadow-sm" x-data="{activeTab: 'participant_data'}">
+          <div class="card-body">
+            <div role="tablist" class="tabs tabs-border">
+              <button role="tab" class="tab" :class="activeTab === 'participant_data' && 'tab-active'"
+                      @click="activeTab = 'participant_data'">Participant Data</button>
+              <button role="tab" class="tab" :class="activeTab === 'session_state' && 'tab-active'"
+                      @click="activeTab = 'session_state'">Session State</button>
+            </div>
+            <div x-show="activeTab === 'participant_data'" class="mt-2">
+              <div class="p-3 border rounded-lg max-h-60 overflow-y-auto">
+                <pre><code class="text-sm">{{ item_content.participant_data|to_json }}</code></pre>
+              </div>
+            </div>
+            <div x-show="activeTab === 'session_state'" x-cloak class="mt-2">
+              <div class="p-3 border rounded-lg max-h-60 overflow-y-auto">
+                <pre><code class="text-sm">{{ item_content.session_state|to_json }}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock app %}

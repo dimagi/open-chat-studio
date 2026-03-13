@@ -7,7 +7,7 @@ from Crypto.Cipher import AES
 from django.conf import settings
 from django.test import override_settings
 
-from apps.channels.clients.connect_client import CommCareConnectClient, NewMessagePayload
+from apps.channels.clients.connect_client import CommCareConnectClient, Message
 
 
 class TestConnectClient:
@@ -26,7 +26,7 @@ class TestConnectClient:
         ciphertext, tag = cipher.encrypt_and_digest(b"this is a secret message")
 
         connect_client = CommCareConnectClient()
-        payload = NewMessagePayload(
+        payload = Message(
             timestamp="2021-10-10T10:10:10Z",
             message_id=uuid4(),
             ciphertext=base64.b64encode(

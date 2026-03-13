@@ -1,0 +1,41 @@
+- id: generic_chatbot
+  input:
+    chatbot_name: "HealthBot"
+    chatbot_description: "A health and wellness advice chatbot"
+  checks:
+    - type: count
+      expected: 30
+    - type: max_words
+      per_message: 6
+    - type: llm_judge
+      criteria: >
+        All messages are short, encouraging, and appropriate for a health chatbot.
+        Messages should not contain overly technical jargon, apologies, or promises about results.
+        Messages should suggest active processing (e.g. thinking, analyzing).
+
+- id: no_description
+  input:
+    chatbot_name: "QuickBot"
+  checks:
+    - type: count
+      expected: 30
+    - type: max_words
+      per_message: 6
+    - type: llm_judge
+      criteria: >
+        All messages are short, encouraging progress updates.
+        Messages should not reference any specific domain since no description was given.
+
+- id: customer_support_bot
+  input:
+    chatbot_name: "SupportPro"
+    chatbot_description: "Handles customer complaints and returns for an e-commerce store"
+  checks:
+    - type: count
+      expected: 30
+    - type: max_words
+      per_message: 6
+    - type: llm_judge
+      criteria: >
+        Messages are short, friendly progress indicators appropriate for customer support.
+        No negative tone. No overly technical jargon. Should feel reassuring.

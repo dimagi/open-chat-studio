@@ -13,13 +13,28 @@
       "ui:widget": "node_name"
     },
     "recipient_list": {
-      "description": "A comma-separated list of email addresses",
+      "description": "A comma-separated list of email addresses. Supports Jinja2 templates.",
       "title": "Recipient List",
-      "type": "string"
+      "type": "string",
+      "ui:optionsSource": "jinja_email_node",
+      "ui:rows": 1,
+      "ui:widget": "jinja_template"
     },
     "subject": {
+      "description": "Email subject. Supports Jinja2 templates.",
       "title": "Subject",
-      "type": "string"
+      "type": "string",
+      "ui:optionsSource": "jinja_email_node",
+      "ui:rows": 1,
+      "ui:widget": "jinja_template"
+    },
+    "body": {
+      "default": "",
+      "description": "Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
+      "title": "Body",
+      "type": "string",
+      "ui:optionsSource": "jinja_email_node",
+      "ui:widget": "jinja_template"
     }
   },
   "required": [

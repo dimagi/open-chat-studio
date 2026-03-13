@@ -95,7 +95,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
 
         match self:
             case LlmProviderTypes.openai:
@@ -115,7 +115,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> "llm_service.LlmService":
-        from . import llm_service
+        from . import llm_service  # noqa: PLC0415 - lazy: avoids loading heavy langchain deps at startup
 
         config = {**config, **self.additional_config, "_type": self.slug}
         try:
@@ -170,7 +170,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         return self.get_llm_service().get_local_index_manager(embedding_model_name)
 
-    def create_remote_index(self, name: str, file_ids: list = None) -> str:
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """
         Creates a remote index with the given name and returns its ID.
         If file_ids are provided, they will be linked to the index.
@@ -266,7 +266,7 @@ class VoiceProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
 
         match self:
             case VoiceProviderType.aws:
@@ -282,7 +282,7 @@ class VoiceProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
-        from . import speech_service
+        from . import speech_service  # noqa: PLC0415 - lazy: avoids loading optional speech provider deps at startup
 
         try:
             match self:
@@ -395,7 +395,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         )
 
     @transaction.atomic()
-    def delete(self):
+    def delete(self):  # ty: ignore[invalid-method-override]
         if self.type in (VoiceProviderType.openai_voice_engine, VoiceProviderType.openai_custom_voice):
             files_to_delete = self.get_files()
             [f.delete() for f in files_to_delete]
@@ -410,7 +410,7 @@ class MessagingProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
 
         match self:
             case MessagingProviderType.twilio:
@@ -424,7 +424,7 @@ class MessagingProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_messaging_service(self, config: dict) -> "messaging_service.MessagingService":
-        from . import messaging_service
+        from . import messaging_service  # noqa: PLC0415 - lazy: optional messaging provider deps
 
         match self:
             case MessagingProviderType.twilio:
@@ -440,7 +440,7 @@ class MessagingProviderType(models.TextChoices):
     @staticmethod
     def platform_supported_provider_types(platform: ChannelPlatform) -> list["MessagingProviderType"]:
         """Finds all provider types supporting the platform specified by `platform`"""
-        from . import messaging_service
+        from . import messaging_service  # noqa: PLC0415 - lazy: optional messaging provider deps
 
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():
@@ -478,7 +478,7 @@ class AuthProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
 
         match self:
             case AuthProviderType.basic:
@@ -534,7 +534,7 @@ class TraceProviderType(models.TextChoices):
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
-        from apps.service_providers import forms
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
 
         match self:
             case TraceProviderType.langfuse:
@@ -542,7 +542,7 @@ class TraceProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_service(self, config: dict) -> "tracing.Tracer":
-        from . import tracing
+        from . import tracing  # noqa: PLC0415 - lazy: avoids loading langfuse at startup (heavy dep)
 
         match self:
             case TraceProviderType.langfuse:

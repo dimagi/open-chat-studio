@@ -169,17 +169,20 @@ def chatbots_home(request, team_slug: str):
     return home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
-class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
     permission_required = "experiments.view_experiment"
 
-    def get_table(self, **kwargs):
-        table = super().get_table(**kwargs)
-        if not flag_is_active(self.request, "flag_tracing"):
-            table.exclude = ("trends",)
-        return table
+    def get_table_data(self):
+        data = super().get_table_data()
+        qs = list(data)
+        ids = [obj.id for obj in qs]
+        trend_data = Experiment.get_bulk_trend_data(ids)
+        for obj in qs:
+            obj.trend_data = trend_data.get(obj.id, ([], []))
+        return qs
 
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
@@ -229,7 +232,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         last_activity_subquery = (
             ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
             .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .order_by("-last_activity_at")
+            .order_by(F("last_activity_at").desc(nulls_last=True))
             .values("last_activity_at")[:1]
         )
 
@@ -243,7 +246,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return queryset
 
 
-class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Experiment
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
@@ -262,6 +265,7 @@ class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "chatbots"
+        context["page_title"] = self.title
         return context
 
     def form_valid(self, form):
@@ -303,12 +307,12 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
 
     context = {
         "active_tab": "chatbots",
+        "page_title": f"{experiment.name} Details",
         "experiment": experiment,
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
-        "allow_copy": not experiment.child_links.exists(),
-        **_get_events_context(experiment, team_slug, request.origin),
+        **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
 
@@ -316,7 +320,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     filter_context = get_filter_context_data(
         request.team,
         columns=columns,
-        date_range_column="last_message",
+        filter_class=ExperimentSessionFilter,
         table_url=session_table_url,
         table_container_id="sessions-table",
         table_type=FilterSet.TableType.SESSIONS,
@@ -326,7 +330,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
 
 
-class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.change_pipeline"
     template_name = "pipelines/pipeline_builder.html"
 
@@ -350,6 +354,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
             "pipeline_id": experiment.pipeline_id,
             "node_schemas": _pipeline_node_schemas(),
             "experiment": experiment,
+            "page_title": f"Edit {experiment.name}",
             "parameter_values": _pipeline_node_parameter_values(
                 team=self.request.team,
                 llm_providers=llm_providers,
@@ -373,7 +378,7 @@ def archive_chatbot(request, team_slug: str, pk: int):
     return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
 
 
-class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
+class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
@@ -406,6 +411,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequir
         context["version_details"] = version
         context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
+        context["page_title"] = f"Create Version - {working_experiment.name}"
         return context
 
     def form_valid(self, form):
@@ -495,7 +501,7 @@ def chatbot_version_create_status(
     )
 
 
-class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """View for rendering chatbot sessions table with filtering support."""
 
     model = ExperimentSession
@@ -655,7 +661,7 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-    from apps.experiments.forms import ExperimentInvitationForm
+    from apps.experiments.forms import ExperimentInvitationForm  # noqa: PLC0415
 
     form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
     if request.method == "POST":
@@ -670,7 +676,7 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                from django.db import transaction
+                from django.db import transaction  # noqa: PLC0415
 
                 with transaction.atomic():
                     session = WebChannel.start_new_session(
@@ -680,7 +686,7 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                         timezone=request.session.get("detected_tz", None),
                     )
                 if post_form.cleaned_data["invite_now"]:
-                    from apps.experiments.email import send_experiment_invitation
+                    from apps.experiments.email import send_experiment_invitation  # noqa: PLC0415
 
                     send_experiment_invitation(session)
         else:
@@ -782,10 +788,9 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             )
             new_experiment.create_version_task_id = task_id
             new_experiment.save(update_fields=["create_version_task_id"])
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
-    else:
-        experiment_id = kwargs["pk"]
-        return single_chatbot_home(request, team_slug, experiment_id)
+            return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
+    experiment_id = kwargs["pk"]
+    return single_chatbot_home(request, team_slug, experiment_id)
 
 
 def home(
@@ -818,6 +823,7 @@ def home(
         {
             "active_tab": title.lower(),
             "title": title,
+            "page_title": title,
             "title_help_content": render_help_with_link("", help_key),
             "table_url": reverse(table_url_name, args=[team_slug]),
             "enable_search": True,
@@ -828,16 +834,16 @@ def home(
     )
 
 
-class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_experimentsession"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         table_url = reverse("chatbots:all_sessions_list", kwargs={"team_slug": team_slug})
         filter_context = get_filter_context_data(
             team=self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
-            date_range_column="last_message",
+            filter_class=ExperimentSessionFilter,
             table_url=table_url,
             table_container_id="data-table",
             table_type=FilterSet.TableType.ALL_SESSIONS,
@@ -846,6 +852,7 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequire
         return {
             "active_tab": "all_sessions",
             "title": "All Sessions",
+            "page_title": "All Sessions",
             "allow_new": False,
             "table_url": table_url,
             "use_dynamic_filters": True,
@@ -866,7 +873,7 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
     )
 
 
-def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
+def _get_events_context(experiment: Experiment, team_slug: str):
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
@@ -901,4 +908,4 @@ def _get_events_context(experiment: Experiment, team_slug: str, origin=None):
         combined_events.append({**event, "team_slug": team_slug})
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events, origin=origin)}
+    return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}

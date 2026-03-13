@@ -15,7 +15,7 @@ jobs:
   dispatch:
     name: Dispatch API Schema Update
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Repository Dispatch
         uses: peter-evans/repository-dispatch@v4

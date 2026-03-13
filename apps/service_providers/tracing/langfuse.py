@@ -6,26 +6,38 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from langfuse._client.get_client import _create_client_from_instance
 from langfuse._client.resource_manager import LangfuseResourceManager
 from langfuse.langchain import CallbackHandler
-from opentelemetry.trace import Status, StatusCode
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
 from .const import SpanLevel
 
 if TYPE_CHECKING:
-    from langchain.callbacks.base import BaseCallbackHandler
+    from langchain_core.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
+    from langfuse.api.client import FernLangfuse
 
     from apps.experiments.models import ExperimentSession
 
 
 logger = logging.getLogger("ocs.tracing.langfuse")
+
+
+def get_langfuse_api_client(config: dict) -> FernLangfuse:
+    """Create a Langfuse management API client for reading trace data."""
+    from langfuse.api.client import FernLangfuse  # noqa: PLC0415 - lazy: test mocks at source module level
+
+    return FernLangfuse(
+        base_url=config["host"],
+        username=config["public_key"],
+        password=config["secret_key"],
+        timeout=10,
+    )
 
 
 class LangFuseTracer(Tracer):
@@ -36,7 +48,7 @@ class LangFuseTracer(Tracer):
     different credentials per call. This is why we don't use the standard 'observe' decorator.
     """
 
-    def __init__(self, type_, config: dict):
+    def __init__(self, type_: str, config: dict):
         super().__init__(type_, config)
         self.client = None
         self.trace_record = None
@@ -119,17 +131,12 @@ class LangFuseTracer(Tracer):
             span.update(output=output.copy())
 
         if exc := context.exception:
-            span.record_exception(exc)
+            span.update(level="ERROR", status_message=str(exc))
 
         if error := context.error:
-            span.set_status(
-                Status(
-                    status_code=StatusCode.ERROR,
-                    description=error,
-                )
-            )
+            span.update(level="ERROR", status_message=error)
 
-    def get_langchain_callback(self) -> BaseCallbackHandler | None:
+    def get_langchain_callback(self) -> BaseCallbackHandler | None:  # ty: ignore[invalid-method-override]
         if not self.ready:
             raise ServiceReentryException("Service does not support reentrant use.")
 
@@ -142,11 +149,14 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
-        return {
-            "trace_id": self.trace_record.trace_id,
-            "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
-            "trace_provider": self.type,
-        }
+        return cast(
+            dict[str, str],
+            {
+                "trace_id": self.trace_record.trace_id,
+                "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
+                "trace_provider": self.type,
+            },
+        )
 
     def add_trace_tags(self, tags: list[str]) -> None:
         if not self.ready:
@@ -159,6 +169,9 @@ class LangFuseTracer(Tracer):
     def set_input_message_id(self, input_message_id: str) -> None:
         pass
 
+    def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
+        pass
+
 
 class ClientManager:
     """This class manages the langfuse clients to avoid creating a new client for every request.
@@ -166,14 +179,14 @@ class ClientManager:
     certain amount of time."""
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.key_timestamps: dict[str, float] = {}
+        self.key_timestamps: dict[str | None, float] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval
         self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
-        from langfuse import Langfuse
+        from langfuse import Langfuse  # noqa: PLC0415 - lazy: test mocks langfuse.Langfuse at source module level
 
         public_key = config.get("public_key")
         with LangfuseResourceManager._lock:

@@ -70,9 +70,7 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
                 else:
                     scope_type = "write"
 
-                formatted_scopes = [
-                    f"{scope}:{scope_type}" for scope in required_scopes
-                ]
+                formatted_scopes = [f"{scope}:{scope_type}" for scope in required_scopes]
                 return {self.name: formatted_scopes}
             elif isinstance(permission, TokenHasOAuthScope):
                 # Get the required scopes from the view (TokenHasScope.get_scopes)

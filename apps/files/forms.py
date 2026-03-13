@@ -4,7 +4,7 @@ from apps.files.models import File
 
 
 class BaseFileFormSet(forms.BaseModelFormSet):
-    def save(self, request):
+    def save(self, request):  # ty: ignore[invalid-method-override]
         files = super().save(commit=False)
         for file in files:
             file.team = request.team

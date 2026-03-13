@@ -1,13 +1,14 @@
+from __future__ import annotations
+
 import operator
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
-from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
-from apps.documents.models import Collection
+from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -21,6 +22,9 @@ from apps.service_providers.llm_service.utils import (
     remove_citations_from_text,
 )
 
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
+
 
 class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
@@ -29,27 +33,27 @@ class StateSchema(AgentState):
     input_message_id: Annotated[int | None, operator.or_]
 
 
-def execute_sub_agent(node: PipelineNode, state: PipelineState):
-    user_input = state["last_node_input"]
-    session: ExperimentSession | None = state.get("experiment_session")
+def execute_sub_agent(node: PipelineNode, context: NodeContext):
+    user_input = context.input
+    session = context.session
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, state, session, tool_callbacks)
+    agent = build_node_agent(node, context, session, tool_callbacks)
 
-    attachments = [att for att in state.get("temp_state", {}).get("attachments", [])]
+    attachments = list(context.attachments)
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
 
     inputs = StateSchema(
         messages=[formatted_input],
-        participant_data=state.get("participant_data") or {},
-        session_state=state.get("session_state") or {},
-        input_message_id=state.get("input_message_id"),
+        participant_data=context.state.participant_data or {},
+        session_state=context.state.session_state or {},
+        input_message_id=context.input_message_id,
     )
     result = agent.invoke(inputs)
     final_message = result["messages"][-1]
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
-    node.save_history(session, user_input, ai_message)
+    node.save_history(user_input, ai_message)
 
     voice_kwargs = {}
     if node.synthetic_voice_id is not None:
@@ -76,7 +80,7 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
         output=message, session=session, include_citations=node.generate_citations
     )
     ai_message_metadata = _process_files(
-        session, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
+        node, cited_files=parsed_output.cited_files, generated_files=parsed_output.generated_files
     )
     if node.generate_citations:
         ai_message = populate_reference_section_from_citations(
@@ -88,13 +92,15 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
     return ai_message, ai_message_metadata
 
 
-def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSession, tool_callbacks: ToolCallbacks):
-    prompt_context = _get_prompt_context(node, session, pipeline_state)
+def build_node_agent(
+    node: PipelineNode, context: NodeContext, session: ExperimentSession, tool_callbacks: ToolCallbacks
+):
+    prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     middleware = []
-    if history_middleware := node.build_history_middleware(session=session, system_message=system_message):
+    if history_middleware := node.build_history_middleware(system_message=system_message):
         middleware.append(history_middleware)
 
     return create_agent(
@@ -107,24 +113,24 @@ def build_node_agent(node, pipeline_state: PipelineState, session: ExperimentSes
     )
 
 
-def _process_files(session: ExperimentSession, cited_files: set[File], generated_files: set[File]) -> dict:
+def _process_files(node: PipelineNode, cited_files: set[File], generated_files: set[File]) -> dict:
     """`cited_files` is a list of files that are cited in the response whereas generated files are those generated
     by the LLM
     """
     if cited_files:
-        session.chat.attach_files(attachment_type="file_citation", files=cited_files)
+        node.repo.attach_files_to_chat(attachment_type="file_citation", files=cited_files)
     if generated_files:
-        session.chat.attach_files(attachment_type="code_interpreter", files=generated_files)
+        node.repo.attach_files_to_chat(attachment_type="code_interpreter", files=generated_files)
     return {
         "cited_files": [file.id for file in cited_files],
         "generated_files": [file.id for file in generated_files],
     }
 
 
-def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
+def _get_prompt_context(node: PipelineNode, session: ExperimentSession, context: NodeContext):
     extra_prompt_context = {
-        "temp_state": state.get("temp_state") or {},
-        "session_state": state.get("session_state") or {},
+        "temp_state": context.state.temp or {},
+        "session_state": context.state.session_state or {},
     }
     return PromptTemplateContext(
         session,
@@ -132,7 +138,8 @@ def _get_prompt_context(node, session: ExperimentSession, state: PipelineState):
         collection_id=node.collection_id,
         collection_index_ids=node.collection_index_ids,
         extra=extra_prompt_context,
-        participant_data=state.get("participant_data") or {},
+        participant_data=context.state.participant_data or {},
+        repo=node.repo,
     )
 
 
@@ -146,17 +153,18 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
-    return tools
+    return cast(list[dict | BaseTool], tools)
 
 
 def _get_search_tool(node):
-    from apps.chat.agent.tools import SearchCollectionByIdTool
-    from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+    from apps.service_providers.llm_service.main import (  # noqa: PLC0415 - lazy: llm_service.main loads heavy langchain deps
+        OpenAIBuiltinTool,
+    )
 
     if not node.collection_index_ids:
         return None
 
-    collections = list(Collection.objects.filter(id__in=node.collection_index_ids, is_index=True))
+    collections = node.repo.get_collections_for_search(node.collection_index_ids)
     if not collections:
         # collections probably deleted
         return None

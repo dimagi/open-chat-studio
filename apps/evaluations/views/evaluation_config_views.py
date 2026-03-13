@@ -11,7 +11,6 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
@@ -31,14 +30,15 @@ from apps.utils.time import seconds_to_human
 logger = logging.getLogger(__name__)
 
 
-class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationconfig"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluations",
             "title": "Evaluations",
+            "page_title": "Evaluations",
             "new_object_url": reverse("evaluations:new", args=[team_slug]),
             "table_url": reverse("evaluations:table", args=[team_slug]),
             # "title_help_content": render_help_with_link(
@@ -47,7 +47,7 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         }
 
 
-class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationconfig"
     model = EvaluationConfig
     table_class = EvaluationConfigTable
@@ -57,12 +57,17 @@ class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
         return EvaluationConfig.objects.filter(team=self.request.team).order_by("-created_at")
 
 
-class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluationconfig"
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
-    extra_context = {"title": "Create Evaluation", "button_text": "Create", "active_tab": "evaluations"}
+    extra_context = {
+        "title": "Create Evaluation",
+        "page_title": "Create Evaluation",
+        "button_text": "Create",
+        "active_tab": "evaluations",
+    }
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -81,13 +86,14 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
         return super().form_valid(form)
 
 
-class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluationconfig"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
     template_name = "evaluations/evaluation_config_form.html"
     extra_context = {
         "title": "Update Evaluation",
+        "page_title": "Update Evaluation",
         "button_text": "Update",
         "active_tab": "evaluations",
     }
@@ -107,16 +113,17 @@ class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMi
         return reverse("evaluations:home", args=[self.request.team.slug])
 
 
-class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_runs_home.html"
     extra_context = {
         "active_tab": "evaluations",
         "title": "Evaluation Runs",
+        "page_title": "Evaluation Runs",
         "allow_new": False,
     }
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
 
         return {
@@ -127,7 +134,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequi
         }
 
 
-class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/components/trend_charts.html"
 
@@ -138,7 +145,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         ("all", "All time"),
     ]
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
 
         date_range = self.request.GET.get("range", "30")
@@ -170,7 +177,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         }
 
 
-class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
     table_class = EvaluationRunTable
@@ -182,22 +189,22 @@ class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
         ).order_by("-created_at")
 
 
-class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_result_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         evaluation_run = get_object_or_404(
             EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
         )
 
+        title = (
+            "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
+        )
         context = {
             "active_tab": "evaluations",
-            "title": (
-                "Evaluation Run Preview"
-                if evaluation_run.type == EvaluationRunType.PREVIEW
-                else "Evaluation Run Results"
-            ),
+            "title": title,
+            "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
         }
@@ -228,7 +235,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         return context
 
 
-class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_results_table.html"
     table_pagination = {"per_page": 10}
@@ -286,7 +293,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
-        from django.conf import settings
+        from django.conf import settings  # noqa: PLC0415
 
         data = self.get_table_data()
         if not data:
@@ -368,7 +375,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                 return columns.Column(verbose_name=header, visible=False)
             case "session":
                 return actions.ActionsColumn(
-                    verbose_name=header,
+                    verbose_name="Links",
                     actions=[
                         actions.chip_action(
                             label="Session",
@@ -376,13 +383,14 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
                             enabled_condition=session_enabled_condition,
                         ),
                         actions.chip_action(
-                            label=mark_safe('<i class="fa-solid fa-external-link"></i>'),
+                            label="Message",
                             url_factory=dataset_url_factory,
                             enabled_condition=dataset_enabled_condition,
                             open_url_in_new_tab=True,
                         ),
                     ],
                     align="right",
+                    extra_context={"join_class": "join join-vertical"},
                 )
             case "message_id":
                 # Skip rendering message_id as a separate column since it's now in session column
@@ -481,6 +489,7 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
         context = {
             "active_tab": "evaluations",
             "title": "Upload Results",
+            "page_title": "Upload Results",
             "evaluation_run": evaluation_run,
         }
         return render(request, "evaluations/evaluation_run_update.html", context)

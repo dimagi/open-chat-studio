@@ -1,6 +1,6 @@
 import re
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Model
 from langchain_core.callbacks import BaseCallbackHandler
@@ -40,9 +40,9 @@ def wrap_callback(
     some magic with the type annotations."""
 
     if run_name_map or filter_patterns:
-        callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])
+        callback = NameMappingWrapper(callback, run_name_map or {}, filter_patterns or [])  # ty: ignore[invalid-assignment]
 
-    return CallbackWrapper(callback)  # type: ignore
+    return cast(BaseCallbackHandler, CallbackWrapper(callback))
 
 
 def serialize_input_output_dict(data: dict[Any, Any]) -> dict[Any, Any]:
@@ -159,12 +159,12 @@ def get_langchain_run_name(serialized: dict[str, Any] | None, **kwargs: Any) -> 
         return kwargs["name"]
 
     try:
-        return serialized["name"]
+        return serialized["name"]  # ty: ignore[not-subscriptable]
     except (KeyError, TypeError):
         pass
 
     try:
-        return serialized["id"][-1]
+        return serialized["id"][-1]  # ty: ignore[not-subscriptable]
     except (KeyError, TypeError):
         pass
 

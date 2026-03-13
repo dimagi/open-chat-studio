@@ -36,6 +36,7 @@ def test_serialize_trace_data():
 def test_filter_patterns():
     class MockCallback:
         def on_llm_start(self, serialized, prompts, tags=None, **kwargs):
+            assert tags is not None
             assert LANGSMITH_TAG_HIDDEN in tags
             assert kwargs["name"] == "llm_name"
 
@@ -48,7 +49,8 @@ def test_filter_patterns():
 def test_name_map():
     class MockCallback:
         def on_llm_start(self, serialized, prompts, tags=None, **kwargs):
-            assert LANGSMITH_TAG_HIDDEN not in tags or []
+            assert tags is not None
+            assert LANGSMITH_TAG_HIDDEN not in tags
             assert kwargs["name"] == "mapped_name"
 
     callback = MockCallback()

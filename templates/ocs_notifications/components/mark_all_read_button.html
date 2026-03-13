@@ -1,0 +1,11 @@
+<button
+  class="btn btn-sm btn-ghost"
+  hx-post="{{ mark_all_read_url }}"
+  hx-target="#data-table"
+  hx-swap="outerHTML"
+  hx-disabled-elt="this"
+>
+  <i class="fa fa-check-double htmx-hide"></i>
+  <span class="loading loading-spinner loading-xs htmx-show"></span>
+  Mark all as read
+</button>

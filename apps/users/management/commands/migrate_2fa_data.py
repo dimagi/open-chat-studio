@@ -32,7 +32,8 @@ class Command(BaseCommand):
                     WHERE table_name = 'otp_totp_totpdevice'
                 )
             """)
-            return cursor.fetchone()[0]
+            row = cursor.fetchone()
+            return row[0] if row else False
 
     def _get_totp_devices(self):
         """Get TOTP devices using raw SQL."""
@@ -92,7 +93,7 @@ class Command(BaseCommand):
         authenticators_to_create = []
 
         # Import User model
-        from apps.users.models import CustomUser
+        from apps.users.models import CustomUser  # noqa: PLC0415
 
         # De-duplicate to at most one confirmed device per user (choose first)
         devices_by_user_id = {}

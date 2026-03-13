@@ -1,0 +1,6 @@
+{% url 'evaluations:dataset_messages_table' request.team.slug table.dataset_id as messages_path %}
+<button type="button" class="btn btn-ghost btn-xs" onclick="SiteJS.app.copyToClipboard(this, 'copy-message-{{ record.id }}')"
+      title="Copy link to clipboard">
+  <input id="copy-message-{{ record.id }}" type="hidden" value="{{ request.scheme }}://{{ request.get_host }}{{ messages_path }}?message_id={{ record.id }}"/>
+  <i class="fa-regular fa-copy"></i>
+</button>

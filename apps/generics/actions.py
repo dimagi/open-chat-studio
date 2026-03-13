@@ -13,26 +13,26 @@ from django_tables2 import TemplateColumn
 @dataclasses.dataclass
 class Action:
     url_name: str
-    url_factory: Callable[[str, Any, Any, Any], str] = None
+    url_factory: Callable[[str, Any, Any, Any], str] | None = None
     """A custom function called during rendering to generate the URL for the action. The function is passed
     the URL name, the request, the record, and the cell value and should return the URL."""
 
-    label: str = None
-    label_factory: Callable[[Any, Any], str] = None
+    label: str | None = None
+    label_factory: Callable[[Any, Any], str] | None = None
     """A custom function called during rendering to generate the action label. The function is passed
     the row's record and cell's value and must return a string."""
 
-    title: str = None
-    icon_class: str = None
-    button_style: str = None
-    extra_context: dict = None
+    title: str | None = None
+    icon_class: str | None = None
+    button_style: str | None = None
+    extra_context: dict | None = None
     required_permissions: list = dataclasses.field(default_factory=list)
     open_url_in_new_tab: bool = False
-    display_condition: Callable[[Any, Any], bool] = None
+    display_condition: Callable[[Any, Any], bool] | None = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be displayed."""
 
-    enabled_condition: Callable[[Any, Any], bool] = None
+    enabled_condition: Callable[[Any, Any], bool] | None = None
     """A callable that takes a request and a record and returns a boolean indicating
     whether the action should be enabled. If none is provided, the action is always enabled."""
 
@@ -95,7 +95,7 @@ class AjaxAction(Action):
     hx_method: str = "post"
     """The HTTP method to use when making the request. One of 'get', 'post', 'put', 'patch', or 'delete'."""
 
-    confirm_message: str = None
+    confirm_message: str | None = None
     """A message to display in a confirmation dialog when the action is clicked.
     If none is provided, no confirmation dialog is shown."""
 
@@ -113,7 +113,7 @@ class ModalAction(Action):
 
     template: str = "generic/action_modal.html"
     modal_template: str = "generic/modal.html"
-    modal_context: dict = None
+    modal_context: dict | None = None
 
     def get_context(self, request, record, value):
         ctxt = super().get_context(request, record, value)
@@ -128,9 +128,9 @@ class ModalAction(Action):
 
 def edit_action(
     url_name: str,
-    url_factory: Callable[[str, Any, Any, Any], str] = None,
-    required_permissions: list = None,
-    display_condition: callable = None,
+    url_factory: Callable[[str, Any, Any, Any], str] | None = None,
+    required_permissions: list | None = None,
+    display_condition: Callable[[Any, Any], bool] | None = None,
     template: str | None = None,
 ):
     kwargs = {}
@@ -148,10 +148,10 @@ def edit_action(
 
 def delete_action(
     url_name: str,
-    url_factory: Callable[[str, Any, Any, Any], str] = None,
-    required_permissions: list = None,
-    display_condition: callable = None,
-    confirm_message: str = None,
+    url_factory: Callable[[str, Any, Any, Any], str] | None = None,
+    required_permissions: list | None = None,
+    display_condition: Callable[[Any, Any], bool] | None = None,
+    confirm_message: str | None = None,
     template: str | None = None,
 ):
     kwargs = {}
@@ -170,13 +170,13 @@ def delete_action(
 
 
 def chip_action(
-    label: str = None,
-    label_factory: Callable[[Any, Any], str] = None,
-    required_permissions: list = None,
-    display_condition: callable = None,
-    enabled_condition: callable = None,
-    url_factory: Callable[[Any, Any, Any, Any], str] = None,
-    icon_class: str = None,
+    label: str | None = None,
+    label_factory: Callable[[Any, Any], str] | None = None,
+    required_permissions: list | None = None,
+    display_condition: Callable[[Any, Any], bool] | None = None,
+    enabled_condition: Callable[[Any, Any], bool] | None = None,
+    url_factory: Callable[[Any, Any, Any, Any], str] | None = None,
+    icon_class: str | None = None,
     button_style: str = "",
     open_url_in_new_tab: bool = False,
 ):
@@ -212,8 +212,12 @@ def chip_action(
 
 
 class ActionsColumn(TemplateColumn):
-    def __init__(self, actions, align: Literal["left", "right", "center"] = "center", **extra):
-        extra_context = {"actions": actions}
+    def __init__(
+        self, actions, align: Literal["left", "right", "center"] = "center", extra_context: dict | None = None, **extra
+    ):
+        context = {"actions": actions}
+        if extra_context:
+            context.update(extra_context)
         if align != "left":
             th = settings.DJANGO_TABLES2_TABLE_ATTRS["th"].copy()
             th["class"] = th["class"].replace("text-left", f"text-{align}")
@@ -221,9 +225,9 @@ class ActionsColumn(TemplateColumn):
             td["class"] = td["class"].replace("text-left", f"text-{align}")
             extra = {"attrs": {"th": th, "td": td}, **extra}
         extra["orderable"] = False
-        super().__init__(template_name="generic/crud_actions_column.html", extra_context=extra_context, **extra)
+        super().__init__(template_name="generic/crud_actions_column.html", extra_context=context, **extra)
 
 
-def chip_column(label: str = None, align="left", **kwargs):
+def chip_column(label: str | None = None, align="left", **kwargs):
     """A column a chip link"""
     return ActionsColumn(actions=[chip_action(label=label)], align=align, **kwargs)

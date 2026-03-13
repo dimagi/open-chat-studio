@@ -28,11 +28,12 @@ class LogAction(EventActionHandlerBase):
         last_message = session.chat.messages.last()
         if last_message:
             return last_message.content
+        return ""
 
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import StaticTriggerType
+        from apps.events.models import StaticTriggerType  # noqa: PLC0415
 
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
@@ -40,7 +41,7 @@ class EndConversationAction(EventActionHandlerBase):
 
 class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import ScheduledMessage
+        from apps.events.models import ScheduledMessage  # noqa: PLC0415
 
         ScheduledMessage.objects.create(
             experiment=session.experiment, participant=session.participant, team=session.team, action=action
@@ -94,7 +95,7 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import Pipeline
+        from apps.pipelines.models import Pipeline  # noqa: PLC0415
 
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
@@ -116,6 +117,8 @@ class PipelineStartAction(EventActionHandlerBase):
                 messages = [last_message.to_langchain_message()]
             else:
                 messages = []
+        else:
+            raise ValueError(f"Unknown input type: {input_type}")
 
         input = "\n".join(f"{message.type}: {message.content}" for message in messages)
         participant_data = session.participant.global_data | session.participant_data_from_experiment
@@ -129,7 +132,7 @@ class PipelineStartAction(EventActionHandlerBase):
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ) as span:
-            from apps.chat.bots import PipelineBot
+            from apps.chat.bots import PipelineBot  # noqa: PLC0415
 
             bot = PipelineBot(
                 session=session,

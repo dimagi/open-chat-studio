@@ -15,7 +15,7 @@ from apps.utils.factories.files import FileFactory
 class TestDeleteFileFromAssistant:
     @pytest.fixture()
     def assistant(self, team_with_users):
-        return OpenAiAssistantFactory(team=team_with_users, builtin_tools=["code_interpreter"])
+        return OpenAiAssistantFactory.create(team=team_with_users, builtin_tools=["code_interpreter"])
 
     @pytest.fixture()
     def resource(self, assistant):
@@ -30,9 +30,9 @@ class TestDeleteFileFromAssistant:
         """Test that file relationship is removed but file is kept when used in other resources."""
         team = assistant.team
         client.force_login(team.members.first())
-        file = FileFactory(team=team, external_id="file_123", external_source="openai")
+        file = FileFactory.create(team=team, external_id="file_123", external_source="openai")
 
-        collection = CollectionFactory(team=team)
+        collection = CollectionFactory.create(team=team)
         collection.files.add(file)
 
         # Setup: Add file to resource
@@ -59,7 +59,7 @@ class TestDeleteFileFromAssistant:
         """Test that file is completely deleted when not used in other resources."""
         team = assistant.team
         client.force_login(team.members.first())
-        file = FileFactory(team=team, external_id="file_123", external_source="openai")
+        file = FileFactory.create(team=team, external_id="file_123", external_source="openai")
 
         # Setup: Add file to resource
         resource.files.add(file)

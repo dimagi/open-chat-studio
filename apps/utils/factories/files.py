@@ -1,4 +1,5 @@
 import factory
+import factory.django
 import faker
 
 fake = faker.Faker()

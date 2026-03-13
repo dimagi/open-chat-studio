@@ -45,7 +45,7 @@ class CollectionForm(forms.ModelForm):
         ).all()
 
         self.fields["embedding_provider_model"].queryset = embedding_model_provider_queryset
-        self.fields["embedding_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"
+        self.fields["embedding_provider_model"].widget.template_name = "django/forms/widgets/select_dynamic.html"  # ty: ignore[invalid-assignment]
 
         # Alpine.js bindings
         self.fields["is_index"].widget.attrs = {"x-model": "isIndex"}

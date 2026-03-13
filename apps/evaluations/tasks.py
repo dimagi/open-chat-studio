@@ -47,7 +47,7 @@ def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
     dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
-@shared_task(base=TaskbadgerTask, rate_limit="0.5/s")
+@shared_task(base=TaskbadgerTask)
 def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
     Run all evaluations over a single message.
@@ -126,13 +126,16 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         # Extract the input message content
         input_content = message.input.get("content", "")
 
+        participant_data = message.participant_data | {}
+        participant_data = session.participant.global_data | participant_data
+
         # Call the bot with the evaluation message and session
         bot_response = handle_evaluation_message(
             experiment_version=experiment,
             experiment_channel=evaluation_channel,
             message_text=input_content,
             session=session,
-            participant_data=message.participant_data,
+            participant_data=participant_data,
         )
         response_content = bot_response.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
@@ -172,7 +175,7 @@ def mark_evaluation_complete(results, evaluation_run_id):
         results: List of results from the group tasks (unused but required by chord)
         evaluation_run_id: ID of the evaluation run to mark complete
     """
-    from apps.evaluations.aggregation import compute_aggregates_for_run
+    from apps.evaluations.aggregation import compute_aggregates_for_run  # noqa: PLC0415
 
     try:
         evaluation_run = EvaluationRun.objects.get(id=evaluation_run_id)
@@ -252,9 +255,12 @@ def cleanup_old_evaluation_data():
     if sessions_count == 0:
         logger.info("No old evaluation sessions found to cleanup")
         return
-    deleted_sessions = old_evaluation_sessions.delete()
+    # Delete via Chat rather than ExperimentSession so the cascade also removes
+    # ChatMessage records. ExperimentSession.chat is a OneToOneField with
+    # on_delete=CASCADE, so deleting the Chat cascades to the session as well.
+    deleted_chats = Chat.objects.filter(experiment_session__in=old_evaluation_sessions).delete()
 
-    logger.info(f"Cleanup completed: deleted {deleted_sessions[0]} evaluation sessions")
+    logger.info(f"Cleanup completed: deleted {deleted_chats[0]} chat records and associated evaluation sessions")
 
 
 @shared_task(base=TaskbadgerTask)
@@ -652,7 +658,7 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
 
 
 def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
-    from apps.evaluations.aggregation import compute_aggregates_for_run
+    from apps.evaluations.aggregation import compute_aggregates_for_run  # noqa: PLC0415
 
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
@@ -796,9 +802,9 @@ def create_dataset_from_sessions_task(
         filter_query: Serialized filter parameters as query string (or None)
         timezone: Timezone for filtering
     """
-    from django.http import QueryDict
+    from django.http import QueryDict  # noqa: PLC0415
 
-    from apps.web.dynamic_filters.datastructures import FilterParams
+    from apps.web.dynamic_filters.datastructures import FilterParams  # noqa: PLC0415
 
     progress_recorder = ProgressRecorder(self)
     dataset = None

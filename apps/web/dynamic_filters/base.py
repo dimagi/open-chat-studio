@@ -56,7 +56,7 @@ DATE_RANGE_OPTIONS = [
     {"label": "Last 1 Hour", "value": "1h"},
     {"label": "Last 1 Day", "value": "1d"},
     {"label": "Last 7 Days", "value": "7d"},
-    {"label": "Last 15 Days", "value": "15d"},
+    {"label": "Last 14 Days", "value": "14d"},
     {"label": "Last 30 Days", "value": "30d"},
     {"label": "Last 3 Months", "value": "90d"},
     {"label": "Last Year", "value": "365d"},
@@ -73,9 +73,22 @@ class MultiColumnFilter:
 
     Attributes:
         filters: A list of `ColumnFilter` instances.
+        date_range_column: The query_param of the default timestamp filter used for date range queries.
     """
 
+    slug: ClassVar[str] = ""
     filters: ClassVar[Sequence[ColumnFilter]]
+    date_range_column: ClassVar[str] = ""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if col := cls.__dict__.get("date_range_column", ""):
+            query_params = {f.query_param for f in cls.__dict__.get("filters", [])}
+            if query_params and col not in query_params:
+                raise ValueError(
+                    f"{cls.__name__}.date_range_column={col!r} does not match "
+                    f"any filter query_param. Available: {sorted(query_params)}"
+                )
 
     @classmethod
     def columns(cls, team, **kwargs) -> dict[str, dict]:
@@ -115,7 +128,8 @@ class ColumnFilter(BaseModel):
     query_param: str
     label: str
     type: TYPE_ANNOTATION
-    column: str = None
+    column: str | None = None
+    description: str = ""
 
     @computed_field
     @property
@@ -178,7 +192,7 @@ class StringColumnFilter(ColumnFilter):
         lookup: The Django lookup to use (e.g., 'icontains', 'istartswith'), or None for exact match
         value: The value to filter by
         """
-        from django.db.models import Q
+        from django.db.models import Q  # noqa: PLC0415
 
         # Build Q object for OR logic
         q = Q()
@@ -196,7 +210,7 @@ class StringColumnFilter(ColumnFilter):
         return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-        from django.db.models import Q
+        from django.db.models import Q  # noqa: PLC0415
 
         # For exclusion: exclude if it matches ANY column
         q = Q()
@@ -213,7 +227,7 @@ class StringColumnFilter(ColumnFilter):
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
         if values := self.values_list(value):
-            from django.db.models import Q
+            from django.db.models import Q  # noqa: PLC0415
 
             # OR logic across multiple columns
             q = Q()
@@ -222,3 +236,43 @@ class StringColumnFilter(ColumnFilter):
             return queryset.filter(q)
 
         return queryset
+
+
+def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
+    """Extract static schema from a MultiColumnFilter for use in AI prompts.
+
+    Returns a dict keyed by query_param with label, type, description, and operators.
+    For choice filters with pre-populated (static) options the options list is included
+    so agents can use values directly without a tool call.  Dynamic filters (whose options
+    come from prepare()) have no options entry, signalling that get_filter_options must be
+    called to discover valid IDs.
+    Does not call prepare() -- no DB access needed.
+    """
+    schema = {}
+    for f in filter_class.filters:
+        entry: dict[str, Any] = {
+            "label": f.label,
+            "type": f.type,
+            "description": f.description,
+            "operators": [op.value for op in FIELD_TYPE_FILTERS[f.type]],
+        }
+        if isinstance(f, ChoiceColumnFilter) and f.options:
+            entry["options"] = [
+                opt if isinstance(opt, str) else opt.get("id", opt.get("label", str(opt))) for opt in f.options
+            ]
+        schema[f.query_param] = entry
+    return schema
+
+
+def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
+    """Build registry of slug -> MultiColumnFilter class from direct subclasses.
+
+    Imports known filter modules to ensure subclasses are registered
+    regardless of import order.
+    """
+    import apps.experiments.filters  # noqa: F401, PLC0415
+    import apps.ocs_notifications.filters  # noqa: F401, PLC0415
+    import apps.participants.filters  # noqa: F401, PLC0415
+    import apps.trace.filters  # noqa: F401, PLC0415
+
+    return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}

@@ -148,8 +148,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
     def get_queryset(self):
         queryset = (
-            ExperimentSession.objects
-            .filter(team__slug=self.request.team.slug)
+            ExperimentSession.objects.filter(team__slug=self.request.team.slug)
             .select_related("team", "experiment", "participant")
             .prefetch_related("chat__tags", "chat__messages__tags")
             .all()
@@ -269,9 +268,9 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                 session.chat.add_tag(tag, request.team, added_by=request.user)
         elif request.method == "DELETE":
             # Remove tags (only user tags, not system tags)
-            from django.contrib.contenttypes.models import ContentType
+            from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
 
-            from apps.annotations.models import CustomTaggedItem
+            from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
 
             tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team, is_system_tag=False)
 

@@ -1,4 +1,5 @@
 import factory
+import factory.django
 
 ACTION_SCHEMA = {
     "openapi": "3.0.0",

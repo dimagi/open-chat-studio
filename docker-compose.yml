@@ -1,0 +1,71 @@
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  volumes:
+    - .:/code
+  env_file:
+    - .env
+  environment:
+    - DATABASE_URL=postgres://postgres:postgres@db:5432/open_chat_studio
+    - REDIS_URL=redis://redis:6379
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=open_chat_studio
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  migrate:
+    <<: *app
+    command: python manage.py migrate
+    restart: "no"
+
+  web:
+    <<: *app
+    command: python manage.py runserver
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=0.0.0.0:8000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  celery_worker:
+    <<: *app
+    command: celery -A config.celery worker -l info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  celery_beat:
+    <<: *app
+    command: celery -A config.celery beat -l info
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  redis_data:

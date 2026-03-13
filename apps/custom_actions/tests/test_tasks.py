@@ -20,7 +20,7 @@ class TestHealthCheckTask:
     )
     def test_health_check_status(self, status_code, expected_status, description, team_with_users, httpx_mock):
         """Test health check with various response scenarios."""
-        custom_action_with_health = CustomActionFactory(
+        custom_action_with_health = CustomActionFactory.create(
             team=team_with_users,
             healthcheck_path="/health",
             server_url="https://example.com",
@@ -41,7 +41,7 @@ class TestHealthCheckTask:
 
     def test_health_check_no_endpoint(self, team_with_users):
         """Test that action without health endpoint is skipped."""
-        action = CustomActionFactory(team=team_with_users)
+        action = CustomActionFactory.create(team=team_with_users)
         initial_status = action.health_status
 
         # Run the health check task
@@ -58,17 +58,17 @@ class TestHealthCheckTask:
     def test_check_all_custom_actions_health(self, mock_delay, team_with_users):
         """Test that custom actions with health paths are loaded."""
         # Create custom actions: some with health paths, some without
-        action_with_health_1 = CustomActionFactory(
+        action_with_health_1 = CustomActionFactory.create(
             team=team_with_users,
             healthcheck_path="/health",
             server_url="https://example.com",
         )
-        action_with_health_2 = CustomActionFactory(
+        action_with_health_2 = CustomActionFactory.create(
             team=team_with_users,
             healthcheck_path="/healthz",
             server_url="https://example2.com",
         )
-        CustomActionFactory(
+        CustomActionFactory.create(
             team=team_with_users,
             healthcheck_path="",
         )

@@ -3,9 +3,15 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 
-from apps.documents.models import Collection, CollectionFile, FileStatus
+from apps.documents.models import (
+    Collection,
+    CollectionFile,
+    DocumentSourceSyncLog,
+    FileStatus,
+    SyncStatus,
+)
 from apps.files.models import File
-from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -16,16 +22,20 @@ from apps.utils.factories.team import TeamWithUsersFactory
 class TestEditCollection:
     @pytest.fixture()
     def collection(self):
-        team = TeamWithUsersFactory()
-        return CollectionFactory(
-            name="Tester", team=team, is_index=True, is_remote_index=True, llm_provider=LlmProviderFactory(team=team)
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(
+            name="Tester",
+            team=team,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=LlmProviderFactory.create(team=team),
         )
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
     @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
     def test_update_collection_with_llm_provider_change(self, create_remote_index, migrate_mock, collection, client):
-        new_llm_provider = LlmProviderFactory(team=collection.team)
+        new_llm_provider = LlmProviderFactory.create(team=collection.team)
         new_vector_store_id = "new-store-123"
         create_remote_index.return_value = new_vector_store_id
 
@@ -81,14 +91,14 @@ class TestEditCollection:
 @pytest.mark.django_db()
 class TestDeleteCollection:
     def setup_collection(self, is_index: bool) -> Collection:
-        team = TeamWithUsersFactory()
-        file = FileFactory(team=team, external_id="remote-file-123")
-        collection = CollectionFactory(
+        team = TeamWithUsersFactory.create()
+        file = FileFactory.create(team=team, external_id="remote-file-123")
+        collection = CollectionFactory.create(
             name="Tester",
             team=team,
             is_index=is_index,
             is_remote_index=is_index,
-            llm_provider=LlmProviderFactory(team=team),
+            llm_provider=LlmProviderFactory.create(team=team),
             openai_vector_store_id="store-123",
         )
         collection.files.add(file)
@@ -104,12 +114,12 @@ class TestDeleteCollection:
         1. The collection is being used in a pipeline
         2. The collection is being used by a pipeline version, which is being used by some published experiment
         """
-        experiment.pipeline = PipelineFactory()
+        experiment.pipeline = PipelineFactory.create()
         experiment.save()
 
         collection = self.setup_collection(is_index=is_index)
         client.force_login(collection.team.members.first())
-        node = NodeFactory(
+        node = NodeFactory.create(
             pipeline=experiment.pipeline, type="LlmNode", params={"collection_index_ids": [collection.id]}
         )
         experiment.create_new_version()
@@ -146,12 +156,12 @@ class TestDeleteCollection:
 class TestDeleteCollectionFile:
     @pytest.fixture()
     def team_with_user(self):
-        return TeamWithUsersFactory()
+        return TeamWithUsersFactory.create()
 
     def test_delete_file_from_non_indexed_collection(self, team_with_user, client):
         """Test deleting a file from a non-indexed collection when file is not used elsewhere."""
-        collection = CollectionFactory(team=team_with_user, is_index=False)
-        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        collection = CollectionFactory.create(team=team_with_user, is_index=False)
+        file = FileFactory.create(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
 
         client.force_login(team_with_user.members.first())
@@ -172,15 +182,15 @@ class TestDeleteCollectionFile:
         self, is_remote_index, team_with_user, client, remote_index_manager_mock, local_index_manager_mock
     ):
         """Test deleting a file from an indexed collection when file is not used by an assistant."""
-        llm_provider = LlmProviderFactory(team=team_with_user)
-        collection = CollectionFactory(
+        llm_provider = LlmProviderFactory.create(team=team_with_user)
+        collection = CollectionFactory.create(
             team=team_with_user,
             is_index=True,
             is_remote_index=is_remote_index,
             llm_provider=llm_provider,
             openai_vector_store_id="vs-123",
         )
-        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        file = FileFactory.create(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
 
         client.force_login(team_with_user.members.first())
@@ -209,15 +219,15 @@ class TestDeleteCollectionFile:
     ):
         """Test deleting a file from an indexed collection when file is also used by another object."""
         # Setup: Create indexed collection with file
-        llm_provider = LlmProviderFactory(team=team_with_user)
-        collection = CollectionFactory(
+        llm_provider = LlmProviderFactory.create(team=team_with_user)
+        collection = CollectionFactory.create(
             team=team_with_user,
             is_index=True,
             is_remote_index=is_remote_index,
             llm_provider=llm_provider,
             openai_vector_store_id="vs-123",
         )
-        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        file = FileFactory.create(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
 
         # Login user
@@ -248,3 +258,121 @@ class TestDeleteCollectionFile:
             # Verify file still exists and is still linked to assistant
             file.refresh_from_db()
             assert file.is_archived is False
+
+
+@pytest.mark.django_db()
+class TestDocumentSourceSyncLogs:
+    @pytest.fixture()
+    def team_with_user(self):
+        return TeamWithUsersFactory.create()
+
+    @pytest.fixture()
+    def collection(self, team_with_user):
+        return CollectionFactory.create(team=team_with_user, is_index=True)
+
+    @pytest.fixture()
+    def document_source(self, collection):
+        return DocumentSourceFactory.create(collection=collection, source_type="github", auto_sync_enabled=True)
+
+    def test_view_sync_logs(self, team_with_user, collection, document_source, client):
+        """Test viewing sync logs for a document source"""
+        # Create some sync logs
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source,
+            status=SyncStatus.SUCCESS,
+            files_added=5,
+            files_updated=2,
+            files_removed=1,
+            duration_seconds=10.5,
+        )
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source,
+            status=SyncStatus.FAILED,
+            files_added=0,
+            files_updated=0,
+            files_removed=0,
+            error_message="Connection timeout",
+            duration_seconds=5.0,
+        )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"Connection timeout" in response.content
+        assert b"Success" in response.content
+        assert b"Failed" in response.content
+
+    def test_filter_sync_logs_by_errors(self, team_with_user, collection, document_source, client):
+        """Test filtering sync logs to show only errors"""
+        # Create success and failed logs
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=5)
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source,
+            status=SyncStatus.FAILED,
+            error_message="Connection timeout",
+        )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+
+        # Request with errors_only filter
+        response = client.get(url, {"errors_only": "true"})
+        assert response.status_code == 200
+        # Should show failed log
+        assert b"Connection timeout" in response.content
+        # Should not show success (when context is properly filtered)
+        content = response.content.decode()
+        assert "Success" not in content or content.count("Success") <= 1  # Allow one in badge type
+
+    def test_pagination_of_sync_logs(self, team_with_user, collection, document_source, client):
+        """Test pagination of sync logs"""
+        # Create more than 10 logs to test pagination
+        for i in range(15):
+            DocumentSourceSyncLog.objects.create(
+                document_source=document_source,
+                status=SyncStatus.SUCCESS,
+                files_added=i,
+            )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_sync_logs",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+
+        # First page
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"Page 1 of 2" in response.content
+
+        # Second page
+        response = client.get(url, {"page": "2"})
+        assert response.status_code == 200
+        assert b"Page 2 of 2" in response.content
+
+    def test_document_source_has_sync_errors(self, document_source):
+        """Test the has_sync_errors method on DocumentSource"""
+        # Initially no logs
+        assert not document_source.has_sync_errors()
+
+        # Add a successful log
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
+        assert not document_source.has_sync_errors()
+
+        # Add a failed log (should be most recent)
+        DocumentSourceSyncLog.objects.create(
+            document_source=document_source, status=SyncStatus.FAILED, error_message="Test error"
+        )
+        assert document_source.has_sync_errors()
+
+        # Add another successful log (now most recent)
+        DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
+        assert not document_source.has_sync_errors()

@@ -8,11 +8,12 @@ from apps.utils.factories.experiment import ExperimentFactory, SurveyFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
+@pytest.mark.django_db()
 class TestSurveyTableView:
     def test_get_queryset(self, experiment):
         assert experiment.pre_survey is not None
         experiment.create_new_version()
-        assert Survey.objects.count() == 2
+        assert Survey.objects.filter(team=experiment.team).count() == 2
 
         request = RequestFactory().get(reverse("experiments:survey_table", args=[experiment.team.slug]))
         request.team = experiment.team
@@ -23,10 +24,10 @@ class TestSurveyTableView:
 
 @pytest.mark.django_db()
 def test_delete(client):
-    team = TeamWithUsersFactory()
+    team = TeamWithUsersFactory.create()
     user = team.members.first()
-    survey = SurveyFactory(team=team)
-    experiment = ExperimentFactory(team=team, pre_survey=survey, post_survey=survey)
+    survey = SurveyFactory.create(team=team)
+    experiment = ExperimentFactory.create(team=team, pre_survey=survey, post_survey=survey)
     client.force_login(user)
     url = reverse("experiments:survey_delete", args=[experiment.team.slug, survey.id])
     response = client.delete(url)

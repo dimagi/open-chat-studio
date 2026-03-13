@@ -1,4 +1,5 @@
 import platform
+import re
 import textwrap
 import time
 from pathlib import Path
@@ -101,7 +102,7 @@ def setup_dev_env(c: Context, step=False):
     if not step or _confirm("\tOK?", _exit=False):
         docker(c, command="up")
 
-    _run_with_confirm(c, "Install pre-commit hooks", "pre-commit install --install-hooks", step)
+    _run_with_confirm(c, "Install pre-commit hooks", "prek install -f", step)
 
     if not Path(".env").exists():
         cprint("\nCreating .env file", "green")
@@ -144,6 +145,7 @@ def ngrok_url(c: Context):
     """Start ngrok tunnel for local development and return public URL."""
     #  You need to have ngrok installed on your system
     c.run("ngrok http 8000", echo=True, asynchronous=True)
+    public_url = None
     tries = 4
     while tries > 0:
         try:
@@ -156,14 +158,32 @@ def ngrok_url(c: Context):
             time.sleep(1)
             print("Trying to a public address from ngrok")
 
+    if not public_url:
+        raise Exit("Could not get public URL from ngrok", -1)
     print(f"Public address found: {public_url}")
     return public_url
+
+
+def _get_portless_name(c: Context) -> str:
+    result = c.run("portless list", hide=True, warn=True)
+    used_names = set(re.findall(r"http://(\w+)\.localhost", result.stdout)) if result.ok else set()
+    name = "ocs"
+    counter = 1
+    while name in used_names:
+        name = f"ocs{counter}"
+        counter += 1
+    return name
 
 
 @task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
-    runserver_command = "python manage.py runserver"
+    has_portless = c.run("which portless", hide=True, warn=True).ok
+    if has_portless:
+        portless_name = _get_portless_name(c)
+        runserver_command = f"portless {portless_name} uv run manage.py runserver"
+    else:
+        runserver_command = "python manage.py runserver"
     if public:
         public_url = ngrok_url(c)
         env_vars = [
@@ -233,6 +253,12 @@ def npm(c: Context, watch=False, install=False):
         c.run("npm install", echo=True)
     cmd = "dev-watch" if watch else "dev"
     c.run(f"npm run {cmd}", echo=True, pty=True)
+
+
+@task(help={"port": "Port to serve docs on (default: 8001)"})
+def docs(c: Context, port=8001):
+    """Serve the developer documentation site locally using MkDocs."""
+    c.run(f"mkdocs serve --dev-addr localhost:{port}", echo=True, pty=True)
 
 
 def _confirm(message, _exit=True, exit_message="Done"):

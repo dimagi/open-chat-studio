@@ -1,7 +1,7 @@
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageType
 
 DEFAULT_ERROR_MESSAGE = (
     "Sorry something went wrong. This was likely an intermittent error related to load."
@@ -28,7 +28,7 @@ def get_message_task_response(experiment, task_id: str):
         if message_id := result.get("message_id"):
             message_details["message"] = ChatMessage.objects.get(id=message_id)
         elif response := result.get("response"):
-            message_details["message"] = {"content": response}
+            message_details["message"] = ChatMessage(content=response, message_type=ChatMessageType.AI)
         if error := result.get("error"):
             if not experiment.debug_mode_enabled:
                 if "Invalid parameter" in error:  # TODO: temporary

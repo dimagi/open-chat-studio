@@ -10,12 +10,15 @@ from apps.service_providers.llm_service.model_parameters import (
     BasicParameters,
     ClaudeHaikuLatestParameters,
     ClaudeOpus4_20250514Parameters,
+    ClaudeOpus46Parameters,
+    ClaudeSonnet46Parameters,
     GPT5Parameters,
     GPT5ProParameters,
     GPT51Parameters,
     GPT52Parameters,
     OpenAIReasoningParameters,
 )
+from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel, LlmProviderTypes
 from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
 
 
@@ -27,6 +30,7 @@ class Model:
     deprecated: bool = False
     is_translation_default: bool = False
     parameters: type[BaseModel] = BasicParameters
+    replacement: str | None = None
 
 
 def k(n: int) -> int:
@@ -46,7 +50,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
-        Model("claude-sonnet-4-5-20250929", k(200), is_default=True, parameters=AnthropicReasoningParameters),
+        Model("claude-opus-4-6", k(200), parameters=ClaudeOpus46Parameters),
+        Model("claude-sonnet-4-6", k(200), is_default=True, parameters=ClaudeSonnet46Parameters),
+        Model("claude-sonnet-4-5-20250929", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-sonnet-4-20250514", k(200), parameters=AnthropicReasoningParameters),
@@ -66,17 +72,16 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
         Model("chatgpt-4o-latest", 128000, deprecated=True),
         Model("gpt-4", k(8)),
-        Model("gpt-4-turbo", 128000),
-        Model("gpt-4-turbo-preview", 128000),
-        Model("gpt-4-0125-preview", 128000, deprecated=True),
-        Model("gpt-4-1106-preview", 128000, deprecated=True),
-        Model("gpt-4-0613", k(8), deprecated=True),
         Model("gpt-3.5-turbo", k(16)),
         Model("gpt-3.5-turbo-1106", k(16), deprecated=True),
         Model("gpt-5", k(400), parameters=GPT5Parameters),
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-5.2", k(400), parameters=GPT52Parameters),
         Model("gpt-5.2-pro", k(400), parameters=GPT52Parameters),
+        Model("gpt-5.3", k(400), parameters=GPT51Parameters),
+        Model("gpt-5.3-instant", k(400), parameters=GPT51Parameters),
+        Model("gpt-5.4", k(400), parameters=GPT52Parameters),
+        Model("gpt-5.4-pro", k(400), parameters=GPT5ProParameters),
         Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
@@ -108,7 +113,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
-        Model("gemini-3-pro-preview", 1048576),
+        Model("gemini-3.1-pro-preview", 1048576),
         Model("gemini-2.5-pro", 1048576, is_translation_default=True),
         Model("gemini-2.5-flash", 1048576, is_default=True),
         Model("gemini-2.5-flash-lite", 1048576),
@@ -134,6 +139,11 @@ DELETED_MODELS = [
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
+    ("openai", "gpt-4-turbo", "gpt-4.1"),
+    ("openai", "gpt-4-turbo-preview", "gpt-4.1"),
+    ("openai", "gpt-4-0125-preview", "gpt-4.1"),
+    ("openai", "gpt-4-1106-preview", "gpt-4.1"),
+    ("openai", "gpt-4-0613", "gpt-4.1"),
     # Groq
     ("groq", "whisper-large-v3"),
     ("groq", "llama3-groq-70b-8192-tool-use-preview"),
@@ -156,6 +166,8 @@ DELETED_MODELS = [
     ("google", "gemini-1.5-flash"),
     ("google", "gemini-1.5-flash-8b"),
     ("google", "gemini-1.5-pro"),
+    # Google Vertex AI
+    ("google_vertex_ai", "gemini-3-pro-preview", "gemini-3.1-pro-preview"),
 ]
 
 
@@ -178,7 +190,7 @@ def get_model_parameters(model_name: str, **param_overrides) -> dict:
     return parameters_model(**param_overrides).model_dump()
 
 
-def get_default_model(provider_type: str) -> Model:
+def get_default_model(provider_type: str) -> Model | None:
     return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
 
 
@@ -186,7 +198,6 @@ def get_default_translation_models_by_provider() -> dict:
     """
     Returns a dict mapping provider labels (e.g., "OpenAI") to their default translation model name.
     """
-    from apps.service_providers.models import LlmProviderTypes
 
     defaults = {}
     for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items():
@@ -199,14 +210,12 @@ def get_default_translation_models_by_provider() -> dict:
 
 @transaction.atomic()
 def update_llm_provider_models():
-    from apps.service_providers.models import LlmProviderModel
 
     _update_llm_provider_models(LlmProviderModel)
 
 
 @transaction.atomic()
 def update_embedding_provider_models():
-    from apps.service_providers.models import EmbeddingProviderModel
 
     _update_embedding_provider_models(EmbeddingProviderModel)
 
@@ -283,7 +292,6 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
     If one does not exist, create a new custom model and add it to the mapping.
     Return the custom model (existing or new)
     """
-    from apps.service_providers.models import LlmProviderModel
 
     id_key = (team_object.team_id,) + key
     custom_model = existing_custom_by_team.get(id_key)

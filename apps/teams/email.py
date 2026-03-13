@@ -32,7 +32,7 @@ def send_bulk_team_admin_emails(
             fail_silently=False
         )
     """
-    from apps.teams.models import Team
+    from apps.teams.models import Team  # noqa: PLC0415
 
     results = {"sent": 0, "failed": 0, "no_admins": 0, "errors": []}
 

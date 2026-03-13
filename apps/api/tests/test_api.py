@@ -19,6 +19,7 @@ from apps.experiments.models import ExperimentSession, Participant, ParticipantD
 from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.langchain import mock_llm
 from apps.utils.tests.clients import ApiTestClient
@@ -26,7 +27,9 @@ from apps.utils.tests.clients import ApiTestClient
 
 @pytest.fixture()
 def experiment(db):
-    return ExperimentFactory(team=TeamWithUsersFactory())
+    exp = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    LlmProviderFactory.create(team=exp.team)
+    return exp
 
 
 @pytest.mark.django_db()
@@ -80,8 +83,8 @@ def test_retrieve_experiments(auth_method, experiment):
 
 @pytest.mark.django_db()
 def test_only_experiments_from_the_scoped_team_is_returned():
-    experiment_team_1 = ExperimentFactory(team=TeamWithUsersFactory(member__user__username="uname1"))
-    experiment_team_2 = ExperimentFactory(team=TeamWithUsersFactory(member__user__username="uname2"))
+    experiment_team_1 = ExperimentFactory.create(team=TeamWithUsersFactory.create(member__user__username="uname1"))
+    experiment_team_2 = ExperimentFactory.create(team=TeamWithUsersFactory.create(member__user__username="uname2"))
     team1 = experiment_team_1.team
     team2 = experiment_team_2.team
 
@@ -108,8 +111,8 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_create_and_update_participant_data(auth_method):
     identifier = "part1"
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
-    experiment2 = ExperimentFactory(team=experiment.team)
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    experiment2 = ExperimentFactory.create(team=experiment.team)
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team, auth_method=auth_method)
 
@@ -147,8 +150,8 @@ def test_create_and_update_participant_data(auth_method):
 def test_update_participant_data_returns_404():
     """A 404 will be returned when any experiment in the payload is not found. No updates should occur"""
     identifier = "part1"
-    experiment = ExperimentFactory(team=TeamWithUsersFactory())
-    experiment2 = ExperimentFactory(team=TeamWithUsersFactory())
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    experiment2 = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     participant = Participant.objects.create(identifier=identifier, team=experiment.team, platform="api")
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
@@ -317,17 +320,17 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
         json={"channel_id": created_connect_channel_id, "consent": True},
     )
 
-    team = TeamWithUsersFactory()
-    experiment1 = ExperimentFactory(team=team)
-    ExperimentChannelFactory(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
-    ExperimentChannelFactory(
+    team = TeamWithUsersFactory.create()
+    experiment1 = ExperimentFactory.create(team=team)
+    ExperimentChannelFactory.create(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
+    ExperimentChannelFactory.create(
         team=team,
         experiment=experiment1,
         platform=ChannelPlatform.COMMCARE_CONNECT,
         extra_data={"commcare_connect_bot_name": "bot1"},
     )
-    experiment2 = ExperimentFactory(team=team)
-    experiment3 = ExperimentFactory(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
+    experiment3 = ExperimentFactory.create(team=team)
 
     # Participant 1. This is a telegram participant, so should be ignored
     _setup_channel_participant(experiment1, identifier="97878997", channel_platform=ChannelPlatform.TELEGRAM)
@@ -537,7 +540,7 @@ def _setup_participant_data(
     system_metadata: dict,
     encryption_key=None,
 ):
-    participant = ParticipantFactory(
+    participant = ParticipantFactory.create(
         team=experiment.team, identifier=connect_id, platform=ChannelPlatform.COMMCARE_CONNECT
     )
     return ParticipantData.objects.create(
@@ -570,7 +573,9 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method):
         system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
         encryption_key=encryption_key,
     )
-    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT)
+    ExperimentChannelFactory.create(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
+    )
 
     assert (
         ExperimentSession.objects.filter(participant=participant_data.participant, experiment=experiment).exists()
@@ -645,7 +650,7 @@ def test_generate_bot_message_auto_creates_participant(ConnectClient, experiment
     created_connect_channel_id = str(uuid.uuid4())
 
     # Setup the experiment with a CCC channel
-    ExperimentChannelFactory(
+    ExperimentChannelFactory.create(
         team=experiment.team,
         experiment=experiment,
         platform=ChannelPlatform.COMMCARE_CONNECT,

@@ -11,6 +11,8 @@ from django.db.models import Case, F, Func, OuterRef, Q, Subquery, When, functio
 from django.utils import timezone
 from pytz.exceptions import UnknownTimeZoneError
 
+from apps.channels.models import ChannelPlatform
+from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
@@ -107,8 +109,6 @@ class StaticTriggerType(models.TextChoices):
     CONVERSATION_ENDED_BY_EVENT = ("conversation_ended_by_event", "The conversation is ended by an event")
     CONVERSATION_END_MANUALLY = ("conversation_ended_manually", "The conversation is manually ended by an admin")
     LAST_TIMEOUT = ("last_timeout", "The last timeout occurs")
-    HUMAN_SAFETY_LAYER_TRIGGERED = ("human_safety_layer_triggered", "The safety layer is triggered by a human")
-    BOT_SAFETY_LAYER_TRIGGERED = ("bot_safety_layer_triggered", "The safety layer is triggered by a bot")
     CONVERSATION_START = ("conversation_start", "A new conversation is started")
     NEW_HUMAN_MESSAGE = ("new_human_message", "A new human message is received")
     NEW_BOT_MESSAGE = ("new_bot_message", "A new bot message is received")
@@ -172,7 +172,7 @@ class StaticTrigger(BaseModel, VersionsMixin):
         return result
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
+    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
@@ -200,7 +200,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
-        help_text="Seconds to wait after last response before triggering action",
+        help_text="Seconds to wait before triggering action",
     )
     total_num_triggers = models.IntegerField(
         default=1,
@@ -217,9 +217,16 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
     objects = TimeoutTriggerObjectManager()
     is_active = models.BooleanField(default=True)
+    trigger_from_first_message = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, the timeout delay is calculated from the first message"
+            " in the conversation rather than the most recent."
+        ),
+    )
 
     @transaction.atomic()
-    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):
+    def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
@@ -233,36 +240,34 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 
     def timed_out_sessions(self):
         """Finds all the timed out sessions where:
-        - The last human message was sent at a time earlier than the trigger time
+        - The relevant human message (first or last, based on trigger_from_first_message) was sent
+          at a time earlier than the trigger time
         - There have been fewer trigger attempts than the total number defined by the trigger
         """
-        from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 
         time_window_to_ignore = timezone.now() - timedelta(seconds=self.delay)
+        message_ordering = "created_at" if self.trigger_from_first_message else "-created_at"
 
-        last_human_message_created_at = (
-            ChatMessage.objects
-            .filter(
+        reference_message_created_at = (
+            ChatMessage.objects.filter(
                 chat__experiment_session=OuterRef("pk"),
                 message_type=ChatMessageType.HUMAN,
             )
-            .order_by("-created_at")
+            .order_by(message_ordering)
             .values("created_at")[:1]
         )
-        last_human_message_id = (
-            ChatMessage.objects
-            .filter(
+        reference_message_id = (
+            ChatMessage.objects.filter(
                 chat__experiment_session=OuterRef("session_id"),
                 message_type=ChatMessageType.HUMAN,
             )
-            .order_by("-created_at")
+            .order_by(message_ordering)
             .values("id")[:1]
         )
-        success_count_for_last_message = (
-            EventLog.objects
-            .filter(
+        success_count_for_reference_message = (
+            EventLog.objects.filter(
                 session=OuterRef("pk"),
-                chat_message_id=Subquery(last_human_message_id),
+                chat_message_id=Subquery(reference_message_id),
                 status=EventLogStatusChoices.SUCCESS,
             )
             .annotate(
@@ -270,21 +275,19 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             )  # We don't use Count here because otherwise Django wants to do a group_by, which messes up the subquery: https://stackoverflow.com/a/69031027
             .values("count")
         )
-        failure_count_for_last_message = (
-            EventLog.objects
-            .filter(
+        failure_count_for_reference_message = (
+            EventLog.objects.filter(
                 session=OuterRef("pk"),
-                chat_message_id=Subquery(last_human_message_id),
+                chat_message_id=Subquery(reference_message_id),
                 status=EventLogStatusChoices.FAILURE,
             )
             .annotate(count=Func(F("chat_message_id"), function="Count"))
             .values("count")
         )
         last_success_log = (
-            EventLog.objects
-            .filter(
+            EventLog.objects.filter(
                 session=OuterRef("pk"),
-                chat_message_id=Subquery(last_human_message_id),
+                chat_message_id=Subquery(reference_message_id),
                 status=EventLogStatusChoices.SUCCESS,
             )
             .order_by("-created_at")
@@ -292,30 +295,30 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         )
 
         sessions = (
-            ExperimentSession.objects
-            .filter(
+            ExperimentSession.objects.filter(
                 experiment=self.experiment.get_working_version(),
                 ended_at=None,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
             .annotate(
-                last_human_message_created_at=Subquery(last_human_message_created_at),
-                success_count=Subquery(success_count_for_last_message),
-                failure_count=Subquery(failure_count_for_last_message),
+                reference_message_created_at=Subquery(reference_message_created_at),
+                success_count=Subquery(success_count_for_reference_message),
+                failure_count=Subquery(failure_count_for_reference_message),
                 last_success_log_time=Subquery(last_success_log),
             )
             .annotate(
                 last_event_timestamp=Case(
                     When(last_success_log_time__isnull=False, then=F("last_success_log_time")),
-                    When(last_success_log_time__isnull=True, then=F("last_human_message_created_at")),
+                    When(last_success_log_time__isnull=True, then=F("reference_message_created_at")),
                 )
             )
             .filter(
-                last_human_message_created_at__gte=self.updated_at,
-                # last message received after trigger config was updated
+                reference_message_created_at__gte=self.updated_at,
+                # reference message received after trigger config was updated
                 last_event_timestamp__lt=time_window_to_ignore,
-                last_human_message_created_at__isnull=False,
-            )  # The last message was received before the trigger time
+                reference_message_created_at__isnull=False,
+            )  # The reference message was received before the trigger time
             .filter(
                 Q(success_count__lt=self.total_num_triggers) | Q(success_count__isnull=True)
             )  # There were either no tries yet, or fewer tries than the required number for this message
@@ -327,10 +330,11 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         return sessions.select_related("experiment_channel", "experiment").all()
 
     def fire(self, session) -> str | None:
-        last_human_message = ChatMessage.objects.filter(
+        messages = ChatMessage.objects.filter(
             chat_id=session.chat_id,
             message_type=ChatMessageType.HUMAN,
-        ).last()
+        )
+        reference_message = messages.first() if self.trigger_from_first_message else messages.last()
 
         result = None
 
@@ -340,22 +344,22 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             if not handler_cls:
                 working_version.event_logs.create(
                     session=session,
-                    chat_message=last_human_message,
+                    chat_message=reference_message,
                     status=EventLogStatusChoices.FAILURE,
                     log=f"Action with type '{self.action.action_type}' not found.",
                 )
                 return None
             result = handler_cls().invoke(session, self.action)
             working_version.event_logs.create(
-                session=session, chat_message=last_human_message, status=EventLogStatusChoices.SUCCESS, log=result
+                session=session, chat_message=reference_message, status=EventLogStatusChoices.SUCCESS, log=result
             )
         except Exception as e:
             working_version.event_logs.create(
-                session=session, chat_message=last_human_message, status=EventLogStatusChoices.FAILURE, log=str(e)
+                session=session, chat_message=reference_message, status=EventLogStatusChoices.FAILURE, log=str(e)
             )
 
-        if not self._has_triggers_left(working_version, session, last_human_message):
-            from apps.events.tasks import enqueue_static_triggers
+        if not self._has_triggers_left(working_version, session, reference_message):
+            from apps.events.tasks import enqueue_static_triggers  # noqa: PLC0415
 
             enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
@@ -397,6 +401,11 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             fields=[
                 VersionField(group_name=group_name, name="delay", raw_value=self.delay),
                 VersionField(group_name=group_name, name="total_num_triggers", raw_value=self.total_num_triggers),
+                VersionField(
+                    group_name=group_name,
+                    name="trigger_from_first_message",
+                    raw_value=self.trigger_from_first_message,
+                ),
                 *action_param_versions,
             ],
         )
@@ -405,8 +414,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
 class ScheduledMessageManager(models.Manager):
     def get_messages_to_fire(self):
         return (
-            self
-            .filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
+            self.filter(is_complete=False, cancelled_at=None, next_trigger_date__lte=functions.Now())
             .select_related("action")
             .order_by("next_trigger_date")
         )
@@ -476,7 +484,7 @@ class ScheduledMessage(BaseTeamModel):
 
     def safe_trigger(self, attempt_number=1):
         """Wraps _trigger with attempt tracking and retry"""
-        from apps.events.tasks import retry_scheduled_message
+        from apps.events.tasks import retry_scheduled_message  # noqa: PLC0415
 
         trigger_number = self.total_triggers
         attempt = ScheduledMessageAttempt(
@@ -533,19 +541,12 @@ class ScheduledMessage(BaseTeamModel):
 
     def _get_experiment_to_generate_response(self) -> Experiment:
         """
-        - If no child bot was specified to generate the response, use the default experiment version
-        - If a child bot was specified to generate the response, we must find the version of the child bot that is
-            linked to the default router.
+        - If no experiment was specified to generate the response, use the default experiment version
+        - If an experiment was specified, use that experiment
         """
         default_router_experiment = self.experiment.default_version
         experiment_id = self.params.get("experiment_id")
         if experiment_id and int(experiment_id) != self.experiment.id:
-            if default_router_experiment.is_a_version and default_router_experiment.child_links.count() > 0:
-                # Find the child of this version that has the specified experiment as its working version
-                return (
-                    default_router_experiment.child_links.filter(child__working_version_id=experiment_id).first().child
-                )
-
             return Experiment.objects.get(id=experiment_id)
 
         return default_router_experiment
@@ -647,7 +648,7 @@ class ScheduledMessage(BaseTeamModel):
     def __str__(self):
         return self.as_string()
 
-    def as_dict(self, as_timezone: str = None):
+    def as_dict(self, as_timezone: str | None = None):
         next_trigger_date = self.next_trigger_date
         last_triggered_at = self.last_triggered_at
         if as_timezone:

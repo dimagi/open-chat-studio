@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 from langgraph.graph.state import CompiledStateGraph
@@ -61,14 +62,15 @@ def create_runnable(pipeline: Pipeline, nodes: list[dict], edges: list[dict | st
 
 
 def create_pipeline_model(
-    nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline = None
+    nodes: list[dict], edges: list[dict | str] | None = None, pipeline: Pipeline | None = None
 ) -> Pipeline:
     if not pipeline:
-        pipeline = PipelineFactory()
+        pipeline = PipelineFactory.create()
+    assert pipeline is not None
     if edges is None:
-        edges = _make_edges(nodes)
+        edges = _make_edges(nodes)  # ty: ignore[invalid-assignment]
     if edges and isinstance(edges[0], str):
-        edges = _edges_from_strings(edges, nodes)
+        edges = _edges_from_strings(edges, nodes)  # ty: ignore[invalid-assignment]
     flow_nodes = []
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
@@ -85,7 +87,7 @@ def end_node():
     return {"id": _node_id("end"), "type": nodes.EndNode.__name__, "params": {"name": "end"}}
 
 
-def email_node(name: str | None = None):
+def email_node(name: str | None = None, body: str = ""):
     return _with_node_id_and_name(
         name,
         "send_email",
@@ -95,6 +97,7 @@ def email_node(name: str | None = None):
             "params": {
                 "recipient_list": "test@example.com",
                 "subject": "This is an interesting email",
+                "body": body,
             },
         },
     )
@@ -114,7 +117,7 @@ def llm_response_with_prompt_node(
     if prompt is None:
         prompt = "You are a helpful assistant"
 
-    params = {
+    params: dict[str, Any] = {
         "llm_provider_id": provider_id,
         "llm_provider_model_id": provider_model_id,
         "prompt": prompt,
@@ -291,6 +294,6 @@ def _with_node_id_and_name(name: str, default_name: str, params: dict):
     return params
 
 
-def _node_id(name: str, default_name: str = None):
+def _node_id(name: str, default_name: str | None = None):
     name = name or default_name or str(uuid4())
     return f"{name}-{str(uuid4())[-4:]}"

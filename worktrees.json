@@ -1,0 +1,5 @@
+{
+  "setup-worktree": [
+    "bash .claude/hooks/setup-env.sh"
+  ]
+}

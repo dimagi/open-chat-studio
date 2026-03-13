@@ -8,7 +8,7 @@ from apps.utils.factories.files import FileFactory
 
 @pytest.mark.django_db()
 def test_deleting_assistant_with_files():
-    assistant = OpenAiAssistantFactory()
+    assistant = OpenAiAssistantFactory.create()
     files = FileFactory.create_batch(3)
     ToolResources.objects.create(assistant=assistant, tool_type="code_interpreter").files.set(files)
 
@@ -19,11 +19,11 @@ def test_deleting_assistant_with_files():
 
 @pytest.mark.django_db()
 def test_deleting_assistant_with_files_multiple_references(caplog):
-    assistant = OpenAiAssistantFactory()
+    assistant = OpenAiAssistantFactory.create()
     files = FileFactory.create_batch(3)
     ToolResources.objects.create(assistant=assistant, tool_type="code_interpreter").files.set(files)
 
-    assistant2 = OpenAiAssistantFactory()
+    assistant2 = OpenAiAssistantFactory.create()
     ToolResources.objects.create(assistant=assistant2, tool_type="code_interpreter").files.set(files[:1])
 
     assistant.delete()

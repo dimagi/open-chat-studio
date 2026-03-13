@@ -49,27 +49,28 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.tables import render_table_row
+from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.evaluations")
 
 
-class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class DatasetHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
-    def get_context_data(self, team_slug: str, **kwargs):
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
             "active_tab": "evaluation_datasets",
             "title": "Datasets",
+            "page_title": "Datasets",
             "new_object_url": reverse("evaluations:dataset_new", args=[team_slug]),
             "table_url": reverse("evaluations:dataset_table", args=[team_slug]),
         }
 
 
-class DatasetTableView(SingleTableView, PermissionRequiredMixin):
+class DatasetTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationdataset"
     model = EvaluationDataset
     table_class = EvaluationDatasetTable
@@ -83,13 +84,14 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
         )
 
 
-class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluationdataset"
     model = EvaluationDataset
     form_class = EvaluationDatasetEditForm
     template_name = "evaluations/dataset_edit.html"
     extra_context = {
         "title": "Update Dataset",
+        "page_title": "Update Dataset",
         "button_text": "Update",
         "active_tab": "evaluation_datasets",
     }
@@ -109,9 +111,9 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return get_filter_context_data(
             self.request.team,
             ExperimentSessionFilter.columns(self.request.team),
-            "last_message",
-            table_url,
-            "sessions-table",
+            filter_class=ExperimentSessionFilter,
+            table_url=table_url,
+            table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
         )
 
@@ -130,7 +132,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
 
-class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
     permission_required = "evaluations.delete_evaluationdataset"
     model = EvaluationDataset
 
@@ -146,13 +148,14 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluationdataset"
     template_name = "evaluations/dataset_create_form.html"
     model = EvaluationDataset
     form_class = EvaluationDatasetForm
     extra_context = {
         "title": "Create Dataset",
+        "page_title": "Create Dataset",
         "button_text": "Create Dataset",
         "active_tab": "evaluation_datasets",
         "form_attrs": {"id": "dataset-create-form"},
@@ -195,7 +198,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         context = get_filter_context_data(
             self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
-            date_range_column="last_message",
+            filter_class=ExperimentSessionFilter,
             table_url=table_url,
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
@@ -224,7 +227,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return response
 
 
-class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
@@ -256,7 +259,7 @@ def dataset_sessions_selection_json(request, team_slug: str):
     return JsonResponse(session_keys, safe=False)
 
 
-class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """Table view for dataset messages with pagination."""
 
     model = EvaluationMessage
@@ -306,6 +309,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, Permi
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["highlight_message_id"] = self.get_highlight_message_id()
+        kwargs["dataset_id"] = self.kwargs["dataset_id"]
         return kwargs
 
 
@@ -337,7 +341,7 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         table_view.kwargs = {"dataset_id": dataset_id}
 
         queryset = table_view.get_queryset()
-        table = table_view.table_class(queryset)
+        table = table_view.table_class(queryset, dataset_id=dataset_id, request=request)
 
         return render(request, "table/single_table.html", {"table": table})
 
@@ -398,8 +402,8 @@ def update_message(request, team_slug, message_id):
     # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
-    message.input_chat_message = None
-    message.expected_output_chat_message = None
+    message.input_chat_message = None  # ty: ignore[invalid-assignment]
+    message.expected_output_chat_message = None  # ty: ignore[invalid-assignment]
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None
@@ -407,7 +411,8 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        response = render_table_row(request, DatasetMessagesTable, message)
+        table = DatasetMessagesTable(data=[message], dataset_id=dataset.id, request=request)
+        response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")
         response = reswap(response, "outerHTML")

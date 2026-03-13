@@ -5,13 +5,20 @@ from . import views
 
 app_name = "custom_actions"
 
-urlpatterns = make_crud_urls(views, "CustomAction")
-
-# Add the health check endpoint
-urlpatterns.append(
+urlpatterns = make_crud_urls(views, "CustomAction") + [
     path(
         "<int:pk>/check-health/",
         views.CheckCustomActionHealth.as_view(),
         name="check_health",
-    )
-)
+    ),
+    path(
+        "<int:pk>/test-endpoints/",
+        views.CustomActionEndpointTester.as_view(),
+        name="test_endpoints",
+    ),
+    path(
+        "<int:pk>/test-endpoint/",
+        views.TestCustomActionEndpoint.as_view(),
+        name="test_endpoint",
+    ),
+]

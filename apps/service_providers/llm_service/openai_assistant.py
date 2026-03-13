@@ -27,7 +27,7 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
     TODO: Here's a PR that tries to fix it in LangChain: https://github.com/langchain-ai/langchain/pull/21484
     """
 
-    def invoke(self, input: dict, config: RunnableConfig | None = None):
+    def invoke(self, input: dict, config: RunnableConfig | None = None):  # ty: ignore[invalid-method-override]
         config = ensure_config(config)
         callback_manager = CallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
@@ -92,9 +92,11 @@ class OpenAIAssistantRunnable(BrokenOpenAIAssistantRunnable):
 
     def _wait_for_run(self, run_id: str, thread_id: str, progress_states=("in_progress", "queued")) -> Any:
         in_progress = True
+        run = None
         while in_progress:
             run = self.client.beta.threads.runs.retrieve(run_id, thread_id=thread_id)
             in_progress = run.status in progress_states
             if in_progress:
                 sleep(self.check_every_ms / 1000)
+        assert run is not None  # Loop always executes at least once since in_progress starts True
         return run

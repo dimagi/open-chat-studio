@@ -12,6 +12,8 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import Any
 
+from django.db import connections
+from langchain_core.runnables import config as langchain_runnable_config
 from langchain_core.runnables.config import ContextThreadPoolExecutor, P, T
 
 logger = logging.getLogger(__name__)
@@ -39,14 +41,12 @@ class CurrentThreadExecutor(Executor):
 def patch_executor(executor: type[Executor]) -> Generator[None, Any]:
     """Monkeypatch the langchain executor to run tasks in the current thread.
     This is used for pipeline tests where the DB transaction is not committed."""
-    from langchain_core.runnables import config
-
-    original = config.ContextThreadPoolExecutor
-    config.ContextThreadPoolExecutor = executor
+    original = langchain_runnable_config.ContextThreadPoolExecutor
+    langchain_runnable_config.ContextThreadPoolExecutor = executor  # ty: ignore[invalid-assignment]
     try:
         yield
     finally:
-        config.ContextThreadPoolExecutor = original
+        langchain_runnable_config.ContextThreadPoolExecutor = original
 
 
 class DjangoLangGraphRunner:
@@ -103,7 +103,7 @@ class DjangoLangGraphRunner:
 class DjangoSafeContextThreadPoolExecutor(ContextThreadPoolExecutor):
     """Thread pool executor that wraps the target function with Django database connection handling."""
 
-    def submit(  # type: ignore[override]
+    def submit(
         self,
         func: Callable[P, T],
         *args: P.args,
@@ -150,7 +150,6 @@ def _django_db_cleanup_wrapper(func: Callable) -> Callable:
 
 
 def close_db_connections():
-    from django.db import connections
 
     try:
         connections.close_all()

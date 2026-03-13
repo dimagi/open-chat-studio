@@ -6,13 +6,14 @@ from apps.chat.bots import PipelineBot
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistory
 from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
@@ -22,33 +23,38 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
+
+
+@pytest.fixture()
+def provider_model():
+    return LlmProviderModelFactory.create()
 
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="node",
     )
     llm_2 = llm_response_with_prompt_node(
-        str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 2:", history_type=None
+        str(provider.id), str(provider_model.id), prompt="Node 2:", history_type=None
     )  # No history_type
     nodes = [
         start_node(),
@@ -59,7 +65,11 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     runnable = create_runnable(pipeline, nodes)
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"]
+    repo = ORMRepository(session=experiment_session)
+    config = {"configurable": {"repo": repo}}
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)[
+        "messages"
+    ]
     expected_call_messages = [
         [("system", "Node 1:"), ("human", user_input)],
         [("system", "Node 2:"), ("human", f"Node 1: {user_input}")],
@@ -76,9 +86,9 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
     assert not PipelineChatHistory.objects.filter(session=experiment_session.id, name=llm_2["id"]).exists()
 
     user_input_2 = "Saying more stuff"
-    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
-        "messages"
-    ][-1]
+    output_2 = runnable.invoke(
+        PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config
+    )["messages"][-1]
 
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
@@ -108,29 +118,31 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="node",
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 2:",
         history_type="node",
     )
     nodes = [start_node(), llm_1, llm_2, end_node()]
     runnable = create_runnable(pipeline, nodes)
+    repo = ORMRepository(session=experiment_session)
+    config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
-    output_1 = runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))["messages"][
-        -1
-    ]
+    output_1 = runnable.invoke(
+        PipelineState(messages=[user_input], experiment_session=experiment_session), config=config
+    )["messages"][-1]
     expected_output = f"Node 2: Node 1: {user_input}"
     assert output_1 == expected_output
 
@@ -148,9 +160,9 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
     ]
 
     user_input_2 = "Saying more stuff"
-    output_2 = runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))[
-        "messages"
-    ][-1]
+    output_2 = runnable.invoke(
+        PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config
+    )["messages"][-1]
     expected_output = f"Node 2: Node 1: {user_input_2}"
     assert output_2 == expected_output
 
@@ -184,20 +196,20 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_global_history(get_llm_service, provider, pipeline, experiment_session):
+def test_global_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="global",
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 2:",
         history_type="node",
     )
@@ -274,14 +286,14 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session)
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="named",
         history_name="history1",
@@ -289,22 +301,22 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
     )
     llm_2 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 2:",
         history_type="named",
         history_name="history1",
         name="llm2",
     )
-    llm_3 = llm_response_with_prompt_node(
-        str(provider.id), str(experiment_session.experiment.llm_provider_model.id), prompt="Node 3:", history_type=None
-    )
+    llm_3 = llm_response_with_prompt_node(str(provider.id), str(provider_model.id), prompt="Node 3:", history_type=None)
     nodes = [start_node(), llm_1, llm_2, llm_3, end_node()]
     runnable = create_runnable(pipeline, nodes)
+    repo = ORMRepository(session=experiment_session)
+    config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config)
 
     expected_call_messages = [
         # First call to Node 1
@@ -351,24 +363,26 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
 
 @django_db_with_data()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session):
+def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
     service = build_fake_llm_service(None, [0], llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
-        str(experiment_session.experiment.llm_provider_model.id),
+        str(provider_model.id),
         prompt="Node 1:",
         history_type="none",
     )
     nodes = [start_node(), llm_1, end_node()]
     runnable = create_runnable(pipeline, nodes)
+    repo = ORMRepository(session=experiment_session)
+    config = {"configurable": {"repo": repo}}
 
     user_input = "The User Input"
-    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input], experiment_session=experiment_session), config=config)
     user_input_2 = "Second User Input"
-    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session))
+    runnable.invoke(PipelineState(messages=[user_input_2], experiment_session=experiment_session), config=config)
 
     expected_call_messages = [
         # First call to Node 1

@@ -53,7 +53,7 @@ def get_default_team_for_user(user: CustomUser):
         return None
 
 
-def create_default_team_for_user(user: CustomUser, team_name: str = None):
+def create_default_team_for_user(user: CustomUser, team_name: str | None = None):
     team_name = team_name or get_default_team_name_for_user(user)
     slug = get_next_unique_team_slug(team_name)
     team = Team.objects.create(name=team_name, slug=slug)

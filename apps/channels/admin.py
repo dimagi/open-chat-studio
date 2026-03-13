@@ -24,7 +24,7 @@ class ExperimentChannelAdmin(admin.ModelAdmin):
         if obj.messaging_provider:
             return obj.messaging_provider.name
 
-    def get_changeform_initial_data(self, request: HttpRequest) -> dict[str, str]:
+    def get_changeform_initial_data(self, request: HttpRequest) -> dict:
         return {"extra_data": {"bot_token": "your token here"}}
 
     def get_queryset(self, *args, **kwargs):

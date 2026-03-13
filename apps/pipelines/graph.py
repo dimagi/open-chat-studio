@@ -10,8 +10,10 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.base import PipelineRouterNode
+from apps.pipelines.nodes import nodes as pipeline_nodes_module
+from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState
 from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
+from apps.service_providers.llm_service.retry import get_retry_policy
 
 
 class Node(pydantic.BaseModel):
@@ -23,9 +25,7 @@ class Node(pydantic.BaseModel):
 
     @property
     def pipeline_node_class(self):
-        from apps.pipelines.nodes import nodes
-
-        return getattr(nodes, self.type)
+        return getattr(pipeline_nodes_module, self.type)
 
     @cached_property
     def pipeline_node_instance(self):
@@ -120,7 +120,6 @@ class PipelineGraph(pydantic.BaseModel):
         return cls(nodes=node_data, edges=edge_data)
 
     def build_runnable(self) -> CompiledStateGraph:
-        from apps.pipelines.nodes.base import PipelineState
 
         if not self.nodes:
             raise PipelineBuildError("There are no nodes in the graph")
@@ -190,6 +189,8 @@ class PipelineGraph(pydantic.BaseModel):
                 node_id=self.end_node.id,
             )
 
+        retry_policy = get_retry_policy()
+
         for node in nodes:
             try:
                 node_instance = node.pipeline_node_instance
@@ -197,12 +198,13 @@ class PipelineGraph(pydantic.BaseModel):
                 if isinstance(node_instance, PipelineRouterNode):
                     edge_map = self.conditional_edge_map[node.id]
                     router_function = node_instance.build_router_function(edge_map, incoming_nodes)
-                    state_graph.add_node(node.id, router_function)
+                    state_graph.add_node(node.id, router_function, retry_policy=retry_policy)
                 else:
                     outgoing_nodes = [edge.target for edge in self.edges if edge.source == node.id]
                     state_graph.add_node(
                         node.id,
                         partial(node_instance.process, incoming_nodes, outgoing_nodes),
+                        retry_policy=retry_policy,
                     )
             except ValidationError as ex:
                 raise PipelineNodeBuildError(ex) from ex

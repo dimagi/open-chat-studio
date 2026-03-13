@@ -9,4 +9,5 @@ urlpatterns = [
     path("api-keys/create/", views.create_api_key, name="create_api_key"),
     path("api-keys/revoke/", views.revoke_api_key, name="revoke_api_key"),
     path("oauth-tokens/revoke/", views.revoke_oauth_token, name="revoke_oauth_token"),
+    path("notification-preferences/save/", views.save_notification_preferences, name="save_notification_preferences"),
 ]
