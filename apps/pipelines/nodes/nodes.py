@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from io import BytesIO
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
@@ -13,7 +14,6 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_openai.chat_models.base import OpenAIRefusalError
 from langgraph.constants import END
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator, model_validator
@@ -95,6 +95,37 @@ def main(input: str, **kwargs) -> str:
 """
 
 
+def _build_jinja_context(context: "NodeContext", repo: "ORMRepository") -> dict:
+    """Build the Jinja2 template context dict shared by RenderTemplate and SendEmail."""
+    content = {
+        "input": context.input,
+        "node_inputs": context.inputs,
+        "temp_state": context.state.temp,
+        "session_state": context.state.session_state,
+        "input_message_id": context.input_message_id,
+        "input_message_url": context.input_message_url,
+    }
+    session = context.session
+    if session:
+        participant = repo.participant
+        if participant:
+            content.update(
+                {
+                    "participant_details": {
+                        "identifier": getattr(participant, "identifier", None),
+                        "platform": getattr(participant, "platform", None),
+                    },
+                    "participant_schedules": repo.get_participant_schedules(
+                        as_dict=True,
+                        include_inactive=True,
+                    )
+                    or [],
+                }
+            )
+        content["participant_data"] = context.state.participant_data
+    return content
+
+
 class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
 
@@ -113,34 +144,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         env = SandboxedEnvironment()
         try:
-            content = {
-                "input": context.input,
-                "node_inputs": context.inputs,
-                "temp_state": context.state.temp,
-                "session_state": context.state.session_state,
-                "input_message_id": context.input_message_id,
-                "input_message_url": context.input_message_url,
-            }
-
-            session = context.session
-            if session:
-                participant = self.repo.participant
-                if participant:
-                    content.update(
-                        {
-                            "participant_details": {
-                                "identifier": getattr(participant, "identifier", None),
-                                "platform": getattr(participant, "platform", None),
-                            },
-                            "participant_schedules": self.repo.get_participant_schedules(
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or [],
-                        }
-                    )
-                content["participant_data"] = context.state.participant_data
-
+            content = _build_jinja_context(context, self.repo)
             template = env.from_string(self.template_string)
             output = template.render(content)
         except Exception as e:
@@ -289,7 +293,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         }
         # Only require collection_index_summaries variable if multiple indexes are selected
         if len(self.collection_index_ids) > 1:
-            context["collection_index_summaries"] = self.collection_index_ids
+            context["collection_index_summaries"] = [str(i) for i in self.collection_index_ids]
 
         try:
             known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
@@ -429,12 +433,29 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         )
     )
 
-    recipient_list: str = Field(description="A comma-separated list of email addresses")
-    subject: str
+    recipient_list: str = Field(
+        description="A comma-separated list of email addresses. Supports Jinja2 templates.",
+        json_schema_extra=UiSchema(
+            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
+        ),
+    )
+    subject: str = Field(
+        description="Email subject. Supports Jinja2 templates.",
+        json_schema_extra=UiSchema(
+            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
+        ),
+    )
+    body: str = Field(
+        default="",
+        description="Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
+    )
 
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
         value = value or ""
+        if "{{" in value or "{%" in value:
+            return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
             try:
                 validate_email(email)
@@ -443,9 +464,39 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return value
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=context.input
-        )
+        env = SandboxedEnvironment()
+        env.filters["split"] = lambda value, sep=",": str(value).split(sep)
+        jinja_context = _build_jinja_context(context, self.repo)
+
+        try:
+            subject = env.from_string(self.subject).render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(f"Error rendering email subject: {e}") from e
+
+        # Strip newlines to prevent email header injection
+        subject = subject.replace("\r", "").replace("\n", " ")
+
+        try:
+            rendered_recipients = env.from_string(self.recipient_list).render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(f"Error rendering email recipient list: {e}") from e
+
+        recipients = [r.strip() for r in rendered_recipients.split(",") if r.strip()]
+        for email in recipients:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise PipelineNodeRunError(f"Invalid email address after rendering: {email!r}") from None
+
+        if self.body:
+            try:
+                message = env.from_string(self.body).render(jinja_context)
+            except Exception as e:
+                raise PipelineNodeRunError(f"Error rendering email body: {e}") from e
+        else:
+            message = context.input
+
+        send_email_from_pipeline.delay(recipient_list=recipients, subject=subject, message=message)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
@@ -579,6 +630,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             response_format=self._create_router_schema(),
         )
 
+        from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: PLC0415 - TID253: heavy lib
+
         is_default_keyword = False
         try:
             agent_input = {"messages": [HumanMessage(content=node_input)]}
@@ -628,7 +681,9 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     route_key: str = Field(..., description="The key in the data to use for routing")
 
     def _process_conditional(self, context: "NodeContext"):
-        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
+        from apps.service_providers.llm_service.prompt_context import (  # noqa: PLC0415 - lazy: avoids startup load
+            SafeAccessWrapper,
+        )
 
         match self.data_source:
             case self.DataSource.participant_data:
@@ -911,7 +966,6 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 content: The file content as bytes
                 content_type: Optional MIME type. Auto-detected from filename if not provided.
             """
-            from io import BytesIO
 
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")

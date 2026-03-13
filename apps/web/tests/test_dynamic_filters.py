@@ -1,3 +1,4 @@
+from apps.experiments.filters import ExperimentSessionFilter
 from apps.web.dynamic_filters.base import (
     FIELD_TYPE_FILTERS,
     MultiColumnFilter,
@@ -47,7 +48,6 @@ class TestGetFilterRegistry:
 
 class TestExperimentSessionFilterSchema:
     def test_schema_has_all_columns(self):
-        from apps.experiments.filters import ExperimentSessionFilter
 
         schema = get_filter_schema(ExperimentSessionFilter)
         expected_keys = {
@@ -65,7 +65,6 @@ class TestExperimentSessionFilterSchema:
         assert set(schema.keys()) == expected_keys
 
     def test_all_columns_have_descriptions(self):
-        from apps.experiments.filters import ExperimentSessionFilter
 
         schema = get_filter_schema(ExperimentSessionFilter)
         for key, col in schema.items():
@@ -74,7 +73,7 @@ class TestExperimentSessionFilterSchema:
 
 class TestChatMessageFilterSchema:
     def test_schema_has_all_columns(self):
-        from apps.experiments.filters import ChatMessageFilter
+        from apps.experiments.filters import ChatMessageFilter  # noqa: PLC0415
 
         schema = get_filter_schema(ChatMessageFilter)
         expected_keys = {"tags", "last_message", "versions"}

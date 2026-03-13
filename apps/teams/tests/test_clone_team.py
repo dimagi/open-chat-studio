@@ -25,8 +25,8 @@ from apps.utils.factories.user import UserFactory
 @pytest.fixture(scope="module")
 def source_team(django_db_blocker):
     """Create a source team with various related data."""
-    from apps.teams.utils import current_team
-    from apps.utils.deletion import delete_object_with_auditing_of_related_objects
+    from apps.teams.utils import current_team  # noqa: PLC0415
+    from apps.utils.deletion import delete_object_with_auditing_of_related_objects  # noqa: PLC0415
 
     with django_db_blocker.unblock():
         # Clean up any leftover from previous runs
@@ -80,7 +80,7 @@ def source_team(django_db_blocker):
 @pytest.mark.django_db()
 def test_clone_team_nonexistent_source():
     """Test error when source team doesn't exist."""
-    from django.core.management.base import CommandError
+    from django.core.management.base import CommandError  # noqa: PLC0415
 
     with pytest.raises(CommandError, match="does not exist"):
         call_command(

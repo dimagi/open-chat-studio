@@ -86,7 +86,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
 
-class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = Experiment
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"
@@ -690,7 +690,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 @experiment_session_view()
 @verify_session_access_cookie
 def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    from apps.analysis.translation import translate_messages_with_llm
+    from apps.analysis.translation import translate_messages_with_llm  # noqa: PLC0415
 
     session = request.experiment_session
     provider_id = request.POST.get("llm_provider", "")
@@ -752,7 +752,7 @@ def redirect_to_messages_view(request, session):
         params["show_original_translation"] = show_original_translation
 
     if params:
-        from urllib.parse import urlencode
+        from urllib.parse import urlencode  # noqa: PLC0415
 
         url += "?" + urlencode(params)
 

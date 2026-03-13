@@ -106,8 +106,9 @@
       </div>
     </form>
   {% elif df_filter_columns and df_table_type %}
-    <div class="my-2 flex justify-between">
+    <div class="my-2 flex justify-between items-center">
       {% include "experiments/filters.html" %}
+      {% if filter_bar_action %}{% include filter_bar_action %}{% endif %}
     </div>
   {% else %}
     <hr class="my-2">

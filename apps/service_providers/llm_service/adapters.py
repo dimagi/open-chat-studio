@@ -15,6 +15,7 @@ from django.db import models
 from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
+from apps.chat.agent.tools import get_assistant_tools
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
@@ -59,7 +60,9 @@ class BaseAdapter:
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+        from google.ai.generativelanguage_v1beta.types import (  # noqa: PLC0415 - lazy: optional Google AI lib
+            Tool as GenAITool,
+        )
 
         return [
             t
@@ -87,8 +90,6 @@ class AssistantAdapter(BaseAdapter):
 
         self.provider_model_name = assistant.llm_provider_model.name
         self.team = session.team
-
-        from apps.chat.agent.tools import get_assistant_tools
 
         self.tools = get_assistant_tools(assistant, experiment_session=session)
         self.disabled_tools = disabled_tools

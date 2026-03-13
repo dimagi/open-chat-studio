@@ -45,6 +45,68 @@ def test_save_participant_data():
     participant_data.save.assert_called()
 
 
+def test_save_participant_data_computes_and_sets_diff():
+    session = mock.Mock()
+    trace_service = mock.Mock()
+    trace_service.get_trace_metadata.return_value = {}
+    bot = PipelineBot(session, mock.Mock(), trace_service)
+    participant_data = mock.Mock()
+    participant_data.data = None
+    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
+    bot.__dict__["participant_data"] = participant_data
+
+    input_data = {"name": "Alice", "plan": "free"}
+    output_data = {"name": "Alice", "plan": "pro", "score": 100}
+
+    bot._save_outputs(
+        input_state=PipelineState(messages=["hi"], participant_data=input_data),
+        output=PipelineState(messages=["Hello"], participant_data=output_data),
+    )
+
+    assert participant_data.data == output_data
+    participant_data.save.assert_called()
+    trace_service.set_participant_data_diff.assert_called_once()
+    diff = trace_service.set_participant_data_diff.call_args[0][0]
+    # Verify the diff captures the actual changes
+    assert len(diff) > 0
+
+
+def test_save_participant_data_no_diff_when_unchanged():
+    session = mock.Mock()
+    trace_service = mock.Mock()
+    trace_service.get_trace_metadata.return_value = {}
+    bot = PipelineBot(session, mock.Mock(), trace_service)
+    participant_data = mock.Mock()
+    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
+    bot.__dict__["participant_data"] = participant_data
+
+    same_data = {"name": "Alice", "plan": "free"}
+
+    bot._save_outputs(
+        input_state=PipelineState(messages=["hi"], participant_data=same_data),
+        output=PipelineState(messages=["Hello"], participant_data=same_data),
+    )
+
+    trace_service.set_participant_data_diff.assert_not_called()
+
+
+def test_save_participant_data_no_diff_when_no_trace_service():
+    session = mock.Mock()
+    bot = PipelineBot(session, mock.Mock(), None)
+    participant_data = mock.Mock()
+    participant_data.data = None
+    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
+    bot.__dict__["participant_data"] = participant_data
+
+    bot._save_outputs(
+        input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
+        output=PipelineState(messages=["Hello"], participant_data={"plan": "pro"}),
+    )
+
+    # Should not raise even without trace_service
+    assert participant_data.data == {"plan": "pro"}
+
+
 def test_pipeline_execution_failure_propagates_exception():
     """Pipeline failures re-raise the exception; no direct notification call from bots.py."""
     participant = mock.Mock(identifier="user123", global_data={})

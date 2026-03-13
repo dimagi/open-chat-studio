@@ -4,6 +4,7 @@ import functools
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from apps.chat.conversation import COMPRESSION_MARKER
 from apps.chat.models import ChatMessage
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
@@ -112,7 +113,6 @@ class ORMRepository:
         or summary field (real summary text) on ChatMessage.
         For node history: updates fields on PipelineChatMessages.
         """
-        from apps.chat.conversation import COMPRESSION_MARKER
 
         if history_type == "global":
             message = ChatMessage.objects.get(id=checkpoint_message_id)
@@ -237,7 +237,7 @@ class ORMRepository:
     @instance_cache
     def get_assistant(self, assistant_id: int) -> OpenAiAssistant:
         """Fetch an OpenAI assistant by ID. Raises RepositoryLookupError if not found."""
-        from apps.assistants.models import OpenAiAssistant
+        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→repository
 
         try:
             return OpenAiAssistant.objects.get(id=assistant_id)
@@ -322,7 +322,9 @@ class InMemoryPipelineRepository(ORMRepository):
     def get_pipeline_chat_history(self, history_type, name):
         key = f"{history_type}:{name}"
         if key not in self.chat_histories:
-            from apps.utils.factories.pipelines import PipelineChatHistoryFactory
+            from apps.utils.factories.pipelines import (  # noqa: PLC0415 - lazy: test-only factory
+                PipelineChatHistoryFactory,
+            )
 
             self.chat_histories[key] = PipelineChatHistoryFactory.build(type=history_type, name=name)
         return self.chat_histories[key]
@@ -335,7 +337,9 @@ class InMemoryPipelineRepository(ORMRepository):
             "node_id": node_id,
         }
         self.history_messages.append(record)
-        from apps.utils.factories.pipelines import PipelineChatMessagesFactory
+        from apps.utils.factories.pipelines import (  # noqa: PLC0415 - lazy: test-only factory
+            PipelineChatMessagesFactory,
+        )
 
         return PipelineChatMessagesFactory.build(
             id=len(self.history_messages),
@@ -366,7 +370,7 @@ class InMemoryPipelineRepository(ORMRepository):
             "purpose": purpose,
         }
         self.files_created.append(record)
-        from apps.utils.factories.files import FileFactory
+        from apps.utils.factories.files import FileFactory  # noqa: PLC0415 - lazy: test-only factory
 
         return FileFactory.build(id=len(self.files_created), name=filename, content_type=content_type or "")
 

@@ -77,7 +77,7 @@ class TeamSignupForm(SignupForm):
                 )
 
             email = cleaned_data.get("email")
-            if invite.email != email:
+            if invite.email.lower() != email.lower():
                 raise forms.ValidationError(
                     _("You must sign up with the email address that the invitation was sent to.")
                 )
@@ -133,7 +133,7 @@ class InvitationForm(forms.ModelForm):
                 ).format(email)
             )
 
-        return email
+        return email.lower()
 
     class Meta:
         model = Invitation

@@ -30,7 +30,7 @@ from apps.utils.time import seconds_to_human
 logger = logging.getLogger(__name__)
 
 
-class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationconfig"
     template_name = "generic/object_home.html"
 
@@ -47,7 +47,7 @@ class EvaluationHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         }
 
 
-class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationconfig"
     model = EvaluationConfig
     table_class = EvaluationConfigTable
@@ -57,7 +57,7 @@ class EvaluationTableView(SingleTableView, PermissionRequiredMixin):
         return EvaluationConfig.objects.filter(team=self.request.team).order_by("-created_at")
 
 
-class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluationconfig"
     template_name = "evaluations/evaluation_config_form.html"
     model = EvaluationConfig
@@ -86,7 +86,7 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, CreateView, PermissionRequired
         return super().form_valid(form)
 
 
-class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluationconfig"
     model = EvaluationConfig
     form_class = EvaluationConfigForm
@@ -113,7 +113,7 @@ class EditEvaluation(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMi
         return reverse("evaluations:home", args=[self.request.team.slug])
 
 
-class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_runs_home.html"
     extra_context = {
@@ -134,7 +134,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequi
         }
 
 
-class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/components/trend_charts.html"
 
@@ -177,7 +177,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         }
 
 
-class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
     table_class = EvaluationRunTable
@@ -189,7 +189,7 @@ class EvaluationRunTableView(SingleTableView, PermissionRequiredMixin):
         ).order_by("-created_at")
 
 
-class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_result_home.html"
 
@@ -235,7 +235,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRe
         return context
 
 
-class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
+class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_results_table.html"
     table_pagination = {"per_page": 10}
@@ -293,7 +293,7 @@ class EvaluationResultTableView(SingleTableView, PermissionRequiredMixin):
         Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
-        from django.conf import settings
+        from django.conf import settings  # noqa: PLC0415
 
         data = self.get_table_data()
         if not data:

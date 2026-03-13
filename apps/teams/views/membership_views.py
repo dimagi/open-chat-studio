@@ -94,7 +94,7 @@ def remove_team_membership(request, team_slug, membership_id):
 
 @transaction.atomic
 def remove_user_from_team(membership):
-    from apps.api.models import UserAPIKey
+    from apps.api.models import UserAPIKey  # noqa: PLC0415
 
     membership.delete()
     UserAPIKey.objects.filter(user=membership.user, team=membership.team).delete()

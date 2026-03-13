@@ -1,0 +1,89 @@
+# Production Docker Compose for Open Chat Studio self-hosting.
+# See docs/hosting/docker.md for full setup instructions.
+#
+# IMPORTANT: For production deployments we strongly recommend using managed
+# PostgreSQL and Redis services (e.g. Amazon RDS, Google Cloud SQL, Upstash,
+# Redis Labs) rather than running them in containers alongside the app.
+# The `db` and `redis` services below are provided as a convenience for
+# simpler single-server setups.
+
+x-app: &app
+  image: open-chat-studio:latest
+  restart: unless-stopped
+  env_file:
+    - .env.prod
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: open_chat_studio
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  migrate:
+    <<: *app
+    command: python manage.py migrate --noinput
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *app
+    command: >
+      gunicorn
+        --bind 0.0.0.0:${PORT:-8000}
+        --workers ${WEB_WORKERS:-2}
+        --threads 8
+        --timeout 0
+        config.wsgi:application
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  celery_worker:
+    <<: *app
+    command: celery -A config worker -l INFO --pool gevent --concurrency 100
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  celery_beat:
+    <<: *app
+    command: celery -A config beat -l INFO
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  redis_data:

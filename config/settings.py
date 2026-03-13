@@ -229,7 +229,7 @@ else:
         }
     }
 
-db_options = DATABASES["default"].setdefault("OPTIONS", {})
+db_options: dict = DATABASES["default"].setdefault("OPTIONS", {})  # ty: ignore[invalid-assignment]
 if env.bool("DJANGO_DATABASE_USE_POOL", True):
     DATABASES["default"].pop("CONN_MAX_AGE", None)
     # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
@@ -240,6 +240,12 @@ if env.bool("DJANGO_DATABASE_USE_POOL", True):
     }
 else:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
+
+# RDS Proxy requires TLS. psycopg3 defaults to sslmode=prefer which falls back to
+# non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
+# without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
+# (e.g. set to "prefer" for local dev without TLS).
+db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="prefer" if DEBUG else "require")
 
 # Auth / login stuff
 
@@ -368,7 +374,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {
+    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -380,7 +386,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-    STORAGES["public"] = {
+    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -572,7 +578,7 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
     from taskbadger.systems.celery import CelerySystemIntegration
 
     def _before_create(task: dict):
-        from apps.teams.utils import get_current_team
+        from apps.teams.utils import get_current_team  # noqa: PLC0415
 
         if team := get_current_team():
             task.setdefault("tags", {})["team"] = team.slug

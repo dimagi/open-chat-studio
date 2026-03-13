@@ -41,7 +41,7 @@ class LLMResponseMixin(BaseModel):
     )
 
     def get_llm_service(self) -> LlmService:
-        from apps.service_providers.models import LlmProvider
+        from apps.service_providers.models import LlmProvider  # noqa: PLC0415
 
         try:
             provider = LlmProvider.objects.get(id=self.llm_provider_id)

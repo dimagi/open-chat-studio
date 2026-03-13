@@ -51,7 +51,7 @@ class Attachment(BaseModel):
 
     @cached_property
     def _file(self):
-        from apps.files.models import File
+        from apps.files.models import File  # noqa: PLC0415
 
         try:
             return File.objects.get(id=self.file_id)
@@ -61,7 +61,7 @@ class Attachment(BaseModel):
 
     @cached_property
     def document(self):
-        from apps.documents.readers import Document
+        from apps.documents.readers import Document  # noqa: PLC0415
 
         return Document.from_file(self._file)
 

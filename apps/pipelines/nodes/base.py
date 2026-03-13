@@ -249,7 +249,6 @@ class BasePipelineNode(BaseModel, ABC):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
-        from apps.channels.datamodels import Attachment
 
         if not incoming_nodes:
             # This is the first node in the graph
@@ -259,6 +258,8 @@ class BasePipelineNode(BaseModel, ABC):
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
             state["temp_state"]["user_input"] = state["last_node_input"]
+            from apps.channels.datamodels import Attachment  # noqa: PLC0415 - circular: channels.datamodels→events→base
+
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
@@ -425,6 +426,7 @@ class Widgets(StrEnum):
     key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
     voice_widget = "voice_widget"
+    jinja_template = "jinja_template"
 
 
 class OptionsSource(StrEnum):
@@ -439,6 +441,7 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
+    jinja_email_node = "jinja_email_node"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 
@@ -477,6 +480,9 @@ class UiSchema(BaseModel):
     # when it becomes hidden.
     default_on_show: Any = None
 
+    # Number of rows for textarea-based widgets (e.g. jinja_template). Defaults to 2.
+    rows: int | None = None
+
     def __call__(self, schema: JsonDict):
         if self.widget:
             schema["ui:widget"] = self.widget
@@ -486,6 +492,8 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.rows is not None:
+            schema["ui:rows"] = self.rows
         if self.visible_when is not None:
             if isinstance(self.visible_when, list):
                 schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]

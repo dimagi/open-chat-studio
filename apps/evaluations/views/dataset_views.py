@@ -56,7 +56,7 @@ from apps.web.waf import WafRule, waf_allow
 logger = logging.getLogger("ocs.evaluations")
 
 
-class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class DatasetHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationdataset"
     template_name = "generic/object_home.html"
 
@@ -70,7 +70,7 @@ class DatasetHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMix
         }
 
 
-class DatasetTableView(SingleTableView, PermissionRequiredMixin):
+class DatasetTableView(PermissionRequiredMixin, SingleTableView):
     permission_required = "evaluations.view_evaluationdataset"
     model = EvaluationDataset
     table_class = EvaluationDatasetTable
@@ -84,7 +84,7 @@ class DatasetTableView(SingleTableView, PermissionRequiredMixin):
         )
 
 
-class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin):
+class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluationdataset"
     model = EvaluationDataset
     form_class = EvaluationDatasetEditForm
@@ -132,7 +132,7 @@ class EditDataset(LoginAndTeamRequiredMixin, UpdateView, PermissionRequiredMixin
         return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
 
-class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMixin):
+class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
     permission_required = "evaluations.delete_evaluationdataset"
     model = EvaluationDataset
 
@@ -148,7 +148,7 @@ class DeleteDataset(LoginAndTeamRequiredMixin, DeleteView, PermissionRequiredMix
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluationdataset"
     template_name = "evaluations/dataset_create_form.html"
     model = EvaluationDataset
@@ -227,7 +227,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMix
         return response
 
 
-class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
@@ -259,7 +259,7 @@ def dataset_sessions_selection_json(request, team_slug: str):
     return JsonResponse(session_keys, safe=False)
 
 
-class DatasetMessagesTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """Table view for dataset messages with pagination."""
 
     model = EvaluationMessage

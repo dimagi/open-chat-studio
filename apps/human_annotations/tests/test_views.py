@@ -2,6 +2,7 @@ import json
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import Client
 from django.urls import reverse
 
@@ -13,13 +14,14 @@ from apps.human_annotations.models import (
     AnnotationQueue,
     AnnotationStatus,
 )
+from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.teams.models import Flag
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
     AnnotationQueueFactory,
 )
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 
 User = get_user_model()
 
@@ -737,8 +739,8 @@ def test_add_session_to_queue_post_duplicate_returns_200(
 
 @pytest.mark.django_db()
 def test_annotation_sessions_selection_table_has_selection_column(team_with_users):
-    from apps.human_annotations.tables import AnnotationSessionsSelectionTable
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.human_annotations.tables import AnnotationSessionsSelectionTable  # noqa: PLC0415
+    from apps.utils.factories.experiment import ExperimentSessionFactory  # noqa: PLC0415
 
     session = ExperimentSessionFactory.create(team=team_with_users)
     table = AnnotationSessionsSelectionTable([session])
@@ -753,7 +755,7 @@ def test_annotation_sessions_selection_table_has_selection_column(team_with_user
 
 @pytest.mark.django_db()
 def test_queue_sessions_table_view(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.utils.factories.experiment import ExperimentSessionFactory  # noqa: PLC0415
 
     ExperimentSessionFactory.create_batch(3, team=team_with_users)
     url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
@@ -763,7 +765,7 @@ def test_queue_sessions_table_view(client, team_with_users, queue):
 
 @pytest.mark.django_db()
 def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory  # noqa: PLC0415
 
     own_session = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=own_session.chat)
@@ -778,7 +780,7 @@ def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, 
 
 @pytest.mark.django_db()
 def test_queue_sessions_json_returns_external_ids(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory  # noqa: PLC0415
 
     sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
     for s in sessions:
@@ -802,7 +804,7 @@ def test_queue_sessions_json_requires_login(team_with_users, queue):
 
 @pytest.mark.django_db()
 def test_queue_sessions_table_excludes_sessions_without_messages(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory  # noqa: PLC0415
 
     session_with_messages = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=session_with_messages.chat)
@@ -817,7 +819,7 @@ def test_queue_sessions_table_excludes_sessions_without_messages(client, team_wi
 
 @pytest.mark.django_db()
 def test_queue_sessions_json_excludes_sessions_without_messages(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+    from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory  # noqa: PLC0415
 
     session_with_messages = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=session_with_messages.chat)
@@ -843,7 +845,7 @@ def test_add_sessions_get_renders_filter_context(client, team_with_users, queue)
 
 @pytest.mark.django_db()
 def test_add_sessions_post_creates_items_from_external_ids(client, team_with_users, queue):
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.utils.factories.experiment import ExperimentSessionFactory  # noqa: PLC0415
 
     sessions = ExperimentSessionFactory.create_batch(2, team=team_with_users)
     session_ids = ",".join(str(s.external_id) for s in sessions)
@@ -851,15 +853,15 @@ def test_add_sessions_post_creates_items_from_external_ids(client, team_with_use
     response = client.post(url, {"session_ids": session_ids})
     assert response.status_code == 302
     assert response["Location"] == reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
-    from apps.human_annotations.models import AnnotationItem
+    from apps.human_annotations.models import AnnotationItem  # noqa: PLC0415
 
     assert AnnotationItem.objects.filter(queue=queue).count() == 2
 
 
 @pytest.mark.django_db()
 def test_add_sessions_post_skips_duplicates(client, team_with_users, queue):
-    from apps.human_annotations.models import AnnotationItem
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.human_annotations.models import AnnotationItem  # noqa: PLC0415
+    from apps.utils.factories.experiment import ExperimentSessionFactory  # noqa: PLC0415
 
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     existing_session = item.session
@@ -875,17 +877,151 @@ def test_add_sessions_post_empty_redirects_with_error(client, team_with_users, q
     url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
     response = client.post(url, {"session_ids": ""})
     assert response.status_code == 302
-    from apps.human_annotations.models import AnnotationItem
+    from apps.human_annotations.models import AnnotationItem  # noqa: PLC0415
 
     assert AnnotationItem.objects.filter(queue=queue).count() == 0
 
 
 @pytest.mark.django_db()
 def test_add_sessions_post_ignores_other_team_sessions(client, team_with_users, queue):
-    from apps.human_annotations.models import AnnotationItem
-    from apps.utils.factories.experiment import ExperimentSessionFactory
+    from apps.human_annotations.models import AnnotationItem  # noqa: PLC0415
+    from apps.utils.factories.experiment import ExperimentSessionFactory  # noqa: PLC0415
 
     other_session = ExperimentSessionFactory.create()  # different team
     url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
     client.post(url, {"session_ids": str(other_session.external_id)})
     assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+# ===== Annotation Reviewer Role =====
+
+
+@pytest.fixture()
+def reviewer_membership(team_with_users):
+    """A team membership with only the Annotation Reviewer role."""
+
+    reviewer_group = Group.objects.get(name=ANNOTATION_REVIEWER_GROUP)
+    return MembershipFactory.create(team=team_with_users, groups=[reviewer_group])
+
+
+@pytest.fixture()
+def reviewer_client(reviewer_membership):
+    c = Client()
+    c.force_login(reviewer_membership.user)
+    return c
+
+
+@pytest.mark.django_db()
+def test_reviewer_can_view_queue_home(reviewer_client, team_with_users):
+    url = reverse("human_annotations:queue_home", args=[team_with_users.slug])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+    # No "new queue" button for reviewers
+    assert "new_object_url" not in response.context
+
+
+@pytest.mark.django_db()
+def test_reviewer_queue_table_only_shows_assigned_queues(reviewer_client, reviewer_membership, team_with_users, user):
+    assigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    assigned_queue.assignees.add(reviewer_membership.user)
+    unassigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    unassigned_queue.assignees.add(user)  # assigned to someone else
+
+    url = reverse("human_annotations:queue_table", args=[team_with_users.slug])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+    queues = response.context["object_list"]
+    assert queues.filter(pk=assigned_queue.pk).exists()
+    assert not queues.filter(pk=unassigned_queue.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_reviewer_queue_table_hides_unassigned_queues(reviewer_client, team_with_users, user):
+    """Queues with no assignees are NOT visible to reviewers — only directly assigned queues are."""
+    open_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    assert not open_queue.assignees.exists()
+
+    url = reverse("human_annotations:queue_table", args=[team_with_users.slug])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+    assert not response.context["object_list"].filter(pk=open_queue.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_reviewer_can_annotate_assigned_queue(reviewer_client, reviewer_membership, team_with_users, user, queue):
+    queue.assignees.add(reviewer_membership.user)
+    AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    url = reverse("human_annotations:annotate_queue", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+    assert response.context["can_annotate"] is True
+
+
+@pytest.mark.django_db()
+def test_reviewer_cannot_annotate_unassigned_queue(reviewer_client, team_with_users, user, queue):
+    """If queue has assignees and reviewer is not one of them, they are redirected."""
+    queue.assignees.add(user)  # reviewer is not in assignees
+    AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    url = reverse("human_annotations:annotate_queue", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db()
+def test_reviewer_cannot_create_queue(reviewer_client, team_with_users):
+    url = reverse("human_annotations:queue_new", args=[team_with_users.slug])
+    response = reviewer_client.get(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_reviewer_cannot_add_sessions_to_queue(reviewer_client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_reviewer_cannot_manage_assignees(reviewer_client, team_with_users, queue):
+    url = reverse("human_annotations:queue_manage_assignees", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_reviewer_cannot_export_annotations(reviewer_client, team_with_users, queue):
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_reviewer_detail_url_returns_404_for_unassigned_queue(reviewer_client, team_with_users, user):
+    """Reviewer cannot access queue detail directly by PK if not assigned."""
+    unassigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, unassigned_queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_reviewer_detail_url_returns_200_for_assigned_queue(
+    reviewer_client, reviewer_membership, team_with_users, user
+):
+    """Reviewer can access queue detail directly if assigned."""
+    assigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    assigned_queue.assignees.add(reviewer_membership.user)
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, assigned_queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_reviewer_items_table_returns_empty_for_unassigned_queue(reviewer_client, team_with_users, user):
+    """Reviewer gets an empty items table (not 404) when accessing an unassigned queue's items by PK."""
+    unassigned_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    AnnotationItemFactory.create(queue=unassigned_queue, team=team_with_users)
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, unassigned_queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 200
+    assert unassigned_queue.name not in response.content.decode()

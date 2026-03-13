@@ -42,7 +42,7 @@ from .utils import get_llm_providers_for_assistants
 logger = logging.getLogger("ocs.assistants")
 
 
-class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class OpenAiAssistantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "assistants.view_openaiassistant"
 
@@ -68,7 +68,7 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, TemplateView, PermissionReq
         }
 
 
-class OpenAiAssistantTableView(SingleTableView, PermissionRequiredMixin):
+class OpenAiAssistantTableView(PermissionRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
     permission_required = "assistants.view_openaiassistant"
@@ -201,7 +201,7 @@ class SyncEditingOpenAiAssistant(BaseOpenAiAssistantView, View):
         return HttpResponseClientRefresh()
 
 
-class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "assistants.delete_openaiassistant"
 
     @transaction.atomic()
@@ -246,7 +246,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequ
             return reswap(HttpResponse(response, status=400), "none")
 
 
-class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "assistants.change_openaiassistant"
 
     def post(self, request, team_slug: str, pk: int):
@@ -261,7 +261,7 @@ class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         return render_table_row(request, OpenAiAssistantTable, assistant)
 
 
-class ImportAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
+class ImportAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
     template_name = "generic/object_form.html"
     permission_required = "assistants.add_openaiassistant"
     form_class = ImportAssistantForm
@@ -307,7 +307,7 @@ class AddFileToAssistant(BaseAddMultipleFilesHtmxView):
         )
 
 
-class DeleteFileFromAssistant(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeleteFileFromAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.delete_file"
 
     @transaction.atomic()

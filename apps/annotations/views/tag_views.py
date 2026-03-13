@@ -20,7 +20,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
 
 
-class TagHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class TagHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "annotations.view_tag"
 
@@ -34,7 +34,7 @@ class TagHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
         }
 
 
-class CreateTag(CreateView, PermissionRequiredMixin):
+class CreateTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "annotations.add_tag"
     model = Tag
     form_class = TagForm
@@ -61,7 +61,7 @@ class CreateTag(CreateView, PermissionRequiredMixin):
         return self.form_invalid(form)
 
 
-class EditTag(UpdateView, PermissionRequiredMixin):
+class EditTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "annotations.change_tag"
     model = Tag
     form_class = TagForm
@@ -86,7 +86,7 @@ class EditTag(UpdateView, PermissionRequiredMixin):
         return super().get(request, *args, **kwargs)
 
 
-class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeleteTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "annotations.delete_tag"
 
     def delete(self, request, team_slug: str, pk: int):
@@ -98,7 +98,8 @@ class DeleteTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse()
 
 
-class TagTableView(SingleTableView):
+class TagTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+    permission_required = "annotations.view_tag"
     model = Tag
     table_class = TagTable
     template_name = "table/single_table.html"
@@ -119,7 +120,7 @@ class TagTableView(SingleTableView):
         return queryset
 
 
-class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class UnlinkTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "annotations.delete_customtaggeditem"
 
     def post(self, request, team_slug: str):
@@ -132,7 +133,7 @@ class UnlinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         return HttpResponse()
 
 
-class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class TagUI(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "annotations.view_customtaggeditem"
 
     def get(self, request, team_slug: str):
@@ -166,7 +167,7 @@ class TagUI(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         )
 
 
-class LinkTag(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class LinkTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "annotations.add_customtaggeditem"
 
     def post(self, request, team_slug: str):

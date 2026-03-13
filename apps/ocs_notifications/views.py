@@ -48,6 +48,10 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
             "title": "Notifications",
             "table_url": table_url,
             "enable_search": False,
+            "filter_bar_action": "ocs_notifications/components/mark_all_read_button.html",
+            "mark_all_read_url": reverse(
+                "ocs_notifications:mark_all_notifications_read", args=[self.request.team.slug]
+            ),
             "actions": [
                 actions.Action(
                     url_name="ocs_notifications:toggle_do_not_disturb",
@@ -206,6 +210,16 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
             "ocs_notifications/components/do_not_disturb_button.html",
             context={"end_datetime": user_preferences.do_not_disturb_until},
         )
+
+
+class MarkAllNotificationsReadView(LoginAndTeamRequiredMixin, View):
+    def post(self, request, team_slug: str, *args, **kwargs):
+        EventUser.objects.filter(user=request.user, team=request.team, read=False).update(
+            read=True, read_at=timezone.now()
+        )
+        bust_unread_notification_cache(user_id=request.user.id, team_slug=team_slug)
+        table_url = reverse("ocs_notifications:notifications_table", args=[team_slug])
+        return render(request, "ocs_notifications/components/mark_all_read_reload.html", {"table_url": table_url})
 
 
 class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):

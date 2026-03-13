@@ -8,7 +8,7 @@ class Command(MigrateCommand):
     def handle(self, *args, **options):
         super().handle(*args, **options)
         # migrate_finished.send(self)  # for some reason this doesn't work on prod
-        from apps.teams.signals import create_groups_after_migrate
+        from apps.teams.signals import create_groups_after_migrate  # noqa: PLC0415
 
         create_groups_after_migrate()
         call_command("setup_periodic_tasks")
