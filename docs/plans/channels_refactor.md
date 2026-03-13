@@ -8,10 +8,11 @@
 
 - **Context Class**: Holds all data state throughout processing
 - **Stateless Stages**: Process and augment the context
-- **Conditional Execution**: Stages skip or run based on context state
-- **Clear Flow**: Context passes through stages sequentially
+- **Core Stages vs Terminal Stages**: Core stages run sequentially and can be short-circuited; terminal stages always run
+- **Exception-Based Early Exit**: Any core stage can raise `EarlyExitResponse` to short-circuit remaining core stages
+- **Pipeline Orchestrator**: The pipeline catches the exception and feeds the response into terminal stages
 
-This is essentially a **Pipeline Pattern** (aka Chain of Responsibility or Middleware Pattern).
+This is essentially a **Pipeline Pattern** with exception-based short-circuiting and a guaranteed terminal phase.
 
 ## Current Code Analysis
 
@@ -115,9 +116,9 @@ class MessageProcessingContext:
     formatted_message: str | None = None
     files_to_send: list[File] = field(default_factory=list)
 
-    # Control flow — single field for early exit
-    # If set, pipeline stops and this becomes the response.
-    # Replaces the old dual-flag approach (should_process_message + early_exit_response).
+    # Control flow — set by the pipeline orchestrator when it catches
+    # an EarlyExitResponse exception. Stages do NOT set this directly;
+    # they raise EarlyExitResponse instead.
     early_exit_response: str | None = None
 
     # Error tracking — each stage handles its own errors internally
@@ -126,7 +127,8 @@ class MessageProcessingContext:
 ```
 
 > **Review decisions applied**:
-> - **Single early exit field**: `early_exit_response` is the sole control flow mechanism. When set, the pipeline stops. The old `should_process_message` flag is removed — it was redundant.
+> - **Exception-based early exit**: Stages raise `EarlyExitResponse` to short-circuit. The pipeline catches it, sets `ctx.early_exit_response`, then runs terminal stages. Stages never check or set this field directly.
+> - **Core vs terminal stages**: Core stages (validation, session, consent, query, bot, formatting) can be short-circuited. Terminal stages (EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage) always run.
 > - **Callbacks/sender/capabilities on context**: Stages are zero-arg constructors. They access channel-specific dependencies via `ctx.callbacks`, `ctx.sender`, and `ctx.capabilities`. This simplifies pipeline construction and makes stages fully reusable.
 > - **No `stage_timings`**: Observability is handled by trace spans in `ProcessingStage.__call__`, not manual timing.
 > - **Error handling per-stage**: Each stage handles its own errors internally. `processing_errors` is an observability list, not a pipeline-level error control mechanism.
@@ -150,7 +152,22 @@ def process(self, ctx: MessageProcessingContext) -> None:
 
 **Recommendation**: Start with **Option B (Mutable)** for simplicity, can refactor to immutable later if needed.
 
-### 2\. Processing Stage Interface
+### 2\. EarlyExitResponse Exception
+
+```py
+class EarlyExitResponse(Exception):
+    """Raised by any core stage to short-circuit the pipeline.
+
+    The pipeline orchestrator catches this, stores the message on
+    ctx.early_exit_response, and then runs terminal stages.
+    """
+
+    def __init__(self, response: str):
+        self.response = response
+        super().__init__(response)
+```
+
+### 3\. Processing Stage Interface
 
 ```py
 class ProcessingStage(ABC):
@@ -158,19 +175,28 @@ class ProcessingStage(ABC):
 
     Stages are zero-arg: all dependencies come from the context object.
     Each stage handles its own errors internally.
+
+    Stages do NOT check early_exit_response — the pipeline orchestrator
+    handles short-circuiting. To exit early, raise EarlyExitResponse.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         """Determine if this stage should run based on context state.
 
-        Default: run if no early exit has been triggered.
-        Override to add additional conditions (always call super first).
+        Default: always run. Override to add stage-specific conditions
+        (e.g., "only run if user_query is set").
+
+        NOTE: This is for stage-specific preconditions only. Early exit
+        short-circuiting is handled by the pipeline, not by stages.
         """
-        return ctx.early_exit_response is None
+        return True
 
     @abstractmethod
     def process(self, ctx: MessageProcessingContext) -> None:
-        """Process the context, modifying it in place"""
+        """Process the context, modifying it in place.
+
+        Raise EarlyExitResponse to short-circuit the pipeline.
+        """
         pass
 
     def __call__(self, ctx: MessageProcessingContext) -> None:
@@ -184,11 +210,12 @@ class ProcessingStage(ABC):
 ```
 
 > **Review decisions applied**:
-> - **`should_run` checks `early_exit_response is None`** instead of `ctx.should_process_message`. Single control flow field.
+> - **`should_run` does NOT check `early_exit_response`**: Early exit short-circuiting is the pipeline's responsibility. `should_run` is only for stage-specific preconditions (e.g., "only run if user_query is set").
+> - **`EarlyExitResponse` exception**: Stages raise this to short-circuit. The pipeline catches it, stores the message on `ctx.early_exit_response`, then runs terminal stages.
 > - **Trace spans for observability**: `__call__` wraps `process` in a trace span, not manual `time.monotonic()` timing. Integrates with existing tracing infrastructure.
 > - **Zero-arg stages**: No `__init__` parameters — stages get everything from `ctx`.
 
-### 3\. Concrete Stages
+### 4\. Concrete Stages
 
 Map current flow to stages:
 
@@ -209,7 +236,7 @@ class ParticipantValidationStage(ProcessingStage):
             )
 
         if not ctx.participant_allowed:
-            ctx.early_exit_response = "Sorry, you are not allowed to chat to this bot"
+            raise EarlyExitResponse("Sorry, you are not allowed to chat to this bot")
 ```
 
 **Maps to**: `_participant_is_allowed()` (line 378-381)
@@ -220,11 +247,13 @@ class ParticipantValidationStage(ProcessingStage):
 class SessionResolutionStage(ProcessingStage):
     """Loads or creates experiment session. Also handles /reset command."""
 
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.participant_allowed
+
     def process(self, ctx: MessageProcessingContext) -> None:
         # Handle /reset command — end current session so a new one is created
         if self._is_reset_command(ctx):
             self._handle_reset(ctx)
-            return
 
         # Check for pre-set session (Web/Slack channels set this at creation)
         if ctx.experiment_session:
@@ -251,7 +280,7 @@ class SessionResolutionStage(ProcessingStage):
         return ctx.message.message_text and ctx.message.message_text.strip() == "/reset"
 
     def _handle_reset(self, ctx: MessageProcessingContext) -> None:
-        """End current session and signal early exit with reset confirmation."""
+        """End current session and raise early exit with reset confirmation."""
         if ctx.experiment_session:
             ctx.experiment_session.end(reason="reset by user")
         elif not ctx.experiment_session:
@@ -263,7 +292,7 @@ class SessionResolutionStage(ProcessingStage):
             if existing:
                 existing.end(reason="reset by user")
 
-        ctx.early_exit_response = "Session reset. Send a new message to start over."
+        raise EarlyExitResponse("Session reset. Send a new message to start over.")
 ```
 
 **Maps to**: `_ensure_sessions_exists()` (line 697-726) and `/reset` handling
@@ -281,7 +310,7 @@ class MessageTypeValidationStage(ProcessingStage):
 
     def process(self, ctx: MessageProcessingContext) -> None:
         if ctx.message.content_type not in ctx.capabilities.supported_message_types:
-            ctx.early_exit_response = self._generate_unsupported_message_response(ctx)
+            raise EarlyExitResponse(self._generate_unsupported_message_response(ctx))
 ```
 
 **Maps to**: `is_message_type_supported()` and `_handle_unsupported_message()` (lines 789-804)
@@ -294,13 +323,13 @@ class MessageTypeValidationStage(ProcessingStage):
 class ConsentFlowStage(ProcessingStage):
     """Handles conversational consent state machine.
 
-    This stage only manages consent state transitions and sets
-    early_exit_response. It does NOT:
+    This stage only manages consent state transitions and raises
+    EarlyExitResponse. It does NOT:
     - Send messages (ResponseSendingStage handles that)
     - Persist to chat history (EarlyExitResponseStage handles that)
 
     Sub-behaviors:
-    1. Seed message: Set initial consent prompt as early_exit_response
+    1. Seed message: Raise EarlyExitResponse with consent prompt
        when session is in SETUP status
     2. State transitions: SETUP → PENDING → PENDING_PRE_SURVEY → ACTIVE
     3. Non-consent path: When consent is not enabled, session transitions
@@ -311,9 +340,6 @@ class ConsentFlowStage(ProcessingStage):
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        if ctx.early_exit_response is not None:
-            return False
-
         # Skip if channel doesn't support conversational consent
         if not ctx.capabilities.supports_conversational_consent:
             return False
@@ -331,11 +357,11 @@ class ConsentFlowStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         # State machine: SETUP → PENDING → PENDING_PRE_SURVEY → ACTIVE
         session = ctx.experiment_session
+        response = None
 
         if session.status == SessionStatus.SETUP:
             response = self._ask_for_consent(ctx)
             session.update_status(SessionStatus.PENDING)
-            ctx.early_exit_response = response
 
         elif session.status == SessionStatus.PENDING:
             if self._user_gave_consent(ctx):
@@ -348,8 +374,6 @@ class ConsentFlowStage(ProcessingStage):
             else:
                 response = self._ask_for_consent(ctx)
 
-            ctx.early_exit_response = response
-
         elif session.status == SessionStatus.PENDING_PRE_SURVEY:
             if self._user_gave_consent(ctx):
                 response = self._start_conversation(ctx)
@@ -357,7 +381,8 @@ class ConsentFlowStage(ProcessingStage):
             else:
                 response = self._ask_for_survey(ctx)
 
-            ctx.early_exit_response = response
+        if response is not None:
+            raise EarlyExitResponse(response)
 ```
 
 **Maps to**: `_handle_pre_conversation_requirements()` (lines 409-441)
@@ -365,8 +390,8 @@ class ConsentFlowStage(ProcessingStage):
 > **Review decisions applied**:
 > - **`supports_conversational_consent` on ChannelCapabilities** (not a ClassVar on ChannelBase): `should_run` checks `ctx.capabilities.supports_conversational_consent`. This stage is always included in the pipeline — the skip logic is internal.
 > - **Sub-behaviors documented** (Decision 8): State transitions and seed message are this stage's responsibility. Chat history persistence and message sending are handled downstream by `EarlyExitResponseStage` and `ResponseSendingStage` respectively.
-> - **Single `early_exit_response`**: All `ctx.should_process_message = False` lines removed.
-> - **No message sending**: This stage only sets `early_exit_response`. The `ResponseSendingStage` is the sole stage that sends messages to the user.
+> - **Exception-based early exit**: This stage raises `EarlyExitResponse` instead of setting a field. The pipeline catches it and runs terminal stages.
+> - **No message sending**: This stage only raises `EarlyExitResponse`. The `ResponseSendingStage` is the sole stage that sends messages to the user.
 
 #### Stage 5: QueryExtractionStage
 
@@ -410,7 +435,7 @@ class ChatMessageCreationStage(ProcessingStage):
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.early_exit_response is None and ctx.user_query is not None
+        return ctx.user_query is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
         ctx.chat_message = ChatMessage.objects.create(
@@ -431,7 +456,7 @@ class BotInteractionStage(ProcessingStage):
     """Gets response from bot"""
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.early_exit_response is None and ctx.user_query is not None
+        return ctx.user_query is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
         # Channel-specific "typing" indicator
@@ -502,21 +527,22 @@ class ResponseFormattingStage(ProcessingStage):
 
 > Zero-arg: capabilities accessed via `ctx.capabilities`.
 
-#### Stage 9: EarlyExitResponseStage
+#### Stage 9: EarlyExitResponseStage (Terminal)
 
 ```py
 class EarlyExitResponseStage(ProcessingStage):
     """Persists early_exit_response to chat history.
 
-    When a stage (e.g., ConsentFlowStage, ParticipantValidationStage)
-    sets early_exit_response, this stage creates the corresponding
-    ChatMessage DB record so the response appears in the conversation
-    history.
+    TERMINAL STAGE — always runs after core stages complete (or after
+    an EarlyExitResponse exception is caught by the pipeline).
+
+    When a core stage raises EarlyExitResponse, the pipeline catches it
+    and sets ctx.early_exit_response. This stage then creates the
+    corresponding ChatMessage DB record so the response appears in
+    the conversation history.
 
     Uses _add_to_history (extracted from the old ConsentFlowStage)
     to persist the message.
-
-    This stage runs only when early_exit_response is set.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -535,16 +561,17 @@ class EarlyExitResponseStage(ProcessingStage):
         )
 ```
 
-> **Review decision**: Early exit responses are persisted via this dedicated stage. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only set `early_exit_response` — they never persist or send messages directly.
+> **Review decision**: Early exit responses are persisted via this dedicated terminal stage. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
 
-#### Stage 10: ResponseSendingStage
+#### Stage 10: ResponseSendingStage (Terminal)
 
 ```py
 class ResponseSendingStage(ProcessingStage):
     """Sends response to user via channel.
 
+    TERMINAL STAGE — always runs after core stages complete.
     This is the ONLY stage that sends messages to the user.
-    It always fires — handling both normal bot responses and early exit responses.
+    Handles both normal bot responses and early exit responses.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -586,7 +613,7 @@ class ResponseSendingStage(ProcessingStage):
 > - **Always fires**: `should_run` returns `True` when there's either a `formatted_message` or `early_exit_response`. The early exit path sends the response text; the normal path sends the formatted bot response with files.
 > - Error handling is per-stage (Decision 5).
 
-#### Stage 11: ActivityTrackingStage
+#### Stage 11: ActivityTrackingStage (Terminal)
 
 ```py
 class ActivityTrackingStage(ProcessingStage):
@@ -613,31 +640,52 @@ class ActivityTrackingStage(ProcessingStage):
 
 **Maps to**: `_update_session_activity()` (lines 860-876)
 
-### 4\. Pipeline Orchestrator
+### 5\. Pipeline Orchestrator
 
 ```py
 class MessageProcessingPipeline:
-    """Orchestrates message processing through stages"""
+    """Orchestrates message processing through core and terminal stages.
 
-    def __init__(self, stages: list[ProcessingStage]):
-        self.stages = stages
+    Core stages run sequentially and can be short-circuited by raising
+    EarlyExitResponse. Terminal stages always run — they handle both
+    normal responses and early exit responses.
+
+    The pipeline is the ONLY place that handles EarlyExitResponse.
+    Individual stages never check ctx.early_exit_response.
+    """
+
+    def __init__(
+        self,
+        core_stages: list[ProcessingStage],
+        terminal_stages: list[ProcessingStage],
+    ):
+        self.core_stages = core_stages
+        self.terminal_stages = terminal_stages
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
-        """Run all stages in sequence.
+        """Run core stages, catch EarlyExitResponse, then run terminal stages.
 
-        Each stage's __call__ checks should_run() internally (which checks
-        early_exit_response). The pipeline itself does not catch errors —
-        each stage handles its own errors (Decision 5).
+        1. Run core stages sequentially. If any raises EarlyExitResponse,
+           remaining core stages are skipped.
+        2. Catch the exception and store the response on ctx.early_exit_response.
+        3. Run terminal stages unconditionally (they always fire).
         """
-        for stage in self.stages:
-            stage(ctx)  # __call__ checks should_run() → skips if early_exit_response is set
+        try:
+            for stage in self.core_stages:
+                stage(ctx)
+        except EarlyExitResponse as e:
+            ctx.early_exit_response = e.response
+
+        # Terminal stages always run — regardless of early exit
+        for stage in self.terminal_stages:
+            stage(ctx)
 
         return ctx
 ```
 
-> **Review decision applied**: Pipeline no longer has a `break` on early exit. Instead, each stage's `should_run()` (which checks `early_exit_response is None`) handles skipping. This is simpler and means the pipeline is just a loop — stages own their control flow.
+> **Review decision applied**: The pipeline orchestrator is the sole owner of early exit control flow. Core stages raise `EarlyExitResponse` to short-circuit; the pipeline catches it and feeds the response into terminal stages. Terminal stages (EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage) always run. Individual stages never check `ctx.early_exit_response`.
 
-### 5\. Channel Implementation
+### 6\. Channel Implementation
 
 Channels become **pipeline builders** \+ **dependency providers**:
 
@@ -684,23 +732,26 @@ class ChannelBase(ABC):
         """Build standard processing pipeline.
 
         All stages are zero-arg — they get dependencies from the context.
-        ConsentFlowStage is always included; its should_run() checks
-        ctx.capabilities.supports_conversational_consent internally.
-        ResponseSendingStage is the sole stage that sends messages.
+        Core stages can be short-circuited by EarlyExitResponse.
+        Terminal stages always run.
         """
-        return MessageProcessingPipeline([
-            ParticipantValidationStage(),
-            SessionResolutionStage(),
-            MessageTypeValidationStage(),
-            ConsentFlowStage(),
-            QueryExtractionStage(),
-            ChatMessageCreationStage(),
-            BotInteractionStage(),
-            ResponseFormattingStage(),
-            EarlyExitResponseStage(),
-            ResponseSendingStage(),
-            ActivityTrackingStage(),
-        ])
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                SessionResolutionStage(),
+                MessageTypeValidationStage(),
+                ConsentFlowStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                EarlyExitResponseStage(),
+                ResponseSendingStage(),
+                ActivityTrackingStage(),
+            ],
+        )
 
     def new_user_message(self, message: BaseMessage) -> ChatMessage:
         """Main entry point - runs message through pipeline"""
@@ -718,15 +769,17 @@ class ChannelBase(ABC):
             capabilities=self._get_capabilities(),
         )
 
-        # Process through pipeline
+        # Process through pipeline (core stages may raise EarlyExitResponse;
+        # the pipeline catches it and runs terminal stages regardless)
+        pipeline = self._build_pipeline()
         with self.trace_service.trace(
             trace_name=self.experiment.name,
             session=self.experiment_session,
             inputs={"input": message.model_dump()},
         ) as span:
-            ctx = self.pipeline.process(ctx)
+            ctx = pipeline.process(ctx)
 
-            # Determine response
+            # Determine response to return to caller
             if ctx.early_exit_response:
                 response = ChatMessage(content=ctx.early_exit_response)
             elif ctx.bot_response:
@@ -771,11 +824,11 @@ class ChannelBase(ABC):
 > - **ChannelCapabilities dataclass**: `supports_conversational_consent` lives here (not as a ClassVar on ChannelBase). `frozen=True` for safety.
 > - **Zero-arg stages**: Pipeline construction is trivial — no callbacks/sender/capabilities passed to stage constructors.
 > - **Dependencies on context**: `new_user_message` injects callbacks, sender, and capabilities into the context object.
+> - **Core vs terminal stages**: 8 core stages (can be short-circuited by `EarlyExitResponse`) + 3 terminal stages (always run).
 > - **ConsentFlowStage always included**: No conditional in `_build_pipeline`. The stage's `should_run()` handles the skip logic.
-> - **11 stages**: ChatMessageCreationStage, EarlyExitResponseStage added. ResponseSendingStage is the sole message-sending stage (always fires).
 > - **Dynamic `_get_capabilities()`** (Decision 3): Method can be overridden for channels where capabilities depend on runtime state (e.g., provider-dependent file support).
 
-### 6\. Concrete Channel Example
+### 7\. Concrete Channel Example
 
 ```py
 class TelegramChannel(ChannelBase):
@@ -834,17 +887,17 @@ def test_participant_validation_allows_public_experiment():
     ParticipantValidationStage().process(ctx)
 
     assert ctx.participant_allowed is True
-    assert ctx.early_exit_response is None
 
 def test_participant_validation_blocks_private_experiment():
     ctx = _make_context(
         experiment=Mock(is_public=False, is_participant_allowed=Mock(return_value=False)),
     )
 
-    ParticipantValidationStage().process(ctx)
+    with pytest.raises(EarlyExitResponse) as exc_info:
+        ParticipantValidationStage().process(ctx)
 
     assert ctx.participant_allowed is False
-    assert "not allowed" in ctx.early_exit_response
+    assert "not allowed" in exc_info.value.response
 ```
 
 Fast, DB-free, no complex setup \- just test the stage logic with stubs\!
@@ -855,7 +908,7 @@ Context makes all state explicit and traceable:
 
 - What was the input?
 - What was computed at each stage?
-- Why did processing stop early? (check `early_exit_response`)
+- Why did processing stop early? (`EarlyExitResponse` exception with message)
 - Stage performance visible via trace spans
 
 ### 4\. **Easy to Extend** ✅
@@ -867,23 +920,23 @@ class RateLimitingStage(ProcessingStage):
     """Check if user has exceeded rate limit"""
 
     def should_run(self, ctx) -> bool:
-        return ctx.early_exit_response is None and ctx.participant_allowed
+        return ctx.participant_allowed
 
     def process(self, ctx) -> None:
         if self._is_rate_limited(ctx.participant_identifier):
-            ctx.early_exit_response = "Too many messages. Please wait."
+            raise EarlyExitResponse("Too many messages. Please wait.")
 ```
 
-Just insert into pipeline \- no changes to other stages\!
+Just insert into pipeline's `core_stages` list \- no changes to other stages\!
 
 ### 5\. **Channel-Specific Customization** ✅
 
 Channels can:
 
-- Add stages: `pipeline.stages.insert(0, CustomStage())`
-- Remove stages: `pipeline.stages = [s for s in stages if not isinstance(s, ConsentFlowStage)]`
-- Replace stages: `pipeline.stages[2] = CustomValidationStage()`
-- Reorder stages: `pipeline.stages.sort(key=...)`
+- Add core stages: `pipeline.core_stages.insert(0, CustomStage())`
+- Add terminal stages: `pipeline.terminal_stages.append(CustomCleanupStage())`
+- Remove stages: `pipeline.core_stages = [s for s in stages if not isinstance(s, ConsentFlowStage)]`
+- Replace stages: `pipeline.core_stages[2] = CustomValidationStage()`
 
 ### 6\. **Observability** ✅
 
@@ -905,6 +958,15 @@ Stages don't maintain state between messages:
 - No `self.experiment_session` that might be wrong
 - No `cached_property` that might cache wrong value
 - Just: input context → process → output context
+
+### 8\. **Clear Control Flow** ✅
+
+Exception-based early exit makes the flow obvious:
+
+- Core stages raise `EarlyExitResponse` — no checking flags in every stage
+- Pipeline orchestrator is the single point of control flow management
+- Terminal stages always run — guaranteed cleanup and response delivery
+- No risk of stages forgetting to check a flag
 
 ## Challenges & Solutions
 
@@ -977,13 +1039,18 @@ class MessageProcessingContext:
 
 **Problem**: Some stages need to exit early (participant not allowed, unsupported message, consent flow).
 
-**Decision**: Single `early_exit_response` field on context:
+**Decision**: Exception-based early exit via `EarlyExitResponse`:
 
 ```py
-ctx.early_exit_response = "Appropriate message"
+raise EarlyExitResponse("Appropriate message")
 ```
 
-When `early_exit_response` is set, `ProcessingStage.should_run()` returns `False` for all subsequent stages. No separate boolean flag needed — the presence of the response string is the signal. This eliminates the risk of the two fields getting out of sync.
+Any core stage can raise this exception. The pipeline orchestrator catches it, stores the response on `ctx.early_exit_response`, then runs terminal stages. This approach:
+
+- Eliminates the need for every stage to check a flag in `should_run()`
+- Makes the pipeline orchestrator the single point of control flow
+- Guarantees terminal stages always run (cleanup, response delivery, activity tracking)
+- Uses Python's natural exception flow — no risk of forgetting to check a flag
 
 ### Challenge 3: Service Injection
 
@@ -1204,6 +1271,7 @@ Stage unit tests use stub objects — no `@pytest.mark.django_db`, no factories:
 
 ```py
 # tests/channels/stages/test_participant_validation.py
+import pytest
 from unittest.mock import Mock
 
 def _make_context(**overrides):
@@ -1220,7 +1288,6 @@ def _make_context(**overrides):
             supports_conversational_consent=True,
             supported_message_types=["text"],
         ),
-        early_exit_response=None,
         participant_allowed=False,
         participant_identifier=None,
         experiment_session=None,
@@ -1235,17 +1302,17 @@ def test_allows_participant_in_public_experiment():
     ParticipantValidationStage().process(ctx)
 
     assert ctx.participant_allowed is True
-    assert ctx.early_exit_response is None
 
 def test_blocks_participant_in_private_experiment():
     ctx = _make_context(
         experiment=Mock(is_public=False, is_participant_allowed=Mock(return_value=False)),
     )
 
-    ParticipantValidationStage().process(ctx)
+    with pytest.raises(EarlyExitResponse) as exc_info:
+        ParticipantValidationStage().process(ctx)
 
     assert ctx.participant_allowed is False
-    assert "not allowed" in ctx.early_exit_response
+    assert "not allowed" in exc_info.value.response
 ```
 
 **No DB needed\!** Pure logic testing with stubs. Fast and isolated.
@@ -1273,11 +1340,18 @@ def test_full_pipeline_happy_path(mock_bot):
         capabilities=ChannelCapabilities(supported_message_types=["text"]),
     )
 
-    pipeline = MessageProcessingPipeline([
-        ParticipantValidationStage(),
-        SessionResolutionStage(),
-        # ... remaining stages
-    ])
+    pipeline = MessageProcessingPipeline(
+        core_stages=[
+            ParticipantValidationStage(),
+            SessionResolutionStage(),
+            # ... remaining core stages
+        ],
+        terminal_stages=[
+            EarlyExitResponseStage(),
+            ResponseSendingStage(),
+            ActivityTrackingStage(),
+        ],
+    )
     result_ctx = pipeline.process(ctx)
 
     assert result_ctx.participant_allowed
@@ -1379,14 +1453,26 @@ class MessageProcessingContext:
     files_to_send: list = field(default_factory=list)
     unsupported_files: list = field(default_factory=list)
 
-    # Control flow — single field for early exit
+    # Control flow — set by the pipeline when it catches EarlyExitResponse.
+    # Stages do NOT set this directly; they raise EarlyExitResponse instead.
     early_exit_response: str | None = None
 
     # Error tracking
     processing_errors: list[str] = field(default_factory=list)
 ```
 
-**1.2 Create Channel Abstractions** (`apps/chat/channel_abstractions.py`):
+**1.2 Create EarlyExitResponse Exception** (`apps/chat/channel_exceptions.py`):
+
+```py
+class EarlyExitResponse(Exception):
+    """Raised by any core stage to short-circuit the pipeline."""
+
+    def __init__(self, response: str):
+        self.response = response
+        super().__init__(response)
+```
+
+**1.3 Create Channel Abstractions** (`apps/chat/channel_abstractions.py`):
 
 ```py
 from dataclasses import dataclass, field
@@ -1477,7 +1563,7 @@ class ChannelBase(ABC):
 
 **Validation**: Run all tests \- should pass with zero changes.
 
-**Commit**: "Add MessageProcessingContext, ChannelCallbacks, ChannelCapabilities, ChannelSender infrastructure"
+**Commit**: "Add MessageProcessingContext, EarlyExitResponse, ChannelCallbacks, ChannelCapabilities, ChannelSender infrastructure"
 
 ---
 
@@ -1491,15 +1577,20 @@ class ChannelBase(ABC):
 from abc import ABC, abstractmethod
 
 class ProcessingStage(ABC):
-    """Base class for stateless, zero-arg processing stages."""
+    """Base class for stateless, zero-arg processing stages.
+
+    Stages do NOT check early_exit_response — the pipeline handles that.
+    To exit early, raise EarlyExitResponse.
+    """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        """Default: run if no early exit triggered."""
-        return ctx.early_exit_response is None
+        """Default: always run. Override for stage-specific preconditions."""
+        return True
 
     @abstractmethod
     def process(self, ctx: MessageProcessingContext) -> None:
-        """Process context, modifying it in place"""
+        """Process context, modifying it in place.
+        Raise EarlyExitResponse to short-circuit the pipeline."""
         pass
 
     def __call__(self, ctx: MessageProcessingContext) -> None:
@@ -1530,7 +1621,7 @@ class ParticipantValidationStage(ProcessingStage):
         )
 
         if not ctx.participant_allowed:
-            ctx.early_exit_response = "Sorry, you are not allowed to chat to this bot"
+            raise EarlyExitResponse("Sorry, you are not allowed to chat to this bot")
 ```
 
 **2.3 Use Stage in ChannelBase**:
@@ -1539,10 +1630,10 @@ class ParticipantValidationStage(ProcessingStage):
 class ChannelBase(ABC):
     def _new_user_message_internal(self, ctx: MessageProcessingContext):
         # NEW: Use stage for participant validation
-        ParticipantValidationStage()(ctx)  # __call__ handles should_run + tracing
-
-        if ctx.early_exit_response:
-            return ChatMessage(content=ctx.early_exit_response)
+        try:
+            ParticipantValidationStage()(ctx)  # __call__ handles should_run + tracing
+        except EarlyExitResponse as e:
+            return ChatMessage(content=e.response)
 
         # Copy to self for existing code
         self.message = ctx.message
@@ -1557,8 +1648,10 @@ class ChannelBase(ABC):
 
 ```py
 # DB-free unit tests — use stubs, not factories
+import pytest
 from unittest.mock import Mock
 from apps.chat.channel_stages import ParticipantValidationStage
+from apps.chat.channel_exceptions import EarlyExitResponse
 
 def _make_context(**overrides):
     """Helper to create a stub context for stage testing."""
@@ -1570,7 +1663,6 @@ def _make_context(**overrides):
         callbacks=Mock(),
         sender=Mock(),
         capabilities=Mock(supports_conversational_consent=True, supported_message_types=["text"]),
-        early_exit_response=None,
         participant_allowed=False,
         participant_identifier=None,
     )
@@ -1583,17 +1675,17 @@ def test_participant_validation_allows_public_experiment():
     ParticipantValidationStage().process(ctx)
 
     assert ctx.participant_allowed is True
-    assert ctx.early_exit_response is None
 
 def test_participant_validation_blocks_private_experiment():
     ctx = _make_context(
         experiment=Mock(is_public=False, is_participant_allowed=Mock(return_value=False)),
     )
 
-    ParticipantValidationStage().process(ctx)
+    with pytest.raises(EarlyExitResponse) as exc_info:
+        ParticipantValidationStage().process(ctx)
 
     assert ctx.participant_allowed is False
-    assert "not allowed" in ctx.early_exit_response
+    assert "not allowed" in exc_info.value.response
 ```
 
 **Note**: The whitelisted user test (which needs DB access) belongs in integration tests with `@pytest.mark.django_db` and factories. Stage unit tests should be fast and DB-free.
@@ -1619,13 +1711,12 @@ class SessionResolutionStage(ProcessingStage):
     """Loads or creates experiment session. Also handles /reset."""
 
     def should_run(self, ctx) -> bool:
-        return ctx.early_exit_response is None and ctx.participant_allowed
+        return ctx.participant_allowed
 
     def process(self, ctx) -> None:
-        # Handle /reset command
+        # Handle /reset command (raises EarlyExitResponse)
         if self._is_reset_command(ctx):
             self._handle_reset(ctx)
-            return
 
         # Respect pre-set session (Web/Slack)
         if ctx.experiment_session:
@@ -1651,7 +1742,7 @@ class MessageTypeValidationStage(ProcessingStage):
 
     def process(self, ctx) -> None:
         if ctx.message.content_type not in ctx.capabilities.supported_message_types:
-            ctx.early_exit_response = self._generate_error_message(ctx)
+            raise EarlyExitResponse(self._generate_error_message(ctx))
 ```
 
 **Tests**: Test supported/unsupported message types
@@ -1665,8 +1756,6 @@ class ConsentFlowStage(ProcessingStage):
     # Zero-arg — uses ctx.capabilities for consent support check
 
     def should_run(self, ctx) -> bool:
-        if ctx.early_exit_response is not None:
-            return False
         if not ctx.capabilities.supports_conversational_consent:
             return False
         return (
@@ -1681,7 +1770,7 @@ class ConsentFlowStage(ProcessingStage):
 
     def process(self, ctx) -> None:
         # State machine logic from _handle_pre_conversation_requirements
-        # Must handle: chat history, seed message, non-consent path, message sending
+        # Raises EarlyExitResponse for consent prompts
         # ...
 ```
 
@@ -1713,7 +1802,7 @@ class ChatMessageCreationStage(ProcessingStage):
     """Creates the ChatMessage DB record for the user's message."""
 
     def should_run(self, ctx) -> bool:
-        return ctx.early_exit_response is None and ctx.user_query is not None
+        return ctx.user_query is not None
 
     def process(self, ctx) -> None:
         ctx.chat_message = ChatMessage.objects.create(
@@ -1734,7 +1823,7 @@ class BotInteractionStage(ProcessingStage):
     # Zero-arg — uses ctx.callbacks for typing indicator
 
     def should_run(self, ctx) -> bool:
-        return ctx.early_exit_response is None and ctx.user_query is not None
+        return ctx.user_query is not None
 
     def process(self, ctx) -> None:
         ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
@@ -1777,11 +1866,13 @@ class ResponseFormattingStage(ProcessingStage):
 
 **Commit**: "Extract ResponseFormattingStage"
 
-**3.8 EarlyExitResponseStage** (Week 6):
+**3.8 Terminal Stages: EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage** (Week 6):
+
+Extract the three terminal stages. These always run — the pipeline passes them both normal and early-exit contexts.
 
 ```py
 class EarlyExitResponseStage(ProcessingStage):
-    """Persists early_exit_response to chat history.
+    """TERMINAL STAGE: Persists early_exit_response to chat history.
     Uses _add_to_history (moved out of ConsentFlowStage).
     """
 
@@ -1795,13 +1886,7 @@ class EarlyExitResponseStage(ProcessingStage):
 
 **Tests**: Test persistence with early exit set, test no-op when no early exit
 
-**Commit**: "Extract EarlyExitResponseStage"
-
-**3.9 Update ResponseSendingStage** (Week 6):
-
-Update `ResponseSendingStage` to always fire and handle both early exit and normal responses. This is the sole stage that sends messages to the user.
-
-**Commit**: "Update ResponseSendingStage to handle early exit responses"
+**Commit**: "Extract terminal stages (EarlyExitResponse, ResponseSending, ActivityTracking)"
 
 ---
 
@@ -1813,17 +1898,30 @@ Update `ResponseSendingStage` to always fire and handle both early exit and norm
 
 ```py
 class MessageProcessingPipeline:
-    """Orchestrates message processing through stages"""
+    """Orchestrates message processing through core and terminal stages.
 
-    def __init__(self, stages: list[ProcessingStage]):
-        self.stages = stages
+    Core stages can be short-circuited by EarlyExitResponse.
+    Terminal stages always run.
+    """
+
+    def __init__(
+        self,
+        core_stages: list[ProcessingStage],
+        terminal_stages: list[ProcessingStage],
+    ):
+        self.core_stages = core_stages
+        self.terminal_stages = terminal_stages
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
-        """Run all stages sequentially.
-        Each stage's __call__ checks should_run() internally.
-        No pipeline-level error handling — each stage handles its own errors.
-        """
-        for stage in self.stages:
+        """Run core stages, catch EarlyExitResponse, then run terminal stages."""
+        try:
+            for stage in self.core_stages:
+                stage(ctx)
+        except EarlyExitResponse as e:
+            ctx.early_exit_response = e.response
+
+        # Terminal stages always run
+        for stage in self.terminal_stages:
             stage(ctx)
 
         return ctx
@@ -1835,26 +1933,29 @@ class MessageProcessingPipeline:
 class ChannelBase(ABC):
     def __init__(self, ...):
         # ... existing init
-        self.pipeline = self._build_pipeline()
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
         """Build default processing pipeline.
-        All stages are zero-arg. ConsentFlowStage always included.
-        ResponseSendingStage is the sole message-sending stage.
+        Core stages can be short-circuited by EarlyExitResponse.
+        Terminal stages always run.
         """
-        return MessageProcessingPipeline([
-            ParticipantValidationStage(),
-            SessionResolutionStage(),
-            MessageTypeValidationStage(),
-            ConsentFlowStage(),
-            QueryExtractionStage(),
-            ChatMessageCreationStage(),
-            BotInteractionStage(),
-            ResponseFormattingStage(),
-            EarlyExitResponseStage(),
-            ResponseSendingStage(),
-            ActivityTrackingStage(),
-        ])
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                SessionResolutionStage(),
+                MessageTypeValidationStage(),
+                ConsentFlowStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                EarlyExitResponseStage(),
+                ResponseSendingStage(),
+                ActivityTrackingStage(),
+            ],
+        )
 
     def new_user_message(self, message: BaseMessage) -> ChatMessage:
         """Process message through pipeline"""
@@ -1960,23 +2061,25 @@ All decisions below were made during the plan review and are reflected throughou
 
 | # | Area | Decision | Summary |
 |---|------|----------|---------|
-| 1 | Architecture | Single `early_exit_response` | Removed `should_process_message`. One field for control flow — its presence signals early exit. |
-| 2 | Architecture | Callbacks/sender/capabilities on context | Stages are zero-arg. Channel-specific dependencies are injected into `ctx` by `ChannelBase.new_user_message()`. |
-| 3 | Architecture | Runtime `_get_capabilities()` | Method on ChannelBase, overridable for provider-dependent channels (e.g., WhatsApp file support varies). |
-| 4 | Architecture | Pre-set session on context | Web/Slack channels set `ctx.experiment_session` at creation. `SessionResolutionStage` respects this. |
-| 5 | Code Quality | Each stage handles own errors | No pipeline-level try/catch. Stages append to `ctx.processing_errors` for observability. |
-| 6 | Code Quality | Separate `ChatMessageCreationStage` | Stage between QueryExtraction and BotInteraction. DB record exists before bot call. |
-| 7 | Code Quality | `/reset` inside `SessionResolutionStage` | Reset is session lifecycle — belongs in the stage that manages sessions. |
-| 8 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message, non-consent path. Chat history and sending moved out. |
-| — | Update | `EarlyExitResponseStage` | Persists `early_exit_response` to chat history. Uses `_add_to_history` (moved out of ConsentFlowStage). |
-| — | Update | `ResponseSendingStage` always fires | Sole stage that sends messages. Handles both normal responses and early exit responses. No other stage sends messages. |
+| 1 | Architecture | `EarlyExitResponse` exception | Stages raise `EarlyExitResponse` to short-circuit. Pipeline catches it, sets `ctx.early_exit_response`, runs terminal stages. |
+| 2 | Architecture | Core vs terminal stages | 8 core stages (short-circuitable) + 3 terminal stages (always run). Pipeline orchestrator owns control flow. |
+| 3 | Architecture | Callbacks/sender/capabilities on context | Stages are zero-arg. Channel-specific dependencies are injected into `ctx` by `ChannelBase.new_user_message()`. |
+| 4 | Architecture | Runtime `_get_capabilities()` | Method on ChannelBase, overridable for provider-dependent channels (e.g., WhatsApp file support varies). |
+| 5 | Architecture | Pre-set session on context | Web/Slack channels set `ctx.experiment_session` at creation. `SessionResolutionStage` respects this. |
+| 6 | Code Quality | Each stage handles own errors | Stages append to `ctx.processing_errors` for observability. |
+| 7 | Code Quality | Separate `ChatMessageCreationStage` | Stage between QueryExtraction and BotInteraction. DB record exists before bot call. |
+| 8 | Code Quality | `/reset` inside `SessionResolutionStage` | Reset is session lifecycle — belongs in the stage that manages sessions. Raises `EarlyExitResponse`. |
+| 9 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message, non-consent path. Raises `EarlyExitResponse`. |
+| — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Uses `_add_to_history` (moved out of ConsentFlowStage). |
+| — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. |
+| — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
 | — | Update | Callbacks receive targeted parameters | Callback methods receive `recipient: str` (not full context). No chicken-and-egg problem — `participant_identifier` passed at call time. |
-| 9 | Testing | DB-free stage unit tests | Use stubs/mocks (`unittest.mock.Mock`), not factories. No `@pytest.mark.django_db` for stage tests. |
-| 10 | Testing | Phased test migration | Migrate tests alongside code — as stages are extracted, write new stage tests and update old ones. |
-| 11 | Testing | Edge case test checklist | Per-stage checklist of edge cases to test (see Testing Strategy section). |
-| 12 | Testing | Citation tests as pure unit tests | `_format_reference_section` tests use string inputs — no DB, no factories. |
-| 13 | Performance | `select_related` on session queries | `SessionResolutionStage` uses `.select_related("experiment", "participant")`. |
-| 14 | Performance | Document `select_related` for experiment FKs | Experiment queries throughout stages should use appropriate `select_related`. |
+| 10 | Testing | DB-free stage unit tests | Use stubs/mocks (`unittest.mock.Mock`), not factories. Test `EarlyExitResponse` with `pytest.raises`. |
+| 11 | Testing | Phased test migration | Migrate tests alongside code — as stages are extracted, write new stage tests and update old ones. |
+| 12 | Testing | Edge case test checklist | Per-stage checklist of edge cases to test (see Testing Strategy section). |
+| 13 | Testing | Citation tests as pure unit tests | `_format_reference_section` tests use string inputs — no DB, no factories. |
+| 14 | Performance | `select_related` on session queries | `SessionResolutionStage` uses `.select_related("experiment", "participant")`. |
+| 15 | Performance | Document `select_related` for experiment FKs | Experiment queries throughout stages should use appropriate `select_related`. |
 | — | Example feedback | Trace spans in `__call__` | `ProcessingStage.__call__` uses `ctx.trace_service.span()`, not `time.monotonic()` timing. |
 | — | Example feedback | `supports_conversational_consent` on `ChannelCapabilities` | Not a ClassVar on ChannelBase. ConsentFlowStage checks `ctx.capabilities.supports_conversational_consent`. |
 
