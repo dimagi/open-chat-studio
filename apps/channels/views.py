@@ -16,6 +16,7 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -28,7 +29,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
-from apps.channels import tasks
+from apps.channels import meta_webhook, tasks
 from apps.channels.datamodels import TwilioMessage
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
@@ -418,3 +419,92 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
             "experiment": channel.experiment,
         },
     )
+
+
+@method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
+class MetaCloudAPIWebhookView(View):
+    def get(self, request):
+        log.debug("Meta Cloud API webhook verification request received")
+        return meta_webhook.verify_webhook(request)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            log.debug("Meta Cloud API webhook received invalid JSON")
+            return HttpResponseBadRequest("Invalid JSON.")
+
+        # Meta webhooks include an "object" field indicating the source product.
+        # For the WhatsApp Business API it is always "whatsapp_business_account".
+        # See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview
+        if data.get("object") != "whatsapp_business_account":
+            log.debug("Meta Cloud API webhook ignored: object=%s", data.get("object"))
+            return HttpResponse()
+
+        try:
+            message_values = meta_webhook.extract_message_values(data)
+            if not message_values:
+                log.debug("Meta Cloud API webhook received payload with no messages")
+                return HttpResponse()
+
+        except (KeyError, IndexError):
+            log.debug("Meta Cloud API webhook payload missing expected fields")
+            return HttpResponse()
+
+        # A payload may contain values for different phone numbers (e.g. a Business Account with multiple numbers),
+        # so each value must be routed to its own channel.
+        unique_phone_ids = {v["metadata"]["phone_number_id"] for v in message_values}
+        channel_map = {
+            ch.extra_data["phone_number_id"]: ch
+            for ch in ExperimentChannel.objects.filter(
+                platform=ChannelPlatform.WHATSAPP,
+                extra_data__phone_number_id__in=list(unique_phone_ids),
+                messaging_provider__type=MessagingProviderType.meta_cloud_api,
+            ).select_related("experiment", "team", "messaging_provider")
+        }
+
+        # Signature verification happens after the channel lookup because the app_secret
+        # needed to verify is stored in the channel's messaging provider (an encrypted field).
+        if not channel_map:
+            return HttpResponse()
+
+        channels = list(channel_map.values())
+        if not self._payload_has_valid_signature(channels, request_headers=request.headers, request_body=request.body):
+            log.warning("Meta Cloud API webhook signature verification failed for channel")
+            return HttpResponse()
+
+        set_current_team(channels[0].team)
+
+        for value in message_values:
+            phone_number_id = value["metadata"]["phone_number_id"]
+            ch = channel_map.get(phone_number_id)
+            if not ch:
+                continue
+
+            tasks.handle_meta_cloud_api_message.delay(
+                channel_id=ch.id,
+                team_slug=ch.team.slug,
+                message_data=value,
+            )
+
+        return HttpResponse()
+
+    def _payload_has_valid_signature(
+        self, channels: list[ExperimentChannel], request_headers: dict, request_body: dict
+    ) -> bool:
+        """Verify the X-Hub-Signature-256 of a Meta webhook payload.
+
+        All channels in the payload must belong to the same messaging provider (i.e. share the
+        same Meta app and app_secret). Payloads that span multiple providers are rejected to
+        prevent an attacker with a legitimate channel from forging messages for a phone number
+        that belongs to a different Meta app by including it in a payload signed with their own
+        app_secret.
+        """
+        if len({ch.messaging_provider_id for ch in channels}) > 1:
+            log.error("Meta Cloud API webhook payload spans multiple messaging providers")
+            return False
+        channel = channels[0]
+        app_secret = channel.messaging_provider.config.get("app_secret", "")
+        signature = request_headers.get("X-Hub-Signature-256", "")
+        return meta_webhook.verify_signature(request_body, signature, app_secret)

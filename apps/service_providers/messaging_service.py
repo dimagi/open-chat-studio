@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 import backoff
 import httpx
+import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
@@ -333,6 +334,75 @@ class SureAdhereService(MessagingService):
         data = {"patient_Id": to, "message_Body": message}
         response = httpx.post(send_msg_url, headers=headers, json=data)
         response.raise_for_status()
+
+
+class MetaCloudAPIService(MessagingService):
+    _type: ClassVar[str] = "meta_cloud_api"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    access_token: str
+    business_id: str
+    app_secret: str = ""
+    verify_token: str = ""
+    _phone_number_id: str | None = pydantic.PrivateAttr(default=None)
+
+    META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
+    META_API_TIMEOUT: ClassVar[int] = 30
+    WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
+
+    @property
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+    def is_valid_number(self, number: str) -> bool:
+        self._phone_number_id = self._fetch_phone_number_id(number)
+        if not self._phone_number_id:
+            raise ValueError(
+                f"{number} was not found in the WhatsApp Business Account. "
+                "Please verify the number is registered with your business."
+            )
+        return True
+
+    def get_phone_number_id(self) -> str | None:
+        """Return the phone number ID resolved by a prior `is_valid_number` call."""
+        return self._phone_number_id
+
+    def _fetch_phone_number_id(self, phone_number: str) -> str | None:
+        """Look up the phone number ID for the given E.164 phone number
+        using the WhatsApp Business Account Phone Number Management API."""
+        url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
+        response = httpx.get(
+            url, headers=self._headers, params={"fields": "id,display_phone_number"}, timeout=self.META_API_TIMEOUT
+        )
+        response.raise_for_status()
+        for entry in response.json().get("data", []):
+            display = entry.get("display_phone_number", "")
+            try:
+                parsed = phonenumbers.parse(display)
+                normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            except phonenumbers.NumberParseException:
+                continue
+            if normalized == phone_number:
+                return entry["id"]
+        return None
+
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
+        for chunk in chunks:
+            data = {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "text",
+                "text": {"body": chunk},
+            }
+            response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+            response.raise_for_status()
 
 
 class SlackService(MessagingService):

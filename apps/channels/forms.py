@@ -233,15 +233,32 @@ class WhatsappChannelForm(WebhookUrlFormBase):
     def clean_number(self):
         try:
             number_obj = phonenumbers.parse(self.cleaned_data["number"])
-            number = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
-            service = self.messaging_provider.get_messaging_service()
+            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+        except phonenumbers.NumberParseException:
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+
+    def clean(self):
+        cleaned_data = super().clean()
+        number = cleaned_data.get("number")
+        if not number or not self.messaging_provider:
+            return cleaned_data
+
+        service = self.messaging_provider.get_messaging_service()
+        try:
             if not service.is_valid_number(number):
                 self.warning_message = (
                     f"{number} was not found at the provider. Please make sure it is there before proceeding"
                 )
-            return number
-        except phonenumbers.NumberParseException:
-            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+        except ValueError as e:
+            self.add_error("number", str(e))
+            return cleaned_data
+        except Exception:
+            self.add_error("number", "Could not validate this number right now. Please try again.")
+            return cleaned_data
+
+        if self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
+            cleaned_data["phone_number_id"] = service.get_phone_number_id()
+        return cleaned_data
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
