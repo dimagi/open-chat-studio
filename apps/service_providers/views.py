@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 
+import httpx
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -247,6 +248,9 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
 
 # ==================== Custom Voice Management Views ====================
 
+# Maximum items to fetch from OpenAI API per request
+_OPENAI_LIST_LIMIT = 100
+
 
 def _get_custom_voice_provider(request, pk: int) -> VoiceProvider:
     """Helper to get and validate a custom voice provider."""
@@ -256,6 +260,17 @@ def _get_custom_voice_provider(request, pk: int) -> VoiceProvider:
         team=request.team,
         type=VoiceProviderType.openai_custom_voice,
     )
+
+
+def _format_api_error(e: Exception) -> str:
+    """Extract a user-friendly error message from an API exception."""
+    if isinstance(e, httpx.HTTPStatusError):
+        try:
+            body = e.response.json()
+            return body.get("error", {}).get("message", f"API error (HTTP {e.response.status_code})")
+        except Exception:
+            return f"API error (HTTP {e.response.status_code})"
+    return "An unexpected error occurred. Please check your provider configuration and try again."
 
 
 @login_and_team_required
@@ -268,10 +283,10 @@ def list_custom_voice_consents(request, team_slug: str, pk: int):
     error_message = None
     try:
         client = provider.get_custom_voice_client()
-        consents = client.list_voice_consents()
+        consents = client.list_voice_consents(limit=_OPENAI_LIST_LIMIT)
     except Exception as e:
-        log.warning(f"Could not fetch consents from OpenAI: {e}")
-        error_message = str(e)
+        log.warning("Could not fetch consents from OpenAI", exc_info=True)
+        error_message = _format_api_error(e)
 
     return render(
         request,
@@ -290,30 +305,23 @@ def list_custom_voice_consents(request, team_slug: str, pk: int):
 @require_http_methods(["GET", "POST"])
 def create_custom_voice_consent(request, team_slug: str, pk: int):
     """Upload a consent recording for custom voice creation."""
-    from apps.service_providers.openai_custom_voice import OpenAICustomVoiceClient
+    from apps.service_providers.forms import VoiceConsentForm  # noqa: PLC0415 - circular: forms imports models
+    from apps.service_providers.openai_custom_voice import (  # noqa: PLC0415 - lazy: optional provider dep
+        OpenAICustomVoiceClient,
+    )
 
     provider = _get_custom_voice_provider(request, pk)
+    supported_languages = OpenAICustomVoiceClient.get_supported_languages()
 
     if request.method == "POST":
-        consent_name = request.POST.get("consent_name", "").strip()
-        consent_language = request.POST.get("consent_language", "en")
-        consent_file = request.FILES.get("consent_recording")
-
-        errors = []
-        if not consent_name:
-            errors.append("Consent name is required")
-        if not consent_file:
-            errors.append("Consent recording file is required")
-
-        if errors:
-            for error in errors:
-                messages.error(request, error)
-        else:
+        form = VoiceConsentForm(request.POST, request.FILES, supported_languages=supported_languages)
+        if form.is_valid():
             try:
                 client = provider.get_custom_voice_client()
+                consent_file = form.cleaned_data["consent_recording"]
                 consent = client.create_voice_consent(
-                    name=consent_name,
-                    language=consent_language,
+                    name=form.cleaned_data["consent_name"],
+                    language=form.cleaned_data["consent_language"],
                     recording_file=consent_file.file,
                     filename=consent_file.name,
                 )
@@ -328,22 +336,22 @@ def create_custom_voice_consent(request, team_slug: str, pk: int):
                 )
             except Exception as e:
                 log.exception("Error creating voice consent")
-                messages.error(request, f"Failed to create consent: {e}")
+                messages.error(request, f"Failed to create consent: {_format_api_error(e)}")
+    else:
+        form = VoiceConsentForm(supported_languages=supported_languages)
 
-    # Get consent phrase for display
-    language = request.POST.get("consent_language", "en") if request.method == "POST" else "en"
+    language = form.data.get("consent_language", "en") if form.is_bound else "en"
     try:
         consent_phrase = OpenAICustomVoiceClient.get_consent_phrase(language)
     except ValueError:
         consent_phrase = OpenAICustomVoiceClient.get_consent_phrase("en")
-
-    supported_languages = OpenAICustomVoiceClient.get_supported_languages()
 
     return render(
         request,
         "service_providers/custom_voice/create_consent.html",
         {
             "provider": provider,
+            "form": form,
             "consent_phrase": consent_phrase,
             "supported_languages": supported_languages,
             "selected_language": language,
@@ -358,23 +366,21 @@ def list_custom_voices(request, team_slug: str, pk: int):
     """List custom voices for a provider."""
     provider = _get_custom_voice_provider(request, pk)
 
-    # Get voices from database
     db_voices = SyntheticVoice.objects.filter(
         voice_provider=provider,
         service=SyntheticVoice.OpenAICustomVoice,
     )
 
-    # Fetch from OpenAI to check sync status
     openai_voices = {}
     consents = []
     error_message = None
     try:
         client = provider.get_custom_voice_client()
-        openai_voices = {v.id: v for v in client.list_voices()}
-        consents = client.list_voice_consents()
+        openai_voices = {v.id: v for v in client.list_voices(limit=_OPENAI_LIST_LIMIT)}
+        consents = client.list_voice_consents(limit=_OPENAI_LIST_LIMIT)
     except Exception as e:
-        log.warning(f"Could not fetch from OpenAI: {e}")
-        error_message = str(e)
+        log.warning("Could not fetch from OpenAI", exc_info=True)
+        error_message = _format_api_error(e)
 
     return render(
         request,
@@ -395,52 +401,32 @@ def list_custom_voices(request, team_slug: str, pk: int):
 @require_http_methods(["GET", "POST"])
 def create_custom_voice(request, team_slug: str, pk: int):
     """Create a custom voice from audio sample and consent."""
+    from apps.service_providers.forms import CustomVoiceCreationForm  # noqa: PLC0415 - circular: forms imports models
+
     provider = _get_custom_voice_provider(request, pk)
 
     if request.method == "POST":
-        voice_name = request.POST.get("voice_name", "").strip()
-        consent_id = request.POST.get("consent_id", "").strip()
-        audio_sample = request.FILES.get("audio_sample")
-
-        errors = []
-        if not voice_name:
-            errors.append("Voice name is required")
-        if not consent_id:
-            errors.append("Consent ID is required")
-        if not audio_sample:
-            errors.append("Audio sample file is required")
-
-        if errors:
-            for error in errors:
-                messages.error(request, error)
-        else:
+        form = CustomVoiceCreationForm(request.POST, request.FILES)
+        if form.is_valid():
             try:
                 client = provider.get_custom_voice_client()
+                audio_sample = form.cleaned_data["audio_sample"]
                 voice = client.create_voice(
-                    name=voice_name,
-                    consent_id=consent_id,
+                    name=form.cleaned_data["voice_name"],
+                    consent_id=form.cleaned_data["consent_id"],
                     audio_sample_file=audio_sample.file,
                     filename=audio_sample.name,
                 )
 
-                # Create SyntheticVoice record
-                SyntheticVoice.objects.create(
-                    name=voice_name,
-                    neural=True,
-                    language="",
-                    language_code="",
-                    gender="",
-                    service=SyntheticVoice.OpenAICustomVoice,
+                SyntheticVoice.create_custom_voice(
+                    name=form.cleaned_data["voice_name"],
                     voice_provider=provider,
-                    config={
-                        "voice_id": voice.id,
-                        "consent_id": consent_id,
-                        "created_at": voice.created_at,
-                        "model": "gpt-4o-mini-tts",
-                    },
+                    voice_id=voice.id,
+                    consent_id=form.cleaned_data["consent_id"],
+                    created_at=voice.created_at,
                 )
 
-                messages.success(request, f"Voice '{voice_name}' created successfully!")
+                messages.success(request, f"Voice '{form.cleaned_data['voice_name']}' created successfully!")
                 return redirect(
                     "service_providers:custom_voice_list_voices",
                     team_slug=team_slug,
@@ -448,22 +434,24 @@ def create_custom_voice(request, team_slug: str, pk: int):
                 )
             except Exception as e:
                 log.exception("Error creating custom voice")
-                messages.error(request, f"Failed to create voice: {e}")
+                messages.error(request, f"Failed to create voice: {_format_api_error(e)}")
+    else:
+        form = CustomVoiceCreationForm()
 
-    # Fetch available consents
     consents = []
     try:
         client = provider.get_custom_voice_client()
-        consents = client.list_voice_consents()
+        consents = client.list_voice_consents(limit=_OPENAI_LIST_LIMIT)
     except Exception as e:
-        log.warning(f"Could not fetch consents: {e}")
-        messages.warning(request, f"Could not fetch consents from OpenAI: {e}")
+        log.warning("Could not fetch consents", exc_info=True)
+        messages.warning(request, f"Could not fetch consents from OpenAI: {_format_api_error(e)}")
 
     return render(
         request,
         "service_providers/custom_voice/create_voice.html",
         {
             "provider": provider,
+            "form": form,
             "consents": consents,
             "active_tab": "manage-team",
         },
@@ -487,22 +475,16 @@ def delete_custom_voice(request, team_slug: str, pk: int, voice_pk: int):
     voice_name = voice.name
     openai_voice_id = voice.get_openai_voice_id()
 
-    try:
-        # Delete from OpenAI first if we have a voice_id
-        if openai_voice_id:
+    # Delete from OpenAI first if we have a voice_id
+    if openai_voice_id:
+        try:
             client = provider.get_custom_voice_client()
-            try:
-                client.delete_voice(openai_voice_id)
-            except Exception as e:
-                log.warning(f"Could not delete voice from OpenAI: {e}")
-                # Continue to delete from DB even if OpenAI deletion fails
+            client.delete_voice(openai_voice_id)
+        except Exception:
+            log.warning("Could not delete voice from OpenAI (continuing with DB deletion)", exc_info=True)
 
-        # Delete from database
-        voice.delete()
-        messages.success(request, f"Voice '{voice_name}' deleted successfully")
-    except Exception as e:
-        log.exception("Error deleting custom voice")
-        messages.error(request, f"Failed to delete voice: {e}")
+    voice.delete()
+    messages.success(request, f"Voice '{voice_name}' deleted successfully")
 
     return redirect(
         "service_providers:custom_voice_list_voices",

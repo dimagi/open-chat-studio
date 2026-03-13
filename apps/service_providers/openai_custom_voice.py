@@ -131,7 +131,7 @@ class OpenAICustomVoiceClient:
             List of VoiceConsent objects
         """
         url = f"{self.base_url}/audio/voice_consents"
-        params = {"limit": limit}
+        params: dict[str, int | str] = {"limit": limit}
         if after:
             params["after"] = after
 
@@ -197,7 +197,7 @@ class OpenAICustomVoiceClient:
     def list_voices(self, limit: int = 20, after: str | None = None) -> list[CustomVoice]:
         """List custom voices available to the organization"""
         url = f"{self.base_url}/audio/voices"
-        params = {"limit": limit}
+        params: dict[str, int | str] = {"limit": limit}
         if after:
             params["after"] = after
 
@@ -230,7 +230,7 @@ class OpenAICustomVoiceClient:
         mime_types = {
             "mp3": "audio/mpeg",
             "mpeg": "audio/mpeg",
-            "wav": "audio/x-wav",
+            "wav": "audio/wav",
             "ogg": "audio/ogg",
             "aac": "audio/aac",
             "flac": "audio/flac",

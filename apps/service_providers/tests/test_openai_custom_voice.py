@@ -1,20 +1,24 @@
 """
-Tests for OpenAI Custom Voice API client and speech service.
+Tests for OpenAI Custom Voice API client, speech service, and views.
 """
 
 from io import BytesIO
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 
 from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
+from apps.service_providers.models import VoiceProviderType
 from apps.service_providers.openai_custom_voice import (
     CustomVoice,
     OpenAICustomVoiceClient,
     VoiceConsent,
 )
 from apps.service_providers.speech_service import OpenAICustomVoiceSpeechService
+from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 
 
 class TestVoiceConsent:
@@ -72,7 +76,7 @@ class TestOpenAICustomVoiceClient:
 
     def test_get_mime_type(self):
         assert OpenAICustomVoiceClient._get_mime_type("file.mp3") == "audio/mpeg"
-        assert OpenAICustomVoiceClient._get_mime_type("file.wav") == "audio/x-wav"
+        assert OpenAICustomVoiceClient._get_mime_type("file.wav") == "audio/wav"
         assert OpenAICustomVoiceClient._get_mime_type("file.ogg") == "audio/ogg"
         assert OpenAICustomVoiceClient._get_mime_type("file.unknown") == "application/octet-stream"
 
@@ -299,7 +303,7 @@ class TestVoiceProviderCustomVoiceClient:
 
     def test_get_custom_voice_client_success(self):
         """Test getting custom voice client from provider"""
-        from apps.service_providers.models import VoiceProvider, VoiceProviderType
+        from apps.service_providers.models import VoiceProvider  # noqa: PLC0415
 
         provider = Mock(spec=VoiceProvider)
         provider.type = VoiceProviderType.openai_custom_voice
@@ -318,10 +322,127 @@ class TestVoiceProviderCustomVoiceClient:
 
     def test_get_custom_voice_client_wrong_provider_type(self):
         """Test that getting client fails for non-custom-voice provider"""
-        from apps.service_providers.models import VoiceProvider, VoiceProviderType
+        from apps.service_providers.models import VoiceProvider  # noqa: PLC0415
 
         provider = Mock(spec=VoiceProvider)
         provider.type = VoiceProviderType.openai
 
         with pytest.raises(ValueError, match="Custom voice client not available"):
             VoiceProvider.get_custom_voice_client(provider)
+
+
+@pytest.fixture()
+def custom_voice_provider(team_with_users):
+    return VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.openai_custom_voice,
+        name="Test Custom Voice Provider",
+        config={
+            "openai_api_key": "sk-test-key",
+            "openai_organization": "org-test",
+        },
+    )
+
+
+@pytest.fixture()
+def authed_client(team_with_users, client):
+    user = team_with_users.members.first()
+    client.force_login(user)
+    return client
+
+
+@pytest.mark.django_db()
+class TestCustomVoiceViews:
+    def test_list_voices_renders(self, authed_client, custom_voice_provider, team_with_users):
+        """List voices page renders even when OpenAI API fails."""
+        url = reverse(
+            "service_providers:custom_voice_list_voices",
+            kwargs={"team_slug": team_with_users.slug, "pk": custom_voice_provider.pk},
+        )
+        with patch.object(type(custom_voice_provider), "get_custom_voice_client") as mock_client:
+            mock_client.side_effect = Exception("API unreachable")
+            response = authed_client.get(url)
+
+        assert response.status_code == 200
+        assert response.context["error_message"] is not None
+
+    def test_list_consents_renders(self, authed_client, custom_voice_provider, team_with_users):
+        """List consents page renders even when OpenAI API fails."""
+        url = reverse(
+            "service_providers:custom_voice_list_consents",
+            kwargs={"team_slug": team_with_users.slug, "pk": custom_voice_provider.pk},
+        )
+        with patch.object(type(custom_voice_provider), "get_custom_voice_client") as mock_client:
+            mock_client.side_effect = Exception("API unreachable")
+            response = authed_client.get(url)
+
+        assert response.status_code == 200
+        assert response.context["error_message"] is not None
+
+    def test_create_voice_creates_db_record(self, authed_client, custom_voice_provider, team_with_users):
+        """Creating a voice should create a SyntheticVoice with correct config."""
+        url = reverse(
+            "service_providers:custom_voice_create",
+            kwargs={"team_slug": team_with_users.slug, "pk": custom_voice_provider.pk},
+        )
+        audio_file = SimpleUploadedFile("sample.mp3", b"fake audio", content_type="audio/mpeg")
+
+        with patch.object(type(custom_voice_provider), "get_custom_voice_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.create_voice.return_value = CustomVoice(id="voice_new123", name="My Voice", created_at=9999)
+            mock_client.list_voice_consents.return_value = []
+            mock_get_client.return_value = mock_client
+
+            response = authed_client.post(
+                url,
+                data={
+                    "voice_name": "My Voice",
+                    "consent_id": "cons_abc",
+                    "audio_sample": audio_file,
+                },
+            )
+
+        assert response.status_code == 302
+        voice = SyntheticVoice.objects.get(
+            voice_provider=custom_voice_provider, service=SyntheticVoice.OpenAICustomVoice
+        )
+        assert voice.name == "My Voice"
+        assert voice.config["voice_id"] == "voice_new123"
+        assert voice.config["consent_id"] == "cons_abc"
+
+    def test_delete_voice_succeeds_even_when_openai_fails(self, authed_client, custom_voice_provider, team_with_users):
+        """Delete should remove DB record even if OpenAI deletion fails."""
+        voice = SyntheticVoice.create_custom_voice(
+            name="Deletable Voice",
+            voice_provider=custom_voice_provider,
+            voice_id="voice_del123",
+            consent_id="cons_del456",
+        )
+        url = reverse(
+            "service_providers:custom_voice_delete",
+            kwargs={
+                "team_slug": team_with_users.slug,
+                "pk": custom_voice_provider.pk,
+                "voice_pk": voice.pk,
+            },
+        )
+
+        with patch.object(type(custom_voice_provider), "get_custom_voice_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.delete_voice.side_effect = Exception("OpenAI down")
+            mock_get_client.return_value = mock_client
+
+            response = authed_client.post(url)
+
+        assert response.status_code == 302
+        assert not SyntheticVoice.objects.filter(pk=voice.pk).exists()
+
+    def test_create_voice_rejects_wrong_provider_type(self, authed_client, team_with_users):
+        """Views should 404 for non-custom-voice providers."""
+        aws_provider = VoiceProviderFactory(team=team_with_users, type=VoiceProviderType.aws)
+        url = reverse(
+            "service_providers:custom_voice_list_voices",
+            kwargs={"team_slug": team_with_users.slug, "pk": aws_provider.pk},
+        )
+        response = authed_client.get(url)
+        assert response.status_code == 404

@@ -330,7 +330,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         if self.type != VoiceProviderType.openai_custom_voice:
             raise ValueError(f"Custom voice client not available for provider type: {self.type}")
 
-        from apps.service_providers.openai_custom_voice import OpenAICustomVoiceClient
+        from apps.service_providers.openai_custom_voice import (  # noqa: PLC0415 - lazy: optional provider dep
+            OpenAICustomVoiceClient,
+        )
 
         return OpenAICustomVoiceClient(
             api_key=self.config["openai_api_key"],
@@ -357,10 +359,6 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 except IntegrityError:
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
                     raise ValidationError(message) from None
-        elif self.type == VoiceProviderType.openai_custom_voice:
-            # Custom voice files are handled through the voice creation workflow
-            # (consent upload -> voice creation) rather than direct file upload
-            pass
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)

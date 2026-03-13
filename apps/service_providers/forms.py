@@ -161,6 +161,81 @@ class OpenAICustomVoiceConfigForm(OpenAIConfigForm):
     file_formset_form = OpenAICustomVoiceFileFormset
 
 
+ACCEPTED_AUDIO_TYPES = ["mp3", "wav", "ogg", "aac", "flac", "webm", "mp4", "mpeg"]
+MAX_AUDIO_FILE_SIZE_MB = 10
+
+
+def _validate_audio_file(file, field_name: str) -> list[str]:
+    """Validate an uploaded audio file for extension and size."""
+    errors = []
+    if file:
+        ext = file.name.rsplit(".", 1)[-1].lower() if "." in file.name else ""
+        if ext not in ACCEPTED_AUDIO_TYPES:
+            valid = ", ".join(f".{t}" for t in ACCEPTED_AUDIO_TYPES)
+            errors.append(f"{field_name}: unsupported file type '.{ext}'. Accepted: {valid}")
+        file_size_mb = file.size / (1024 * 1024)
+        if file_size_mb > MAX_AUDIO_FILE_SIZE_MB:
+            errors.append(f"{field_name}: file exceeds {MAX_AUDIO_FILE_SIZE_MB}MB limit ({file_size_mb:.1f}MB)")
+    return errors
+
+
+class VoiceConsentForm(forms.Form):
+    """Form for uploading a voice consent recording."""
+
+    consent_name = forms.CharField(
+        max_length=255,
+        label=_("Consent Name"),
+        help_text=_("A name to identify this consent recording"),
+    )
+    consent_language = forms.ChoiceField(
+        label=_("Language"),
+        help_text=_("The language of the consent phrase you recorded"),
+    )
+    consent_recording = forms.FileField(
+        label=_("Consent Recording"),
+        help_text=_("Upload your recording of the consent phrase"),
+    )
+
+    def __init__(self, *args, supported_languages=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if supported_languages:
+            self.fields["consent_language"].choices = supported_languages
+
+    def clean_consent_recording(self):
+        file = self.cleaned_data.get("consent_recording")
+        if file:
+            errors = _validate_audio_file(file, "Consent recording")
+            if errors:
+                raise forms.ValidationError(errors)
+        return file
+
+
+class CustomVoiceCreationForm(forms.Form):
+    """Form for creating a custom voice from an audio sample."""
+
+    voice_name = forms.CharField(
+        max_length=255,
+        label=_("Voice Name"),
+        help_text=_("A descriptive name for this voice"),
+    )
+    consent_id = forms.CharField(
+        label=_("Consent Recording"),
+        help_text=_("The consent recording must be from the same voice actor"),
+    )
+    audio_sample = forms.FileField(
+        label=_("Audio Sample"),
+        help_text=_("30 seconds or less of the voice you want to clone"),
+    )
+
+    def clean_audio_sample(self):
+        file = self.cleaned_data.get("audio_sample")
+        if file:
+            errors = _validate_audio_file(file, "Audio sample")
+            if errors:
+                raise forms.ValidationError(errors)
+        return file
+
+
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["openai_api_key"]
 
@@ -336,7 +411,6 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     slack_installation_id = forms.CharField(widget=forms.HiddenInput())
 
     def get_slack_installation(self):
-
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()
 
