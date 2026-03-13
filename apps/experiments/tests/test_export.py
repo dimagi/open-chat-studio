@@ -7,6 +7,7 @@ import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.export import filtered_export_to_csv
+from apps.experiments.models import SessionStatus
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -272,6 +273,7 @@ def test_trace_id_export():
 
     session = Mock(
         external_id="session123",
+        status="active",
         get_platform_name=Mock(return_value="TestPlatform"),
         participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
         chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
@@ -312,3 +314,43 @@ def test_trace_id_export():
     assert rows[2][trace_id_index] == "trace123"  # ai msg from trace1 (same trace_id)
     assert rows[3][trace_id_index] == "trace456"  # human msg from trace2 (langfuse)
     assert rows[4][trace_id_index] == "trace456"  # ai msg from trace2 (same trace_id)
+
+
+@pytest.mark.django_db()
+def test_session_status_export():
+    experiment = ExperimentFactory.create()
+    team = experiment.team
+    session = ExperimentSessionFactory.create(
+        experiment=experiment,
+        team=team,
+        experiment_channel=ExperimentChannelFactory.create(),
+        status=SessionStatus.COMPLETE,
+    )
+    human_msg = ChatMessage.objects.create(
+        chat=session.chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
+    ai_msg = ChatMessage.objects.create(
+        chat=session.chat,
+        content="Hi there",
+        message_type=ChatMessageType.AI,
+    )
+    TraceFactory.create(
+        experiment=experiment,
+        session=session,
+        participant=session.participant,
+        team=team,
+        input_message=human_msg,
+        output_message=ai_msg,
+    )
+
+    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
+    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    rows = list(csv_reader)
+
+    header = rows[0]
+    status_index = header.index("Session Status")
+
+    assert rows[1][status_index] == SessionStatus.COMPLETE
+    assert rows[2][status_index] == SessionStatus.COMPLETE
