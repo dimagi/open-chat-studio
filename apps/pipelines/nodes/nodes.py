@@ -8,7 +8,9 @@ from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
+from jinja2 import TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
+from jinja2.sandbox import SecurityError as JinjaSandboxSecurityError
 from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
@@ -92,6 +94,34 @@ DEFAULT_FUNCTION = f"""# You must define a main function, which takes the node i
 def main(input: str, **kwargs) -> str:
     return input
 """
+
+
+def format_jinja_error(exc: Exception, field_name: str, context: dict | None = None) -> str:
+    """Format a Jinja2 exception into a structured, actionable error message.
+
+    Args:
+        exc: The Jinja2 exception that was raised.
+        field_name: The Pydantic field name where the error occurred.
+        context: The Jinja template context dict, if available. Used to list
+            available variables for UndefinedError.
+    """
+    exc_type = type(exc).__name__
+
+    if isinstance(exc, UndefinedError):
+        msg = f'Jinja2 UndefinedError in field "{field_name}": {exc}'
+        if context:
+            var_names = ", ".join(context.keys())
+            msg += f"\nAvailable variables: {var_names}"
+        return msg
+
+    if isinstance(exc, TemplateSyntaxError):
+        line_info = f" (line {exc.lineno})" if exc.lineno else ""
+        return f'Jinja2 TemplateSyntaxError in field "{field_name}": {exc.message}{line_info}'
+
+    if isinstance(exc, JinjaSandboxSecurityError):
+        return f'Jinja2 SecurityError in field "{field_name}": {exc}'
+
+    return f'Jinja2 error in field "{field_name}": {exc_type}: {exc}'
 
 
 def _build_jinja_context(context: "NodeContext", repo: "ORMRepository") -> dict:
