@@ -1,5 +1,8 @@
 import inspect
 import json
+import os
+import tempfile
+from pathlib import Path
 
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
@@ -18,6 +21,10 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 from django_htmx.http import reswap
 from django_tables2 import SingleTableView
+from djlint.lint import lint_file
+from djlint.settings import Config as DjlintConfig
+from jinja2 import TemplateSyntaxError
+from jinja2.sandbox import SandboxedEnvironment
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
@@ -39,6 +46,14 @@ from apps.web.waf import WafRule, waf_allow
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
 from ..utils.prompt import PromptVars
+
+# Curated djlint rules relevant to template fragments.
+# All other rules (H005 html lang, H007 DOCTYPE, H016 title, J004/J018 url_for, etc.)
+# are irrelevant for template fragments and would produce noise.
+DJLINT_ALLOWED_RULES = {"H020", "H021", "H025", "T027", "T034"}
+
+# Use /dev/shm (RAM-backed tmpfs) if available to avoid disk I/O for temp files
+_DJLINT_TMPDIR = "/dev/shm" if os.path.isdir("/dev/shm") else None
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -363,3 +378,77 @@ def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
 def get_pipeline_message_response(request, team_slug: str, pipeline_pk: int, task_id: str):
     progress = Progress(AsyncResult(task_id)).get_info()
     return JsonResponse(progress)
+
+
+@login_and_team_required
+@permission_required("pipelines.change_pipeline")
+@csrf_exempt
+@require_POST
+def validate_jinja(request, team_slug: str):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    template = body.get("template")
+    if template is None:
+        return JsonResponse({"error": "Missing 'template' field"}, status=400)
+
+    checks = set(body.get("checks", ["jinja", "html"]))
+    errors = []
+
+    # 1. Jinja syntax validation
+    if "jinja" in checks and template:
+        try:
+            SandboxedEnvironment().parse(template)
+        except TemplateSyntaxError as e:
+            errors.append(
+                {
+                    "line": e.lineno or 1,
+                    "column": 0,
+                    "message": e.message,
+                    "severity": "error",
+                }
+            )
+
+    # 2. HTML linting via djlint (only if requested and no Jinja syntax errors)
+    if "html" in checks and not errors and template:
+        errors.extend(_djlint_check(template))
+
+    return JsonResponse({"errors": errors})
+
+
+def _djlint_check(template: str) -> list[dict]:
+    """Run djlint on a template string and return lint issues as dicts.
+
+    Uses a curated allowlist of rules (DJLINT_ALLOWED_RULES) to filter out
+    rules that are irrelevant for template fragments.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, dir=_DJLINT_TMPDIR) as f:
+        f.write(template)
+        tmp_path = Path(f.name)
+    try:
+        config = DjlintConfig(str(tmp_path), profile="jinja")
+        results = lint_file(config, tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    errors = []
+    for issues in results.values():
+        for issue in issues:
+            code = issue.get("code", "")
+            if code not in DJLINT_ALLOWED_RULES:
+                continue
+            line_str = issue.get("line", "1:0")
+            parts = line_str.split(":")
+            line = int(parts[0]) if parts[0].isdigit() else 1
+            column = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            errors.append(
+                {
+                    "line": line,
+                    "column": column,
+                    "message": f"{code} {issue.get('message', '')}".strip(),
+                    "severity": "warning",
+                }
+            )
+    return errors
