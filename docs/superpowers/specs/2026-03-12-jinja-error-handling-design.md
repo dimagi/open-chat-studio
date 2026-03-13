@@ -35,9 +35,29 @@ Or when valid:
 {"errors": []}
 ```
 
-Implementation uses `SandboxedEnvironment().parse(template)` — this only parses the template AST without rendering, so it catches syntax errors but not undefined variable errors (which are only knowable at runtime when the context is available). Using the same `SandboxedEnvironment` as runtime ensures parity.
+The endpoint runs two checks in sequence:
 
-Empty template strings are valid (`parse("")` returns an empty AST) and return `{"errors": []}`.
+1. **Jinja syntax validation** via `SandboxedEnvironment().parse(template)` — parses the template AST without rendering, catching syntax errors but not undefined variable errors (which are only knowable at runtime). Uses the same `SandboxedEnvironment` as runtime for parity. Results returned with `"error"` severity.
+
+2. **HTML linting** via `djlint.lint.lint_file()` with profile `"jinja"` — catches HTML issues like unclosed tags, malformed attributes, etc. Results returned with `"warning"` severity. Uses a curated rule set relevant to template fragments (not full HTML documents):
+   - **H025**: Orphan/unclosed tags
+   - **T027**: Unclosed string in template syntax
+   - **T034**: Likely typo in template tags (`{% ... }` instead of `{% ... %}`)
+   - **H020**: Empty tag pairs
+   - **H021**: Inline styles (informational)
+   - All other rules are ignored (e.g. H005 html lang, H007 DOCTYPE, H016 title, J004/J018 url_for — irrelevant for template fragments)
+
+Since djlint operates on files, the endpoint writes the template to a `NamedTemporaryFile` for linting, then cleans up.
+
+Response includes both error types with a `severity` field:
+```json
+{"errors": [
+  {"line": 1, "column": 8, "message": "unexpected end of template", "severity": "error"},
+  {"line": 3, "column": 0, "message": "H025 Tag seems to be an orphan.", "severity": "warning"}
+]}
+```
+
+Empty template strings are valid and return `{"errors": []}`.
 
 #### Frontend CodeMirror Linter
 
@@ -46,7 +66,7 @@ Add a CodeMirror `linter()` extension to the `JinjaEditor` component. On each ed
 The linter function:
 - Debounces calls to avoid excessive requests during typing
 - Maps backend error responses to `{from, to, severity, message}` diagnostics
-- Shows "error" severity for syntax errors
+- Shows "error" severity (red squiggles) for Jinja syntax errors, "warning" severity (yellow squiggles) for HTML lint issues
 - Clears stale diagnostics while a request is in-flight
 
 Requires adding `@codemirror/lint` as an npm dependency.
@@ -118,7 +138,7 @@ No changes to the `Trace` model or `format_exception_for_trace()` — the improv
 
 - `apps/pipelines/tests/test_template_node.py` — test structured error messages for RenderTemplate
 - `apps/pipelines/tests/test_nodes.py` — test structured error messages for SendEmail
-- New test for the validate-jinja endpoint (syntax errors, valid templates, empty input)
+- New test for the validate-jinja endpoint (Jinja syntax errors, HTML lint warnings, valid templates, empty input)
 - Update `apps/pipelines/tests/node_schemas/SendEmail.json` and add/update RenderTemplate schema test
 
 ## Out of Scope
