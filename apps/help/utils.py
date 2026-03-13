@@ -1,7 +1,10 @@
 import inspect
 import textwrap
 
+from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
+from apps.pipelines.nodes.nodes import CodeNode
+from apps.pipelines.repository import InMemoryPipelineRepository
 
 PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
     """
@@ -63,7 +66,7 @@ PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
 
 
 def get_python_node_coder_prompt(current_code: str, error: str) -> str:
-    from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION
+    from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION  # noqa: PLC0415
 
     if current_code == DEFAULT_FUNCTION:
         current_code = ""
@@ -79,10 +82,8 @@ def get_python_node_coder_prompt(current_code: str, error: str) -> str:
 
 
 def get_python_node_functions():
-    from apps.pipelines.nodes.base import PipelineState
-    from apps.pipelines.nodes.nodes import CodeNode
-
     node = CodeNode(name="test", node_id="123", django_node=None, code="")
+    node._repo = InMemoryPipelineRepository()
     mock_state = PipelineState(outputs={}, experiment_session=None)
     res = node._get_custom_functions(state=mock_state, context=NodeContext(mock_state), output_state=mock_state)
     function_docs = filter(None, [extract_function_signature(name, obj) for name, obj in res.items()])

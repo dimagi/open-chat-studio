@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import emoji
 import httpx
@@ -144,7 +144,7 @@ class ChannelBase(ABC):
         self.experiment = experiment
         self.experiment_channel = experiment_channel
         self._experiment_session = experiment_session
-        self._message: BaseMessage = None
+        self._message: BaseMessage | None = None
         self._participant_identifier = experiment_session.participant.identifier if experiment_session else None
         self._is_user_message = False
         self.trace_service = TracingService.create_for_experiment(self.experiment)
@@ -182,7 +182,7 @@ class ChannelBase(ABC):
 
     @property
     def experiment_session(self) -> ExperimentSession:
-        return self._experiment_session  # ty: ignore[invalid-return-type]
+        return cast(ExperimentSession, self._experiment_session)
 
     @experiment_session.setter
     def experiment_session(self, value: ExperimentSession):
@@ -191,7 +191,7 @@ class ChannelBase(ABC):
 
     @property
     def message(self) -> BaseMessage:
-        return self._message
+        return self._message  # ty: ignore[invalid-return-type]
 
     @property
     def supports_multimedia(self) -> bool:
@@ -228,7 +228,7 @@ class ChannelBase(ABC):
         elif self.message:
             self._participant_identifier = self.message.participant_id
 
-        return self._participant_identifier  # ty: ignore[invalid-return-type]
+        return cast(str, self._participant_identifier)
 
     @property
     def participant_user(self):
@@ -1020,7 +1020,7 @@ class WebChannel(ChannelBase):
 
     @classmethod
     def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
-        from apps.experiments.tasks import get_response_for_webchat_task
+        from apps.experiments.tasks import get_response_for_webchat_task  # noqa: PLC0415
 
         if seed_message := experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(

@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -12,8 +13,9 @@ from apps.generics.help import render_help_with_link
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class ConsentFormHome(LoginAndTeamRequiredMixin, TemplateView):
+class ConsentFormHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
+    permission_required = "experiments.view_consentform"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
@@ -25,16 +27,17 @@ class ConsentFormHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class ConsentFormTableView(SingleTableView):
+class ConsentFormTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = ConsentForm
     table_class = ConsentFormTable
     template_name = "table/single_table.html"
+    permission_required = "experiments.view_consentform"
 
     def get_queryset(self):
         return ConsentForm.objects.filter(team=self.request.team, is_version=False)
 
 
-class CreateConsentForm(CreateView):
+class CreateConsentForm(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = ConsentForm
     fields = ["name", "consent_text", "capture_identifier", "identifier_label", "identifier_type", "confirmation_text"]
     template_name = "generic/object_form.html"
@@ -44,6 +47,7 @@ class CreateConsentForm(CreateView):
         "button_text": "Create",
         "active_tab": "consent_forms",
     }
+    permission_required = "experiments.add_consentform"
 
     def get_success_url(self):
         return reverse("experiments:consent_home", args=[self.request.team.slug])
@@ -54,7 +58,7 @@ class CreateConsentForm(CreateView):
         return super().form_valid(form)
 
 
-class EditConsentForm(UpdateView):
+class EditConsentForm(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = ConsentForm
     fields = ["name", "consent_text", "capture_identifier", "identifier_label", "identifier_type", "confirmation_text"]
     template_name = "generic/object_form.html"
@@ -64,6 +68,7 @@ class EditConsentForm(UpdateView):
         "button_text": "Update",
         "active_tab": "consent_forms",
     }
+    permission_required = "experiments.change_consentform"
 
     def get_queryset(self):
         return ConsentForm.objects.filter(team=self.request.team)
@@ -72,7 +77,9 @@ class EditConsentForm(UpdateView):
         return reverse("experiments:consent_home", args=[self.request.team.slug])
 
 
-class DeleteConsentForm(LoginAndTeamRequiredMixin, View):
+class DeleteConsentForm(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "experiments.delete_consentform"
+
     def delete(self, request, team_slug: str, pk: int):
         consent_form = get_object_or_404(ConsentForm, id=pk, team=request.team)
         if consent_form.is_default:

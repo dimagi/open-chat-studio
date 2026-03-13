@@ -23,11 +23,13 @@ logger = logging.getLogger("ocs.notifications")
 
 @shared_task
 def send_notification_email_async(user_ids, notification_event_id):
-    from apps.users.models import CustomUser
+    from apps.users.models import CustomUser  # noqa: PLC0415
 
     try:
         users = CustomUser.objects.filter(id__in=user_ids)
-        notification_event = NotificationEvent.objects.select_related("event_type").get(id=notification_event_id)
+        notification_event = NotificationEvent.objects.select_related("event_type", "team").get(
+            id=notification_event_id
+        )
         send_notification_email(users, notification_event)
     except Exception:
         logger.exception("Failed to send notification email async")
@@ -44,8 +46,13 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
     for user in users:
         subject = f"Notification: {notification_event.title}"
 
-        # Build absolute URL for user profile
         profile_url = absolute_url(reverse("users:user_profile"))
+        notification_url = absolute_url(
+            reverse(
+                "ocs_notifications:notification_event_home",
+                args=[notification_event.team.slug, notification_event.event_type_id],
+            )
+        )
 
         context = {
             "user": user,
@@ -53,6 +60,8 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
             "title": notification_event.title,
             "message": notification_event.message,
             "level": notification_event.event_type.get_level_display(),
+            "team_name": notification_event.team.name,
+            "notification_url": notification_url,
             "profile_url": profile_url,
         }
 

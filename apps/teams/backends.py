@@ -18,6 +18,7 @@ ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 PIPELINE_ADMIN_GROUP = "Pipeline Admin"
 EVALUATION_ADMIN_GROUP = "Evaluation Admin"
+ANNOTATION_REVIEWER_GROUP = "Annotation Reviewer"
 
 NORMAL_USER_GROUPS = [
     EXPERIMENT_ADMIN_GROUP,
@@ -229,6 +230,15 @@ GROUPS = [
         EVALUATION_ADMIN_GROUP,
         [
             AppPermSetDef("evaluations", ALL),
+        ],
+    ),
+    GroupDef(
+        ANNOTATION_REVIEWER_GROUP,
+        [
+            ModelPermSetDef("human_annotations", "annotationqueue", [VIEW]),
+            ModelPermSetDef("human_annotations", "annotationitem", [VIEW, CHANGE]),
+            ModelPermSetDef("human_annotations", "annotation", [ADD]),
+            ModelPermSetDef("human_annotations", "annotationqueueaggregate", [VIEW]),
         ],
     ),
 ]

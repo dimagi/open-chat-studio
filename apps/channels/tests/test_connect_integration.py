@@ -28,7 +28,7 @@ def _setup_participant(experiment) -> tuple:
     commcare_connect_channel_id = str(uuid4())
 
     encryption_key = os.urandom(32)
-    participant = ParticipantFactory(identifier=connect_id, team=team, platform=ChannelPlatform.COMMCARE_CONNECT)
+    participant = ParticipantFactory.create(identifier=connect_id, team=team, platform=ChannelPlatform.COMMCARE_CONNECT)
     part_data = ParticipantData.objects.create(
         team=team,
         participant=participant,
@@ -36,7 +36,7 @@ def _setup_participant(experiment) -> tuple:
         experiment=experiment,
         encryption_key=base64.b64encode(encryption_key).decode("utf-8"),
     )
-    experiment_channel = ExperimentChannelFactory(
+    experiment_channel = ExperimentChannelFactory.create(
         team=team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
     )
     return commcare_connect_channel_id, encryption_key, experiment_channel, part_data
@@ -173,7 +173,7 @@ class TestCommCareConnectChannel:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_get_encryption_key_generates_missing_key(self):
         """Missing encryption keys should be generated"""
-        session = ExperimentSessionFactory(experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT)
+        session = ExperimentSessionFactory.create(experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT)
         channel = CommCareConnectChannel.from_experiment_session(session)
         participant_data = ParticipantData.objects.create(
             team=session.team,

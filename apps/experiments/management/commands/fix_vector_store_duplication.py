@@ -14,7 +14,7 @@ class Command(BaseCommand):
         parser.add_argument("--assistant", help="A specific assistant id", required=False)
 
     def handle(self, team, assistant, **options):
-        from apps.teams.models import Team
+        from apps.teams.models import Team  # noqa: PLC0415
 
         assistants = []
         if assistant:

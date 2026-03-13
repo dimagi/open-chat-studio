@@ -14,7 +14,7 @@ from .message_examples import sureadhere_messages
 
 @pytest.fixture()
 def sureadhere_channel(sureadhere_provider):
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory.create(
         platform=ChannelPlatform.SUREADHERE,
         messaging_provider=sureadhere_provider,
         experiment__team=sureadhere_provider.team,

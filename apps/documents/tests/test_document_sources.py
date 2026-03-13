@@ -171,7 +171,7 @@ class TestDocumentSourceManager:
         manager = DocumentSourceManager(document_source)
 
         with patch.object(manager, "_sync_documents") as mock_sync:
-            from apps.documents.source_loaders.base import SyncResult
+            from apps.documents.source_loaders.base import SyncResult  # noqa: PLC0415
 
             mock_sync.return_value = SyncResult(success=True, files_added=1)
 

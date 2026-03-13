@@ -4,6 +4,7 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import dictdiffer
 from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
@@ -15,6 +16,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -131,12 +133,13 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.experiments.models import AgentTools
-        from apps.pipelines.graph import PipelineGraph
+        from apps.experiments.models import AgentTools  # noqa: PLC0415
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
 
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
+                "repo": ORMRepository(session=self.session),
                 "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
             },
             run_name_map=graph.node_id_to_name_mapping,
@@ -202,6 +205,9 @@ class PipelineBot:
 
         out_pd = output.get("participant_data", None)
         if out_pd is not None and out_pd != input_state.get("participant_data"):
+            if self.trace_service:
+                diff = list(dictdiffer.diff(input_state.get("participant_data", {}), out_pd))
+                self.trace_service.set_participant_data_diff(diff)
             self.participant_data.data = out_pd
             self.participant_data.save(update_fields=["data"])
             self.session.participant.update_name_from_data(out_pd)
@@ -235,7 +241,7 @@ class PipelineBot:
         return chat_message
 
     def get_synthetic_voice(self) -> SyntheticVoice | None:
-        from apps.experiments.models import SyntheticVoice
+        from apps.experiments.models import SyntheticVoice  # noqa: PLC0415
 
         if self.synthetic_voice_id is None:
             return None
@@ -271,14 +277,15 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import PipelineGraph
-        from apps.pipelines.nodes.helpers import temporary_session
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415
+        from apps.pipelines.nodes.helpers import temporary_session  # noqa: PLC0415
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             state = PipelineState(messages=[input], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
-            output = runner.invoke(runnable, state)
+            output = runner.invoke(runnable, state, config)
             output = PipelineState(**output).json_safe()
         return output
 
@@ -379,7 +386,8 @@ class EventBot:
 
     @property
     def system_prompt(self):
-        context = PromptTemplateContext(self.session, None).get_context(["participant_data", "current_datetime"])
+        repo = ORMRepository(session=self.session)
+        context = PromptTemplateContext(self.session, repo=repo).get_context(["participant_data", "current_datetime"])
         context["conversation_history"] = self.get_conversation_history()
         return self.SYSTEM_PROMPT.format(**context)
 

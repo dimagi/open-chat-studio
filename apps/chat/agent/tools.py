@@ -185,7 +185,7 @@ class SearchToolConfig:
     generate_citations: bool = True
 
     def get_index(self):
-        from apps.documents.models import Collection
+        from apps.documents.models import Collection  # noqa: PLC0415
 
         return Collection.objects.get(id=self.index_id)
 
@@ -399,7 +399,7 @@ class EndSessionTool(CustomBaseTool):
     )
 
     def action(self, *args, **kwargs):
-        from apps.pipelines.nodes.base import Intents
+        from apps.pipelines.nodes.base import Intents  # noqa: PLC0415
 
         self.tool_callbacks.register_intent(Intents.END_SESSION)
         return "Your intent to end the session has been registered."
@@ -424,7 +424,7 @@ class AttachMediaTool(CustomBaseTool):
         if len(file_ids) > 5:
             return "A maximum of 5 files can be attached."
 
-        from apps.files.models import File
+        from apps.files.models import File  # noqa: PLC0415
 
         response = []
         include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
@@ -510,7 +510,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
         """
         Search a specific collection index for the most relevant file chunks based on the query.
         """
-        from apps.documents.models import Collection
+        from apps.documents.models import Collection  # noqa: PLC0415
 
         not_found = f"Collection index with ID {collection_index_id} not found."
         if collection_index_id not in self.allowed_collection_ids:

@@ -17,13 +17,13 @@ from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterPara
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
     """Test cloning sessions when filtered sessions are selected without filters - should get all messages."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
 
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset")
 
@@ -61,16 +61,20 @@ def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_create_dataset_from_sessions_task_with_filter():
     """Test cloning sessions with filter - should only get filtered messages."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
-    human_msg1 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="good message", chat=session_1.chat)
+    human_msg1 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="good message", chat=session_1.chat
+    )
     human_msg1.add_rating("+1")  # This will be included
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="good response", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="good response", chat=session_1.chat)
 
-    human_msg2 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="bad message", chat=session_1.chat)
+    human_msg2 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="bad message", chat=session_1.chat
+    )
     human_msg2.add_rating("-1")  # This will be filtered out
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="bad response", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="bad response", chat=session_1.chat)
 
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset")
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
@@ -104,11 +108,13 @@ def test_create_dataset_from_sessions_task_with_filter():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_create_dataset_from_sessions_task_with_duplicates():
     """Test that duplicate detection works when adding messages to existing dataset."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
-    human_msg = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="test message", chat=session_1.chat)
-    ai_msg = ChatMessageFactory(message_type=ChatMessageType.AI, content="test response", chat=session_1.chat)
+    human_msg = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="test message", chat=session_1.chat
+    )
+    ai_msg = ChatMessageFactory.create(message_type=ChatMessageType.AI, content="test response", chat=session_1.chat)
 
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset")
 
@@ -145,19 +151,25 @@ def test_create_dataset_from_sessions_task_with_duplicates():
 
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_history():
-    session_1 = ExperimentSessionFactory()
-    session_2 = ExperimentSessionFactory(team=session_1.team)
+    session_1 = ExperimentSessionFactory.create()
+    session_2 = ExperimentSessionFactory.create(team=session_1.team)
 
     # Two message pairs from the first session
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message2 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="session1 message2 ai", chat=session_1.chat)
+    ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
+    )
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="session1 message2 human", chat=session_1.chat
+    )
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="session1 message2 ai", chat=session_1.chat)
 
     # One message pair from the second session (with a seed message in the history)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message0 ai", chat=session_2.chat)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="session2 message0 ai", chat=session_2.chat)
+    ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat
+    )
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
         session_1.team, [session_1.external_id, session_2.external_id]
@@ -200,17 +212,17 @@ def test_create_messages_from_sessions_includes_history():
 
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_comments(team_with_users):
-    session_1 = ExperimentSessionFactory(team=team_with_users)
+    session_1 = ExperimentSessionFactory.create(team=team_with_users)
     user = team_with_users.members.first()
 
     team = session_1.team
-    human_message = ChatMessageFactory(
+    human_message = ChatMessageFactory.create(
         message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
     )
     UserComment.add_for_model(human_message, comment="comment1", added_by=user, team=team)
     UserComment.add_for_model(human_message, comment="comment2", added_by=user, team=team)
 
-    ai_message = ChatMessageFactory(
+    ai_message = ChatMessageFactory.create(
         message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat
     )
     UserComment.add_for_model(ai_message, comment="comment3", added_by=user, team=team)
@@ -224,16 +236,16 @@ def test_create_messages_from_sessions_includes_comments(team_with_users):
 
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_tags():
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
 
     team = session_1.team
-    human_message = ChatMessageFactory(
+    human_message = ChatMessageFactory.create(
         message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
     )
     human_message.add_version_tag(2, True)
     human_message.add_rating("+1")
 
-    ai_message = ChatMessageFactory(
+    ai_message = ChatMessageFactory.create(
         message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat
     )
     ai_message.add_version_tag(3, True)
@@ -249,17 +261,21 @@ def test_create_messages_from_sessions_includes_tags():
 @pytest.mark.django_db()
 def test_create_from_sessions_with_filtered_sessions_only():
     """Test cloning only filtered messages from sessions."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     # Create messages with different ratings
-    human_msg1 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    human_msg1 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat
+    )
     human_msg1.add_rating("+1")  # This will be filtered
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
-    human_msg2 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
+    human_msg2 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat
+    )
     human_msg2.add_rating("-1")  # This will be filtered out
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
 
     # Create filter params to only include +1 rated messages
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
@@ -281,31 +297,33 @@ def test_create_from_sessions_with_filtered_sessions_only():
 @pytest.mark.django_db()
 def test_create_from_sessions_mixed_regular_and_filtered():
     """Test combining regular sessions (all messages) with filtered sessions."""
-    session_1 = ExperimentSessionFactory()
-    session_2 = ExperimentSessionFactory(team=session_1.team)
+    session_1 = ExperimentSessionFactory.create()
+    session_2 = ExperimentSessionFactory.create(team=session_1.team)
     team = session_1.team
 
     # Session 1: Regular session - all messages should be included
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="session1 message1 human", chat=session_1.chat
+    )
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="session1 message1 ai", chat=session_1.chat)
 
     # Session 2: Filtered session - only +1 rated messages should be included
-    human_msg1 = ChatMessageFactory(
+    human_msg1 = ChatMessageFactory.create(
         message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat
     )
     human_msg1.add_rating("+1")  # This will be included
-    ChatMessageFactory(
+    ChatMessageFactory.create(
         message_type=ChatMessageType.AI, content="session2 message1 ai", chat=session_2.chat
     )  # This will also be included
-    ChatMessageFactory(
+    ChatMessageFactory.create(
         message_type=ChatMessageType.HUMAN, content="session2 message1 human", chat=session_2.chat
     )  # This won't be included
 
-    human_msg3 = ChatMessageFactory(
+    human_msg3 = ChatMessageFactory.create(
         message_type=ChatMessageType.HUMAN, content="session2 message2 human", chat=session_2.chat
     )
     human_msg3.add_rating("-1")  # This won't be incldued
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="session2 message2 ai", chat=session_2.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="session2 message2 ai", chat=session_2.chat)
 
     # Create filter params to only include +1 rated messages
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
@@ -333,12 +351,12 @@ def test_create_from_sessions_mixed_regular_and_filtered():
 @pytest.mark.django_db()
 def test_create_from_sessions_no_filter_params():
     """Test that filtered sessions are ignored when no filter params provided."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     # Create messages
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
         team=team,
@@ -355,7 +373,7 @@ def test_create_from_sessions_no_filter_params():
 @pytest.mark.django_db()
 def test_create_from_sessions_empty_sessions():
     """Test behavior with empty session lists."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     eval_messages = EvaluationMessage.create_from_sessions(
@@ -368,19 +386,23 @@ def test_create_from_sessions_empty_sessions():
 @pytest.mark.django_db()
 def test_filtered_messages_include_complete_history():
     """Test that filtered messages include complete session history, not just filtered messages."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
-    human_msg2 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
+    human_msg2 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat
+    )
     human_msg2.add_rating("+1")
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
 
-    human_msg3 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
+    human_msg3 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat
+    )
     human_msg3.add_rating("+1")
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
 
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
@@ -409,14 +431,14 @@ def test_consecutive_human_messages():
     """Test that consecutive HUMAN messages each create an evaluation message with null AI output.
     This could happen there AI message fails to generate.
     """
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message2 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
         team=team,
@@ -443,15 +465,15 @@ def test_consecutive_ai_messages():
     """Test that consecutive AI messages
     This can happen when a scheduled message is sent
     """
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
     # Create two consecutive AI messages
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message2 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
 
     eval_messages = EvaluationMessage.create_from_sessions(
         team=team,
@@ -476,27 +498,31 @@ def test_consecutive_ai_messages():
 @pytest.mark.django_db()
 def test_filtered_messages_complete_history_with_mixed_pairs():
     """Test that history includes all messages chronologically, even when filtering creates gaps."""
-    session_1 = ExperimentSessionFactory()
+    session_1 = ExperimentSessionFactory.create()
     team = session_1.team
 
     # Pair 1: Normal pair (not tagged)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message1 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message1 ai", chat=session_1.chat)
 
     # Unpaired HUMAN (not tagged)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message2 human unpaired", chat=session_1.chat)
+    ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="message2 human unpaired", chat=session_1.chat
+    )
 
     # Pair 2: Normal pair (not tagged)
-    ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="message3 human", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message3 ai", chat=session_1.chat)
 
     # Unpaired AI (not tagged)
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message4 ai unpaired", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message4 ai unpaired", chat=session_1.chat)
 
     # Pair 3: Normal pair (TAGGED - this should be in results)
-    human_msg5 = ChatMessageFactory(message_type=ChatMessageType.HUMAN, content="message5 human", chat=session_1.chat)
+    human_msg5 = ChatMessageFactory.create(
+        message_type=ChatMessageType.HUMAN, content="message5 human", chat=session_1.chat
+    )
     human_msg5.add_rating("+1")
-    ChatMessageFactory(message_type=ChatMessageType.AI, content="message5 ai", chat=session_1.chat)
+    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="message5 ai", chat=session_1.chat)
 
     # Filter to only include the tagged message
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])

@@ -15,6 +15,7 @@ from apps.pipelines.nodes.nodes import (
     LLMResponseWithPrompt,
 )
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     assistant_node,
     create_pipeline_model,
@@ -37,12 +38,12 @@ from apps.utils.pytest import django_db_transactional, django_db_with_data
 
 @pytest.fixture()
 def provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def provider_model():
-    return LlmProviderModelFactory()
+    return LlmProviderModelFactory.create()
 
 
 @pytest.mark.django_db()
@@ -70,16 +71,19 @@ def test_assistant_node(patched_invoke, disabled_tools):
         run_id="run_id",
         thread_id="thread_id",
     )
-    pipeline = PipelineFactory()
+    pipeline = PipelineFactory.create()
     tools = [AgentTools.ONE_OFF_REMINDER, AgentTools.UPDATE_PARTICIPANT_DATA]
-    assistant = OpenAiAssistantFactory(tools=tools)
+    assistant = OpenAiAssistantFactory.create(tools=tools)
     nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
     runnable = create_runnable(pipeline, nodes)
+    session = ExperimentSessionFactory.create(team=assistant.team)
     state = PipelineState(
         messages=["Hi there bot"],
-        experiment_session=ExperimentSessionFactory(team=assistant.team),
+        experiment_session=session,
     )
-    output_state = runnable.invoke(state, config={"configurable": {"disabled_tools": disabled_tools}})
+    output_state = runnable.invoke(
+        state, config={"configurable": {"disabled_tools": disabled_tools, "repo": ORMRepository(session=session)}}
+    )
     assert output_state["messages"][-1] == "hello"
     args = patched_invoke.call_args[0]
     assert patched_invoke.call_count == 1
@@ -116,7 +120,9 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
         {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}
     )
     node._config = ensure_config({"configurable": {"disabled_tools": disabled_tools}})
-    tools = _get_configured_tools(node, ExperimentSessionFactory(), ToolCallbacks())
+    session = ExperimentSessionFactory.create()
+    node._repo = ORMRepository(session=session)
+    tools = _get_configured_tools(node, session, ToolCallbacks())
     tool_names = {getattr(tool, "name", "") for tool in tools}
     assert not set(disabled_tools) & tool_names
 
@@ -144,15 +150,15 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
         ),
         end_node(),
     ]
-    pipeline = PipelineFactory()
-    session = ExperimentSessionFactory()
+    pipeline = PipelineFactory.create()
+    session = ExperimentSessionFactory.create()
     graph = create_runnable(pipeline, nodes)
     state = PipelineState(
         messages=["Repeat exactly: 123"],
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state)
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
 
@@ -193,15 +199,15 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
         ),
         end_node(),
     ]
-    pipeline = PipelineFactory()
-    session = ExperimentSessionFactory()
+    pipeline = PipelineFactory.create()
+    session = ExperimentSessionFactory.create()
     graph = create_runnable(pipeline, nodes)
     state = PipelineState(
         messages=["Repeat exactly: 123"],
         experiment_session=session,
         participant_data={"test": "abc", "other": "xyz"},
     )
-    output = graph.invoke(state)
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
     assert output["messages"][-1] == "ai response after tool"
     assert tool.func.call_args == (("test arg",), {})
     assert len(service.llm.get_call_messages()) == 2

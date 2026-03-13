@@ -177,7 +177,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         When a collection is indexed, we need to create a new vector store when we create a new version of it
         and upload the file versions to it.
         """
-        from apps.documents.tasks import index_collection_files
+        from apps.documents.tasks import index_collection_files  # noqa: PLC0415
 
         version_number = self.version_number
         self.version_number = version_number + 1
@@ -272,7 +272,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         Archive the collection with its files and remove the index and the files at the remote service, if it has one
         """
-        from apps.documents.tasks import delete_collection_task
+        from apps.documents.tasks import delete_collection_task  # noqa: PLC0415
 
         if self.get_related_nodes_queryset().exists():
             return False
@@ -431,7 +431,7 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         )
 
     def archive(self, delete_files=True):
-        from apps.documents.tasks import delete_document_source_task
+        from apps.documents.tasks import delete_document_source_task  # noqa: PLC0415
 
         super().archive()
         if delete_files:

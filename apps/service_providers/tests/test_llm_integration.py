@@ -1,3 +1,4 @@
+import json
 import os
 
 import environ
@@ -67,7 +68,6 @@ def google_credentials():
 @pytest.fixture()
 def google_vertex_ai_credentials():
     """Get real Google Vertex AI credentials from environment"""
-    import json
 
     credentials_json_str = env.str("GOOGLE_VERTEX_AI_CREDENTIALS_JSON", default=None)
     if not credentials_json_str:
@@ -161,7 +161,7 @@ def _run_llm_pipeline_test(
     )
 
     # Create pipeline with single LLM node
-    pipeline = PipelineFactory(team=team_with_users)
+    pipeline = PipelineFactory.create(team=team_with_users)
     nodes = [
         start_node(),
         llm_response_with_prompt_node(
@@ -175,8 +175,8 @@ def _run_llm_pipeline_test(
     pipeline = create_pipeline_model(nodes, pipeline=pipeline)
 
     # Create experiment and session
-    experiment = ExperimentFactory(team=team_with_users, pipeline=pipeline)
-    session = ExperimentSessionFactory(experiment=experiment)
+    experiment = ExperimentFactory.create(team=team_with_users, pipeline=pipeline)
+    session = ExperimentSessionFactory.create(experiment=experiment)
 
     # Run pipeline
     bot = PipelineBot(session=session, experiment=experiment, trace_service=TracingService.empty())

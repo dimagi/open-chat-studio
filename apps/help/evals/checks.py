@@ -43,9 +43,9 @@ def check_code_node(code: str) -> str | None:
     """Validate code against the CodeNode pydantic schema.
     Returns None on success, error message on failure.
     """
-    from pydantic import ValidationError
+    from pydantic import ValidationError  # noqa: PLC0415
 
-    from apps.pipelines.nodes.nodes import CodeNode
+    from apps.pipelines.nodes.nodes import CodeNode  # noqa: PLC0415
 
     try:
         CodeNode.model_validate({"code": code, "name": "code", "node_id": "code", "django_node": None})
@@ -58,7 +58,7 @@ def check_execute(code: str, input_value: str, expected: str) -> str | None:
     """Execute the code in the RestrictedPython sandbox and check the output.
     Returns None on success, error message on failure.
     """
-    from apps.pipelines.nodes.nodes import CodeNode
+    from apps.pipelines.nodes.nodes import CodeNode  # noqa: PLC0415
 
     try:
         node = CodeNode.model_validate({"code": code, "name": "eval", "node_id": "eval", "django_node": None})

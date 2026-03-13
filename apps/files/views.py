@@ -48,7 +48,7 @@ class FileView(LoginAndTeamRequiredMixin, View):
             return _not_found()
 
 
-class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.add_file"
 
     def post(self, request, team_slug: str, **kwargs):
@@ -95,7 +95,7 @@ class BaseAddFileHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMix
         return file
 
 
-class BaseAddMultipleFilesHtmxView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class BaseAddMultipleFilesHtmxView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.add_file"
 
     def post(self, request, team_slug: str, **kwargs):
@@ -148,7 +148,7 @@ class BaseAddMultipleFilesHtmxView(LoginAndTeamRequiredMixin, View, PermissionRe
         )
 
 
-class BaseDeleteFileView(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class BaseDeleteFileView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.delete_file"
 
     @transaction.atomic()
@@ -195,7 +195,7 @@ class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
 
 
 # This view is not currently being used
-class CreateFile(LoginAndTeamRequiredMixin, CreateView):
+class CreateFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     template_name = "documents/file_form.html"
     model = File
     form_class = FileForm
@@ -217,7 +217,7 @@ class CreateFile(LoginAndTeamRequiredMixin, CreateView):
         return response
 
 
-class EditFile(LoginAndTeamRequiredMixin, UpdateView):
+class EditFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     template_name = "documents/file_form.html"
     model = File
     form_class = FileForm
@@ -248,7 +248,7 @@ class EditFile(LoginAndTeamRequiredMixin, UpdateView):
         return response
 
 
-class DeleteFile(LoginAndTeamRequiredMixin, View):
+class DeleteFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.delete_file"
 
     def delete(self, request, team_slug: str, pk: int):

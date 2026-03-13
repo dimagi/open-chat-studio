@@ -10,22 +10,22 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def llm_provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def llm_provider_model():
-    return LlmProviderModelFactory()
+    return LlmProviderModelFactory.create()
 
 
 @pytest.fixture()
 def assistant():
-    return OpenAiAssistantFactory()
+    return OpenAiAssistantFactory.create()
 
 
 @pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
-    pipeline = PipelineFactory()
+    pipeline = PipelineFactory.create()
     pipeline.data["nodes"].append(
         {
             "id": "1",
@@ -80,11 +80,11 @@ class TestServiceProviderModel:
     @django_db_with_data()
     def test_can_delete_unassociated_provider_models(self):
         # custom llm provider models that are not attached to experiments can be deleted
-        llm_provider_model = LlmProviderModelFactory()
+        llm_provider_model = LlmProviderModelFactory.create()
         llm_provider_model.delete()
 
     @django_db_with_data()
     def test_can_delete_unassociated_global_provider_models(self):
         # global provider models can be deleted
-        global_llm_provider_model = LlmProviderModelFactory(team=None)
+        global_llm_provider_model = LlmProviderModelFactory.create(team=None)
         global_llm_provider_model.delete()

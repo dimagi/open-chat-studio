@@ -271,7 +271,7 @@ class TestDashboardService:
 
     def test_caching_behavior(self, team, experiment, participant, experiment_session, chat):
         """Test caching behavior in service methods"""
-        from ..models import DashboardCache
+        from ..models import DashboardCache  # noqa: PLC0415
 
         service = DashboardService(team)
 

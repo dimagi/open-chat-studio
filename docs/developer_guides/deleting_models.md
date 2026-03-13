@@ -1,34 +1,39 @@
-# Deleting LLM Models
+# Managing LLM Model Lifecycle
 
-When removing deprecated LLM models from the platform, follow this process to ensure proper cleanup and user notification:
+This guide covers two distinct processes for managing LLM models that are being retired:
 
-## Step 1: Update Model Definitions
+- **Deprecating** a model: the model is kept in the system but flagged as deprecated. Users see a warning in the UI and are notified of the recommended replacement so they can update before the model is deleted.
+- **Deleting** a model: the model is fully removed from the platform. Any remaining references are auto-migrated to a replacement if one is specified, and affected teams are notified.
 
-In `apps/service_providers/llm_service/default_models.py`:
+| | Deprecation | Deletion |
+|---|---|---|
+| Removed from `DEFAULT_LLM_PROVIDER_MODELS` | No (marked `deprecated=True`) | Yes |
+| Added to `DELETED_MODELS` | No | Yes |
+| Model removed from DB | No | Yes |
+| Auto-migration to replacement | No | Optional |
+| Maintenance step to clean up list | No | Yes |
+| User notification | Optional | Yes |
 
-1. **Remove** the model from `DEFAULT_LLM_PROVIDER_MODELS`:
-   ```python
-   DEFAULT_LLM_PROVIDER_MODELS = {
-       "openai": [
-           # Model("gpt-4", k(8)),  # Remove this line
-           Model("gpt-4o", 128000),
-           # ... other models
-       ],
-   }
-   ```
+---
 
-2. **Add** the model to `DELETED_MODELS`:
-   ```python
-   DELETED_MODELS = [
-       ("openai", "gpt-4"),
-       ("anthropic", "claude-2.0"),
-       # ... other deleted models
-   ]
-   ```
+## Deprecating a Model
 
-## Step 2: Create Django Migration
+Deprecation marks a model as unsupported while keeping it accessible. Deprecated models show a warning in the UI. If a replacement is specified, users are notified so they can migrate before the model is eventually deleted.
 
-Create a migration in `apps/service_providers/migrations/` that performs the model update:
+### Step 1: Update Model Definitions
+
+In `apps/service_providers/llm_service/default_models.py`, set `deprecated=True` on the model. Optionally set `replacement` to the name of the recommended successor model — this is included in the notification to affected teams:
+
+```python
+DEFAULT_LLM_PROVIDER_MODELS = {
+    "openai": [
+        Model("gpt-4", k(8), deprecated=True, replacement="gpt-4o"),
+        # ... other models
+    ],
+}
+```
+
+### Step 2: Create Django Migration
 
 ```python
 from django.db import migrations
@@ -43,7 +48,62 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Update model list (marks deprecated models)
+        # Update model list (marks deprecated models in DB)
+        llm_model_migration(),
+
+        # notify affected teams about the deprecation and recommended replacement
+        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
+    ]
+```
+
+---
+
+## Deleting a Model
+
+Deletion fully removes a model from the platform. References are either auto-migrated to a replacement or cleared, and affected teams are notified.
+
+### Step 1: Update Model Definitions
+
+In `apps/service_providers/llm_service/default_models.py`:
+
+1. **Remove** the model from `DEFAULT_LLM_PROVIDER_MODELS`:
+   ```python
+   DEFAULT_LLM_PROVIDER_MODELS = {
+       "openai": [
+           # Model("gpt-4", k(8), deprecated=True),  # Remove this line
+           Model("gpt-4o", 128000),
+           # ... other models
+       ],
+   }
+   ```
+
+2. **Add** the model to `DELETED_MODELS`. Optionally include a replacement model name to auto-migrate references instead of clearing them:
+   ```python
+   DELETED_MODELS = [
+       # Without replacement: references to this model are set to None
+       ("openai", "gpt-4"),
+
+       # With replacement: references are updated to point to the replacement model
+       ("anthropic", "claude-2.0", "claude-3-5-sonnet-latest"),
+   ]
+   ```
+
+### Step 2: Create Django Migration
+
+```python
+from django.db import migrations
+
+from apps.data_migrations.utils.migrations import RunDataMigration
+from apps.service_providers.migration_utils import llm_model_migration
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("service_providers", "0040_previous_migration"),
+    ]
+
+    operations = [
+        # Update model list
         llm_model_migration(),
 
         # Clean up references and notify teams
@@ -51,20 +111,48 @@ class Migration(migrations.Migration):
     ]
 ```
 
-## Testing
+---
 
-Before deploying:
+## Auto-migrating Usages to a Replacement Model
 
-```bash
-# Preview what will be deleted
-python manage.py remove_deprecated_models --dry-run
+When deleting a model, you can specify a replacement to automatically update all references to point to a different model. This avoids leaving users with broken or null model references.
 
-# Verbose output with team details
-python manage.py remove_deprecated_models --dry-run -v 2
+Add a third element to the `DELETED_MODELS` tuple:
 
-# Run the migration
-python manage.py migrate
+```python
+DELETED_MODELS = [
+    ("openai", "gpt-4", "gpt-4o"),  # All references updated to gpt-4o
+]
 ```
+
+When a replacement is specified:
+- Pipeline node references are updated to use the replacement model
+- Direct FK references (assistants, analyses, etc.) are updated to the replacement
+- The deletion notification tells teams which replacement was applied
+
+When no replacement is specified:
+- Pipeline node references are set to `None`
+- Teams are still notified that references were cleared
+
+---
+
+## User Notifications
+
+Both the deprecation notification and the deletion command use the OCS notifications system (see [notifications guide](notifications.md)) rather than admin emails. Notifications are sent to team members with the `service_providers.change_llmprovidermodel` permission.
+
+Notifications include:
+- Which model was deprecated/deleted
+- The replacement model (if any)
+- Counts of affected chatbots, pipelines, and assistants
+
+### Slug conventions
+
+| Event | Slug |
+|---|---|
+| Deprecated model (user action needed) | `llm-model-deprecated` |
+| Deleted model references cleared/migrated | `llm-model-deleted` |
+
+---
 
 ## Maintenance: Clearing Old Models from DELETED_MODELS
 
@@ -103,7 +191,6 @@ It is safe to remove models from `DELETED_MODELS` when **both** conditions are m
    DELETED_MODELS = [
        # Keep recent additions (< 1 month in main)
        ("openai", "gpt-4"),
-       ("anthropic", "claude-2.0"),
 
        # Remove these - added 2 months ago, migrated everywhere
        # ("azure", "gpt-35-turbo"),

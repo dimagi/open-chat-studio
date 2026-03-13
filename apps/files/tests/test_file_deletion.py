@@ -10,7 +10,7 @@ from apps.utils.factories.files import FileFactory
 
 @pytest.fixture()
 def assistant():
-    return OpenAiAssistantFactory(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
+    return OpenAiAssistantFactory.create(assistant_id="test_id", builtin_tools=["code_interpreter", "file_search"])
 
 
 @pytest.fixture()

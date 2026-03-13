@@ -15,7 +15,7 @@ def test_signal_human_activity_on_chat_messages():
     This is the main test that validates the time-based behavior requested.
     """
     with travel("2025-01-01 10:00:00", tick=False):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         first_time = timezone.now()
 
         # Create first message

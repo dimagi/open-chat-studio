@@ -56,7 +56,7 @@ class EvaluationConfigTable(tables.Table):
 
     def render_evaluators(self, value, record):
         """Render the evaluators column with icons and labels in an unordered list."""
-        from apps.evaluations.utils import get_evaluator_type_display
+        from apps.evaluations.utils import get_evaluator_type_display  # noqa: PLC0415
 
         if not value.exists():
             return "—"

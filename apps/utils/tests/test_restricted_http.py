@@ -1,8 +1,12 @@
+from io import BytesIO
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import httpx
 import pytest
 
+from apps.channels.datamodels import Attachment
+from apps.utils.factories.service_provider_factories import AuthProviderFactory
+from apps.utils.factories.team import TeamFactory
 from apps.utils.restricted_http import (
     HttpAuthProviderError,
     HttpConnectionError,
@@ -304,17 +308,15 @@ class TestAuthProviderIntegration:
             client.get("https://api.example.com/data", auth="My Provider")
 
     def test_auth_provider_not_found(self, mock_validate_url):
-        from apps.utils.factories.team import TeamFactory
 
-        team = TeamFactory()
+        team = TeamFactory.create()
         client = RestrictedHttpClient(team=team)
         with pytest.raises(HttpAuthProviderError, match="not found"):
             client.get("https://api.example.com/data", auth="Nonexistent Provider")
 
     def test_auth_provider_found_and_headers_injected(self):
-        from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
-        provider = AuthProviderFactory(
+        provider = AuthProviderFactory.create(
             name="My API Key",
             type="api_key",
             config={"key": "X-Api-Key", "value": "secret123"},
@@ -325,9 +327,8 @@ class TestAuthProviderIntegration:
         assert headers.get("X-Api-Key") or headers.get("x-api-key")
 
     def test_auth_provider_cached(self):
-        from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
-        provider = AuthProviderFactory(
+        provider = AuthProviderFactory.create(
             name="Cached Provider",
             type="bearer",
             config={"token": "bearer-token"},
@@ -340,9 +341,8 @@ class TestAuthProviderIntegration:
         assert "Cached Provider" in client._auth_cache
 
     def test_auth_headers_take_precedence(self):
-        from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
-        provider = AuthProviderFactory(
+        provider = AuthProviderFactory.create(
             name="Bearer Auth",
             type="bearer",
             config={"token": "real-token"},
@@ -363,11 +363,8 @@ class TestAuthProviderIntegration:
         assert headers == {"X-Custom": "value"}
 
     def test_cross_team_lookup_blocked(self):
-        from apps.utils.factories.service_provider_factories import AuthProviderFactory
-        from apps.utils.factories.team import TeamFactory
-
-        AuthProviderFactory(name="Team A Provider")
-        other_team = TeamFactory()
+        AuthProviderFactory.create(name="Team A Provider")
+        other_team = TeamFactory.create()
 
         client = RestrictedHttpClient(team=other_team)
         with pytest.raises(HttpAuthProviderError, match="not found"):
@@ -428,10 +425,6 @@ class TestFileUpload:
 
     def test_attachment_resolved(self, client):
         """Test that Attachment objects are resolved correctly."""
-        from io import BytesIO
-
-        from apps.channels.datamodels import Attachment
-
         mock_file = MagicMock()
         mock_file.file.open.return_value = BytesIO(b"file content")
 
@@ -452,7 +445,6 @@ class TestFileUpload:
             assert len(handles) == 1
 
     def test_attachment_missing_file(self, client):
-        from apps.channels.datamodels import Attachment
 
         attachment = Attachment(
             file_id=999,

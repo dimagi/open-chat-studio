@@ -25,6 +25,7 @@
     "@babel/preset-typescript": "^7.27.1",
     "@eslint/js": "^9.39.2",
     "@tailwindcss/typography": "^0.5.19",
+    "@types/js-cookie": "^3.0.6",
     "@types/lodash": "^4.17.24",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -50,6 +51,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "@codemirror/lang-jinja": "^6.0.0",
     "@codemirror/lang-json": "^6.0.1",
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/merge": "^6.11.1",
@@ -63,7 +65,7 @@
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.1.0",
-    "dompurify": "^3.2.5",
+    "dompurify": "^3.3.2",
     "htmx.org": "^2.0.8",
     "immer": "^10.1.1",
     "js-cookie": "^3.0.5",

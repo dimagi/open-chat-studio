@@ -2,6 +2,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from apps.service_providers.llm_service import AnthropicLlmService, AzureLlmService, OpenAILlmService
+from apps.service_providers.llm_service.main import OpenAIGenericService
 from apps.service_providers.models import LlmProviderTypes
 
 
@@ -33,3 +34,28 @@ def test_openai_service_get_num_tokens(model):
     # fine-tuned model
     llm = service.get_chat_model(model, temperature=0.5)
     assert llm.get_num_tokens_from_messages([HumanMessage("Hello")]) > 0
+
+
+def test_openai_service_uses_responses_api():
+    """OpenAILlmService should use the Responses API for enhanced OpenAI features."""
+    service = OpenAILlmService(openai_api_key="test")
+    assert service._use_responses_api is True
+    llm = service.get_chat_model("gpt-4o")
+    assert llm.use_responses_api is True
+
+
+@pytest.mark.parametrize(
+    "provider_type,config",
+    [
+        (LlmProviderTypes.groq, {"openai_api_key": "test"}),
+        (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
+    ],
+)
+def test_generic_openai_service_does_not_use_responses_api(provider_type, config):
+    """Generic OpenAI-compatible providers (Groq, Perplexity) must not use the Responses API
+    as it is an OpenAI-specific endpoint that returns 404 on third-party providers."""
+    service = provider_type.get_llm_service(config)
+    assert isinstance(service, OpenAIGenericService)
+    assert service._use_responses_api is False
+    llm = service.get_chat_model("some-model")
+    assert llm.use_responses_api is False

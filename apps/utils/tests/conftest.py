@@ -33,7 +33,12 @@ def _model_setup():
     t3
     """
     # inline import to avoid importing before app initialization
-    from apps.utils.tests.models import Bot, Collection, Param, Tool
+    from apps.utils.tests.models import (  # noqa: PLC0415 - lazy: test models require setup_test_app() to run first; moving to module level would import before app tables are created
+        Bot,
+        Collection,
+        Param,
+        Tool,
+    )
 
     with enable_audit():
         c1 = Collection.objects.create(name="c1")

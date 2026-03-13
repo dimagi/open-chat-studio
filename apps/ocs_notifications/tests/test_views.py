@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 from time_machine import travel
 
-from apps.ocs_notifications.models import UserNotificationPreferences
+from apps.ocs_notifications.models import EventUser, UserNotificationPreferences
 from apps.utils.factories.notifications import EventUserFactory
 
 
@@ -159,6 +159,30 @@ class TestNotificationPreferencesView:
         cache_call = mock_bust_cache.call_args
         assert cache_call[0][0] == user.id
         assert cache_call[1]["team_slug"] == team_with_users.slug
+
+
+@pytest.mark.django_db()
+class TestMarkAllNotificationsReadView:
+    @patch("apps.ocs_notifications.views.bust_unread_notification_cache")
+    def test_marks_all_unread_as_read_and_busts_cache(self, mock_bust_cache, client, team_with_users):
+        user = team_with_users.members.first()
+        other_user = team_with_users.members.last()
+        EventUserFactory.create(user=user, team=team_with_users, read=False, read_at=None)
+        EventUserFactory.create(user=user, team=team_with_users, read=False, read_at=None)
+        EventUserFactory.create(user=user, team=team_with_users, read=True)
+        other_user_notification = EventUserFactory.create(user=other_user, team=team_with_users, read=False)
+
+        client.force_login(user)
+        url = reverse("ocs_notifications:mark_all_notifications_read", args=[team_with_users.slug])
+        response = client.post(url)
+
+        assert response.status_code == 200
+
+        assert EventUser.objects.filter(user=user, team=team_with_users, read=False).count() == 0
+        assert EventUser.objects.filter(user=user, team=team_with_users, read=True).count() == 3
+        other_user_notification.refresh_from_db()
+        assert other_user_notification.read is False
+        mock_bust_cache.assert_called_once_with(user_id=user.id, team_slug=team_with_users.slug)
 
 
 class TestToggleDoNotDisturbView:

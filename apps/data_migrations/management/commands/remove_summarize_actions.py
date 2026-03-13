@@ -45,7 +45,7 @@ class Command(IdempotentCommand):
 
         if self.verbosity > 1:
             # Verbose output: show details for each team
-            from apps.teams.models import Team
+            from apps.teams.models import Team  # noqa: PLC0415
 
             teams = {t.id: t for t in Team.objects.filter(id__in=teams_context.keys())}
 

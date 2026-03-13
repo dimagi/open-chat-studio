@@ -14,12 +14,12 @@ from apps.utils.tests.clients import ApiTestClient
 
 @pytest.fixture()
 def experiment(db):
-    return ExperimentFactory(team=TeamWithUsersFactory())
+    return ExperimentFactory.create(team=TeamWithUsersFactory.create())
 
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment)
 
 
 @pytest.mark.django_db()
@@ -201,7 +201,7 @@ def _create_attachments(chat, message):
     file_ids = ["file_1", "file_2"]
     files = []
     for external_id in file_ids:
-        files.append(FileFactory(name=external_id, external_id=external_id))
+        files.append(FileFactory.create(name=external_id, external_id=external_id))
     tool_resource.files.add(*files)
     message.metadata = {"openai_file_ids": file_ids}
     message.save()
@@ -214,12 +214,12 @@ def test_list_sessions_with_experiment_filter(experiment):
     user = experiment.team.members.first()
 
     # Create another experiment in the same team
-    experiment2 = ExperimentFactory(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
 
     # Create sessions for both experiments
-    session1 = ExperimentSessionFactory(experiment=experiment)
-    session2 = ExperimentSessionFactory(experiment=experiment2)
-    session3 = ExperimentSessionFactory(experiment=experiment)
+    session1 = ExperimentSessionFactory.create(experiment=experiment)
+    session2 = ExperimentSessionFactory.create(experiment=experiment2)
+    session3 = ExperimentSessionFactory.create(experiment=experiment)
 
     client = ApiTestClient(user, team)
 
@@ -255,9 +255,9 @@ def test_list_sessions_with_version_filter(experiment):
     user = experiment.team.members.first()
 
     # Create sessions with messages that have version tags
-    session1 = ExperimentSessionFactory(experiment=experiment)
-    session2 = ExperimentSessionFactory(experiment=experiment)
-    session3 = ExperimentSessionFactory(experiment=experiment)
+    session1 = ExperimentSessionFactory.create(experiment=experiment)
+    session2 = ExperimentSessionFactory.create(experiment=experiment)
+    session3 = ExperimentSessionFactory.create(experiment=experiment)
 
     # Add messages with version tags to sessions
     message1 = session1.chat.messages.create(message_type="ai", content="test response v1")
@@ -304,18 +304,16 @@ def test_list_sessions_with_version_filter(experiment):
 
 @pytest.mark.django_db()
 def test_list_sessions_with_combined_filters(experiment):
-    from apps.annotations.models import TagCategories
-
     team = experiment.team
     user = experiment.team.members.first()
 
     # Create another experiment for testing
-    experiment2 = ExperimentFactory(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
 
     # Create sessions
-    session1 = ExperimentSessionFactory(experiment=experiment)  # exp1, v1.0
-    session2 = ExperimentSessionFactory(experiment=experiment2)  # exp2, v1.0
-    session3 = ExperimentSessionFactory(experiment=experiment)  # exp1, v2.0
+    session1 = ExperimentSessionFactory.create(experiment=experiment)  # exp1, v1.0
+    session2 = ExperimentSessionFactory.create(experiment=experiment2)  # exp2, v1.0
+    session3 = ExperimentSessionFactory.create(experiment=experiment)  # exp1, v2.0
 
     # Add version tags
     message1 = session1.chat.messages.create(message_type="ai", content="test")
@@ -615,10 +613,10 @@ def test_tags_endpoint_team_isolation(experiment):
     """Test that users can only manage tags for sessions in their team"""
     # Create two teams with sessions
     team1 = experiment.team
-    team2 = TeamWithUsersFactory()
+    team2 = TeamWithUsersFactory.create()
 
-    experiment2 = ExperimentFactory(team=team2)
-    session2 = ExperimentSessionFactory(experiment=experiment2)
+    experiment2 = ExperimentFactory.create(team=team2)
+    session2 = ExperimentSessionFactory.create(experiment=experiment2)
 
     user1 = team1.members.first()
     client1 = ApiTestClient(user1, team1)

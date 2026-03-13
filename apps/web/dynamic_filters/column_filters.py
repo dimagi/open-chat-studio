@@ -19,10 +19,13 @@ class ExperimentFilter(ChoiceColumnFilter):
     query_param: str = "experiment"
     column: str = "experiment_id"
     label: str = "Chatbot"
-    description: str = "Filter by chatbot (experiment) name"
+    description: str = (
+        "Filter by chatbot. Values are numeric database IDs — call get_filter_options('experiment') "
+        "to look up the ID for a chatbot name. Do NOT use the chatbot name string as a value."
+    )
 
     def prepare(self, team, **_):
-        from apps.experiments.models import Experiment
+        from apps.experiments.models import Experiment  # noqa: PLC0415
 
         experiments = (
             Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")

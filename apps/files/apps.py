@@ -13,7 +13,7 @@ class FilesConfig(AppConfig):
     label = "files"
 
     def ready(self):
-        from .models import File
+        from .models import File  # noqa: PLC0415
 
         for field in File._meta.get_fields():
             if not field.many_to_many:

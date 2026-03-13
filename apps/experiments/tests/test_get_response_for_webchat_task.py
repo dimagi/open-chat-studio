@@ -8,15 +8,15 @@ from apps.utils.factories.files import FileFactory
 
 @pytest.fixture()
 def session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.mark.django_db()
 def test_get_response_for_webchat_task(session):
     """Basic test for the code in the task. Not intended to test the functions called in the task."""
 
-    file1 = FileFactory(file__data="# a python file\nimport sys", team=session.team)
-    file2 = FileFactory(file__data='{"key": "value"}', team=session.team)
+    file1 = FileFactory.create(file__data="# a python file\nimport sys", team=session.team)
+    file2 = FileFactory.create(file__data='{"key": "value"}', team=session.team)
 
     attachments = [
         Attachment(

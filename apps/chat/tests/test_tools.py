@@ -59,7 +59,7 @@ class BaseTestAgentTool:
 
     @pytest.fixture()
     def session(self, db):
-        return ExperimentSessionFactory()
+        return ExperimentSessionFactory.create()
 
 
 @pytest.mark.django_db()
@@ -162,7 +162,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
         scheduled_message = ScheduledMessage.objects.create(
             participant=session.participant,
             team=session.team,
-            action=EventActionFactory(params=self.schedule_params()),
+            action=EventActionFactory.create(params=self.schedule_params()),
             experiment=session.experiment,
         )
 
@@ -202,7 +202,7 @@ class TestMoveScheduledMessageDateTool(BaseTestAgentTool):
             message = ScheduledMessage.objects.create(
                 participant=session.participant,
                 team=session.team,
-                action=EventActionFactory(params=self.schedule_params()),
+                action=EventActionFactory.create(params=self.schedule_params()),
                 experiment=session.experiment,
             )
 
@@ -231,7 +231,7 @@ class TestDeleteReminderTool:
 
     @pytest.fixture()
     def session(self, db):
-        return ExperimentSessionFactory()
+        return ExperimentSessionFactory.create()
 
     @staticmethod
     def schedule_params():
@@ -241,7 +241,7 @@ class TestDeleteReminderTool:
         scheduled_message = ScheduledMessage.objects.create(
             participant=session.participant,
             team=session.team,
-            action=EventActionFactory(params=self.schedule_params()),
+            action=EventActionFactory.create(params=self.schedule_params()),
             experiment=session.experiment,
         )
 
@@ -292,7 +292,7 @@ def test_move_datetime_to_new_weekday_and_time(
 
 @pytest.mark.django_db()
 def test_create_schedule_message_success():
-    experiment_session = ExperimentSessionFactory()
+    experiment_session = ExperimentSessionFactory.create()
     message = "Test message"
     kwargs = {
         "frequency": 1,
@@ -325,7 +325,7 @@ def test_create_schedule_message_success():
 
 @pytest.mark.django_db()
 def test_create_schedule_message_invalid_form():
-    experiment_session = ExperimentSessionFactory()
+    experiment_session = ExperimentSessionFactory.create()
     message = "Test message"
     kwargs = {
         "frequency": "invalid_frequency",  # invalid input
@@ -349,7 +349,7 @@ def test_create_schedule_message_invalid_form():
 
 @pytest.mark.django_db()
 def test_create_schedule_message_experiment_does_not_exist():
-    experiment_session = ExperimentSessionFactory()
+    experiment_session = ExperimentSessionFactory.create()
     message = "Test message"
     kwargs = {
         "frequency": 1,
@@ -445,8 +445,8 @@ class TestSearchIndexTool:
 
     @pytest.mark.parametrize("generate_citations", [True, False])
     def test_action_returns_relevant_chunks(self, generate_citations, team, local_index_manager_mock):
-        collection = CollectionFactory(team=team)
-        file = FileFactory(team=team, name="the_greatness_of_fruit.txt")
+        collection = CollectionFactory.create(team=team)
+        file = FileFactory.create(team=team, name="the_greatness_of_fruit.txt")
         vector_data = self.load_vector_data()
 
         FileChunkEmbedding.objects.create(
@@ -558,8 +558,8 @@ def test_get_mcp_tool_instances(fetch_tools, team):
             coroutine=async_func,
         )
     ]
-    server = MCPServerFactory(team=team)
-    node = NodeFactory(
+    server = MCPServerFactory.create(team=team)
+    node = NodeFactory.create(
         params={
             "mcp_tools": [f"{server.id}:test-tool"],
         }
@@ -648,7 +648,7 @@ def _get_tool_schema_cls(tool_cls):
     Pydantic v2 stores field defaults in model_fields rather than as class attributes,
     so getattr(tool_cls, 'args_schema') doesn't reliably return the schema class.
     """
-    from pydantic_core import PydanticUndefined
+    from pydantic_core import PydanticUndefined  # noqa: PLC0415
 
     field_info = tool_cls.model_fields.get("args_schema")
     if field_info is None:

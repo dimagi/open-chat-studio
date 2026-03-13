@@ -31,12 +31,12 @@ def fake_llm_service():
 
 @pytest.fixture()
 def session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.fixture()
 def assistant(fake_llm_service):
-    assistant = OpenAiAssistantFactory(assistant_id="assistant_1", tools=["fake_tool"])
+    assistant = OpenAiAssistantFactory.create(assistant_id="assistant_1", tools=["fake_tool"])
     assistant.get_llm_service = lambda *args, **kwargs: fake_llm_service
     return assistant
 
@@ -152,7 +152,7 @@ def configure_common_mocks(assistant):
 
 
 def get_runnable(session, assistant, tool):
-    with patch("apps.chat.agent.tools.get_assistant_tools") as get_tools:
+    with patch("apps.service_providers.llm_service.adapters.get_assistant_tools") as get_tools:
         get_tools.return_value = [tool]
         assistant_adapter = AssistantAdapter(session, assistant, citations_enabled=True)
         history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())

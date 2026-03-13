@@ -22,6 +22,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.utils import set_current_team
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -299,6 +300,7 @@ def test_chatbot_sessions_table_view(team_with_users):
     request.team = team
     request.team_membership = get_team_membership_for_request(request)
     attach_session_middleware_to_request(request)
+    set_current_team(team)
 
     view = ChatbotSessionsTableView.as_view()
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
@@ -314,7 +316,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
     user = team.members.first()
     client.force_login(user)
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         participant__platform="web",
         team=team,
@@ -362,13 +364,13 @@ def test_new_chatbot_session_view(
     user = team.members.first()
     client.force_login(user)
 
-    old_session = ExperimentSessionFactory(
+    old_session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         team=team,
         status=SessionStatus.ACTIVE,
     )
 
-    new_session = ExperimentSessionFactory(
+    new_session = ExperimentSessionFactory.create(
         participant=old_session.participant,
         experiment=old_session.experiment,
         experiment_channel=old_session.experiment_channel,
@@ -428,7 +430,7 @@ def test_disallow_web_channel_session_resets(team_with_users, client):
     user = team.members.first()
     client.force_login(user)
 
-    session = ExperimentSessionFactory(
+    session = ExperimentSessionFactory.create(
         participant__identifier="participant@example.com",
         experiment_channel__platform="web",
         team=team,
@@ -478,7 +480,7 @@ def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
     recently-active one, causing the Last Activity column to appear blank even
     when real activity exists.
     """
-    from datetime import datetime
+    from datetime import datetime  # noqa: PLC0415
 
     team = team_with_users
     user = team.members.first()
@@ -486,11 +488,11 @@ def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
     experiment = Experiment.objects.create(name="Test Chatbot", owner=user, team=team, pipeline=pipeline)
 
     # A bot-initiated session that never received a human message → last_activity_at is null
-    ExperimentSessionFactory(experiment=experiment, last_activity_at=None)
+    ExperimentSessionFactory.create(experiment=experiment, last_activity_at=None)
 
     # A session with genuine user activity
     activity_time = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
-    ExperimentSessionFactory(experiment=experiment, last_activity_at=activity_time)
+    ExperimentSessionFactory.create(experiment=experiment, last_activity_at=activity_time)
 
     request = RequestFactory().get(reverse("chatbots:table", args=[team.slug]))
     request.team = team

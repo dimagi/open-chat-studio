@@ -15,17 +15,17 @@ from apps.utils.pytest import django_db_transactional
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @pytest.fixture()
 def experiment(pipeline):
-    return ExperimentFactory(pipeline=pipeline)
+    return ExperimentFactory.create(pipeline=pipeline)
 
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment)
 
 
 @django_db_transactional()

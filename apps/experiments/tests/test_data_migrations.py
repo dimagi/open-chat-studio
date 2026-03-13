@@ -19,15 +19,15 @@ def test_reconcile_connect_participants():
              lowercase participant's data for a specific chatbot is missing (meaning that participant has never
              chatted to that chatbot)
     """
-    experiment1 = ExperimentFactory()
+    experiment1 = ExperimentFactory.create()
     team = experiment1.team
 
     # Setup case 1 - Same team and chatbot and same identifier differing only by case
-    case1_uc_session = ExperimentSessionFactory(
+    case1_uc_session = ExperimentSessionFactory.create(
         experiment=experiment1, participant__platform="commcare_connect", participant__identifier="ABC123"
     )
 
-    case1_lc_session = ExperimentSessionFactory(
+    case1_lc_session = ExperimentSessionFactory.create(
         team=team, experiment=experiment1, participant__platform="commcare_connect", participant__identifier="abc123"
     )
 
@@ -35,7 +35,7 @@ def test_reconcile_connect_participants():
     lc_participant = case1_lc_session.participant
 
     # Setup case 2 - This participant's identifier should be lowercased
-    case2_session = ExperimentSessionFactory(
+    case2_session = ExperimentSessionFactory.create(
         team=team, experiment=experiment1, participant__platform="commcare_connect", participant__identifier="DEF456"
     )
 
@@ -50,8 +50,8 @@ def test_reconcile_connect_participants():
 
     # Setup case 4 - upper case participant has participant data, lower case participant does not
     # We create a new session for the upper case participant but with a different experiment
-    experiment2 = ExperimentFactory(team=team)
-    ExperimentSessionFactory(experiment=experiment2, participant=uc_participant)
+    experiment2 = ExperimentFactory.create(team=team)
+    ExperimentSessionFactory.create(experiment=experiment2, participant=uc_participant)
     ParticipantData.objects.create(team=team, experiment=experiment2, participant=uc_participant)
     assert lc_participant.data_set.filter(experiment=experiment2).exists() is False
 

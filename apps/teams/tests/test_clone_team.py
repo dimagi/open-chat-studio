@@ -25,8 +25,8 @@ from apps.utils.factories.user import UserFactory
 @pytest.fixture(scope="module")
 def source_team(django_db_blocker):
     """Create a source team with various related data."""
-    from apps.teams.utils import current_team
-    from apps.utils.deletion import delete_object_with_auditing_of_related_objects
+    from apps.teams.utils import current_team  # noqa: PLC0415
+    from apps.utils.deletion import delete_object_with_auditing_of_related_objects  # noqa: PLC0415
 
     with django_db_blocker.unblock():
         # Clean up any leftover from previous runs
@@ -35,19 +35,19 @@ def source_team(django_db_blocker):
             with current_team(existing):
                 delete_object_with_auditing_of_related_objects(existing)
 
-        team = TeamFactory(name="Source Team", slug="source-team")
-        owner = UserFactory()
+        team = TeamFactory.create(name="Source Team", slug="source-team")
+        owner = UserFactory.create()
 
         # Providers
-        llm_provider = LlmProviderFactory(team=team)
-        llm_model = LlmProviderModelFactory(team=team)
-        voice_provider = VoiceProviderFactory(team=team)
-        trace_provider = TraceProviderFactory(team=team)
+        llm_provider = LlmProviderFactory.create(team=team)
+        llm_model = LlmProviderModelFactory.create(team=team)
+        voice_provider = VoiceProviderFactory.create(team=team)
+        trace_provider = TraceProviderFactory.create(team=team)
 
         # Content
-        source_material = SourceMaterialFactory(team=team)
-        consent_form = ConsentFormFactory(team=team)
-        survey = SurveyFactory(team=team)
+        source_material = SourceMaterialFactory.create(team=team)
+        consent_form = ConsentFormFactory.create(team=team)
+        survey = SurveyFactory.create(team=team)
 
         # Pipeline
         pipeline = Pipeline.create_default(team, "Test Pipeline", llm_provider.id, llm_model)
@@ -66,9 +66,9 @@ def source_team(django_db_blocker):
         )
 
         # Evaluations
-        evaluator = EvaluatorFactory(team=team)
-        dataset = EvaluationDatasetFactory(team=team)
-        EvaluationConfigFactory(team=team, dataset=dataset, base_experiment=experiment, evaluators=[evaluator])
+        evaluator = EvaluatorFactory.create(team=team)
+        dataset = EvaluationDatasetFactory.create(team=team)
+        EvaluationConfigFactory.create(team=team, dataset=dataset, base_experiment=experiment, evaluators=[evaluator])
 
         yield team
 
@@ -80,7 +80,7 @@ def source_team(django_db_blocker):
 @pytest.mark.django_db()
 def test_clone_team_nonexistent_source():
     """Test error when source team doesn't exist."""
-    from django.core.management.base import CommandError
+    from django.core.management.base import CommandError  # noqa: PLC0415
 
     with pytest.raises(CommandError, match="does not exist"):
         call_command(
