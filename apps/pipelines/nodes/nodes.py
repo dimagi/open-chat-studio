@@ -513,6 +513,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return _validate_jinja_syntax(value)
 
     @field_validator("recipient_list", mode="before")
+    @classmethod
     def recipient_list_has_valid_emails(cls, value):
         value = value or ""
         # Check Jinja syntax first — if it's invalid, don't try email validation
