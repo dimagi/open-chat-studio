@@ -7,7 +7,6 @@ import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.export import filtered_export_to_csv
-from apps.experiments.models import SessionStatus
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -273,7 +272,7 @@ def test_trace_id_export():
 
     session = Mock(
         external_id="session123",
-        status="active",
+        state={},
         get_platform_name=Mock(return_value="TestPlatform"),
         participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
         chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
@@ -317,14 +316,14 @@ def test_trace_id_export():
 
 
 @pytest.mark.django_db()
-def test_session_status_export():
+def test_session_state_export():
     experiment = ExperimentFactory.create()
     team = experiment.team
     session = ExperimentSessionFactory.create(
         experiment=experiment,
         team=team,
         experiment_channel=ExperimentChannelFactory.create(),
-        status=SessionStatus.COMPLETE,
+        state={"key": "value"},
     )
     human_msg = ChatMessage.objects.create(
         chat=session.chat,
@@ -350,7 +349,7 @@ def test_session_status_export():
     rows = list(csv_reader)
 
     header = rows[0]
-    status_index = header.index("Session Status")
+    state_index = header.index("Session State")
 
-    assert rows[1][status_index] == SessionStatus.COMPLETE
-    assert rows[2][status_index] == SessionStatus.COMPLETE
+    assert json.loads(rows[1][state_index]) == {"key": "value"}
+    assert json.loads(rows[2][state_index]) == {"key": "value"}
