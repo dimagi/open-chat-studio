@@ -249,7 +249,6 @@ class BasePipelineNode(BaseModel, ABC):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
-        from apps.channels.datamodels import Attachment  # noqa: PLC0415
 
         if not incoming_nodes:
             # This is the first node in the graph
@@ -259,6 +258,8 @@ class BasePipelineNode(BaseModel, ABC):
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
             state["temp_state"]["user_input"] = state["last_node_input"]
+            from apps.channels.datamodels import Attachment  # noqa: PLC0415 - circular: channels.datamodels→events→base
+
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]

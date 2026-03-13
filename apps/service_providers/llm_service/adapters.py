@@ -60,8 +60,8 @@ class BaseAdapter:
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
         remove all tools that are run by the LLM provider
         """
-        from google.ai.generativelanguage_v1beta.types import (
-            Tool as GenAITool,  # noqa: PLC0415 - lazy: optional Google AI lib, dep of langchain_google_genai
+        from google.ai.generativelanguage_v1beta.types import (  # noqa: PLC0415 - lazy: optional Google AI lib
+            Tool as GenAITool,
         )
 
         return [

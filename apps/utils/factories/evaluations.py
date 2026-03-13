@@ -1,6 +1,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from apps.chat.models import ChatMessageType
 from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
@@ -9,7 +10,7 @@ from apps.evaluations.models import (
     EvaluationRun,
     Evaluator,
 )
-from apps.utils.factories.experiment import ChatMessageFactory
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -38,9 +39,6 @@ class EvaluationMessageFactory(DjangoModelFactory):
     def create_chat_messages(self, create, extracted, **kwargs):
         """Optionally create associated chat messages"""
         if create and extracted:
-            from apps.chat.models import ChatMessageType  # noqa: PLC0415
-            from apps.utils.factories.experiment import ChatFactory  # noqa: PLC0415
-
             chat = ChatFactory.create()
             if self.input:
                 input_chat_message = ChatMessageFactory.create(

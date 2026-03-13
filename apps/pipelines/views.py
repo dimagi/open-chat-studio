@@ -21,6 +21,7 @@ from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
+from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
@@ -274,15 +275,15 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
 
 
 def _pipeline_node_schemas():
-    from apps.pipelines.nodes import nodes  # noqa: PLC0415
+    from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→views
 
     schemas = []
 
     node_classes = [
         cls
-        for _, cls in inspect.getmembers(nodes, inspect.isclass)
-        if issubclass(cls, nodes.PipelineNode | nodes.PipelineRouterNode)
-        and cls not in (nodes.PipelineNode, nodes.PipelineRouterNode)
+        for _, cls in inspect.getmembers(pipeline_nodes, inspect.isclass)
+        if issubclass(cls, pipeline_nodes.PipelineNode | pipeline_nodes.PipelineRouterNode)
+        and cls not in (pipeline_nodes.PipelineNode, pipeline_nodes.PipelineRouterNode)
     ]
     for node_class in node_classes:
         schemas.append(_get_node_schema(node_class))
@@ -291,7 +292,6 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-    from apps.custom_actions.schema_utils import resolve_references  # noqa: PLC0415
 
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)

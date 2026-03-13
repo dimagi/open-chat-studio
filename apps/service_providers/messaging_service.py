@@ -357,9 +357,7 @@ class SlackService(MessagingService):
     @property
     def client(self) -> "WebClient":
         if not self._client:
-            from apps.slack.client import (
-                get_slack_client,  # noqa: PLC0415 - lazy: slack.client loads optional slack_sdk/slack_bolt deps
-            )
+            from apps.slack.client import get_slack_client  # noqa: PLC0415 - lazy: optional slack_sdk/slack_bolt deps
 
             self._client = get_slack_client(self.slack_installation_id)
         return self._client

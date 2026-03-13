@@ -50,9 +50,7 @@ class TracingService:
 
     @classmethod
     def create_for_experiment(cls, experiment) -> Self:
-        from .ocs_tracer import (
-            OCSTracer,  # noqa: PLC0415 - circular: ocs_tracer→ocs_notifications→experiments.models→tracing
-        )
+        from .ocs_tracer import OCSTracer  # noqa: PLC0415 - circular: ocs_tracer→experiments.models→tracing
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:

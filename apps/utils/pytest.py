@@ -1,3 +1,6 @@
+import pytest
+
+
 def django_db_with_data():
     """Shortcut decorator to mark a test function as requiring the database with data from migrations.
 
@@ -6,7 +9,6 @@ def django_db_with_data():
 
     See also `apps.conftest._django_db_restore_serialized`.
     """
-    import pytest  # noqa: PLC0415
 
     def _inner(func):
         return pytest.mark.django_db(

@@ -220,9 +220,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             return False
 
     def upload_file_to_remote(self, file: File):
-        from apps.assistants.sync import (
-            create_files_remote,  # noqa: PLC0415 - circular: assistants.sync imports index_managers
-        )
+        from apps.assistants.sync import create_files_remote  # noqa: PLC0415 - circular: assistants.sync→index_managers
 
         create_files_remote(self.client, files=[file])
 
@@ -378,8 +376,8 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 class GoogleLocalIndexManager(LocalIndexManager):
     def get_embedding_vector(self, content: str) -> Vector:
-        from langchain_google_genai import (
-            GoogleGenerativeAIEmbeddings,  # noqa: PLC0415 - TID253: heavy lib, slow startup
+        from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+            GoogleGenerativeAIEmbeddings,
         )
 
         embeddings = GoogleGenerativeAIEmbeddings(

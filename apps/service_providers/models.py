@@ -399,9 +399,7 @@ class MessagingProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_messaging_service(self, config: dict) -> "messaging_service.MessagingService":
-        from . import (
-            messaging_service,  # noqa: PLC0415 - lazy: avoids loading optional messaging provider deps at startup
-        )
+        from . import messaging_service  # noqa: PLC0415 - lazy: optional messaging provider deps
 
         match self:
             case MessagingProviderType.twilio:
@@ -417,9 +415,7 @@ class MessagingProviderType(models.TextChoices):
     @staticmethod
     def platform_supported_provider_types(platform: ChannelPlatform) -> list["MessagingProviderType"]:
         """Finds all provider types supporting the platform specified by `platform`"""
-        from . import (
-            messaging_service,  # noqa: PLC0415 - lazy: avoids loading optional messaging provider deps at startup
-        )
+        from . import messaging_service  # noqa: PLC0415 - lazy: optional messaging provider deps
 
         provider_types = []
         for service in messaging_service.MessagingService.__subclasses__():

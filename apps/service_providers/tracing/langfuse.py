@@ -30,9 +30,7 @@ logger = logging.getLogger("ocs.tracing.langfuse")
 
 def get_langfuse_api_client(config: dict) -> FernLangfuse:
     """Create a Langfuse management API client for reading trace data."""
-    from langfuse.api.client import (
-        FernLangfuse,  # noqa: PLC0415 - lazy: test mocks langfuse.FernLangfuse at source module level
-    )
+    from langfuse.api.client import FernLangfuse  # noqa: PLC0415 - lazy: test mocks at source module level
 
     return FernLangfuse(
         base_url=config["host"],

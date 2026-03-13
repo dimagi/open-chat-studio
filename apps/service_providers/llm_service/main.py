@@ -214,8 +214,8 @@ class OpenAILlmService(OpenAIGenericService):
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def get_assistant(self, assistant_id: str, as_agent=False):
-        from apps.service_providers.llm_service.openai_assistant import (
-            OpenAIAssistantRunnable,  # noqa: PLC0415 - lazy: isolates heavy langchain_classic dep
+        from apps.service_providers.llm_service.openai_assistant import (  # noqa: PLC0415 - lazy: isolates heavy langchain_classic dep
+            OpenAIAssistantRunnable,
         )
 
         return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
@@ -239,15 +239,15 @@ class OpenAILlmService(OpenAIGenericService):
         return tools
 
     def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (
-            OpenAIRemoteIndexManager,  # noqa: PLC0415 - lazy: avoids loading pgvector/langchain_text_splitters at startup
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            OpenAIRemoteIndexManager,
         )
 
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (
-            OpenAILocalIndexManager,  # noqa: PLC0415 - lazy: avoids loading pgvector/langchain_text_splitters at startup
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            OpenAILocalIndexManager,
         )
 
         return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
@@ -463,8 +463,8 @@ class GoogleLlmService(LlmService):
         # return tools
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (
-            GoogleLocalIndexManager,  # noqa: PLC0415 - lazy: avoids loading pgvector/langchain_text_splitters at startup
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            GoogleLocalIndexManager,
         )
 
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
