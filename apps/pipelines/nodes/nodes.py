@@ -115,7 +115,7 @@ def format_jinja_error(exc: Exception, field_name: str, context: dict | None = N
         return msg
 
     if isinstance(exc, TemplateSyntaxError):
-        line_info = f" (line {exc.lineno})" if exc.lineno else ""
+        line_info = f" (line {exc.lineno})" if exc.lineno is not None else ""
         return f'Jinja2 TemplateSyntaxError in field "{field_name}": {exc.message}{line_info}'
 
     if isinstance(exc, JinjaSandboxSecurityError):
