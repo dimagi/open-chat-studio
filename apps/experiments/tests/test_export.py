@@ -272,6 +272,7 @@ def test_trace_id_export():
 
     session = Mock(
         external_id="session123",
+        state={},
         get_platform_name=Mock(return_value="TestPlatform"),
         participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
         chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
@@ -312,3 +313,43 @@ def test_trace_id_export():
     assert rows[2][trace_id_index] == "trace123"  # ai msg from trace1 (same trace_id)
     assert rows[3][trace_id_index] == "trace456"  # human msg from trace2 (langfuse)
     assert rows[4][trace_id_index] == "trace456"  # ai msg from trace2 (same trace_id)
+
+
+@pytest.mark.django_db()
+def test_session_state_export():
+    experiment = ExperimentFactory.create()
+    team = experiment.team
+    session = ExperimentSessionFactory.create(
+        experiment=experiment,
+        team=team,
+        experiment_channel=ExperimentChannelFactory.create(),
+        state={"key": "value"},
+    )
+    human_msg = ChatMessage.objects.create(
+        chat=session.chat,
+        content="Hello",
+        message_type=ChatMessageType.HUMAN,
+    )
+    ai_msg = ChatMessage.objects.create(
+        chat=session.chat,
+        content="Hi there",
+        message_type=ChatMessageType.AI,
+    )
+    TraceFactory.create(
+        experiment=experiment,
+        session=session,
+        participant=session.participant,
+        team=team,
+        input_message=human_msg,
+        output_message=ai_msg,
+    )
+
+    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
+    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    rows = list(csv_reader)
+
+    header = rows[0]
+    state_index = header.index("Session State")
+
+    assert json.loads(rows[1][state_index]) == {"key": "value"}
+    assert json.loads(rows[2][state_index]) == {"key": "value"}
