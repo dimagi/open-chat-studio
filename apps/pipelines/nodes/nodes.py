@@ -186,7 +186,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     )
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
     )
 
     @field_validator("template_string", mode="before")
@@ -491,20 +491,16 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
 
     recipient_list: str = Field(
         description="A comma-separated list of email addresses. Supports Jinja2 templates.",
-        json_schema_extra=UiSchema(
-            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
     )
     subject: str = Field(
         description="Email subject. Supports Jinja2 templates.",
-        json_schema_extra=UiSchema(
-            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
     )
     body: str = Field(
         default="",
         description="Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
     )
 
     @field_validator("subject", "body", mode="before")
