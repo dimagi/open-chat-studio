@@ -7,6 +7,7 @@ import {python} from "@codemirror/lang-python";
 import {EditorView} from "@codemirror/view";
 import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
 import {jinja} from "@codemirror/lang-jinja";
+import {linter, Diagnostic} from "@codemirror/lint";
 
 const githubDark = githubDarkInit({
   "settings": {
@@ -256,12 +257,40 @@ export function PromptEditor(
 }
 
 
+type ValidateFn = (template: string) => Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}>;
+
+function jinjaLinter(onValidate: ValidateFn) {
+  return linter(async (view): Promise<Diagnostic[]> => {
+    const doc = view.state.doc.toString();
+    if (!doc.trim()) return [];
+
+    try {
+      const result = await onValidate(doc);
+      return result.errors.map((err) => {
+        const line = Math.min(err.line, view.state.doc.lines);
+        const lineObj = view.state.doc.line(line);
+        const from = lineObj.from + Math.min(err.column, lineObj.length);
+        const to = Math.min(from + 1, lineObj.to);
+        return {
+          from,
+          to,
+          severity: err.severity === "error" ? "error" : "warning",
+          message: err.message,
+        } as Diagnostic;
+      });
+    } catch (_e) {
+      return [];
+    }
+  }, {delay: 500});
+}
+
 export function JinjaEditor(
-  {value, onChange, readOnly, autocompleteVars}: {
+  {value, onChange, readOnly, autocompleteVars, onValidate}: {
     value: string;
     onChange: (value: string) => void;
     readOnly: boolean;
     autocompleteVars: string[];
+    onValidate?: ValidateFn;
   }
 ) {
   const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
@@ -269,6 +298,9 @@ export function JinjaEditor(
     jinja({ variables: jinjaVariables }),
     EditorView.lineWrapping,
   ];
+  if (onValidate) {
+    extensions.push(jinjaLinter(onValidate));
+  }
   if (readOnly) {
     extensions = [
       ...extensions,

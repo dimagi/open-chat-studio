@@ -1433,6 +1433,8 @@ export function JinjaWidget(props: WidgetParams) {
   const rows: number = props.schema["ui:rows"] ?? 2;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
+  const checks = rows < 2 ? ["jinja"] : ["jinja", "html"];
+  const onValidate = (template: string) => apiClient.validateJinja(template, checks);
 
   const onChangeCallback = (value: string) => {
     setNode(props.nodeId, produce((draft) => {
@@ -1493,6 +1495,7 @@ export function JinjaWidget(props: WidgetParams) {
               onChange={onChangeCallback}
               readOnly={props.readOnly}
               autocompleteVars={autocomplete_vars_list}
+              onValidate={onValidate}
             />
           </div>
           {props.inputError && <div className="text-red-500">{props.inputError}</div>}
