@@ -124,6 +124,25 @@ def format_jinja_error(exc: Exception, field_name: str, context: dict | None = N
     return f'Jinja2 error in field "{field_name}": {exc_type}: {exc}'
 
 
+def _validate_jinja_syntax(value: str) -> str:
+    """Pydantic validator that checks Jinja2 template syntax at save time.
+
+    Uses env.parse() (AST only, no rendering) so it only catches syntax errors,
+    not undefined variable errors (which require runtime context).
+    """
+    if not value:
+        return value
+    try:
+        SandboxedEnvironment().parse(value)
+    except TemplateSyntaxError as e:
+        line_info = f" (line {e.lineno})" if e.lineno is not None else ""
+        raise PydanticCustomError(
+            "invalid_jinja_syntax",
+            f"Invalid Jinja2 syntax: {e.message}{line_info}",
+        ) from None
+    return value
+
+
 def _build_jinja_context(context: "NodeContext", repo: "ORMRepository") -> dict:
     """Build the Jinja2 template context dict shared by RenderTemplate and SendEmail."""
     content = {
@@ -169,6 +188,11 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         description="Use {{your_variable_name}} to refer to designate input",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
+
+    @field_validator("template_string", mode="before")
+    @classmethod
+    def validate_template_syntax(cls, value):
+        return _validate_jinja_syntax(value)
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         env = SandboxedEnvironment(undefined=StrictUndefined)
@@ -483,9 +507,16 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
     )
 
+    @field_validator("subject", "body", mode="before")
+    @classmethod
+    def validate_jinja_syntax(cls, value):
+        return _validate_jinja_syntax(value)
+
     @field_validator("recipient_list", mode="before")
     def recipient_list_has_valid_emails(cls, value):
         value = value or ""
+        # Check Jinja syntax first — if it's invalid, don't try email validation
+        _validate_jinja_syntax(value)
         if "{{" in value or "{%" in value:
             return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
