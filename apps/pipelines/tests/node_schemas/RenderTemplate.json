@@ -16,7 +16,8 @@
       "description": "Use {{your_variable_name}} to refer to designate input",
       "title": "Template String",
       "type": "string",
-      "ui:widget": "expandable_text"
+      "ui:optionsSource": "jinja_node",
+      "ui:widget": "jinja_template"
     }
   },
   "required": [

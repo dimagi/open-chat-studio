@@ -31,7 +31,7 @@ class PromptVars(models.TextChoices):
         return [{"label": v, "value": v} for v in prompt_vars]
 
     @staticmethod
-    def get_jinja_email_vars() -> list[dict]:
+    def get_jinja_vars() -> list[dict]:
         vars_ = [
             "input",
             "node_inputs",

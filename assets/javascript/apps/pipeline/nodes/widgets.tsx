@@ -1,4 +1,4 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useState, useMemo} from "react";
 import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
@@ -1433,6 +1433,11 @@ export function JinjaWidget(props: WidgetParams) {
   const rows: number = props.schema["ui:rows"] ?? 2;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
+  // Single-line fields (rows < 2) skip HTML lint — it's not meaningful for one-liner templates
+  const onValidate = useCallback(
+    (template: string) => apiClient.validateJinja(template, rows < 2 ? ["jinja"] : ["jinja", "html"]),
+    [rows]
+  );
 
   const onChangeCallback = (value: string) => {
     setNode(props.nodeId, produce((draft) => {
@@ -1493,6 +1498,7 @@ export function JinjaWidget(props: WidgetParams) {
               onChange={onChangeCallback}
               readOnly={props.readOnly}
               autocompleteVars={autocomplete_vars_list}
+              onValidate={onValidate}
             />
           </div>
           {props.inputError && <div className="text-red-500">{props.inputError}</div>}

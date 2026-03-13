@@ -1,6 +1,7 @@
 import pytest
 
 from apps.experiments.models import Participant
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import RenderTemplate
 from apps.pipelines.repository import ORMRepository
@@ -50,3 +51,17 @@ def test_render_template_with_context_keys(pipeline, experiment_session):
         "participant_data: custom_value, "
         "input_message_url: https://example.com/ "
     )
+
+
+@pytest.mark.django_db()
+def test_render_template_undefined_variable_error(pipeline, experiment_session):
+    state = PipelineState(
+        experiment_session=experiment_session,
+        messages=["hello"],
+        outputs={},
+    )
+    node = RenderTemplate(name="test", node_id="123", django_node=None, template_string="{{ nonexistent_var }}")
+    config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
+
+    with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "template_string"'):
+        node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)

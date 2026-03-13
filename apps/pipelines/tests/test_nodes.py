@@ -21,7 +21,7 @@ from apps.pipelines.nodes.nodes import (
     SendEmail,
     StructuredDataSchemaValidatorMixin,
 )
-from apps.pipelines.repository import ORMRepository
+from apps.pipelines.repository import InMemoryPipelineRepository, ORMRepository
 from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -598,3 +598,46 @@ class TestSendEmailDynamicRendering:
             subject="Hi",
             message="hello",
         )
+
+
+class TestSendEmailRuntimeErrors:
+    def _make_state(self):
+        return PipelineState(messages=["hello"], outputs={}, temp_state={})
+
+    def _make_config(self):
+        repo = InMemoryPipelineRepository()
+        return {"configurable": {"repo": repo}}
+
+    def test_subject_undefined_error(self):
+        node = SendEmail(
+            name="email",
+            node_id="test",
+            django_node=None,
+            recipient_list="test@example.com",
+            subject="{{ nonexistent }}",
+        )
+        with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "subject"'):
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
+
+    def test_body_undefined_error(self):
+        node = SendEmail(
+            name="email",
+            node_id="test",
+            django_node=None,
+            recipient_list="test@example.com",
+            subject="Hi",
+            body="{{ missing_var }}",
+        )
+        with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "body"'):
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
+
+    def test_recipient_list_undefined_error(self):
+        node = SendEmail(
+            name="email",
+            node_id="test",
+            django_node=None,
+            recipient_list="{{ missing_var }}",
+            subject="Hi",
+        )
+        with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "recipient_list"'):
+            node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
