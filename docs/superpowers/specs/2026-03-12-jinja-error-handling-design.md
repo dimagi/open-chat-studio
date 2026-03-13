@@ -16,9 +16,9 @@ Jinja template errors in the Email and Template pipeline nodes provide poor feed
 
 #### Backend Endpoint
 
-A new team-scoped API endpoint validates Jinja template syntax. It follows the same URL pattern and auth as existing pipeline endpoints (`@login_and_team_required`, `@csrf_exempt`):
+A new team-scoped API endpoint validates Jinja template syntax. It uses `@login_and_team_required` + `@permission_required("pipelines.view_pipeline")` with CSRF protection (`@require_POST`):
 
-```
+```http
 POST /api/pipelines/<team_slug>/validate-jinja/
 Content-Type: application/json
 
@@ -27,7 +27,7 @@ Content-Type: application/json
 
 Response:
 ```json
-{"errors": [{"line": 1, "column": 8, "message": "unexpected end of template, expected 'end of print statement'."}]}
+{"errors": [{"line": 1, "column": 8, "message": "unexpected end of template, expected 'end of print statement'.", "severity": "error"}]}
 ```
 
 Or when valid:
@@ -90,23 +90,23 @@ Replace the generic `f"Error rendering template: {e}"` pattern with a helper fun
 #### Error Format
 
 For `UndefinedError`:
-```
+```text
 Jinja2 UndefinedError in field "subject": 'participant_data' is undefined
 Available variables: input, node_inputs, temp_state, session_state, input_message_id, input_message_url
 ```
 
 For `TemplateSyntaxError`:
-```
+```text
 Jinja2 TemplateSyntaxError in field "body": unexpected end of template (line 3)
 ```
 
 For `SecurityError`:
-```
+```text
 Jinja2 SecurityError in field "template_string": access to attribute 'mro' of 'type' object is unsafe
 ```
 
 For other exceptions:
-```
+```text
 Jinja2 error in field "body": <exception type>: <message>
 ```
 

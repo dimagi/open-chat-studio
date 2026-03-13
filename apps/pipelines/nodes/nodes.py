@@ -123,9 +123,9 @@ def format_jinja_error(exc: Exception, field_name: str, context: dict | None = N
     return f'Jinja2 error in field "{field_name}": {type(exc).__name__}: {exc}'
 
 
-def _validate_jinja_syntax(value: str) -> str:
+def _validate_jinja_syntax(value: Any) -> Any:
     """Pydantic validator that checks Jinja2 template syntax at save time."""
-    if not value:
+    if value is None or not isinstance(value, str) or value == "":
         return value
     error = parse_jinja_template(value)
     if error:
@@ -505,10 +505,13 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
     @field_validator("recipient_list", mode="before")
     @classmethod
     def recipient_list_has_valid_emails(cls, value):
-        value = value or ""
+        if value is None:
+            value = ""
+        if not isinstance(value, str):
+            return value
         # Check Jinja syntax first — if it's invalid, don't try email validation
         value = _validate_jinja_syntax(value)
-        if "{{" in value or "{%" in value:
+        if any(token in value for token in ("{{", "{%", "{#")):
             return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
             try:

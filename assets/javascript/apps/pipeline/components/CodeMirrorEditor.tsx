@@ -1,6 +1,6 @@
 import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
 import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
-import {useEffect, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import CodeMirror, {EditorState} from "@uiw/react-codemirror";
 import {autocompletion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
 import {python} from "@codemirror/lang-python";
@@ -278,9 +278,13 @@ function jinjaLinter(onValidate: ValidateFn) {
           message: err.message,
         } as Diagnostic;
       });
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn("Jinja linter request failed:", e);
-      return [];
+      const message =
+        typeof e === "object" && e !== null && "error" in e && typeof (e as {error?: unknown}).error === "string"
+          ? (e as {error: string}).error
+          : "Template validation is temporarily unavailable";
+      return [{from: 0, to: Math.min(1, view.state.doc.length), severity: "warning", message}];
     }
   }, {delay: 500});
 }
@@ -294,20 +298,19 @@ export function JinjaEditor(
     onValidate?: ValidateFn;
   }
 ) {
-  const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
-  let extensions = [
-    jinja({ variables: jinjaVariables }),
-    EditorView.lineWrapping,
-  ];
-  if (onValidate && !readOnly) {
-    extensions.push(jinjaLinter(onValidate));
-  }
-  if (readOnly) {
-    extensions = [
-      ...extensions,
-      EditorView.editable.of(false),
-      EditorState.readOnly.of(true),
+  const extensions = useMemo(() => {
+    const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
+    const exts = [
+      jinja({ variables: jinjaVariables }),
+      EditorView.lineWrapping,
     ];
-  }
+    if (onValidate && !readOnly) {
+      exts.push(jinjaLinter(onValidate));
+    }
+    if (readOnly) {
+      exts.push(EditorView.editable.of(false), EditorState.readOnly.of(true));
+    }
+    return exts;
+  }, [autocompleteVars, onValidate, readOnly]);
   return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
 }

@@ -378,14 +378,20 @@ def validate_jinja(request, team_slug: str):
     template = body.get("template")
     if template is None:
         return JsonResponse({"error": "Missing 'template' field"}, status=400)
+    if not isinstance(template, str):
+        return JsonResponse({"error": "'template' must be a string"}, status=400)
 
-    if template and len(template) > 50_000:
+    if len(template) > 50_000:
         return JsonResponse({"error": "Template too large (max 50,000 characters)"}, status=400)
 
+    allowed_checks = {"jinja", "html"}
     checks_raw = body.get("checks", ["jinja", "html"])
-    if not isinstance(checks_raw, list):
-        return JsonResponse({"error": "'checks' must be a list"}, status=400)
+    if not isinstance(checks_raw, list) or not all(isinstance(c, str) for c in checks_raw):
+        return JsonResponse({"error": "'checks' must be a list of strings"}, status=400)
     checks = set(checks_raw)
+    unknown_checks = checks - allowed_checks
+    if unknown_checks:
+        return JsonResponse({"error": f"Unsupported check(s): {', '.join(sorted(unknown_checks))}"}, status=400)
     errors = []
 
     # 1. Jinja syntax validation

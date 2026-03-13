@@ -102,6 +102,18 @@ class TestJinjaSyntaxBackstopValidator:
                 subject="Hi",
             )
 
+    def test_send_email_recipient_list_jinja_comment_is_allowed(self):
+        """Jinja comments like {# primary #} should not trigger email validation."""
+        node = SendEmail(
+            name="email",
+            node_id="1",
+            django_node=None,
+            recipient_list="{# primary #}ops@example.com",
+            subject="Hi",
+            body="Hello",
+        )
+        assert "{#" in node.recipient_list
+
     def test_send_email_valid_jinja_fields(self):
         node = SendEmail(
             name="email",
@@ -212,6 +224,22 @@ class TestValidateJinjaEndpoint:
 
     def test_missing_template_field(self, authed_client, team_with_users):
         response = self._post(authed_client, team_with_users, {})
+        assert response.status_code == 400
+
+    def test_non_string_template(self, authed_client, team_with_users):
+        response = self._post(authed_client, team_with_users, {"template": 123})
+        assert response.status_code == 400
+
+    def test_checks_not_a_list(self, authed_client, team_with_users):
+        response = self._post(authed_client, team_with_users, {"template": "hello", "checks": "jinja"})
+        assert response.status_code == 400
+
+    def test_checks_with_non_string_entries(self, authed_client, team_with_users):
+        response = self._post(authed_client, team_with_users, {"template": "hello", "checks": [{}]})
+        assert response.status_code == 400
+
+    def test_checks_with_unknown_value(self, authed_client, team_with_users):
+        response = self._post(authed_client, team_with_users, {"template": "hello", "checks": ["unknown"]})
         assert response.status_code == 400
 
     def test_unauthenticated_request(self, team_with_users):

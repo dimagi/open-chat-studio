@@ -33,7 +33,7 @@ def djlint_check(template: str) -> list[dict]:
     Uses a curated allowlist of rules (DJLINT_ALLOWED_RULES) to filter out
     rules that are irrelevant for template fragments.
     """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, dir=_DJLINT_TMPDIR) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, dir=_DJLINT_TMPDIR, encoding="utf-8") as f:
         f.write(template)
         tmp_path = Path(f.name)
     try:
