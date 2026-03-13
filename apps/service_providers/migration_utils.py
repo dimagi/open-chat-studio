@@ -36,7 +36,9 @@ def populate_temperature_params(Node):
 
 def llm_model_migration():
     def _update_llm_models(apps, schema_editor):
-        from apps.service_providers.llm_service.default_models import _update_llm_provider_models  # noqa: PLC0415
+        from apps.service_providers.llm_service.default_models import (  # noqa: PLC0415 - Django migration: lazy import
+            _update_llm_provider_models,
+        )
 
         LlmProviderModel = apps.get_model("service_providers", "LlmProviderModel")
         _update_llm_provider_models(LlmProviderModel)
@@ -46,7 +48,9 @@ def llm_model_migration():
 
 def embedding_model_migration():
     def update_embedding_models(apps, schema_editor):
-        from apps.service_providers.llm_service.default_models import _update_embedding_provider_models  # noqa: PLC0415
+        from apps.service_providers.llm_service.default_models import (  # noqa: PLC0415 - Django migration: lazy import
+            _update_embedding_provider_models,
+        )
 
         EmbeddingProviderModel = apps.get_model("service_providers", "EmbeddingProviderModel")
         _update_embedding_provider_models(EmbeddingProviderModel)

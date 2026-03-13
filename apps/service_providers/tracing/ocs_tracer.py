@@ -213,7 +213,7 @@ class OCSTracer(Tracer):
         """
         Bust any relevant caches when an error is detected in a span.
         """
-        from apps.experiments.models import Experiment  # noqa: PLC0415
+        from apps.experiments.models import Experiment  # noqa: PLC0415 - circular: experiments.models→tracing
 
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
