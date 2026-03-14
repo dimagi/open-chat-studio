@@ -2,6 +2,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.evaluations.aggregation import compute_aggregates_for_run
+from apps.evaluations.models import EvaluationRunAggregate
 from apps.evaluations.tasks import _upload_evaluation_run_results, process_evaluation_results_csv_rows
 from apps.evaluations.views.evaluation_config_views import generate_evaluation_results_column_suggestions
 from apps.utils.factories.evaluations import (
@@ -237,8 +239,6 @@ def test_process_csv_no_update_when_value_unchanged(evaluation_setup):
 @pytest.mark.django_db()
 def test_upload_task_recomputes_aggregates(evaluation_setup):
     """Test that uploading CSV results triggers aggregate recalculation"""
-    from apps.evaluations.aggregation import compute_aggregates_for_run  # noqa: PLC0415
-    from apps.evaluations.models import EvaluationRunAggregate  # noqa: PLC0415
 
     # Compute initial aggregates
     compute_aggregates_for_run(evaluation_setup["run"])
