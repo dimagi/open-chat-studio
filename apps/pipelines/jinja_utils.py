@@ -50,7 +50,7 @@ def djlint_check(template: str) -> list[dict]:
                 continue
             line_str = issue.get("line", "1:0")
             parts = line_str.split(":")
-            line = int(parts[0]) if parts[0].isdigit() else 1
+            line = max(1, int(parts[0])) if parts[0].isdigit() else 1
             column = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
             errors.append(
                 {
