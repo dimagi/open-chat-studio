@@ -9,7 +9,9 @@ from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
+from jinja2 import StrictUndefined, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
+from jinja2.sandbox import SecurityError as JinjaSandboxSecurityError
 from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
@@ -33,6 +35,7 @@ from apps.pipelines.exceptions import (
     PipelineNodeRunError,
     WaitForNextInput,
 )
+from apps.pipelines.jinja_utils import parse_jinja_template
 from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
@@ -95,6 +98,46 @@ def main(input: str, **kwargs) -> str:
 """
 
 
+def format_jinja_error(exc: Exception, field_name: str, context: dict | None = None) -> str:
+    """Format a Jinja2 exception into a structured, actionable error message.
+
+    Args:
+        exc: The Jinja2 exception that was raised.
+        field_name: The Pydantic field name where the error occurred.
+        context: The Jinja template context dict, if available. Used to list
+            available variables for UndefinedError.
+    """
+    if isinstance(exc, UndefinedError):
+        msg = f'Jinja2 UndefinedError in field "{field_name}": {exc}'
+        if context:
+            var_names = ", ".join(context.keys())
+            msg += f"\nAvailable variables: {var_names}"
+        return msg
+
+    if isinstance(exc, TemplateSyntaxError):
+        line_info = f" (line {exc.lineno})" if exc.lineno is not None else ""
+        return f'Jinja2 TemplateSyntaxError in field "{field_name}": {exc.message}{line_info}'
+
+    if isinstance(exc, JinjaSandboxSecurityError):
+        return f'Jinja2 SecurityError in field "{field_name}": {exc}'
+
+    return f'Jinja2 error in field "{field_name}": {type(exc).__name__}: {exc}'
+
+
+def _validate_jinja_syntax(value: Any) -> Any:
+    """Pydantic validator that checks Jinja2 template syntax at save time."""
+    if value is None or not isinstance(value, str) or value == "":
+        return value
+    error = parse_jinja_template(value)
+    if error:
+        line_info = f" (line {error.lineno})" if error.lineno is not None else ""
+        raise PydanticCustomError(
+            "invalid_jinja_syntax",
+            f"Invalid Jinja2 syntax: {error.message}{line_info}",
+        ) from None
+    return value
+
+
 def _build_jinja_context(context: "NodeContext", repo: "ORMRepository") -> dict:
     """Build the Jinja2 template context dict shared by RenderTemplate and SendEmail."""
     content = {
@@ -138,17 +181,25 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     )
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
     )
 
+    @field_validator("template_string", mode="before")
+    @classmethod
+    def validate_jinja_syntax(cls, value):
+        return _validate_jinja_syntax(value)
+
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        env = SandboxedEnvironment()
+        env = SandboxedEnvironment(undefined=StrictUndefined)
+        jinja_context = _build_jinja_context(context, self.repo)
         try:
-            content = _build_jinja_context(context, self.repo)
             template = env.from_string(self.template_string)
-            output = template.render(content)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering template: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "template_string")) from e
+        try:
+            output = template.render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(format_jinja_error(e, "template_string", context=jinja_context)) from e
 
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
@@ -435,26 +486,33 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
 
     recipient_list: str = Field(
         description="A comma-separated list of email addresses. Supports Jinja2 templates.",
-        json_schema_extra=UiSchema(
-            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
     )
     subject: str = Field(
         description="Email subject. Supports Jinja2 templates.",
-        json_schema_extra=UiSchema(
-            widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node, rows=1
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
     )
     body: str = Field(
         default="",
         description="Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_email_node),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
     )
 
+    @field_validator("subject", "body", mode="before")
+    @classmethod
+    def validate_jinja_syntax(cls, value):
+        return _validate_jinja_syntax(value)
+
     @field_validator("recipient_list", mode="before")
+    @classmethod
     def recipient_list_has_valid_emails(cls, value):
-        value = value or ""
-        if "{{" in value or "{%" in value:
+        if value is None:
+            value = ""
+        if not isinstance(value, str):
+            return value
+        # Check Jinja syntax first — if it's invalid, don't try email validation
+        value = _validate_jinja_syntax(value)
+        if any(token in value for token in ("{{", "{%", "{#")):
             return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
             try:
@@ -464,14 +522,14 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return value
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        env = SandboxedEnvironment()
+        env = SandboxedEnvironment(undefined=StrictUndefined)
         env.filters["split"] = lambda value, sep=",": str(value).split(sep)
         jinja_context = _build_jinja_context(context, self.repo)
 
         try:
             subject = env.from_string(self.subject).render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering email subject: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "subject", context=jinja_context)) from e
 
         # Strip newlines to prevent email header injection
         subject = subject.replace("\r", "").replace("\n", " ")
@@ -479,7 +537,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         try:
             rendered_recipients = env.from_string(self.recipient_list).render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering email recipient list: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "recipient_list", context=jinja_context)) from e
 
         recipients = [r.strip() for r in rendered_recipients.split(",") if r.strip()]
         for email in recipients:
@@ -492,7 +550,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
             try:
                 message = env.from_string(self.body).render(jinja_context)
             except Exception as e:
-                raise PipelineNodeRunError(f"Error rendering email body: {e}") from e
+                raise PipelineNodeRunError(format_jinja_error(e, "body", context=jinja_context)) from e
         else:
             message = context.input
 
