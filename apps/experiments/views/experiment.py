@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from typing import cast
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import jwt
 from celery.result import AsyncResult
@@ -42,6 +42,7 @@ from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
 
 from apps.analysis.const import LANGUAGE_CHOICES
+from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.models import ChannelPlatform
@@ -690,7 +691,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 @experiment_session_view()
 @verify_session_access_cookie
 def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    from apps.analysis.translation import translate_messages_with_llm  # noqa: PLC0415
 
     session = request.experiment_session
     provider_id = request.POST.get("llm_provider", "")
@@ -752,8 +752,6 @@ def redirect_to_messages_view(request, session):
         params["show_original_translation"] = show_original_translation
 
     if params:
-        from urllib.parse import urlencode  # noqa: PLC0415
-
         url += "?" + urlencode(params)
 
     return HttpResponseRedirect(url)

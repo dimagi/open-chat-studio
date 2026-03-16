@@ -5,6 +5,7 @@ from datetime import timedelta
 from functools import cached_property
 from io import StringIO
 
+from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -293,7 +294,6 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
         Inspect the first row's keys and build a Table subclass
         with one Column per field.
         """
-        from django.conf import settings  # noqa: PLC0415
 
         data = self.get_table_data()
         if not data:
