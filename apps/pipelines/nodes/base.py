@@ -258,6 +258,7 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_source"] = None
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state.setdefault("temp_state", {})
             state["temp_state"]["user_input"] = state["last_node_input"]
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
