@@ -4,7 +4,7 @@ NOTES
 -->
 ### Product Description
 <!--
-A short summary of the change from a user persepctive.
+A short summary of the change from a user perspective.
 For non-user facing changes write 'no change'.
 -->
 
