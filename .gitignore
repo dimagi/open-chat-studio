@@ -44,3 +44,4 @@ CODE_REVIEW.md
 # Playwright
 playwright-report/
 .playwright-cli
+test-results/
