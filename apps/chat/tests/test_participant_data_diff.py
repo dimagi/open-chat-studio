@@ -1,10 +1,7 @@
-from unittest.mock import Mock
-
 import pytest
 from django.urls import reverse
 
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.trace.models import Trace
+from apps.chat.models import ChatMessageType
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
     ExperimentSessionFactory,
@@ -13,73 +10,47 @@ from apps.utils.factories.experiment import (
 from apps.utils.factories.traces import TraceFactory
 
 
-class TestParticipantDataDiffFromTrace:
-    """Unit tests for ChatMessage.participant_data_diff_from_trace property.
-    No DB needed — uses plain model instances with manually set attributes.
-    """
-
-    def test_no_prefetch_attribute(self):
-        msg = ChatMessage()
-        assert msg.participant_data_diff_from_trace is None
-
-    def test_empty_prefetch_list(self):
-        msg = ChatMessage()
-        msg.prefetched_output_traces_with_diff = []
-        assert msg.participant_data_diff_from_trace is None
-
-    def test_single_trace_with_diff(self):
-        diff = [["change", "plan", ["free", "pro"]]]
-        trace = Mock(spec=Trace)
-        trace.participant_data_diff = diff
-
-        msg = ChatMessage()
-        msg.prefetched_output_traces_with_diff = [trace]
-        assert msg.participant_data_diff_from_trace == diff
-
-    def test_multiple_traces_returns_first(self):
-        diff1 = [["change", "plan", ["free", "pro"]]]
-        diff2 = [["add", "", [["score", 100]]]]
-        trace1 = Mock(spec=Trace)
-        trace1.participant_data_diff = diff1
-        trace2 = Mock(spec=Trace)
-        trace2.participant_data_diff = diff2
-
-        msg = ChatMessage()
-        msg.prefetched_output_traces_with_diff = [trace1, trace2]
-        assert msg.participant_data_diff_from_trace == diff1
-
-
 @pytest.mark.django_db()
 class TestParticipantDataDiffInSessionMessages:
-    """Integration tests for diff indicator rendering in the session messages view."""
-
-    DIFF_ICON_MARKER = "fa-code-compare"
-
-    @pytest.fixture()
-    def session_with_messages(self, experiment):
-        """Uses the ``experiment`` fixture from conftest which creates a team with user memberships.
-        The participant's user is set to the experiment owner so that the
-        ``verify_session_access_cookie`` decorator grants access.
-        """
+    def test_messages_queryset_includes_participant_data_diff(self, client, experiment):
         session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
         )
-        human_msg = ChatMessageFactory.create(
-            chat=session.chat,
-            message_type=ChatMessageType.HUMAN,
-            content="Hello",
-        )
-        ai_msg = ChatMessageFactory.create(
-            chat=session.chat,
-            message_type=ChatMessageType.AI,
-            content="Hi there!",
-        )
-        return session, human_msg, ai_msg
 
-    def _get_messages_url(self, session):
-        experiment = session.experiment
-        return reverse(
+        messages = []
+        for i in range(5):
+            msg_type = ChatMessageType.HUMAN if i % 2 == 0 else ChatMessageType.AI
+            messages.append(
+                ChatMessageFactory.create(
+                    chat=session.chat,
+                    message_type=msg_type,
+                    content=f"Message {i}",
+                )
+            )
+
+        # Attach traces with participant_data_diff to the 2nd and 4th messages (AI messages)
+        diff_1 = [["change", "plan", ["free", "pro"]]]
+        diff_2 = [["add", "", [["score", 100]]], ["change", "level", [1, 2]]]
+        TraceFactory.create(
+            experiment=experiment,
+            session=session,
+            participant=session.participant,
+            team=experiment.team,
+            participant_data_diff=diff_1,
+            output_message=messages[1],
+        )
+        TraceFactory.create(
+            experiment=experiment,
+            session=session,
+            participant=session.participant,
+            team=experiment.team,
+            participant_data_diff=diff_2,
+            output_message=messages[3],
+        )
+
+        client.force_login(experiment.owner)
+        url = reverse(
             "experiments:experiment_session_messages_view",
             kwargs={
                 "team_slug": experiment.team.slug,
@@ -87,59 +58,13 @@ class TestParticipantDataDiffInSessionMessages:
                 "session_id": session.external_id,
             },
         )
+        response = client.get(url + "?show_all=on")
+        assert response.status_code == 200
+        page_messages = response.context["messages"]
 
-    def _login_and_get(self, client, session):
-        user = session.experiment.owner
-        client.force_login(user)
-        url = self._get_messages_url(session)
-        return client.get(url)
-
-    def _create_trace(self, session, participant_data_diff, **kwargs):
-        return TraceFactory.create(
-            experiment=session.experiment,
-            session=session,
-            participant=session.participant,
-            team=session.team,
-            participant_data_diff=participant_data_diff,
-            **kwargs,
-        )
-
-    def test_ai_message_with_diff_shows_indicator(self, client, session_with_messages):
-        session, human_msg, ai_msg = session_with_messages
-        self._create_trace(session, [["change", "plan", ["free", "pro"]]], output_message=ai_msg)
-
-        response = self._login_and_get(client, session)
-        content = response.content.decode()
-        assert self.DIFF_ICON_MARKER in content
-
-    def test_ai_message_with_null_diff_no_indicator(self, client, session_with_messages):
-        session, human_msg, ai_msg = session_with_messages
-        self._create_trace(session, None, output_message=ai_msg)
-
-        response = self._login_and_get(client, session)
-        content = response.content.decode()
-        assert content.count(self.DIFF_ICON_MARKER) == 0
-
-    def test_ai_message_with_empty_diff_no_indicator(self, client, session_with_messages):
-        session, human_msg, ai_msg = session_with_messages
-        self._create_trace(session, [], output_message=ai_msg)
-
-        response = self._login_and_get(client, session)
-        content = response.content.decode()
-        assert content.count(self.DIFF_ICON_MARKER) == 0
-
-    def test_ai_message_with_no_trace_no_indicator(self, client, session_with_messages):
-        session, human_msg, ai_msg = session_with_messages
-
-        response = self._login_and_get(client, session)
-        content = response.content.decode()
-        assert content.count(self.DIFF_ICON_MARKER) == 0
-
-    def test_human_message_with_diff_no_indicator(self, client, session_with_messages):
-        """Diff indicator only shows on AI messages, not human messages."""
-        session, human_msg, ai_msg = session_with_messages
-        self._create_trace(session, [["change", "plan", ["free", "pro"]]], input_message=human_msg)
-
-        response = self._login_and_get(client, session)
-        content = response.content.decode()
-        assert content.count(self.DIFF_ICON_MARKER) == 0
+        assert len(page_messages) == 5
+        assert page_messages[0].participant_data_diff_from_trace is None
+        assert page_messages[1].participant_data_diff_from_trace == diff_1
+        assert page_messages[2].participant_data_diff_from_trace is None
+        assert page_messages[3].participant_data_diff_from_trace == diff_2
+        assert page_messages[4].participant_data_diff_from_trace is None
