@@ -136,6 +136,9 @@
                           </time>
                         </div>
                         {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
+                        {% if message.is_ai_message %}
+                          {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
+                        {% endif %}
                         {% if perms.evaluations.change_evaluationdataset and message.is_human_message %}
                           <div class="tooltip" data-tip="Add to dataset" @click="selectedMessageId={{ message.id }}">
                             <button

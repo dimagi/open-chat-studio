@@ -10,6 +10,7 @@ from functools import cached_property
 from typing import Self, cast
 from uuid import uuid4
 
+import dictdiffer
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -1614,6 +1615,26 @@ class ExperimentSession(BaseTeamModel):
             return self.experiment.participantdata_set.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
             return {}
+
+    @cached_property
+    def latest_trace(self):
+        return self.traces.order_by("-timestamp", "-id").first()
+
+    @cached_property
+    def latest_participant_data(self) -> dict:
+        """Returns the participant data as it exists after the most recent trace in this session.
+
+        If a trace with a diff exists, the diff is applied to the trace's snapshot
+        to reconstruct the final state. Falls back to the experiment-level
+        participant data when no traces exist.
+        """
+        trace = self.latest_trace
+        if trace is None:
+            return self.participant_data_from_experiment
+        snapshot = trace.participant_data or {}
+        if trace.participant_data_diff:
+            return dictdiffer.patch(trace.participant_data_diff, snapshot)
+        return snapshot
 
     @cached_property
     def experiment_version(self) -> Experiment:

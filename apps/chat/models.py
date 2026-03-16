@@ -174,6 +174,19 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return trace_info
 
     @property
+    def participant_data_diff_from_trace(self):
+        """Return participant_data_diff from a prefetched output trace, if any.
+
+        Requires ``prefetched_output_traces_with_diff`` to be set via Prefetch
+        in the queryset. See ``experiment_session_messages_view`` in
+        ``apps/experiments/views/experiment.py``.
+        """
+        traces = getattr(self, "prefetched_output_traces_with_diff", [])
+        if traces:
+            return traces[0].participant_data_diff
+        return None
+
+    @property
     def is_ai_message(self):
         return self.message_type == ChatMessageType.AI
 

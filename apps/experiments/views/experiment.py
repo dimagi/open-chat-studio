@@ -15,7 +15,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import CharField, Count, F, Prefetch, Subquery, Value
+from django.db.models import CharField, Count, F, Prefetch, Q, Subquery, Value
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -84,6 +84,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.trace.models import Trace
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -427,7 +428,7 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
 def get_export_download_link(request, team_slug: str, experiment_id: str, task_id: str):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     info = Progress(AsyncResult(task_id)).get_info()
-    context = {"experiment": experiment}
+    context: dict[str, object] = {"experiment": experiment}
     if info["complete"] and info["success"]:
         file_id = info["result"]["file_id"]
         download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id})
@@ -618,7 +619,14 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
                 "tagged_items",
                 queryset=CustomTaggedItem.objects.select_related("tag", "user"),
                 to_attr="prefetched_tagged_items",
-            )
+            ),
+            Prefetch(
+                "output_message_trace",
+                queryset=Trace.objects.exclude(
+                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
+                ).only("id", "participant_data_diff", "output_message_id"),
+                to_attr="prefetched_output_traces_with_diff",
+            ),
         )
     )
     if selected_tags:
@@ -691,7 +699,6 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 @experiment_session_view()
 @verify_session_access_cookie
 def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-
     session = request.experiment_session
     provider_id = request.POST.get("llm_provider", "")
     model_id = request.POST.get("llm_provider_model", "")

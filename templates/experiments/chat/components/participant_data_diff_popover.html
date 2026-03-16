@@ -1,0 +1,26 @@
+{% load json_tags %}
+{% with diff=message.participant_data_diff_from_trace %}
+{% if diff %}
+  {% with changes=diff|participant_data_diff_display %}
+  {% if changes %}
+    <div class="relative" x-data="{ showDiff: false }">
+      <div class="tooltip" data-tip="Participant data changed">
+        <button class="btn btn-sm btn-square btn-ghost"
+                @click="showDiff = !showDiff">
+          <i class="fa-solid fa-code-compare fa-sm"></i>
+        </button>
+      </div>
+      <div x-show="showDiff" x-cloak @click.outside="showDiff = false"
+           class="absolute z-50 bottom-full mb-1 p-3 bg-base-100 border border-base-300 rounded-lg shadow-lg w-80 right-0">
+        <h4 class="text-xs font-semibold text-base-content/70 mb-2">
+          <i class="fa-solid fa-code-compare mr-1"></i> Participant data changes
+        </h4>
+        <div class="space-y-1 max-h-48 overflow-y-auto">
+          {% include "generic/components/participant_data_diff_changes.html" with changes=changes text_size="text-xs" %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+  {% endwith %}
+{% endif %}
+{% endwith %}
