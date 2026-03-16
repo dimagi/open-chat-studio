@@ -136,7 +136,7 @@
                 Current participant data (no interactions recorded yet)
               </p>
             {% endif %}
-          <pre><code class="text-sm">{{ experiment_session.merged_participant_data|to_json }}</code></pre>
+          <pre><code class="text-sm">{{ experiment_session.latest_participant_data|to_json }}</code></pre>
           </div>
         </div>
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />

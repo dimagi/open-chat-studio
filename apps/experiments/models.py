@@ -1621,7 +1621,13 @@ class ExperimentSession(BaseTeamModel):
         return self.traces.order_by("-timestamp", "-id").first()
 
     @cached_property
-    def merged_participant_data(self) -> dict:
+    def latest_participant_data(self) -> dict:
+        """Returns the participant data as it exists after the most recent trace in this session.
+
+        If a trace with a diff exists, the diff is applied to the trace's snapshot
+        to reconstruct the final state. Falls back to the experiment-level
+        participant data when no traces exist.
+        """
         trace = self.latest_trace
         if trace is None:
             return self.participant_data_from_experiment

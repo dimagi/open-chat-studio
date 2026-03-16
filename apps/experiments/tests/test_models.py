@@ -530,14 +530,14 @@ class TestExperimentSession:
         trace2 = Trace.objects.create(session=session, team=session.team, experiment=session.experiment, duration=200)
         assert session.latest_trace == trace2
 
-    def test_merged_participant_data_falls_back_when_no_trace(self):
-        """Without any trace, merged_participant_data falls back to participant_data_from_experiment."""
+    def test_latest_participant_data_falls_back_when_no_trace(self):
+        """Without any trace, latest_participant_data falls back to participant_data_from_experiment."""
         session = ExperimentSessionFactory.create()
         # No traces, no participant data object — should return empty dict
-        assert session.merged_participant_data == {}
+        assert session.latest_participant_data == {}
 
-    def test_merged_participant_data_with_trace_snapshot_only(self):
-        """When the trace has no diff, merged_participant_data returns the snapshot as-is."""
+    def test_latest_participant_data_with_trace_snapshot_only(self):
+        """When the trace has no diff, latest_participant_data returns the snapshot as-is."""
         session = ExperimentSessionFactory.create()
         Trace.objects.create(
             session=session,
@@ -547,10 +547,10 @@ class TestExperimentSession:
             participant_data={"name": "Alice"},
             participant_data_diff=None,
         )
-        assert session.merged_participant_data == {"name": "Alice"}
+        assert session.latest_participant_data == {"name": "Alice"}
 
-    def test_merged_participant_data_applies_diff(self):
-        """merged_participant_data applies the diff to the snapshot."""
+    def test_latest_participant_data_applies_diff(self):
+        """latest_participant_data applies the diff to the snapshot."""
         session = ExperimentSessionFactory.create()
         snapshot = {"name": "Alice"}
         diff = list(dictdiffer.diff(snapshot, {"name": "Alice", "age": 30}))
@@ -562,7 +562,7 @@ class TestExperimentSession:
             participant_data=snapshot,
             participant_data_diff=diff,
         )
-        assert session.merged_participant_data == {"name": "Alice", "age": 30}
+        assert session.latest_participant_data == {"name": "Alice", "age": 30}
 
 
 @pytest.mark.django_db()
