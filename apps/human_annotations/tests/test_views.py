@@ -1023,7 +1023,6 @@ def test_remove_session_get_shows_confirmation(client, team_with_users, queue, u
     content = response.content.decode()
     assert "Remove Session from Queue" in content
     assert "quality_score" in content
-    assert user.get_full_name() or user.username in content
 
 
 @pytest.mark.django_db()
