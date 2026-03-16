@@ -10,6 +10,7 @@ from functools import cached_property
 from typing import Self, cast
 from uuid import uuid4
 
+import dictdiffer
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -1617,12 +1618,10 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def latest_trace(self):
-        return self.traces.order_by("-timestamp").first()
+        return self.traces.order_by("-timestamp", "-id").first()
 
     @cached_property
     def merged_participant_data(self) -> dict:
-        import dictdiffer  # noqa: PLC0415
-
         trace = self.latest_trace
         if trace is None:
             return self.participant_data_from_experiment

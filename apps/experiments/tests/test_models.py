@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
+import dictdiffer
 import pytest
 import time_machine
 from django.db import transaction
@@ -550,8 +551,6 @@ class TestExperimentSession:
 
     def test_merged_participant_data_applies_diff(self):
         """merged_participant_data applies the diff to the snapshot."""
-        import dictdiffer
-
         session = ExperimentSessionFactory.create()
         snapshot = {"name": "Alice"}
         diff = list(dictdiffer.diff(snapshot, {"name": "Alice", "age": 30}))
