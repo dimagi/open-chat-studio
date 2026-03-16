@@ -1,4 +1,4 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useState, useMemo} from "react";
 import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
@@ -1429,18 +1429,30 @@ function getAutoCompleteList(list: Array<Option>) {
 }
 
 export function JinjaWidget(props: WidgetParams) {
-  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const autocomplete_vars_list: string[] = useMemo(
+    () => getAutoCompleteList(getSelectOptions(props.schema)),
+    [props.schema]
+  );
   const rows: number = props.schema["ui:rows"] ?? 2;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Single-line fields (rows < 2) skip HTML lint — it's not meaningful for one-liner templates
+  const onValidate = useCallback(
+    (template: string) => apiClient.validateJinja(template, rows < 2 ? ["jinja"] : ["jinja", "html"]),
+    [rows]
+  );
 
-  const onChangeCallback = (value: string) => {
+  const onChangeCallback = useCallback((value: string) => {
     setNode(props.nodeId, produce((draft) => {
       draft.data.params[props.name] = value;
     }));
-  };
+  }, [props.nodeId, props.name, setNode]);
 
-  const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+  const openModal = () => {
+    setIsModalOpen(true);
+    (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+  };
 
   const label = (
     <>
@@ -1478,7 +1490,7 @@ export function JinjaWidget(props: WidgetParams) {
         )}
       </InputField>
 
-      <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+      <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel" onClose={() => setIsModalOpen(false)}>
         <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
           <form method="dialog">
             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
@@ -1488,12 +1500,13 @@ export function JinjaWidget(props: WidgetParams) {
               <h4 className="font-bold text-lg capitalize">{props.label}</h4>
               <HelpBubble helpText={props.helpText} />
             </div>
-            <JinjaEditor
+            {isModalOpen && <JinjaEditor
               value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
               onChange={onChangeCallback}
               readOnly={props.readOnly}
               autocompleteVars={autocomplete_vars_list}
-            />
+              onValidate={onValidate}
+            />}
           </div>
           {props.inputError && <div className="text-red-500">{props.inputError}</div>}
         </div>

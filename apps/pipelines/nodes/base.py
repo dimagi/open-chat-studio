@@ -257,6 +257,7 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_source"] = None
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state.setdefault("temp_state", {})
             state["temp_state"]["user_input"] = state["last_node_input"]
             from apps.channels.datamodels import Attachment  # noqa: PLC0415 - circular: channels.datamodels→events→base
 
@@ -441,7 +442,7 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
-    jinja_email_node = "jinja_email_node"
+    jinja_node = "jinja_node"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 

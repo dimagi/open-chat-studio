@@ -25,6 +25,7 @@ from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
+from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineTable
@@ -247,7 +248,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, sy
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
-        OptionsSource.jinja_email_node: PromptVars.get_jinja_email_vars(),
+        OptionsSource.jinja_node: PromptVars.get_jinja_vars(),
         OptionsSource.synthetic_voice_id: sorted(
             [
                 _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
@@ -363,3 +364,51 @@ def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
 def get_pipeline_message_response(request, team_slug: str, pipeline_pk: int, task_id: str):
     progress = Progress(AsyncResult(task_id)).get_info()
     return JsonResponse(progress)
+
+
+@login_and_team_required
+@permission_required("pipelines.view_pipeline")
+@require_POST
+def validate_jinja(request, team_slug: str):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    template = body.get("template")
+    if template is None:
+        return JsonResponse({"error": "Missing 'template' field"}, status=400)
+    if not isinstance(template, str):
+        return JsonResponse({"error": "'template' must be a string"}, status=400)
+
+    if len(template) > 50_000:
+        return JsonResponse({"error": "Template too large (max 50,000 characters)"}, status=400)
+
+    allowed_checks = {"jinja", "html"}
+    checks_raw = body.get("checks", ["jinja", "html"])
+    if not isinstance(checks_raw, list) or not all(isinstance(c, str) for c in checks_raw):
+        return JsonResponse({"error": "'checks' must be a list of strings"}, status=400)
+    checks = set(checks_raw)
+    unknown_checks = checks - allowed_checks
+    if unknown_checks:
+        return JsonResponse({"error": f"Unsupported check(s): {', '.join(sorted(unknown_checks))}"}, status=400)
+    errors = []
+
+    # 1. Jinja syntax validation
+    if "jinja" in checks and template:
+        error = parse_jinja_template(template)
+        if error:
+            errors.append(
+                {
+                    "line": error.lineno or 1,
+                    "column": 0,
+                    "message": error.message,
+                    "severity": "error",
+                }
+            )
+
+    # 2. HTML linting via djlint (only if requested and no Jinja syntax errors)
+    if "html" in checks and not errors and template:
+        errors.extend(djlint_check(template))
+
+    return JsonResponse({"errors": errors})

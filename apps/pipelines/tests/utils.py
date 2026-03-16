@@ -159,7 +159,7 @@ def llm_response_node(provider_id: str, provider_model_id: str, name: str | None
 
 def render_template_node(template_string: str | None = None, name: str | None = None):
     if template_string is None:
-        template_string = "<b>{{ summary }}</b>"
+        template_string = "<b>{{ input }}</b>"
     return _with_node_id_and_name(
         name,
         "render-template",
