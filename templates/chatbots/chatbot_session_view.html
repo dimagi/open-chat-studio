@@ -129,7 +129,7 @@
           <div class="p-3 border rounded-lg">
             {% if experiment_session.latest_trace %}
               <p class="text-sm text-base-content/60 mb-2">
-                Participant data as of the last interaction ({{ experiment_session.latest_trace.timestamp }})
+                Participant data as of the last message from this session ({{ experiment_session.latest_trace.timestamp }})
               </p>
             {% else %}
               <p class="text-sm text-base-content/60 mb-2">
