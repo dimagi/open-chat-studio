@@ -52,12 +52,12 @@ test.describe('Custom Actions', () => {
     await expect(page).toHaveURL(TEAM_URL);
 
     // Verify the action appears in the Custom Actions table
-    await expect(page.getByRole('cell', { name: actionName })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'A test custom action for E2E testing' })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'https://api.example.com' })).toBeVisible();
+    const actionRow = page.getByRole('row', { name: new RegExp(actionName) });
+    await expect(actionRow.getByRole('cell', { name: actionName })).toBeVisible();
+    await expect(actionRow.getByRole('cell', { name: 'A test custom action for E2E testing' })).toBeVisible();
+    await expect(actionRow.getByRole('cell', { name: 'https://api.example.com' })).toBeVisible();
 
     // Clean up: delete the created action
-    const actionRow = page.getByRole('row', { name: new RegExp(actionName) });
     await deleteActionRow(page, actionRow);
     await expect(page.getByRole('cell', { name: actionName })).not.toBeVisible();
   });
