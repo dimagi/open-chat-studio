@@ -2,11 +2,19 @@
 NOTES
 * Change to the chat widget should be kept separate from changes to the OCS code for the sake of the changelog and docs automation.
 -->
+### Product Description
+<!--
+A short summary of the change from a user persepctive.
+For non-user facing changes write 'no change'.
+-->
+
 
 ### Technical Description
 <!--
-A summary of the change, the reason for its implementation, and relevant links.
-Include technical details required to understand the change.
+The primary goal of this section is to provide information to the reviewer to make it easier to review the PR.
+
+Include technical details about the change and highlight the primary code changes and any decisions or design points
+that the reviewer should be made aware of.
 -->
 
 
