@@ -1429,7 +1429,10 @@ function getAutoCompleteList(list: Array<Option>) {
 }
 
 export function JinjaWidget(props: WidgetParams) {
-  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const autocomplete_vars_list: string[] = useMemo(
+    () => getAutoCompleteList(getSelectOptions(props.schema)),
+    [props.schema]
+  );
   const rows: number = props.schema["ui:rows"] ?? 2;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
