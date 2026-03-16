@@ -22,6 +22,12 @@ const githubLight = githubLightInit({
   }
 })
 
+const EDITOR_BASIC_SETUP = {
+  lineNumbers: true,
+  tabSize: 4,
+  indentOnInput: true,
+};
+
 export function CodeMirrorEditor(props: ReactCodeMirrorProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -45,11 +51,7 @@ export function CodeMirrorEditor(props: ReactCodeMirrorProps) {
     height: "100%",
     width: "100%",
     theme: isDarkMode ? githubDark : githubLight,
-    basicSetup: {
-      lineNumbers: true,
-      tabSize: 4,
-      indentOnInput: true,
-    }
+    basicSetup: EDITOR_BASIC_SETUP,
   }
   const p = {...props, ...overrides}
   return <CodeMirror {...p} />;

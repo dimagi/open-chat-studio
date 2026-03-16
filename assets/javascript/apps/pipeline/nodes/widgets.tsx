@@ -1442,11 +1442,11 @@ export function JinjaWidget(props: WidgetParams) {
     [rows]
   );
 
-  const onChangeCallback = (value: string) => {
+  const onChangeCallback = useCallback((value: string) => {
     setNode(props.nodeId, produce((draft) => {
       draft.data.params[props.name] = value;
     }));
-  };
+  }, [props.nodeId, props.name, setNode]);
 
   const openModal = () => (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
 
