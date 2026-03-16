@@ -519,6 +519,52 @@ class TestExperimentSession:
         with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
             session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
 
+    def test_latest_trace_returns_none_when_no_traces(self):
+        session = ExperimentSessionFactory.create()
+        assert session.latest_trace is None
+
+    def test_latest_trace_returns_most_recent(self):
+        session = ExperimentSessionFactory.create()
+        Trace.objects.create(session=session, team=session.team, experiment=session.experiment, duration=100)
+        trace2 = Trace.objects.create(session=session, team=session.team, experiment=session.experiment, duration=200)
+        assert session.latest_trace == trace2
+
+    def test_merged_participant_data_falls_back_when_no_trace(self):
+        """Without any trace, merged_participant_data falls back to participant_data_from_experiment."""
+        session = ExperimentSessionFactory.create()
+        # No traces, no participant data object — should return empty dict
+        assert session.merged_participant_data == {}
+
+    def test_merged_participant_data_with_trace_snapshot_only(self):
+        """When the trace has no diff, merged_participant_data returns the snapshot as-is."""
+        session = ExperimentSessionFactory.create()
+        Trace.objects.create(
+            session=session,
+            team=session.team,
+            experiment=session.experiment,
+            duration=100,
+            participant_data={"name": "Alice"},
+            participant_data_diff=None,
+        )
+        assert session.merged_participant_data == {"name": "Alice"}
+
+    def test_merged_participant_data_applies_diff(self):
+        """merged_participant_data applies the diff to the snapshot."""
+        import dictdiffer
+
+        session = ExperimentSessionFactory.create()
+        snapshot = {"name": "Alice"}
+        diff = list(dictdiffer.diff(snapshot, {"name": "Alice", "age": 30}))
+        Trace.objects.create(
+            session=session,
+            team=session.team,
+            experiment=session.experiment,
+            duration=100,
+            participant_data=snapshot,
+            participant_data_diff=diff,
+        )
+        assert session.merged_participant_data == {"name": "Alice", "age": 30}
+
 
 @pytest.mark.django_db()
 class TestSourceMaterialVersioning:
