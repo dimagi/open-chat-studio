@@ -1,6 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
 
-let accountSetupCmd = "uv run python manage.py bootstrap_data --email tester@playwright.com --password My0riginalP@ssw0rd! --team-slug agent --team-name Agent --reset"
 let runServerCmd = "uv run invoke runserver --port 8000"
 
 // npx playwright test
@@ -38,12 +37,12 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: accountSetupCmd + " && " + runServerCmd,
+      command: runServerCmd,
       url: 'http://localhost:8000',
       reuseExistingServer: !process.env.CI,
       env: {
         USE_DEBUG_TOOLBAR: "0",
-        SECRET_KEY: 'LTwzPMJVLeRNOjoLxqHidKWhfoOtjzYawyaGCezb',
+        SECRET_KEY: process.env.SECRET_KEY || 'secret-test-key',
       },
     },
     {
@@ -51,7 +50,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       env: {
         USE_DEBUG_TOOLBAR: 'false',
-        SECRET_KEY: 'LTwzPMJVLeRNOjoLxqHidKWhfoOtjzYawyaGCezb',
+        SECRET_KEY: process.env.SECRET_KEY || 'secret-test-key',
       },
     },
   ]

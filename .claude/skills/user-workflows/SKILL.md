@@ -28,13 +28,15 @@ After all subagents complete, aggregate their results into the summary report be
 
 ## Report Format
 
-After all workflows have been executed, output a summary report:
+After all workflows have been executed, output a summary report. When all tests passed, the final line should say "STATUS: PASSED", otherwise it should say "STATUS: FAILED". Example report:
 
 ```
-Status: <SUCCESS | FAILED>
-Workflow 1 heading: <SUCCESS | FAILED>
-Workflow 2 heading: <SUCCESS | FAILED>
+Workflow 1 heading: <SUCCESS>
+Workflow 2 heading: <FAILED>
+Workflow 3 heading: <SUCCESS>
 ...
+
+STATUS: FAILED
 ```
 
 ## Do

@@ -78,7 +78,7 @@ jobs:
         run: uv run python manage.py migrate
 
       - name: Seed database
-        run: uv run python manage.py bootstrap_data --email tester@playwright.com --password letmein --team-slug agent --team-name Agent
+        run: uv run python manage.py bootstrap_data --email tester@playwright.com --password My0riginalP@ssw0rd! --team-slug agent --team-name Agent --reset
 
       - name: Start Celery worker
         run: uv run celery -A config worker -l INFO --pool=solo -B &
@@ -116,6 +116,14 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: "/core-workflow-testing 8000"
+
+      - name: Check test results
+        run: |
+          if echo "${{ steps.claude.outputs.structured_output }}" | grep -q "STATUS: FAILED"; then
+            echo "Workflow tests failed - STATUS: FAILED found in agent output"
+            exit 1
+          fi
+          echo "Workflow tests passed"
 
       - name: Upload test artifacts
         if: failure()
