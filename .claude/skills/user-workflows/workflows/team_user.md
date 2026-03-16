@@ -1,6 +1,6 @@
 ## Login Credentials
 Username: tester@playwright.com
-Password: letmein
+Password: My0riginalP@ssw0rd!
 
 # Core Workflows
 
@@ -232,7 +232,8 @@ Password: letmein
 4. View tabs: Messages, Participant Data, Participant Schedules, Session State, Chatbot Events
 
 ### End a Session
-1. From the session detail page, click "End Session"
+1. From the session list, click "Session Details"
+2. From the session detail page, click "End Session"
 
 ### Start New Session (from Session Detail)
 1. From the session detail page, click "New Session"

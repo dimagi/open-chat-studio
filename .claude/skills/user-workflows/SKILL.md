@@ -15,7 +15,7 @@ Run each workflow defined in the `workflows/` folder using the playwright-cli sk
 
 ### Parallel execution with subagents
 
-Workflows in the `team_user` category (i.e. `workflows/team_user.md`) must be run in parallel using subagents. Each numbered workflow section (e.g. "1. Authentication", "2. Team Management", etc.) should be dispatched as a separate subagent running concurrently.
+Workflows in the `team_user` category (i.e. `workflows/team_user.md`) must be run in parallel using subagents. Each numbered workflow section (e.g. "1. Authentication", "2. Team Management", etc.) should be dispatched as a separate subagent running concurrently. Each sub-agent should use a different session, by using the `-s=<session-name>` flag when opening the browser.
 
 Each subagent must return a report in this format:
 
@@ -44,5 +44,5 @@ Workflow 2 heading: <SUCCESS | FAILED>
 
 ## Don't
 
-- Run the server on any port other than 8000
+- Try to run the server. Assume it is already running. If not, rather exit
 - Run `team_user` workflows sequentially — always use parallel subagents
