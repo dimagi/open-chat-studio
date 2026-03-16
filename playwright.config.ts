@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 let runServerCmd = "uv run invoke runserver --port 8000"
 
@@ -41,7 +45,7 @@ export default defineConfig({
       url: 'http://localhost:8000',
       reuseExistingServer: !process.env.CI,
       env: {
-        USE_DEBUG_TOOLBAR: "0",
+        USE_DEBUG_TOOLBAR: "False",
         SECRET_KEY: process.env.SECRET_KEY || 'secret-test-key',
       },
     },
@@ -49,7 +53,7 @@ export default defineConfig({
       command: 'uv run inv celery',
       reuseExistingServer: !process.env.CI,
       env: {
-        USE_DEBUG_TOOLBAR: 'false',
+        USE_DEBUG_TOOLBAR: "False",
         SECRET_KEY: process.env.SECRET_KEY || 'secret-test-key',
       },
     },
