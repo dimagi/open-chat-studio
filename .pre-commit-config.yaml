@@ -24,7 +24,7 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.5
+    rev: v0.15.6
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
@@ -48,7 +48,7 @@ repos:
         args: [ --fix ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version.
-    rev: v0.0.21
+    rev: v0.0.23
     hooks:
       # Run the type checker.
       - id: ty-check
