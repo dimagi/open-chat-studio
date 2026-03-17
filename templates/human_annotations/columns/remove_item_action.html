@@ -21,7 +21,7 @@
               hx-delete="{% url 'human_annotations:queue_remove_item' request.team.slug record.queue_id record.pk %}"
               hx-target="#record-{{ record.id }}"
               hx-swap="outerHTML"
-              hx-on::after-request="document.getElementById('remove-modal-{{ record.pk }}').close()">
+              hx-on::after-request="if(event.detail.successful) document.getElementById('remove-modal-{{ record.pk }}').close()">
         {% translate "Remove" %}
       </button>
       <form method="dialog">
