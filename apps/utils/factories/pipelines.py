@@ -1,9 +1,37 @@
+import copy
+
 import factory
 import factory.django
 
 from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes, PipelineChatMessages
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.utils.factories.team import TeamFactory
+
+_DEFAULT_PIPELINE_DATA = {
+    "edges": [
+        {
+            "id": "1->2",
+            "source": "start",
+            "target": "end",
+        },
+    ],
+    "nodes": [
+        {
+            "id": "start",
+            "data": {
+                "id": "start",
+                "type": StartNode.__name__,
+            },
+        },
+        {
+            "id": "end",
+            "data": {
+                "id": "end",
+                "type": EndNode.__name__,
+            },
+        },
+    ],
+}
 
 
 class NodeFactory(factory.django.DjangoModelFactory):
@@ -13,7 +41,7 @@ class NodeFactory(factory.django.DjangoModelFactory):
     flow_id = factory.Faker("uuid4")
     type = "Passthrough"
     label = "Passthrough"
-    params = {}
+    params = factory.LazyFunction(dict)
     pipeline = factory.SubFactory("apps.utils.factories.pipelines.PipelineFactory")
 
 
@@ -23,31 +51,7 @@ class PipelineFactory(factory.django.DjangoModelFactory):
         skip_postgeneration_save = True
 
     name = "Test Pipeline"
-    data = {
-        "edges": [
-            {
-                "id": "1->2",
-                "source": "start",
-                "target": "end",
-            },
-        ],
-        "nodes": [
-            {
-                "id": "start",
-                "data": {
-                    "id": "start",
-                    "type": StartNode.__name__,
-                },
-            },
-            {
-                "id": "end",
-                "data": {
-                    "id": "end",
-                    "type": EndNode.__name__,
-                },
-            },
-        ],
-    }
+    data = factory.LazyFunction(lambda: copy.deepcopy(_DEFAULT_PIPELINE_DATA))
 
     team = factory.SubFactory(TeamFactory)
 

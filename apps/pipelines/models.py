@@ -398,7 +398,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
             new_version.flow_id = new_flow_id
-            if new_version.type not in ("StartNode", "EndNode") and new_version.params["name"] == old_flow_id:
+            if new_version.type not in ("StartNode", "EndNode") and new_version.params.get("name") == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
         if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
