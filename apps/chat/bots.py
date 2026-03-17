@@ -101,9 +101,11 @@ class PipelineBot:
                 human_message=human_message,
             )
         else:
-            if self.session is not None:
-                self._persist_pipeline_state(input_state, output)
             ai_message = ChatMessage(content=output)
+
+        if self.session is not None:
+            self._persist_pipeline_state(input_state, output)
+
         self._process_intents(output)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return ai_message
@@ -201,7 +203,6 @@ class PipelineBot:
             flat_tags = [f"{category}:{tag}" if category else tag for tag, category in output_tags]
             self.trace_service.add_output_message_tags_to_trace(flat_tags)
 
-        self._persist_pipeline_state(input_state, output)
         return ai_message
 
     def _persist_pipeline_state(self, input_state, output):

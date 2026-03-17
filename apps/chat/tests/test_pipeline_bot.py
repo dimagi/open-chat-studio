@@ -8,103 +8,15 @@ from apps.chat.bots import PipelineBot
 from apps.pipelines.nodes.base import PipelineState
 
 
-def test_session_tags():
+def test_save_outputs_saves_ai_message():
     session = mock.Mock()
     bot = PipelineBot(session, mock.Mock(), None)
     bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
-        output=PipelineState(messages=["Hello"], session_tags=[("my-tag", None)]),
+        output=PipelineState(messages=["Hello"]),
     )
-    session.chat.create_and_add_tag.assert_called_with("my-tag", session.team, tag_category=None)
-
-
-def test_save_session_state():
-    session = mock.Mock()
-    bot = PipelineBot(session, mock.Mock(), None)
-    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"]),
-        output=PipelineState(messages=["Hello"], session_state={"test": "demo"}),
-    )
-    assert session.state == {"test": "demo"}
-    session.save.assert_called()
-
-
-def test_save_participant_data():
-    session = mock.Mock()
-    bot = PipelineBot(session, mock.Mock(), None)
-    participant_data = mock.Mock()
-    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
-    bot.__dict__["participant_data"] = participant_data
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"]),
-        output=PipelineState(messages=["Hello"], participant_data={"test": "demo"}),
-    )
-    assert participant_data.data == {"test": "demo"}
-    participant_data.save.assert_called()
-
-
-def test_save_participant_data_computes_and_sets_diff():
-    session = mock.Mock()
-    trace_service = mock.Mock()
-    trace_service.get_trace_metadata.return_value = {}
-    bot = PipelineBot(session, mock.Mock(), trace_service)
-    participant_data = mock.Mock()
-    participant_data.data = None
-    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
-    bot.__dict__["participant_data"] = participant_data
-
-    input_data = {"name": "Alice", "plan": "free"}
-    output_data = {"name": "Alice", "plan": "pro", "score": 100}
-
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"], participant_data=input_data),
-        output=PipelineState(messages=["Hello"], participant_data=output_data),
-    )
-
-    assert participant_data.data == output_data
-    participant_data.save.assert_called()
-    trace_service.set_participant_data_diff.assert_called_once()
-    diff = trace_service.set_participant_data_diff.call_args[0][0]
-    # Verify the diff captures the actual changes
-    assert len(diff) > 0
-
-
-def test_save_participant_data_no_diff_when_unchanged():
-    session = mock.Mock()
-    trace_service = mock.Mock()
-    trace_service.get_trace_metadata.return_value = {}
-    bot = PipelineBot(session, mock.Mock(), trace_service)
-    participant_data = mock.Mock()
-    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
-    bot.__dict__["participant_data"] = participant_data
-
-    same_data = {"name": "Alice", "plan": "free"}
-
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"], participant_data=same_data),
-        output=PipelineState(messages=["Hello"], participant_data=same_data),
-    )
-
-    trace_service.set_participant_data_diff.assert_not_called()
-
-
-def test_save_participant_data_no_diff_when_no_trace_service():
-    session = mock.Mock()
-    bot = PipelineBot(session, mock.Mock(), None)
-    participant_data = mock.Mock()
-    participant_data.data = None
-    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
-    bot.__dict__["participant_data"] = participant_data
-
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
-        output=PipelineState(messages=["Hello"], participant_data={"plan": "pro"}),
-    )
-
-    # Should not raise even without trace_service
-    assert participant_data.data == {"plan": "pro"}
+    bot._save_message_to_history.assert_called_once()
 
 
 class TestPersistPipelineState:
@@ -140,6 +52,59 @@ class TestPersistPipelineState:
         )
         assert participant_data.data == {"test": "demo"}
         participant_data.save.assert_called()
+
+    def test_computes_and_sets_participant_data_diff(self):
+        session = mock.Mock()
+        trace_service = mock.Mock()
+        bot = PipelineBot(session, mock.Mock(), trace_service)
+        participant_data = mock.Mock()
+        participant_data.data = None
+        bot.__dict__["participant_data"] = participant_data
+
+        input_data = {"name": "Alice", "plan": "free"}
+        output_data = {"name": "Alice", "plan": "pro", "score": 100}
+
+        bot._persist_pipeline_state(
+            input_state=PipelineState(messages=["hi"], participant_data=input_data),
+            output=PipelineState(messages=["Hello"], participant_data=output_data),
+        )
+
+        assert participant_data.data == output_data
+        participant_data.save.assert_called()
+        trace_service.set_participant_data_diff.assert_called_once()
+        diff = trace_service.set_participant_data_diff.call_args[0][0]
+        assert len(diff) > 0
+
+    def test_no_diff_when_participant_data_unchanged(self):
+        session = mock.Mock()
+        trace_service = mock.Mock()
+        bot = PipelineBot(session, mock.Mock(), trace_service)
+        participant_data = mock.Mock()
+        bot.__dict__["participant_data"] = participant_data
+
+        same_data = {"name": "Alice", "plan": "free"}
+
+        bot._persist_pipeline_state(
+            input_state=PipelineState(messages=["hi"], participant_data=same_data),
+            output=PipelineState(messages=["Hello"], participant_data=same_data),
+        )
+
+        trace_service.set_participant_data_diff.assert_not_called()
+
+    def test_no_diff_when_no_trace_service(self):
+        session = mock.Mock()
+        bot = PipelineBot(session, mock.Mock(), None)
+        participant_data = mock.Mock()
+        participant_data.data = None
+        bot.__dict__["participant_data"] = participant_data
+
+        bot._persist_pipeline_state(
+            input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
+            output=PipelineState(messages=["Hello"], participant_data={"plan": "pro"}),
+        )
+
+        # Should not raise even without trace_service
+        assert participant_data.data == {"plan": "pro"}
 
     def test_no_save_when_state_unchanged(self):
         session = mock.Mock()
