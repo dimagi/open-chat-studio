@@ -214,7 +214,7 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
 | Transcription failure → notification triggered | `TestNotifications.*` |
 | Pre-existing session on context → SessionResolution is no-op (Web/Slack) | new |
 | EarlyExitResponse from any core stage → terminal stages still run | new |
-| `ResponseSendingStage` is the ONLY place messages reach the user | new |
+| `ResponseSendingStage` is the ONLY place *responses* reach the user (callbacks may send indicators/echoes mid-pipeline) | new |
 
 ---
 
@@ -341,10 +341,10 @@ No DB needed. All stages are `MagicMock` instances.
 - `send_voice()` → `service.send_voice_message()`.
 - `send_file()` → `service.send_file_to_user(platform=WHATSAPP)`.
 
-### `TelegramCallbacks` (mock `telegram_bot`)
-- `transcription_started()` → `send_chat_action(action="upload_voice")`.
-- `submit_input_to_llm()` → `send_chat_action(action="typing")`.
-- `echo_transcript()` → `send_message()` with `"I heard: {transcript}"`.
+### `TelegramCallbacks` (mock `TelegramSender` + `telegram_bot`)
+- `transcription_started()` → `send_chat_action(action="upload_voice")` via raw bot.
+- `submit_input_to_llm()` → `send_chat_action(action="typing")` via raw bot.
+- `echo_transcript()` → `sender.send_text()` with `"I heard: {transcript}"`.
 - `get_message_audio()` → mocked `httpx.get` + `audio.convert_audio()` (OGG→WAV).
 
 ### `WhatsappCallbacks`

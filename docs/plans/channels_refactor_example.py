@@ -99,17 +99,22 @@ class ChannelCallbacks:
 # ---------------------------------------------------------------------------
 
 
-class ChannelSender(ABC):
-    """Abstracts how a channel delivers messages to the user."""
+class ChannelSender:
+    """Abstracts how a channel delivers messages to the user.
 
-    @abstractmethod
-    def send_text(self, text: str, recipient: str) -> None: ...
+    Default implementations raise NotImplementedError. Channels only override
+    the methods their capabilities support — the capabilities layer gates which
+    methods actually get called at runtime.
+    """
+
+    def send_text(self, text: str, recipient: str) -> None:
+        raise NotImplementedError
 
     def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
         raise NotImplementedError
 
-    @abstractmethod
-    def send_file(self, file: File, recipient: str) -> None: ...
+    def send_file(self, file: File, recipient: str) -> None:
+        raise NotImplementedError
 
 
 # ---------------------------------------------------------------------------
@@ -999,7 +1004,8 @@ class ChannelBase(ABC):
 class TelegramCallbacks(ChannelCallbacks):
     """Telegram-specific callbacks: typing indicators, audio download, transcript echo."""
 
-    def __init__(self, telegram_bot):
+    def __init__(self, sender: TelegramSender, telegram_bot):
+        self._sender = sender
         self._bot = telegram_bot
 
     def transcription_started(self, recipient: str) -> None:
@@ -1009,10 +1015,7 @@ class TelegramCallbacks(ChannelCallbacks):
         self._bot.send_chat_action(chat_id=recipient, action="typing")
 
     def echo_transcript(self, recipient: str, transcript: str) -> None:
-        self._bot.send_message(
-            recipient,
-            text=f"I heard: {transcript}",
-        )
+        self._sender.send_text(text=f"I heard: {transcript}", recipient=recipient)
 
     def get_message_audio(self, message: BaseMessage) -> BytesIO:
         import httpx
@@ -1095,11 +1098,11 @@ class TelegramChannel(ChannelBase):
 
         super().__init__(experiment, experiment_channel, experiment_session)
 
-    def _get_callbacks(self) -> ChannelCallbacks:
-        return TelegramCallbacks(telegram_bot=self.telegram_bot)
-
     def _get_sender(self) -> ChannelSender:
         return TelegramSender(self.telegram_bot)
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return TelegramCallbacks(sender=self._get_sender(), telegram_bot=self.telegram_bot)
 
     def _get_capabilities(self) -> ChannelCapabilities:
         from apps.chat.channels import MESSAGE_TYPES
