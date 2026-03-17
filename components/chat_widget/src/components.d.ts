@@ -52,6 +52,11 @@ export namespace Components {
          */
         "language"?: string;
         /**
+          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.
+          * @default 'standard'
+         */
+        "mode": 'standard' | 'kiosk';
+        /**
           * The message to display in the new chat confirmation dialog.
          */
         "newChatConfirmationMessage"?: string;
@@ -74,6 +79,11 @@ export namespace Components {
           * @default 'right'
          */
         "position": 'left' | 'center' | 'right';
+        /**
+          * Whether to show the launcher button. Set to false to hide the button and open the chat window programmatically via the `visible` property.
+          * @default true
+         */
+        "showButton": boolean;
         /**
           * Array of starter questions that users can click to send (JSON array of strings)
          */
@@ -160,6 +170,11 @@ declare namespace LocalJSX {
          */
         "language"?: string;
         /**
+          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.
+          * @default 'standard'
+         */
+        "mode"?: 'standard' | 'kiosk';
+        /**
           * The message to display in the new chat confirmation dialog.
          */
         "newChatConfirmationMessage"?: string;
@@ -182,6 +197,11 @@ declare namespace LocalJSX {
           * @default 'right'
          */
         "position"?: 'left' | 'center' | 'right';
+        /**
+          * Whether to show the launcher button. Set to false to hide the button and open the chat window programmatically via the `visible` property.
+          * @default true
+         */
+        "showButton"?: boolean;
         /**
           * Array of starter questions that users can click to send (JSON array of strings)
          */
