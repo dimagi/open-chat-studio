@@ -85,10 +85,15 @@ class AnnotationItemTable(tables.Table):
         verbose_name="Annotations",
         orderable=False,
     )
+    remove = TemplateColumn(
+        template_name="human_annotations/columns/remove_item_action.html",
+        verbose_name="",
+        orderable=False,
+    )
 
     class Meta:
         model = AnnotationItem
-        fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at"]
+        fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at", "remove"]
         attrs = {"class": "table"}
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
 

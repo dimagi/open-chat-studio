@@ -355,6 +355,39 @@ class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequired
         )
 
 
+class RemoveSessionFromQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "human_annotations.delete_annotationitem"
+
+    def get(self, request, team_slug: str, pk: int, item_pk: int):
+        """Return a confirmation modal partial showing what data will be lost."""
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = get_object_or_404(
+            AnnotationItem.objects.select_related("session", "queue"),
+            pk=item_pk,
+            queue=queue,
+        )
+        annotations = list(
+            Annotation.objects.filter(item=item, status=AnnotationStatus.SUBMITTED)
+            .select_related("reviewer")
+            .order_by("-created_at")
+        )
+        return render(
+            request,
+            "human_annotations/remove_session_confirm.html",
+            {
+                "queue": queue,
+                "item": item,
+                "annotations": annotations,
+            },
+        )
+
+    def delete(self, request, team_slug: str, pk: int, item_pk: int):
+        item = get_object_or_404(AnnotationItem, pk=item_pk, queue_id=pk, queue__team=request.team)
+        item.delete()
+        messages.success(request, "Session removed from queue.")
+        return HttpResponse()
+
+
 class ManageAssignees(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.change_annotationqueue"
 
