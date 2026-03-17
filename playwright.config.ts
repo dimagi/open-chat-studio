@@ -14,7 +14,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   timeout: 120 * 1000, // 2 minutes
   workers: 1,
-  reporter: 'html',
+  reporter: [['html', { open: 'never' }], ['json', { outputFile: 'playwright-results.json' }]],
   use: {
     baseURL: 'http://localhost:8000',
     trace: 'on-first-retry',
@@ -43,7 +43,7 @@ export default defineConfig({
     {
       command: runServerCmd,
       url: 'http://localhost:8000',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: process.env.REUSE_SERVER === '1' || !process.env.CI,
       env: {
         USE_DEBUG_TOOLBAR: "False",
         SECRET_KEY: process.env.SECRET_KEY || 'secret-test-key',
@@ -51,7 +51,7 @@ export default defineConfig({
     },
     {
       command: 'uv run inv celery',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: process.env.REUSE_SERVER === '1' || !process.env.CI,
       env: {
         USE_DEBUG_TOOLBAR: "False",
         SECRET_KEY: process.env.SECRET_KEY || 'secret-test-key',
