@@ -284,6 +284,14 @@
     right: 30px;
     bottom: 30px;
   }
+
+  :host([mode="kiosk"]) {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    height: 100%;
+  }
 }
 
 @layer components {
@@ -398,6 +406,15 @@
 
   .chat-window-dragging {
     @apply shadow-2xl cursor-grabbing;
+  }
+
+  .chat-window-kiosk {
+    @apply absolute inset-0 w-full h-full overflow-hidden flex flex-col;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: var(--chat-window-bg-color);
+    z-index: var(--chat-z-index);
+    font-size: var(--chat-window-font-size);
   }
 
   .chat-header {
