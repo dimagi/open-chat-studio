@@ -203,10 +203,11 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
         .select_related("experiment", "team", "messaging_provider")
         .first()
     )
-    set_current_team(experiment_channel.team)
     if not experiment_channel:
         log.info("No experiment channel found for channel_id=%s team=%s", channel_id, team_slug)
         return
+
+    set_current_team(experiment_channel.team)
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
