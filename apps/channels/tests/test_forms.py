@@ -1,5 +1,6 @@
 from unittest.mock import Mock, PropertyMock, patch
 
+import httpx
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
@@ -86,7 +87,6 @@ def test_whatsapp_form_checks_number(
 @patch("apps.service_providers.messaging_service.httpx.get")
 def test_whatsapp_form_meta_cloud_api_resolves_phone_number_id(mock_httpx_get, messaging_provider, experiment):
     """Test that the phone number ID is fetched from Meta API and stored in extra_data"""
-    import httpx
 
     mock_httpx_get.return_value = httpx.Response(
         200,
@@ -117,9 +117,8 @@ def test_whatsapp_form_meta_cloud_api_resolves_phone_number_id(mock_httpx_get, m
 @pytest.mark.django_db()
 @patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
 @patch("apps.service_providers.messaging_service.httpx.get")
-def test_whatsapp_form_meta_cloud_api_rejects_unknown_number(mock_httpx_get, messaging_provider, experiment):
-    """Test that form validation fails when the phone number is not found in the Meta Business Account"""
-    import httpx
+def test_whatsapp_form_meta_cloud_api_warns_unknown_number(mock_httpx_get, messaging_provider, experiment):
+    """Test that form validation warns when the phone number is not found in the Meta Business Account"""
 
     mock_httpx_get.return_value = httpx.Response(
         200,
@@ -135,8 +134,9 @@ def test_whatsapp_form_meta_cloud_api_rejects_unknown_number(mock_httpx_get, mes
     form = WhatsappChannelForm(
         experiment=experiment, data={"number": "+12125552368", "messaging_provider": provider.id}
     )
-    assert not form.is_valid()
-    assert "was not found in the WhatsApp Business Account" in form.errors["number"][0]
+    assert form.is_valid()
+    assert "was not found at the provider" in form.warning_message
+    assert "phone_number_id" not in form.cleaned_data
 
 
 # Slack channel keyword uniqueness tests
