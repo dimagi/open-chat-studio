@@ -474,8 +474,6 @@ class MetaCloudAPIWebhookView(View):
             log.warning("Meta Cloud API webhook signature verification failed for channel")
             return HttpResponse()
 
-        set_current_team(channels[0].team)
-
         for value in message_values:
             phone_number_id = value["metadata"]["phone_number_id"]
             ch = channel_map.get(phone_number_id)
@@ -495,14 +493,14 @@ class MetaCloudAPIWebhookView(View):
     ) -> bool:
         """Verify the X-Hub-Signature-256 of a Meta webhook payload.
 
-        All channels in the payload must belong to the same messaging provider (i.e. share the
-        same Meta app and app_secret). Payloads that span multiple providers are rejected to
-        prevent an attacker with a legitimate channel from forging messages for a phone number
-        that belongs to a different Meta app by including it in a payload signed with their own
-        app_secret.
+        All channels in the payload must share the same Meta app and app_secret. A payload is expected
+        to be signed by a single app's secret, so if multiple distinct app secrets are found across the
+        channels it means the payload is insecure and is rejected. This prevents an attacker with a
+        legitimate channel from forging messages for a phone number that belongs to a different Meta app by
+        including it in a payload signed with their own app_secret.
         """
-        if len({ch.messaging_provider_id for ch in channels}) > 1:
-            log.error("Meta Cloud API webhook payload spans multiple messaging providers")
+        if len({ch.messaging_provider.config.get("app_secret") for ch in channels}) > 1:
+            log.error("Meta Cloud API webhook payload is not secure")
             return False
         channel = channels[0]
         app_secret = channel.messaging_provider.config.get("app_secret", "")
