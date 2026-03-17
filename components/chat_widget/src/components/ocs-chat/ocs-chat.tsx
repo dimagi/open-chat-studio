@@ -85,6 +85,12 @@ export class OcsChat {
   @Prop() buttonShape: 'round' | 'square' = 'square';
 
   /**
+   * Whether to show the launcher button. Set to false to hide the button
+   * and open the chat window programmatically via the `visible` property.
+   */
+  @Prop() showButton: boolean = true;
+
+  /**
    * The text to place in the header.
    */
   @Prop() headerText: '';
@@ -242,7 +248,9 @@ export class OcsChat {
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
     // Initialize button position from computed styles
-    this.initializeButtonPosition();
+    if (this.showButton) {
+      this.initializeButtonPosition();
+    }
 
     // Defer state changes to avoid triggering them during componentDidLoad
     setTimeout(() => {
@@ -1221,6 +1229,9 @@ export class OcsChat {
   }
 
   private renderButton() {
+    if (!this.showButton) {
+      return null;
+    }
     const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
     const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();

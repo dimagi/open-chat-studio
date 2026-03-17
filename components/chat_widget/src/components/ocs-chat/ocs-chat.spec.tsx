@@ -222,6 +222,46 @@ describe('ocs-chat', () => {
     });
   });
 
+  describe('showButton prop', () => {
+    it('should render the button by default', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot"></open-chat-studio-widget>`,
+      });
+
+      const button = page.root?.shadowRoot?.querySelector('button');
+      expect(button).toBeTruthy();
+    });
+
+    it('should not render the button when show-button is false', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" show-button="false"></open-chat-studio-widget>`,
+      });
+
+      const launcherButton = page.root?.shadowRoot?.querySelector('.chat-btn-icon, .chat-btn-text');
+      expect(launcherButton).toBeFalsy();
+    });
+
+    it('should still show the chat window when show-button is false and visible is true', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" show-button="false" visible="true"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.sessionId = 'test-session';
+      await page.waitForChanges();
+
+      const chatWindow = page.root?.shadowRoot?.querySelector('#ocs-chat-window');
+      expect(chatWindow).toBeTruthy();
+
+      // Header should still be present (showButton only hides the button, not the header)
+      const header = page.root?.shadowRoot?.querySelector('.chat-header');
+      expect(header).toBeTruthy();
+    });
+  });
+
   describe('Combined Welcome Messages and Starter Questions', () => {
     it('should display both welcome messages and starter questions from translations', async () => {
       const page = await newSpecPage({
