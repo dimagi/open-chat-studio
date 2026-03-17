@@ -16,6 +16,7 @@ architecture with all review decisions applied:
   - Issue 7:  Separate ChatMessageCreationStage
   - Issue 8:  /reset handled inside SessionResolutionStage
   - Issue 9:  ConsentFlowStage is explicit about sub-behaviors (no sending/history)
+  - Issue 16: SessionActivationStage handles non-consent session activation (no side effects in should_run)
   - Update:   EarlyExitResponseStage (terminal) persists early_exit_response to chat history
   - Update:   ResponseSendingStage (terminal) is the sole message-sending stage
   - Update:   ActivityTrackingStage (terminal) always runs
@@ -340,6 +341,25 @@ class MessageTypeValidationStage(ProcessingStage):
         return EventBot(ctx.experiment_session, ctx.experiment, trace_info, history_manager).get_user_message(prompt)
 
 
+class SessionActivationStage(ProcessingStage):
+    """Activates the session when conversational consent is not required.
+
+    When consent is disabled or no consent form is configured, this stage
+    transitions the session directly to ACTIVE so downstream stages can
+    proceed. This keeps the side effect out of ConsentFlowStage.should_run.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        if ctx.experiment_session is None:
+            return False
+        return not ctx.experiment.conversational_consent_enabled or not ctx.experiment.consent_form_id
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        from apps.experiments.models import SessionStatus
+
+        ctx.experiment_session.update_status(SessionStatus.ACTIVE)
+
+
 class ConsentFlowStage(ProcessingStage):
     """Handles the conversational consent state machine.
 
@@ -351,29 +371,22 @@ class ConsentFlowStage(ProcessingStage):
     Sub-behaviors:
       - Builds consent/survey prompt text and raises EarlyExitResponse
       - Handles seed message after consent is given
-      - Handles the non-consent path (just set session to ACTIVE)
     """
 
     USER_CONSENT_TEXT = "1"
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        # Check channel capabilities for consent support
+        # Skip if channel doesn't support conversational consent
         if not ctx.capabilities.supports_conversational_consent:
             return False
 
-        # If consent is not enabled, just ensure session is ACTIVE and move on
-        if not ctx.experiment.conversational_consent_enabled or not ctx.experiment.consent_form_id:
-            from apps.experiments.models import SessionStatus
-
-            if ctx.experiment_session:
-                ctx.experiment_session.update_status(SessionStatus.ACTIVE)
-            return False
-
-        # Only run if session is in a pre-conversation state
+        # Only run if consent is enabled and session is in a pre-conversation state
         from apps.experiments.models import SessionStatus
 
         return bool(
             ctx.experiment_session
+            and ctx.experiment.conversational_consent_enabled
+            and ctx.experiment.consent_form_id
             and ctx.experiment_session.status
             in [
                 SessionStatus.SETUP,
@@ -936,6 +949,7 @@ class ChannelBase(ABC):
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
                 MessageTypeValidationStage(),
+                SessionActivationStage(),
                 ConsentFlowStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
@@ -1212,14 +1226,16 @@ def example_message_flow():
     #
     #    b. ChannelBase._build_pipeline() builds:
     #       core_stages: [ParticipantValidation, SessionResolution,
-    #        MessageTypeValidation, ConsentFlow, QueryExtraction,
-    #        ChatMessageCreation, BotInteraction, ResponseFormatting]
+    #        MessageTypeValidation, SessionActivation, ConsentFlow,
+    #        QueryExtraction, ChatMessageCreation, BotInteraction,
+    #        ResponseFormatting]
     #       terminal_stages: [EarlyExitResponse, ResponseSending, ActivityTracking]
     #
     #    c. pipeline.process(ctx) runs core stages in sequence:
     #       - ParticipantValidation: sets ctx.participant_identifier, ctx.participant_allowed
     #       - SessionResolution: loads/creates ctx.experiment_session (with select_related)
     #       - MessageTypeValidation: checks message type against capabilities
+    #       - SessionActivation: activates session when consent is not required
     #       - ConsentFlow: handles consent state machine if needed
     #       - QueryExtraction: sets ctx.user_query (transcribes voice if needed)
     #       - ChatMessageCreation: creates ChatMessage DB record

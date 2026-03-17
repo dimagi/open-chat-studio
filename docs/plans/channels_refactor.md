@@ -317,7 +317,34 @@ class MessageTypeValidationStage(ProcessingStage):
 
 > Zero-arg: reads `supported_message_types` from `ctx.capabilities`.
 
-#### Stage 4: ConsentFlowStage
+#### Stage 4: SessionActivationStage
+
+```py
+class SessionActivationStage(ProcessingStage):
+    """Activates the session when conversational consent is not required.
+
+    When consent is disabled or no consent form is configured, this stage
+    transitions the session directly to ACTIVE so downstream stages can
+    proceed. This keeps the side effect out of ConsentFlowStage.should_run.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        if ctx.experiment_session is None:
+            return False
+        return (
+            not ctx.experiment.conversational_consent_enabled
+            or not ctx.experiment.consent_form_id
+        )
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        ctx.experiment_session.update_status(SessionStatus.ACTIVE)
+```
+
+**Maps to**: The non-consent path previously handled inside `ConsentFlowStage.should_run()`.
+
+> **Review decision applied**: Session activation for non-consent experiments is a separate stage so that `ConsentFlowStage.should_run()` remains a pure precondition check with no side effects (Decision 16).
+
+#### Stage 5: ConsentFlowStage
 
 ```py
 class ConsentFlowStage(ProcessingStage):
@@ -332,8 +359,6 @@ class ConsentFlowStage(ProcessingStage):
     1. Seed message: Raise EarlyExitResponse with consent prompt
        when session is in SETUP status
     2. State transitions: SETUP → PENDING → PENDING_PRE_SURVEY → ACTIVE
-    3. Non-consent path: When consent is not enabled, session transitions
-       directly to ACTIVE (no early exit)
 
     This stage is always included in the pipeline — should_run() handles
     the skip logic based on ctx.capabilities.supports_conversational_consent.
@@ -389,11 +414,11 @@ class ConsentFlowStage(ProcessingStage):
 
 > **Review decisions applied**:
 > - **`supports_conversational_consent` on ChannelCapabilities** (not a ClassVar on ChannelBase): `should_run` checks `ctx.capabilities.supports_conversational_consent`. This stage is always included in the pipeline — the skip logic is internal.
-> - **Sub-behaviors documented** (Decision 8): State transitions and seed message are this stage's responsibility. Chat history persistence and message sending are handled downstream by `EarlyExitResponseStage` and `ResponseSendingStage` respectively.
+> - **Sub-behaviors documented** (Decision 9): State transitions and seed message are this stage's responsibility. Chat history persistence and message sending are handled downstream by `EarlyExitResponseStage` and `ResponseSendingStage` respectively.
 > - **Exception-based early exit**: This stage raises `EarlyExitResponse` instead of setting a field. The pipeline catches it and runs terminal stages.
 > - **No message sending**: This stage only raises `EarlyExitResponse`. The `ResponseSendingStage` is the sole stage that sends messages to the user.
 
-#### Stage 5: QueryExtractionStage
+#### Stage 6: QueryExtractionStage
 
 ```py
 class QueryExtractionStage(ProcessingStage):
@@ -423,7 +448,7 @@ class QueryExtractionStage(ProcessingStage):
 
 > Zero-arg: callbacks accessed via `ctx.callbacks` (injected by ChannelBase at context creation).
 
-#### Stage 6: ChatMessageCreationStage
+#### Stage 7: ChatMessageCreationStage
 
 ```py
 class ChatMessageCreationStage(ProcessingStage):
@@ -449,7 +474,7 @@ class ChatMessageCreationStage(ProcessingStage):
 
 > **Review decision applied** (Decision 6): Separate ChatMessageCreationStage ensures the DB record is created as its own concern, independent of query extraction and bot interaction.
 
-#### Stage 7: BotInteractionStage
+#### Stage 8: BotInteractionStage
 
 ```py
 class BotInteractionStage(ProcessingStage):
@@ -482,7 +507,7 @@ class BotInteractionStage(ProcessingStage):
 
 > Zero-arg: callbacks accessed via `ctx.callbacks`.
 
-#### Stage 8: ResponseFormattingStage
+#### Stage 9: ResponseFormattingStage
 
 ```py
 class ResponseFormattingStage(ProcessingStage):
@@ -527,7 +552,7 @@ class ResponseFormattingStage(ProcessingStage):
 
 > Zero-arg: capabilities accessed via `ctx.capabilities`.
 
-#### Stage 9: EarlyExitResponseStage (Terminal)
+#### Stage 10: EarlyExitResponseStage (Terminal)
 
 ```py
 class EarlyExitResponseStage(ProcessingStage):
@@ -563,7 +588,7 @@ class EarlyExitResponseStage(ProcessingStage):
 
 > **Review decision**: Early exit responses are persisted via this dedicated terminal stage. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
 
-#### Stage 10: ResponseSendingStage (Terminal)
+#### Stage 11: ResponseSendingStage (Terminal)
 
 ```py
 class ResponseSendingStage(ProcessingStage):
@@ -613,7 +638,7 @@ class ResponseSendingStage(ProcessingStage):
 > - **Always fires**: `should_run` returns `True` when there's either a `formatted_message` or `early_exit_response`. The early exit path sends the response text; the normal path sends the formatted bot response with files.
 > - Error handling is per-stage (Decision 5).
 
-#### Stage 11: ActivityTrackingStage (Terminal)
+#### Stage 12: ActivityTrackingStage (Terminal)
 
 ```py
 class ActivityTrackingStage(ProcessingStage):
@@ -740,6 +765,7 @@ class ChannelBase(ABC):
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
                 MessageTypeValidationStage(),
+                SessionActivationStage(),
                 ConsentFlowStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
@@ -824,7 +850,8 @@ class ChannelBase(ABC):
 > - **ChannelCapabilities dataclass**: `supports_conversational_consent` lives here (not as a ClassVar on ChannelBase). `frozen=True` for safety.
 > - **Zero-arg stages**: Pipeline construction is trivial — no callbacks/sender/capabilities passed to stage constructors.
 > - **Dependencies on context**: `new_user_message` injects callbacks, sender, and capabilities into the context object.
-> - **Core vs terminal stages**: 8 core stages (can be short-circuited by `EarlyExitResponse`) + 3 terminal stages (always run).
+> - **Core vs terminal stages**: 9 core stages (can be short-circuited by `EarlyExitResponse`) + 3 terminal stages (always run).
+> - **SessionActivationStage before ConsentFlowStage**: Handles non-consent session activation as a dedicated stage. `ConsentFlowStage.should_run()` is a pure precondition check with no side effects.
 > - **ConsentFlowStage always included**: No conditional in `_build_pipeline`. The stage's `should_run()` handles the skip logic.
 > - **Dynamic `_get_capabilities()`** (Decision 3): Method can be overridden for channels where capabilities depend on runtime state (e.g., provider-dependent file support).
 
@@ -1396,7 +1423,8 @@ Each stage should have tests for these edge cases (where applicable):
 - **ParticipantValidationStage**: Public experiment, private+allowed, private+blocked, missing participant_id
 - **SessionResolutionStage**: Existing session found, no session (create new), pre-set session (Web/Slack), /reset with active session, /reset with no session, session in completed status
 - **MessageTypeValidationStage**: Supported type, unsupported type, empty message
-- **ConsentFlowStage**: Each status transition (SETUP→PENDING, PENDING→ACTIVE, PENDING→PENDING_PRE_SURVEY, PENDING_PRE_SURVEY→ACTIVE), consent denied, channel without consent support, experiment without consent enabled
+- **SessionActivationStage**: Consent disabled (activates), no consent form (activates), consent enabled with form (skips), no session (skips)
+- **ConsentFlowStage**: Each status transition (SETUP→PENDING, PENDING→ACTIVE, PENDING→PENDING_PRE_SURVEY, PENDING_PRE_SURVEY→ACTIVE), consent denied, channel without consent support
 - **QueryExtractionStage**: Text message, voice message, voice transcription failure
 - **ChatMessageCreationStage**: Normal creation, session without chat
 - **BotInteractionStage**: Successful response, bot error, response with files, response without files
@@ -1749,7 +1777,29 @@ class MessageTypeValidationStage(ProcessingStage):
 
 **Commit**: "Extract MessageTypeValidationStage"
 
-**3.3 ConsentFlowStage** (Week 4-5): Most complex stage \- consent state machine.
+**3.3 SessionActivationStage** (Week 4): Simple stage — activates session when consent is not required.
+
+```py
+class SessionActivationStage(ProcessingStage):
+    """Activates the session when conversational consent is not required."""
+
+    def should_run(self, ctx) -> bool:
+        if ctx.experiment_session is None:
+            return False
+        return (
+            not ctx.experiment.conversational_consent_enabled
+            or not ctx.experiment.consent_form_id
+        )
+
+    def process(self, ctx) -> None:
+        ctx.experiment_session.update_status(SessionStatus.ACTIVE)
+```
+
+**Tests**: Test activation when consent disabled, no consent form, consent enabled (skips), no session (skips)
+
+**Commit**: "Extract SessionActivationStage"
+
+**3.4 ConsentFlowStage** (Week 4-5): Most complex stage \- consent state machine.
 
 ```py
 class ConsentFlowStage(ProcessingStage):
@@ -1774,11 +1824,11 @@ class ConsentFlowStage(ProcessingStage):
         # ...
 ```
 
-**Tests**: Test each consent state transition, channel without consent, experiment without consent
+**Tests**: Test each consent state transition, channel without consent
 
 **Commit**: "Extract ConsentFlowStage with state machine"
 
-**3.4 QueryExtractionStage** (Week 5):
+**3.5 QueryExtractionStage** (Week 5):
 
 ```py
 class QueryExtractionStage(ProcessingStage):
@@ -1795,7 +1845,7 @@ class QueryExtractionStage(ProcessingStage):
 
 **Commit**: "Extract QueryExtractionStage"
 
-**3.5 ChatMessageCreationStage** (Week 5):
+**3.6 ChatMessageCreationStage** (Week 5):
 
 ```py
 class ChatMessageCreationStage(ProcessingStage):
@@ -1816,7 +1866,7 @@ class ChatMessageCreationStage(ProcessingStage):
 
 **Commit**: "Extract ChatMessageCreationStage"
 
-**3.6 BotInteractionStage** (Week 6):
+**3.7 BotInteractionStage** (Week 6):
 
 ```py
 class BotInteractionStage(ProcessingStage):
@@ -1847,7 +1897,7 @@ class BotInteractionStage(ProcessingStage):
 
 **Commit**: "Extract BotInteractionStage"
 
-**3.7 ResponseFormattingStage** (Week 6):
+**3.8 ResponseFormattingStage** (Week 6):
 
 ```py
 class ResponseFormattingStage(ProcessingStage):
@@ -1866,7 +1916,7 @@ class ResponseFormattingStage(ProcessingStage):
 
 **Commit**: "Extract ResponseFormattingStage"
 
-**3.8 Terminal Stages: EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage** (Week 6):
+**3.9 Terminal Stages: EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage** (Week 6):
 
 Extract the three terminal stages. These always run — the pipeline passes them both normal and early-exit contexts.
 
@@ -1944,6 +1994,7 @@ class ChannelBase(ABC):
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
                 MessageTypeValidationStage(),
+                SessionActivationStage(),
                 ConsentFlowStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
@@ -2062,14 +2113,15 @@ All decisions below were made during the plan review and are reflected throughou
 | # | Area | Decision | Summary |
 |---|------|----------|---------|
 | 1 | Architecture | `EarlyExitResponse` exception | Stages raise `EarlyExitResponse` to short-circuit. Pipeline catches it, sets `ctx.early_exit_response`, runs terminal stages. |
-| 2 | Architecture | Core vs terminal stages | 8 core stages (short-circuitable) + 3 terminal stages (always run). Pipeline orchestrator owns control flow. |
+| 2 | Architecture | Core vs terminal stages | 9 core stages (short-circuitable) + 3 terminal stages (always run). Pipeline orchestrator owns control flow. |
 | 3 | Architecture | Callbacks/sender/capabilities on context | Stages are zero-arg. Channel-specific dependencies are injected into `ctx` by `ChannelBase.new_user_message()`. |
 | 4 | Architecture | Runtime `_get_capabilities()` | Method on ChannelBase, overridable for provider-dependent channels (e.g., WhatsApp file support varies). |
 | 5 | Architecture | Pre-set session on context | Web/Slack channels set `ctx.experiment_session` at creation. `SessionResolutionStage` respects this. |
 | 6 | Code Quality | Each stage handles own errors | Stages append to `ctx.processing_errors` for observability. |
 | 7 | Code Quality | Separate `ChatMessageCreationStage` | Stage between QueryExtraction and BotInteraction. DB record exists before bot call. |
 | 8 | Code Quality | `/reset` inside `SessionResolutionStage` | Reset is session lifecycle — belongs in the stage that manages sessions. Raises `EarlyExitResponse`. |
-| 9 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message, non-consent path. Raises `EarlyExitResponse`. |
+| 9 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message. Raises `EarlyExitResponse`. |
+| 16 | Code Quality | `SessionActivationStage` for non-consent path | Dedicated stage activates session when consent is disabled. Keeps `ConsentFlowStage.should_run()` side-effect-free. |
 | — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Uses `_add_to_history` (moved out of ConsentFlowStage). |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
