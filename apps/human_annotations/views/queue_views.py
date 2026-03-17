@@ -382,8 +382,7 @@ class RemoveSessionFromQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
         )
 
     def delete(self, request, team_slug: str, pk: int, item_pk: int):
-        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        item = get_object_or_404(AnnotationItem, pk=item_pk, queue=queue)
+        item = get_object_or_404(AnnotationItem, pk=item_pk, queue_id=pk)
         item.delete()
         messages.success(request, "Session removed from queue.")
         return HttpResponse()
