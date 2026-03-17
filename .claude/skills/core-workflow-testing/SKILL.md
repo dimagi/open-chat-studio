@@ -3,19 +3,22 @@ name: core-workflow-testing
 description: Use when regression testing Open Chat Studio core user workflows via Playwright browser automation
 allowed-tools: Bash(playwright-cli:*)
 disable-model-invocation: true
-argument-hint: "[server-port]"
+argument-hint: "[server-port] [optional: comma-separated list of failing test names]"
 ---
 
 # Core Workflow Testing
 
-Run each workflow defined in the `workflows/` folder using the playwright-cli skill. The server is running on port $0
+Run workflows defined in the `playwright/workflows/` folder (relative to the repo root) using the playwright-cli skill. The server is running on port $0.
 
+If a list of failing tests is provided as the second argument (e.g. `"05-chatbot-management.spec.ts > Chatbot Management > Create a chatbot, 02-team-management.spec.ts > Team Management > Invite a Team Member"`), extract the unique workflow sections from that list by mapping spec file prefixes to their corresponding numbered sections (e.g. `05-chatbot-management.spec.ts` → section 5 "Chatbot Management"). Run **only** those sections instead of all workflows.
+
+If no test list is provided, run all workflows.
 
 ## Execution
 
 ### Parallel execution with subagents
 
-Workflows in the `team_user` category (i.e. `workflows/team_user.md`) must be run in parallel using subagents. Each numbered workflow section (e.g. "1. Authentication", "2. Team Management", etc.) should be dispatched as a separate subagent running concurrently. Each sub-agent should use a different session, by using the `-s=<session-name>` flag when opening the browser.
+Workflows in the `team_user` category (i.e. `playwright/workflows/team_user.md`) must be run in parallel using subagents. Each numbered workflow section to be tested should be dispatched as a separate subagent running concurrently. Each sub-agent should use a different session, by using the `-s=<session-name>` flag when opening the browser.
 
 Each subagent must return a report in this format:
 
