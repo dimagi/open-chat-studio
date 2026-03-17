@@ -262,6 +262,110 @@ describe('ocs-chat', () => {
     });
   });
 
+  describe('mode prop', () => {
+    describe('kiosk mode', () => {
+      it('should be visible by default in kiosk mode', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+        });
+
+        const component = page.rootInstance as OcsChat;
+        expect(component.visible).toBe(true);
+      });
+
+      it('should not render the launcher button in kiosk mode', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+        });
+
+        const launcherButton = page.root?.shadowRoot?.querySelector('.chat-btn-icon, .chat-btn-text');
+        expect(launcherButton).toBeFalsy();
+      });
+
+      it('should not render the header in kiosk mode', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+        });
+
+        const component = page.rootInstance as OcsChat;
+        component.sessionId = 'test-session';
+        await page.waitForChanges();
+
+        const header = page.root?.shadowRoot?.querySelector('.chat-header');
+        expect(header).toBeFalsy();
+      });
+
+      it('should render the chat window with kiosk class', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+        });
+
+        const component = page.rootInstance as OcsChat;
+        component.sessionId = 'test-session';
+        await page.waitForChanges();
+
+        const chatWindow = page.root?.shadowRoot?.querySelector('#ocs-chat-window');
+        expect(chatWindow).toBeTruthy();
+        expect(chatWindow?.classList.contains('chat-window-kiosk')).toBe(true);
+      });
+
+      it('should prevent setting visible to false in kiosk mode', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+        });
+
+        const component = page.rootInstance as OcsChat;
+        component.visible = false;
+        await page.waitForChanges();
+
+        expect(component.visible).toBe(true);
+      });
+
+      it('should still render chat content (input area, messages) in kiosk mode', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+        });
+
+        const component = page.rootInstance as OcsChat;
+        component.sessionId = 'test-session';
+        await page.waitForChanges();
+
+        const chatContent = page.root?.shadowRoot?.querySelector('.chat-content');
+        expect(chatContent).toBeTruthy();
+
+        const inputArea = page.root?.shadowRoot?.querySelector('.input-area');
+        expect(inputArea).toBeTruthy();
+      });
+    });
+
+    describe('standard mode (default)', () => {
+      it('should behave normally without mode prop', async () => {
+        const page = await newSpecPage({
+          components: [OcsChat],
+          html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>`,
+        });
+
+        const component = page.rootInstance as OcsChat;
+        component.sessionId = 'test-session';
+        await page.waitForChanges();
+
+        // Header should be present
+        const header = page.root?.shadowRoot?.querySelector('.chat-header');
+        expect(header).toBeTruthy();
+
+        // Window should use normal class
+        const chatWindow = page.root?.shadowRoot?.querySelector('#ocs-chat-window');
+        expect(chatWindow?.classList.contains('chat-window-normal')).toBe(true);
+      });
+    });
+  });
+
   describe('Combined Welcome Messages and Starter Questions', () => {
     it('should display both welcome messages and starter questions from translations', async () => {
       const page = await newSpecPage({
