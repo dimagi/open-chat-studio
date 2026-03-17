@@ -2946,6 +2946,7 @@ dependencies = [
     { name = "django-watchfiles" },
     { name = "djangorestframework" },
     { name = "djangorestframework-api-key" },
+    { name = "djlint" },
     { name = "drf-spectacular" },
     { name = "emoji" },
     { name = "fbmessenger" },
@@ -2996,7 +2997,6 @@ dependencies = [
 dev = [
     { name = "django-debug-toolbar" },
     { name = "django-types" },
-    { name = "djlint" },
     { name = "factory-boy" },
     { name = "invoke" },
     { name = "mock" },
@@ -3058,6 +3058,7 @@ requires-dist = [
     { name = "django-watchfiles", specifier = ">=1.4.0" },
     { name = "djangorestframework" },
     { name = "djangorestframework-api-key" },
+    { name = "djlint", specifier = ">=1.36.4" },
     { name = "drf-spectacular" },
     { name = "emoji" },
     { name = "fbmessenger" },
@@ -3108,7 +3109,6 @@ requires-dist = [
 dev = [
     { name = "django-debug-toolbar", specifier = ">=5.2.0" },
     { name = "django-types" },
-    { name = "djlint", specifier = ">=1.36.4" },
     { name = "factory-boy" },
     { name = "invoke" },
     { name = "mock" },
