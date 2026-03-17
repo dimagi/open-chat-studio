@@ -4,6 +4,8 @@ This app provides a unified framework for integrating external services (LLMs, v
 
 Much of the app relies on consistent conventions and structure across all provider types. This allows the framework to be generic and reusable.
 
+The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio) 
+
 ## Service Provider Models
 
 To support this flexibility, each provider type requires these components that work together:
@@ -97,12 +99,3 @@ which will render the list of providers for the given type with options to creat
     subtitle="Text to speech" %}
 ```
 (NOTE: Newlines added for readability, remove them when using the template)
-
-## Concrete Implementation Example
-
-For a real-world implementation of this pattern, see:
-
-- **[llm_service/README.md](llm_service/README.md)** — Complete LLM provider implementation with 8 provider types
-- **Form classes:** `apps/service_providers/forms.py` (`OpenAIConfigForm`, `AnthropicConfigForm`, etc.)
-- **Service classes:** `apps/service_providers/llm_service/main.py` (`OpenAILlmService`, `AnthropicLlmService`, etc.)
-- **Model layer:** `apps/service_providers/models.py` (`LlmProvider`, `LlmProviderModel`, `LlmProviderTypes`)
