@@ -102,6 +102,10 @@ class PipelineBot:
             )
         else:
             ai_message = ChatMessage(content=output)
+
+        if self.session is not None:
+            self._persist_pipeline_state(input_state, output)
+
         self._process_intents(output)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return ai_message
@@ -200,6 +204,11 @@ class PipelineBot:
             flat_tags = [f"{category}:{tag}" if category else tag for tag, category in output_tags]
             self.trace_service.add_output_message_tags_to_trace(flat_tags)
 
+        return ai_message
+
+    def _persist_pipeline_state(self, input_state, output):
+        """Persist pipeline state changes (participant data, session state, tags) to the database."""
+
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
@@ -217,7 +226,6 @@ class PipelineBot:
         if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
             self.session.save(update_fields=["state"])
-        return ai_message
 
     def _process_intents(self, pipeline_output: dict):
         for intent in pipeline_output.get("intents", []):

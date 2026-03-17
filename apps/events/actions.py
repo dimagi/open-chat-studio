@@ -144,6 +144,5 @@ class PipelineStartAction(EventActionHandlerBase):
                 pipeline=pipeline,
                 save_run_to_history=False,
             )
-            # does not support updating participant data or session state
             span.set_outputs({"response": output.content})
         return output.content
