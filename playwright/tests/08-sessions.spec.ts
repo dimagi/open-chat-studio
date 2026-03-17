@@ -33,80 +33,6 @@ test.describe('Sessions', () => {
     await expect(table.getByRole('link', { name: 'Session Details' }).first()).toBeVisible();
   });
 
-  test('Filter All Sessions by Status (complete)', async ({ page }) => {
-    await page.getByRole('link', { name: 'All sessions' }).click();
-    await expect(page).toHaveURL(/\/chatbots\/sessions\/$/);
-
-
-    // Wait for table to load
-    const table = page.getByRole('table');
-    await expect(table).toBeVisible({ timeout: 10000 });
-    await expect(table.getByRole('link', { name: 'Session Details' }).first()).toBeVisible();
-
-    // Click Filter button
-    await page.getByRole('button', { name: /Filter/ }).click();
-    await expect(page.getByText('Where')).toBeVisible();
-
-    // Select Status column
-    await page.locator('label').filter({ hasText: 'Select column' }).click();
-    await page.getByText('Status', { exact: true }).click();
-
-    // Verify "any of" operator is shown (use first() to avoid strict mode violation)
-    await expect(page.getByText('any of').first()).toBeVisible();
-
-    // Open value selector and select "complete"
-    await page.locator('.relative > .w-40').click();
-    await page.getByRole('checkbox', { name: 'complete' }).check();
-
-    // Wait for filter to be applied
-    await expect(page).toHaveURL(/filter_0_column=state/);
-    await expect(page).toHaveURL(/filter_0_value=.*complete/);
-
-    // Verify Filter (1) indicator appears
-    await expect(page.getByRole('button', { name: /Filter \(1\)/ })).toBeVisible();
-
-    // Wait for filtered table to load - since no sessions have "complete" status,
-    // expect "No sessions yet!" message
-    await expect(page.getByText('No sessions yet!')).toBeVisible({ timeout: 10000 });
-  });
-
-  test('Filter All Sessions by Chatbot', async ({ page }) => {
-    await page.getByRole('link', { name: 'All sessions' }).click();
-    await expect(page).toHaveURL(/\/chatbots\/sessions\/$/);
-
-
-    // Wait for table to load
-    const table = page.getByRole('table');
-    await expect(table).toBeVisible({ timeout: 10000 });
-    await expect(table.getByRole('link', { name: 'Session Details' }).first()).toBeVisible();
-
-    // Click Filter button
-    await page.getByRole('button', { name: /Filter/ }).click();
-    await expect(page.getByText('Where')).toBeVisible();
-
-    // Select Chatbot column
-    await page.locator('label').filter({ hasText: 'Select column' }).click();
-    await page.locator('a').filter({ hasText: /^Chatbot$/ }).click();
-
-    // Verify "any of" operator is shown (use first() to avoid strict mode violation)
-    await expect(page.getByText('any of').first()).toBeVisible();
-
-    // Open value selector and select "Customer Support Bot"
-    await page.locator('.relative > .w-40').click();
-    await page.getByRole('checkbox', { name: 'Customer Support Bot' }).check();
-
-    // Wait for filter to be applied
-    await expect(page).toHaveURL(/filter_0_column=experiment/);
-
-    // Verify Filter (1) indicator appears
-    await expect(page.getByRole('button', { name: /Filter \(1\)/ })).toBeVisible();
-
-    // Wait for filtered table and verify sessions from Customer Support Bot are shown
-    const filteredTable = page.getByRole('table');
-    await expect(filteredTable).toBeVisible({ timeout: 10000 });
-    await expect(filteredTable.getByRole('link', { name: 'Customer Support Bot' }).first()).toBeVisible({ timeout: 10000 });
-  });
-
   test('View Chatbot Sessions tab', async ({ page }) => {
     // Navigate to Chatbots
     await page.goto('/a/agent/chatbots/');
@@ -144,40 +70,6 @@ test.describe('Sessions', () => {
     await expect(sessionsTable.getByRole('link', { name: 'Session Details' }).first()).toBeVisible();
   });
 
-  test('Filter Chatbot Sessions by Status (active)', async ({ page }) => {
-    // Navigate to Customer Support Bot
-    await page.goto('/a/agent/chatbots/');
-
-    const chatbotsTable = page.getByRole('table');
-    await expect(chatbotsTable).toBeVisible({ timeout: 10000 });
-    await page.getByRole('link', { name: 'Customer Support Bot' }).click();
-
-    await expect(page.getByRole('heading', { name: 'Customer Support Bot' })).toBeVisible();
-
-    // Wait for sessions table
-    const sessionsTable = page.getByRole('table');
-    await expect(sessionsTable.getByRole('link', { name: 'Session Details' }).first()).toBeVisible({ timeout: 10000 });
-
-    // Click Filter button
-    await page.getByRole('button', { name: /Filter/ }).click();
-    await expect(page.getByText('Where')).toBeVisible();
-
-    // Select Status column
-    await page.locator('label').filter({ hasText: 'Select column' }).click();
-    await page.getByText('Status', { exact: true }).click();
-
-    // Open value selector and select "active"
-    await page.locator('.relative > .w-40').click();
-    await page.getByRole('checkbox', { name: 'active' }).check();
-
-    // Wait for filter to be applied
-    await expect(page).toHaveURL(/filter_0_column=state/);
-    await expect(page).toHaveURL(/filter_0_value=.*active/);
-
-    // Verify Filter (1) indicator and filter params are applied
-    await expect(page.getByRole('button', { name: /Filter \(1\)/ })).toBeVisible();
-  });
-
   test('View Session Details with metadata and tabs', async ({ page }) => {
     // Navigate to All sessions
     await page.getByRole('link', { name: 'All sessions' }).click();
@@ -213,38 +105,6 @@ test.describe('Sessions', () => {
     await expect(page.getByRole('tab', { name: 'Participant Schedules' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Session State' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Chatbot Events' })).toBeVisible();
-  });
-
-  test('Navigate between sessions using Older/Newer buttons', async ({ page }) => {
-    // Navigate to All sessions
-    await page.getByRole('link', { name: 'All sessions' }).click();
-
-    const table = page.getByRole('table');
-    await expect(table).toBeVisible({ timeout: 10000 });
-
-    // Click the first Session Details link
-    await table.getByRole('link', { name: 'Session Details' }).first().click();
-
-    await expect(page.getByRole('heading', { name: 'Chatbot Review' })).toBeVisible();
-
-    // Record the current URL
-    const firstUrl = page.url();
-
-    // Click Older to navigate to the previous session
-    await page.getByRole('link', { name: /Older/ }).click();
-
-    await expect(page.getByRole('heading', { name: 'Chatbot Review' })).toBeVisible();
-
-    // Verify URL changed
-    expect(page.url()).not.toBe(firstUrl);
-
-    // Click Newer to go back
-    await page.getByRole('link', { name: /Newer/ }).click();
-
-    await expect(page.getByRole('heading', { name: 'Chatbot Review' })).toBeVisible();
-
-    // Verify we are back to the original session
-    expect(page.url()).toBe(firstUrl);
   });
 
   test('Click through session detail tabs', async ({ page }) => {

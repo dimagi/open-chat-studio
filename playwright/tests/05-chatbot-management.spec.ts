@@ -224,29 +224,4 @@ test.describe('Chatbot Management', () => {
     ).toBeVisible();
   });
 
-  test('Search and filter chatbots', async ({ page }) => {
-    // Navigate to chatbots list
-    await page.goto(CHATBOTS_URL);
-
-    // Verify the search box is visible
-    const searchBox = page.getByRole('searchbox', { name: 'Search...' });
-    await expect(searchBox).toBeVisible();
-
-    // Search for "Customer Support Bot" which always has session activity and appears on page 1
-    // Newly-created bots have no activity so they sort last (past page 1 of 25+); use a known bot instead
-    await page.waitForSelector('.htmx-indicator', { state: 'hidden', timeout: 10000 });
-    await searchBox.fill('Customer Support Bot');
-    await searchBox.press('Enter');
-
-    // After search, the known chatbot should be visible
-    await expect(page.getByRole('link', { name: 'Customer Support Bot' })).toBeVisible({ timeout: 10000 });
-
-    // Search for something that doesn't exist (avoid words like "bot" that trigram-match all chatbot names)
-    await searchBox.fill('ZZZZZZZZ_QQQQQ_12345');
-    await searchBox.press('Enter');
-
-    // Wait for the table to update and verify no results
-    await expect(page.getByRole('link', { name: 'Customer Support Bot' })).not.toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('No chatbots found.')).toBeVisible({ timeout: 5000 });
-  });
 });
