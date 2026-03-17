@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from django.core.management import call_command
 
+from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -10,7 +11,7 @@ from apps.utils.factories.service_provider_factories import LlmProviderModelFact
 
 
 def _make_pipeline_referencing(llm_provider_model):
-    pipeline = PipelineFactory()
+    pipeline: Pipeline = PipelineFactory()  # type: ignore[assignment]
     pipeline.data["nodes"].append(
         {
             "id": "1",
