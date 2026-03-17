@@ -6,6 +6,7 @@ export const TEAM_SLUG = 'agent';
 export const TEAM_URL = `/a/${TEAM_SLUG}/team/`;
 
 export async function login(page: Page) {
+  await setupPage(page);
   await page.goto('/accounts/login/');
   // If storageState is loaded, we're already redirected to dashboard
   if (!page.url().includes('/accounts/login')) return;

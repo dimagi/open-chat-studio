@@ -85,7 +85,7 @@ jobs:
         run: uv run python manage.py bootstrap_data --email tester@playwright.com --password My0riginalP@ssw0rd! --team-slug agent --team-name Agent --reset
 
       - name: Start Celery worker
-        run: uv run celery -A config worker -l INFO --pool=solo -B &
+        run: uv run celery -A config worker -l INFO --pool=solo &
 
       - name: Wait for Celery worker to be ready
         run: |

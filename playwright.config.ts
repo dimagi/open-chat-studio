@@ -12,7 +12,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  timeout: 120 * 1000, // 2 minutes
+  timeout: 30 * 1000, // 30 seconds
   workers: 1,
   reporter: [['html', { open: 'never' }], ['json', { outputFile: 'playwright-results.json' }]],
   use: {
