@@ -570,34 +570,28 @@ class ResponseSendingStage(ProcessingStage):
     This is the ONLY stage that sends messages to the user.
     Handles both normal bot responses and early exit responses.
 
-    All send calls are wrapped in try/except. On failure:
-    - Creates a delivery failure notification (in-app)
-    - Sets ctx.sending_exception for SendingErrorHandlerStage
-    - Appends to ctx.processing_errors
-    - Never propagates exceptions
+    Wrapper methods (_send_text, _send_voice) are decorated with
+    @notify_on_delivery_failure for in-app notifications on failure.
+    The outer try/except catches any exception that propagates past
+    the decorator, sets ctx.sending_exception, and never re-raises.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        # Always fire — we have either a formatted_message or an early_exit_response
         return ctx.formatted_message is not None or ctx.early_exit_response is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
         try:
             if ctx.early_exit_response:
-                # Early exit path — send the early exit response
-                ctx.sender.send_text(ctx.early_exit_response, ctx.participant_identifier)
+                self._send_text(ctx, ctx.early_exit_response, ctx.participant_identifier)
                 return
 
             # Normal path — send formatted bot response
             if ctx.voice_audio:
-                ctx.sender.send_voice(ctx.voice_audio, ctx.participant_identifier)
+                self._send_voice(ctx, ctx.voice_audio, ctx.participant_identifier)
                 if ctx.additional_text_message:
-                    ctx.sender.send_text(
-                        ctx.additional_text_message,
-                        ctx.participant_identifier
-                    )
+                    self._send_text(ctx, ctx.additional_text_message, ctx.participant_identifier)
             else:
-                ctx.sender.send_text(ctx.formatted_message, ctx.participant_identifier)
+                self._send_text(ctx, ctx.formatted_message, ctx.participant_identifier)
 
             # Send supported files — each file handles its own error
             for file in ctx.files_to_send:
@@ -605,27 +599,57 @@ class ResponseSendingStage(ProcessingStage):
                     ctx.sender.send_file(file, ctx.participant_identifier, ctx.experiment_session.id)
                 except Exception as e:
                     ctx.processing_errors.append(f"Failed to send file: {e}")
-                    # Fallback to link
                     link = file.download_link(ctx.experiment_session.id)
-                    ctx.sender.send_text(link, ctx.participant_identifier)
+                    self._send_text(ctx, link, ctx.participant_identifier)
         except Exception as e:
-            logger.exception("Failed to send message to user")
-            message_delivery_failure_notification(
-                ctx.experiment,
-                session=ctx.experiment_session,
-                platform_title=ctx.experiment_channel.platform_enum.title(),
-                context="message",
-            )
             ctx.sending_exception = e
             ctx.processing_errors.append(f"Send failed: {e}")
+
+    @notify_on_delivery_failure(context="text message")
+    def _send_text(self, ctx: MessageProcessingContext, text: str, recipient: str) -> None:
+        ctx.sender.send_text(text, recipient)
+
+    @notify_on_delivery_failure(context="voice message")
+    def _send_voice(self, ctx: MessageProcessingContext, audio, recipient: str) -> None:
+        ctx.sender.send_voice(audio, recipient)
+```
+
+The `@notify_on_delivery_failure` decorator is updated to be context-aware — it reads
+`experiment`, `session`, and `platform_title` from the `ctx` parameter instead of
+`self.experiment` / `self.experiment_channel`:
+
+```py
+def notify_on_delivery_failure(context: str):
+    """Decorator that catches exceptions from send methods, creates a
+    failure notification, then re-raises.
+
+    Updated for pipeline stages: reads experiment/session/platform from
+    the ctx parameter (first positional arg after self).
+    """
+    def decorator(method):
+        @wraps(method)
+        def wrapper(self, ctx, *args, **kwargs):
+            try:
+                return method(self, ctx, *args, **kwargs)
+            except Exception as e:
+                logger.exception(e)
+                message_delivery_failure_notification(
+                    ctx.experiment,
+                    session=ctx.experiment_session,
+                    platform_title=ctx.experiment_channel.platform_enum.title(),
+                    context=context,
+                )
+                raise
+        return wrapper
+    return decorator
 ```
 
 **Maps to**: `send_text_to_user()`, `send_voice_to_user()`, `send_file_to_user()` (various lines)
 
 > **Review decisions applied**:
 > - **Single sending stage**: `ResponseSendingStage` is the ONLY stage that sends messages. All other stages set `early_exit_response` and let this stage handle delivery.
-> - **Always fires**: `should_run` returns `True` when there's either a `formatted_message` or `early_exit_response`. The early exit path sends the response text; the normal path sends the formatted bot response with files.
-> - **Resilient**: All sends wrapped in try/except. On failure, creates delivery failure notification, sets `ctx.sending_exception`, and never propagates. This ensures subsequent terminal stages still run.
+> - **Decorated wrappers**: `_send_text` and `_send_voice` wrap `ctx.sender` calls with `@notify_on_delivery_failure` for in-app notifications. The decorator is updated to read experiment/session/platform from `ctx` instead of `self`.
+> - **Resilient**: Outer try/except catches any exception that propagates past the decorator, sets `ctx.sending_exception`, and never re-raises. This ensures subsequent terminal stages still run.
 > - **`send_file` receives `session_id`**: Extra parameter for download link generation.
 
 #### Stage 11: SendingErrorHandlerStage (Terminal)
@@ -2402,7 +2426,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 17 | Architecture | Pipeline catch-all error handler | Unexpected exceptions from core stages: generate error message via `EventBot` (preserving `ChatException` distinction), fall back to `DEFAULT_ERROR_RESPONSE_TEXT`, set `ctx.early_exit_response`, run terminal stages, then **re-raise**. |
 | 18 | Architecture | Terminal stage order | `ResponseSendingStage` → `SendingErrorHandlerStage` → `EarlyExitResponseStage` → `ActivityTrackingStage`. Sending first, then error handling, then persistence, then tracking. |
 | 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles platform-specific send error side effects (e.g., Telegram 403 consent revocation). Reads `ctx.sending_exception`. Non-actionable exceptions are ignored. |
-| 20 | Architecture | `ResponseSendingStage` resilience | All sends wrapped in try/except. On failure: creates delivery failure notification, sets `ctx.sending_exception`, never propagates. Ensures subsequent terminal stages run. |
+| 20 | Architecture | `ResponseSendingStage` resilience | `_send_text` and `_send_voice` wrappers decorated with `@notify_on_delivery_failure` (updated to read from `ctx`). Outer try/except catches any propagated exception, sets `ctx.sending_exception`, never re-raises. |
 | 21 | Architecture | `ctx.sending_exception` | Single `Exception | None` field (not a list). Set by `ResponseSendingStage` on send failure. Read by `SendingErrorHandlerStage`. |
 | 22 | Architecture | Early exit persistence regardless | `EarlyExitResponseStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
 | 23 | Architecture | Channel-specific pipelines | `ApiChannel` and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |

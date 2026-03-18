@@ -128,7 +128,43 @@ class ChannelSender:
 
 
 # ---------------------------------------------------------------------------
-# 4. EarlyExitResponse Exception
+# 4. Delivery Failure Notification Decorator
+# ---------------------------------------------------------------------------
+
+
+def notify_on_delivery_failure(context: str):
+    """Decorator that catches exceptions from send methods, creates a
+    failure notification, then re-raises.
+
+    Updated for pipeline stages: reads experiment/session/platform from
+    the ctx parameter (first positional arg after self).
+    """
+    from functools import wraps
+
+    from apps.ocs_notifications.notifications import message_delivery_failure_notification
+
+    def decorator(method):
+        @wraps(method)
+        def wrapper(self, ctx, *args, **kwargs):
+            try:
+                return method(self, ctx, *args, **kwargs)
+            except Exception as e:
+                logger.exception(e)
+                message_delivery_failure_notification(
+                    ctx.experiment,
+                    session=ctx.experiment_session,
+                    platform_title=ctx.experiment_channel.platform_enum.title(),
+                    context=context,
+                )
+                raise
+
+        return wrapper
+
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# 5. EarlyExitResponse Exception
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +181,7 @@ class EarlyExitResponse(Exception):
 
 
 # ---------------------------------------------------------------------------
-# 5. Message Processing Context
+# 6. Message Processing Context
 # ---------------------------------------------------------------------------
 
 
@@ -202,7 +238,7 @@ class MessageProcessingContext:
 
 
 # ---------------------------------------------------------------------------
-# 6. Processing Stage Base
+# 7. Processing Stage Base
 # ---------------------------------------------------------------------------
 
 
@@ -238,7 +274,7 @@ class ProcessingStage(ABC):
 
 
 # ---------------------------------------------------------------------------
-# 7. Core Stages (can be short-circuited by EarlyExitResponse)
+# 8. Core Stages (can be short-circuited by EarlyExitResponse)
 # ---------------------------------------------------------------------------
 
 
@@ -715,7 +751,7 @@ class ResponseFormattingStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
-# 8. Terminal Stages (always run — never short-circuited)
+# 9. Terminal Stages (always run — never short-circuited)
 #    Order: ResponseSending → SendingErrorHandler → EarlyExitResponse → ActivityTracking
 # ---------------------------------------------------------------------------
 
@@ -726,44 +762,30 @@ class ResponseSendingStage(ProcessingStage):
     This is the ONLY stage that sends messages to the user.
     Handles both early exit responses and normal bot responses.
 
-    All send calls are wrapped in try/except. On failure:
-    - Creates a delivery failure notification (in-app)
-    - Sets ctx.sending_exception for SendingErrorHandlerStage
-    - Appends to ctx.processing_errors
-    - Never propagates exceptions (ensures subsequent terminal stages run)
+    Wrapper methods (_send_text, _send_voice) are decorated with
+    @notify_on_delivery_failure for in-app notifications on failure.
+    The outer try/except catches any exception that propagates past
+    the decorator, sets ctx.sending_exception, and never re-raises.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        # Always fire when there's something to send
         return ctx.formatted_message is not None or ctx.early_exit_response is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        from apps.ocs_notifications.notifications import (
-            audio_synthesis_failure_notification,
-            file_delivery_failure_notification,
-            message_delivery_failure_notification,
-        )
+        from apps.ocs_notifications.notifications import file_delivery_failure_notification
 
         try:
             if ctx.early_exit_response:
-                # Early exit path — send the early exit response text
-                ctx.sender.send_text(ctx.early_exit_response, ctx.participant_identifier)
+                self._send_text(ctx, ctx.early_exit_response, ctx.participant_identifier)
                 return
 
             # Normal path — send formatted bot response
             if ctx.voice_audio:
-                try:
-                    ctx.sender.send_voice(ctx.voice_audio, ctx.participant_identifier)
-                except Exception:
-                    logger.exception("Error sending voice response")
-                    audio_synthesis_failure_notification(ctx.experiment, session=ctx.experiment_session)
-                    # Fallback to text
-                    ctx.sender.send_text(ctx.formatted_message, ctx.participant_identifier)
-
+                self._send_voice(ctx, ctx.voice_audio, ctx.participant_identifier)
                 if ctx.additional_text_message:
-                    ctx.sender.send_text(ctx.additional_text_message, ctx.participant_identifier)
+                    self._send_text(ctx, ctx.additional_text_message, ctx.participant_identifier)
             else:
-                ctx.sender.send_text(ctx.formatted_message, ctx.participant_identifier)
+                self._send_text(ctx, ctx.formatted_message, ctx.participant_identifier)
 
             # Send supported file attachments
             for file in ctx.files_to_send:
@@ -779,18 +801,19 @@ class ResponseSendingStage(ProcessingStage):
                         session=ctx.experiment_session,
                     )
                     download_link = file.download_link(ctx.experiment_session.id)
-                    ctx.sender.send_text(download_link, ctx.participant_identifier)
+                    self._send_text(ctx, download_link, ctx.participant_identifier)
         except Exception as e:
             # Catch-all for send failures — never propagate
-            logger.exception("Failed to send message to user")
-            message_delivery_failure_notification(
-                ctx.experiment,
-                session=ctx.experiment_session,
-                platform_title=ctx.experiment_channel.platform_enum.title(),
-                context="message",
-            )
             ctx.sending_exception = e
             ctx.processing_errors.append(f"Send failed: {e}")
+
+    @notify_on_delivery_failure(context="text message")
+    def _send_text(self, ctx: MessageProcessingContext, text: str, recipient: str) -> None:
+        ctx.sender.send_text(text, recipient)
+
+    @notify_on_delivery_failure(context="voice message")
+    def _send_voice(self, ctx: MessageProcessingContext, audio: SynthesizedAudio, recipient: str) -> None:
+        ctx.sender.send_voice(audio, recipient)
 
 
 class SendingErrorHandlerStage(ProcessingStage):
@@ -886,7 +909,7 @@ class ActivityTrackingStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
-# 9. Pipeline Orchestrator
+# 10. Pipeline Orchestrator
 # ---------------------------------------------------------------------------
 
 
@@ -987,7 +1010,7 @@ class MessageProcessingPipeline:
 
 
 # ---------------------------------------------------------------------------
-# 10. Channel Base
+# 11. Channel Base
 # ---------------------------------------------------------------------------
 
 
@@ -1114,7 +1137,7 @@ class ChannelBase(ABC):
 
 
 # ---------------------------------------------------------------------------
-# 11. Concrete Channel: Telegram
+# 12. Concrete Channel: Telegram
 # ---------------------------------------------------------------------------
 
 
@@ -1233,7 +1256,7 @@ class TelegramChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 12. Concrete Channel: WhatsApp
+# 13. Concrete Channel: WhatsApp
 # ---------------------------------------------------------------------------
 
 
@@ -1310,7 +1333,7 @@ class WhatsappChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 13. Concrete Channel: API (no sending)
+# 14. Concrete Channel: API (no sending)
 # ---------------------------------------------------------------------------
 
 
@@ -1380,7 +1403,7 @@ class ApiChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 14. Concrete Channel: CommCare Connect (platform-specific consent)
+# 15. Concrete Channel: CommCare Connect (platform-specific consent)
 # ---------------------------------------------------------------------------
 
 
@@ -1459,7 +1482,7 @@ class CommCareConnectChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 15. How it all fits together
+# 16. How it all fits together
 # ---------------------------------------------------------------------------
 
 
