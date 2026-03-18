@@ -508,6 +508,48 @@ def main(input, **kwargs):
     assert repo.attached_files[0]["type"] == "code_interpreter"
 
 
+def test_print_captured_in_output():
+    code = """
+def main(input, **kwargs):
+    print("hello from code node")
+    print("value:", 42)
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    node_output = node._process(state, NodeContext(state))
+    outputs = node_output.update["outputs"]["test"]  # ty: ignore[not-subscriptable]
+    assert outputs["console_output"] == "hello from code node\nvalue: 42\n"
+
+
+def test_print_custom_sep_and_end():
+    code = """
+def main(input, **kwargs):
+    print("a", "b", "c", sep="-", end="!")
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    node_output = node._process(state, NodeContext(state))
+    outputs = node_output.update["outputs"]["test"]  # ty: ignore[not-subscriptable]
+    assert outputs["console_output"] == "a-b-c!"
+
+
+def test_no_log_output_when_no_print():
+    code = """
+def main(input, **kwargs):
+    return input
+"""
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    node_output = node._process(state, NodeContext(state))
+    outputs = node_output.update["outputs"]["test"]  # ty: ignore[not-subscriptable]
+    assert "console_output" not in outputs
+
+
 def test_add_file_attachment_requires_bytes():
     code = """
 def main(input, **kwargs):

@@ -902,6 +902,37 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
+class LogCapturePrintCollector:
+    """RestrictedPython-compatible print collector that appends output to a shared log list.
+
+    RestrictedPython transforms ``print(x)`` into ``_print_(_print(x))`` where ``_print_``
+    is a factory that returns a collector instance per scope. Each collector's ``_call_print``
+    method handles the actual print call, writing to a shared ``log_entries`` list.
+    """
+
+    def __init__(self, log_entries: list[str], _getattr_=None):
+        self._log_entries = log_entries
+        self._getattr_ = _getattr_
+        self.txt: list[str] = []
+
+    def write(self, text):
+        self.txt.append(text)
+
+    def __call__(self):
+        return "".join(self.txt)
+
+    def _call_print(self, *objects, **kwargs):
+        if kwargs.get("file") is None:
+            kwargs["file"] = self
+        else:
+            self._getattr_(kwargs["file"], "write")  # ty: ignore[call-non-callable]
+        print(*objects, **kwargs)
+        # Flush collected text to the shared log list
+        if self.txt:
+            self._log_entries.append("".join(self.txt))
+            self.txt.clear()
+
+
 class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):
     """Runs python"""
 
@@ -939,9 +970,10 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
+        log_entries = []
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, context, output_state),
+                additional_globals=self._get_custom_functions(state, context, output_state, log_entries),
                 input=context.input,
                 node_inputs=context.inputs,
             )
@@ -953,21 +985,36 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             message = get_code_error_message("<inline_code>", self.code)
             raise CodeNodeRunError(message) from exc
 
+        output_metadata = {}
+        if log_entries:
+            output_metadata["console_output"] = "".join(log_entries)
+
         if isinstance(result, Command):
             return result
         return Command(
             goto=self._outgoing_nodes,
             update=PipelineState.from_node_output(
-                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+                node_name=self.name,
+                node_id=self.node_id,
+                output=str(result),
+                output_metadata=output_metadata or None,
+                **output_state,
             ),
         )
 
-    def _get_custom_functions(self, state: PipelineState, context: "NodeContext", output_state: PipelineState) -> dict:
+    def _get_custom_functions(
+        self,
+        state: PipelineState,
+        context: "NodeContext",
+        output_state: PipelineState,
+        log_entries: list[str],
+    ) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
             context: The NodeContext for read access.
             output_state: An empty state dict to which state modifications should be made.
+            log_entries: A list that will be populated with log/print output from user code.
         """
         pipeline_state = PipelineState.clone(state)
 
@@ -985,12 +1032,17 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         http_client = RestrictedHttpClient(team=team)
 
+        def _print_factory(_getattr_=None):
+            """RestrictedPython print collector that captures output to log_entries."""
+            return LogCapturePrintCollector(log_entries, _getattr_)
+
         # We create a PipelineAccessor wrapping a *cloned* state with the current node
         # injected into outputs (line above). The clone also isolates user code mutations
         # from the real pipeline state. This is an intentional bypass of the NodeContext
         # abstraction for CodeNode's sandboxed execution environment.
         pipeline_accessor = PipelineAccessor(pipeline_state)
         return {
+            "_print_": _print_factory,
             "http": http_client,
             "get_participant_data": participant_data_proxy.get,
             "set_participant_data": participant_data_proxy.set,

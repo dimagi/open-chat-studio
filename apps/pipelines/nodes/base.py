@@ -148,9 +148,13 @@ class PipelineState(dict):
         node_name: str,
         node_id: str,
         output: Any = None,
+        output_metadata: dict[str, Any] | None = None,
         **kwargs,
     ) -> Self:
-        kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
+        node_output = {"message": output, "node_id": node_id}
+        if output_metadata:
+            node_output.update(output_metadata)
+        kwargs["outputs"] = {node_name: node_output}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
