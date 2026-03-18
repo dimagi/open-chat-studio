@@ -189,9 +189,7 @@ class TwilioService(MessagingService):
         family, sub_type = content_type.split("/", 1)
         if family != "audio":
             raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
-        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
-        data.seek(0)
-        return converted
+        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
@@ -417,10 +415,7 @@ class MetaCloudAPIService(MessagingService):
         return response.json()["id"]
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
-        # Step 1: Get the media download URL from Meta's API
         media_url = self._get_media_url(message.media_id)
-
-        # Step 2: Download the audio binary
         response = httpx.get(
             media_url,
             headers=self._headers,
@@ -440,9 +435,7 @@ class MetaCloudAPIService(MessagingService):
         if family != "audio":
             raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
 
-        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
-        data.seek(0)
-        return converted
+        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def _get_media_url(self, media_id: str) -> str:
         url = f"{self.META_API_BASE_URL}/{media_id}"

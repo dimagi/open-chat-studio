@@ -41,11 +41,8 @@ def on_task_prerun(sender, task_id, task, args, kwargs, **_):
 
 @signals.task_postrun.connect
 def on_task_postrun(sender, **_):
-    from apps.teams.utils import (  # noqa: PLC0415 -Apps aren't fully loaded when the celery module loads, hence we
-        unset_current_team,
-    )
+    from apps.teams.utils import unset_current_team  # noqa: PLC0415 - apps aren't fully loaded when celery loads
 
-    # import this inline
     CeleryContextFilter.clear_task_context()
     unset_current_team()
 
