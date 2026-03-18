@@ -131,6 +131,8 @@ When `send_text_message()` raises `ServiceWindowExpiredException` because the te
 
 **Out of scope:** `TurnIOService` (also WhatsApp, but Turn.io may handle templating at their layer — can be added later following the same pattern). Language internationalization for templates (hardcoded to `"en"` for v1).
 
+**Future work:** Template message configuration is currently manual (users must create the `new_bot_message` template in their Meta Business account and check the config box in OCS). In the future, OCS can automate this by using the Meta WhatsApp Business Management API to create/manage message templates programmatically, removing the manual step entirely.
+
 ### 7. Assumptions
 
 - Consent and survey messages also flow through `send_text_message()` and will hit the service window check. This is acceptable because WhatsApp requires user-initiated contact to open a conversation, so these messages always occur in response to a user message (i.e., within the 24-hour service window).
