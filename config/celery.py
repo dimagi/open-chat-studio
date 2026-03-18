@@ -4,7 +4,6 @@ from celery import Celery, signals
 from celery.app import trace
 from django import db
 
-from apps.teams.utils import unset_current_team
 from apps.utils.logging import CeleryContextFilter
 
 # set the default Django settings module for the 'celery' program.
@@ -22,9 +21,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 # don't log task result
-trace.LOG_SUCCESS = """\
-Task %(name)s[%(id)s] succeeded in %(runtime)ss\
-"""
+trace.LOG_SUCCESS = "Task %(name)s[%(id)s] succeeded in %(runtime)ss"  # type: ignore[assignment]
 
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
@@ -44,6 +41,11 @@ def on_task_prerun(sender, task_id, task, args, kwargs, **_):
 
 @signals.task_postrun.connect
 def on_task_postrun(sender, **_):
+    from apps.teams.utils import (  # noqa: PLC0415 -Apps aren't fully loaded when the celery module loads, hence we
+        unset_current_team,
+    )
+
+    # import this inline
     CeleryContextFilter.clear_task_context()
     unset_current_team()
 
