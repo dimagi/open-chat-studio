@@ -130,6 +130,14 @@ class MessageProcessingContext:
     # Error tracking — each stage handles its own errors internally
     # and appends to this list for observability
     processing_errors: list[str] = field(default_factory=list)
+
+    # Channel-specific context — WORKAROUND for EvaluationChannel only.
+    # EvaluationChannel uses this to pass participant_data (a dict) to
+    # EvalsBotInteractionStage, bypassing the normal DB-backed
+    # ParticipantData lookup. This should NOT be used as a general-purpose
+    # extension mechanism. If other channels need channel-specific data,
+    # revisit this design.
+    channel_context: dict = field(default_factory=dict)
 ```
 
 > **Review decisions applied**:
@@ -1147,18 +1155,74 @@ class WebChannel(ChannelBase):
         return NoOpSender()
 
 
+class EvalsBotInteractionStage(ProcessingStage):
+    """Specialized bot interaction for evaluations.
+
+    Uses EvalsBot instead of get_bot(). Reads participant_data from
+    ctx.channel_context (a dict set by EvaluationChannel, not the
+    DB-backed ParticipantData model).
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.user_query is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        participant_data = ctx.channel_context["participant_data"]
+        ctx.bot = EvalsBot(
+            ctx.experiment_session,
+            ctx.experiment,
+            ctx.trace_service,
+            participant_data=participant_data,
+        )
+        ctx.bot_response = ctx.bot.process_input(
+            ctx.user_query,
+            attachments=ctx.message.attachments,
+        )
+        ctx.files_to_send = ctx.bot_response.get_attached_files() or []
+
+
 class EvaluationChannel(ChannelBase):
-    """Evaluation channel — internal, no message sending."""
+    """Evaluation channel — internal, no message sending.
+
+    Uses EvalsBotInteractionStage instead of BotInteractionStage.
+    Passes participant_data via ctx.channel_context (workaround —
+    see MessageProcessingContext.channel_context).
+    """
+
+    def __init__(self, experiment, experiment_channel, experiment_session,
+                 participant_data: dict):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self._participant_data = participant_data
+
+    def _create_context(self, message) -> MessageProcessingContext:
+        ctx = super()._create_context(message)
+        ctx.channel_context = {"participant_data": self._participant_data}
+        return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
-        # Similar to ApiChannel — omit sending stages
         return MessageProcessingPipeline(
-            core_stages=[...],  # Same core stages
+            core_stages=[
+                ParticipantValidationStage(),
+                # No SessionResolutionStage — session always pre-set
+                MessageTypeValidationStage(),
+                SessionActivationStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                EvalsBotInteractionStage(),  # Instead of BotInteractionStage
+                ResponseFormattingStage(),
+            ],
             terminal_stages=[
+                # No sending stages — evaluations are internal
                 EarlyExitResponseStage(),
                 ActivityTrackingStage(),
             ],
         )
+
+    def _get_sender(self) -> ChannelSender:
+        return NoOpSender()
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return ChannelCallbacks()
 
 
 class CommCareConnectChannel(ChannelBase):
@@ -2494,7 +2558,8 @@ All decisions below were made during the plan review and are reflected throughou
 | 24 | Architecture | `ChannelSender.send_file` signature | `send_file(file, recipient, session_id)` — session_id as extra param since session may not exist when sender is constructed. |
 | 25 | Architecture | No web channel `_inform_user_of_error` override | Web channel no longer needs a no-op override. Error message generation is separated from sending. The generated error message flows back to the web UI via `new_user_message`'s return value. |
 | 26 | Architecture | Voice synthesis fallback in `ResponseFormattingStage` | `AudioSynthesizeException` is caught in `ResponseFormattingStage` and gracefully degraded to text formatting. Not an unrecoverable error — does not propagate to the pipeline's catch-all. Creates `audio_synthesis_failure_notification`. |
-| 27 | Architecture | `WebChannel` pipeline | Overrides `_build_pipeline` to omit `ResponseSendingStage`, `SendingErrorHandlerStage`, and `ConsentFlowStage`. Sets `supports_conversational_consent: False`. Requires pre-existing session. `start_new_session` and `check_and_process_seed_message` class methods remain on the channel class (outside the pipeline). |
+| 27 | Architecture | `WebChannel` pipeline | Overrides `_build_pipeline` to omit `ResponseSendingStage`, `SendingErrorHandlerStage`, `SessionResolutionStage`, and `ConsentFlowStage`. Sets `supports_conversational_consent: False`. Requires pre-existing session. `start_new_session` and `check_and_process_seed_message` class methods remain on the channel class (outside the pipeline). |
+| 28 | Architecture | `EvaluationChannel` + `channel_context` | Uses `ctx.channel_context` dict to pass `participant_data` to `EvalsBotInteractionStage`. This is a **workaround** scoped to `EvaluationChannel` only — it should NOT be used as a general-purpose extension mechanism. `EvalsBotInteractionStage` replaces `BotInteractionStage` and creates `EvalsBot` instead of calling `get_bot()`. |
 | — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Runs after sending stages. Uses `_add_to_history` (moved out of ConsentFlowStage). |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |

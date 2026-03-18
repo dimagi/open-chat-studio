@@ -236,6 +236,14 @@ class MessageProcessingContext:
     # --- Observability ------------------------------------------------------
     processing_errors: list[str] = field(default_factory=list)
 
+    # --- Channel-specific context -------------------------------------------
+    # WORKAROUND for EvaluationChannel only. EvaluationChannel uses this to
+    # pass participant_data (a dict) to EvalsBotInteractionStage, bypassing
+    # the normal DB-backed ParticipantData lookup. This should NOT be used
+    # as a general-purpose extension mechanism. If other channels need
+    # channel-specific data, revisit this design.
+    channel_context: dict = field(default_factory=dict)
+
 
 # ---------------------------------------------------------------------------
 # 7. Processing Stage Base
@@ -1415,7 +1423,105 @@ class ApiChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 15. Concrete Channel: Web (no sending, no conversational consent)
+# 15. Concrete Channel: Evaluation (specialized bot, no sending)
+# ---------------------------------------------------------------------------
+
+
+class EvalsBotInteractionStage(ProcessingStage):
+    """Specialized bot interaction for evaluations.
+
+    Uses EvalsBot instead of get_bot(). Reads participant_data from
+    ctx.channel_context (a dict set by EvaluationChannel, not the
+    DB-backed ParticipantData model).
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.user_query is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        from apps.chat.bots import EvalsBot
+
+        participant_data = ctx.channel_context["participant_data"]
+        ctx.bot = EvalsBot(
+            ctx.experiment_session,
+            ctx.experiment,
+            ctx.trace_service,
+            participant_data=participant_data,
+        )
+        ctx.bot_response = ctx.bot.process_input(
+            ctx.user_query,
+            attachments=ctx.message.attachments,
+        )
+        ctx.files_to_send = ctx.bot_response.get_attached_files() or []
+
+
+class EvaluationChannel(ChannelBase):
+    """Evaluation channel — internal, no message sending.
+
+    Uses EvalsBotInteractionStage instead of BotInteractionStage.
+    Passes participant_data via ctx.channel_context (workaround —
+    see MessageProcessingContext.channel_context).
+    """
+
+    voice_replies_supported = False
+
+    def __init__(self, experiment, experiment_channel, experiment_session, participant_data: dict):
+        if not experiment_session:
+            from apps.chat.exceptions import ChannelException
+
+            raise ChannelException("EvaluationChannel requires an existing session")
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self._participant_data = participant_data
+        self.trace_service = self._create_empty_trace_service()
+
+    def _create_empty_trace_service(self):
+        from apps.service_providers.tracing import TracingService
+
+        return TracingService.empty()
+
+    def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
+        ctx = super()._create_context(message)
+        ctx.channel_context = {"participant_data": self._participant_data}
+        return ctx
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                # No SessionResolutionStage — session always pre-set
+                MessageTypeValidationStage(),
+                SessionActivationStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                EvalsBotInteractionStage(),  # Instead of BotInteractionStage
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                # No sending stages — evaluations are internal
+                EarlyExitResponseStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return ChannelCallbacks()  # All no-ops
+
+    def _get_sender(self) -> ChannelSender:
+        return NoOpSender()
+
+    def _get_capabilities(self) -> ChannelCapabilities:
+        from apps.chat.channels import MESSAGE_TYPES
+
+        return ChannelCapabilities(
+            supports_voice=False,
+            supports_files=False,
+            supports_conversational_consent=False,
+            supported_message_types=[MESSAGE_TYPES.TEXT],
+        )
+
+
+# ---------------------------------------------------------------------------
+# 16. Concrete Channel: Web (no sending, no conversational consent)
 # ---------------------------------------------------------------------------
 
 
@@ -1491,7 +1597,7 @@ class WebChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 16. Concrete Channel: CommCare Connect (platform-specific consent)
+# 17. Concrete Channel: CommCare Connect (platform-specific consent)
 # ---------------------------------------------------------------------------
 
 
@@ -1570,7 +1676,7 @@ class CommCareConnectChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 16. How it all fits together
+# 18. How it all fits together
 # ---------------------------------------------------------------------------
 
 
