@@ -75,9 +75,10 @@ def test_whatsapp_form_checks_number(
     provider = MessagingProviderFactory.create(type=provider_type, config={"account_sid": "123", "auth_token": "123"})
     messaging_provider.return_value = provider
     form = WhatsappChannelForm(experiment=experiment, data={"number": number, "messaging_provider": provider.id})
-    assert form.is_valid(), f"Form errors: {form.errors}"
-    if not number_found_at_provider:
-        assert form.warning_message == (
+    if number_found_at_provider:
+        assert form.is_valid(), f"Form errors: {form.errors}"
+    else:
+        assert form.errors["number"][0] == (
             f"{number} was not found at the provider. Please make sure it is there before proceeding"
         )
 
