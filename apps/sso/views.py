@@ -5,6 +5,7 @@ from allauth.socialaccount.models import SocialApp
 from allauth.utils import get_form_class
 from django import forms
 from django.contrib import messages
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.signals import user_logged_out
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -175,8 +176,6 @@ def sso_logout(request):
 
     user_logged_out.send(sender=sso_session.user.__class__, request=request, user=sso_session.user)
     if hasattr(request, "user"):
-        from django.contrib.auth.models import AnonymousUser  # noqa: PLC0415
-
         request.user = AnonymousUser()
 
     return HttpResponse(status=200)

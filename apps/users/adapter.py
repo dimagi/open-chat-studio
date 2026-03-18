@@ -30,18 +30,18 @@ class MfaAdapter(DefaultMFAAdapter):
 
     def encrypt(self, text: str) -> str:
         """Encrypt TOTP secrets using Django cryptography if configured."""
+        from django_cryptography.utils.crypto import FernetBytes
+
         if not settings.CRYPTOGRAPHY_SALT:
             return text
-
-        from django_cryptography.utils.crypto import FernetBytes  # noqa: PLC0415
 
         return b64encode(FernetBytes().encrypt(force_bytes(text))).decode("ascii")
 
     def decrypt(self, encrypted_text: str) -> str:
         """Decrypt TOTP secrets."""
+        from django_cryptography.utils.crypto import FernetBytes
+
         if not settings.CRYPTOGRAPHY_SALT:
             return encrypted_text
-
-        from django_cryptography.utils.crypto import FernetBytes  # noqa: PLC0415
 
         return force_str(FernetBytes().decrypt(b64decode(encrypted_text)))
