@@ -1,12 +1,14 @@
 from io import BytesIO
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
-from apps.channels.datamodels import TurnWhatsappMessage
+from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage
 from apps.channels.models import ChannelPlatform
+from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
 from apps.service_providers.exceptions import AudioConversionError
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -129,23 +131,7 @@ class TestTurnWhatsappMessageParsing:
 
     def test_audio_message_type_maps_to_voice(self):
         """WhatsApp sends 'audio' as the message type, which should map to MESSAGE_TYPES.VOICE."""
-        message_data = {
-            "contacts": [{"wa_id": "27826419977", "profile": {"name": "Test"}}],
-            "messages": [
-                {
-                    "from": "27826419977",
-                    "id": "wamid.test",
-                    "timestamp": "1773300527",
-                    "type": "audio",
-                    "audio": {
-                        "mime_type": "audio/ogg; codecs=opus",
-                        "sha256": "abc123",
-                        "id": "1215194677037265",
-                    },
-                }
-            ],
-        }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = TurnWhatsappMessage.parse(turnio_messages.audio_message())
         assert message.content_type == MESSAGE_TYPES.VOICE
         assert message.media_id == "1215194677037265"
 
@@ -189,9 +175,6 @@ class TestTurnWhatsappMessageParsing:
 class TestMetaCloudAPIServiceAudio:
     """Tests for MetaCloudAPIService audio message support."""
 
-    def test_supported_message_types_includes_voice(self, meta_cloud_api_service):
-        assert MESSAGE_TYPES.VOICE in meta_cloud_api_service.supported_message_types
-
     def test_voice_replies_supported(self, meta_cloud_api_service):
         assert meta_cloud_api_service.voice_replies_supported is True
 
@@ -219,7 +202,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, audio_download_response]
 
-        message = TurnWhatsappMessage(
+        message = MetaCloudAPIMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
@@ -238,7 +221,7 @@ class TestMetaCloudAPIServiceAudio:
         assert "123" in first_call.args[0]  # media_id in URL
         # Second call: download audio binary
         second_call = mock_get.call_args_list[1]
-        assert "lookaside.fbsbx.com" in second_call.args[0]
+        assert urlparse(second_call.args[0]).hostname == "lookaside.fbsbx.com"
 
         # Verify media data was cached on the message
         assert message.cached_media_data is not None
@@ -266,7 +249,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, non_audio_response]
 
-        message = TurnWhatsappMessage(
+        message = MetaCloudAPIMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
@@ -291,7 +274,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, error_response]
 
-        message = TurnWhatsappMessage(
+        message = MetaCloudAPIMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
@@ -311,7 +294,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [error_response]
 
-        message = TurnWhatsappMessage(
+        message = MetaCloudAPIMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",

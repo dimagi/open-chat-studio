@@ -99,6 +99,26 @@ def status_message():
     }
 
 
+def audio_message():
+    """A WhatsApp audio message (type='audio') - used by Meta Cloud API directly."""
+    return {
+        "contacts": [{"wa_id": "27826419977", "profile": {"name": "Test"}}],
+        "messages": [
+            {
+                "from": "27826419977",
+                "id": "wamid.test",
+                "timestamp": "1773300527",
+                "type": "audio",
+                "audio": {
+                    "mime_type": "audio/ogg; codecs=opus",
+                    "sha256": "abc123",
+                    "id": "1215194677037265",
+                },
+            }
+        ],
+    }
+
+
 def voice_message():
     return {
         "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
