@@ -23,6 +23,7 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
+from RestrictedPython.PrintCollector import PrintCollector
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -902,37 +903,6 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
             return AssistantChat(adapter=adapter, history_manager=history_manager)
 
 
-class LogCapturePrintCollector:
-    """RestrictedPython-compatible print collector that appends output to a shared log list.
-
-    RestrictedPython transforms ``print(x)`` into ``_print_(_print(x))`` where ``_print_``
-    is a factory that returns a collector instance per scope. Each collector's ``_call_print``
-    method handles the actual print call, writing to a shared ``log_entries`` list.
-    """
-
-    def __init__(self, log_entries: list[str], _getattr_=None):
-        self._log_entries = log_entries
-        self._getattr_ = _getattr_
-        self.txt: list[str] = []
-
-    def write(self, text):
-        self.txt.append(text)
-
-    def __call__(self):
-        return "".join(self.txt)
-
-    def _call_print(self, *objects, **kwargs):
-        if kwargs.get("file") is None:
-            kwargs["file"] = self
-        else:
-            self._getattr_(kwargs["file"], "write")  # ty: ignore[call-non-callable]
-        print(*objects, **kwargs)
-        # Flush collected text to the shared log list
-        if self.txt:
-            self._log_entries.append("".join(self.txt))
-            self.txt.clear()
-
-
 class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):
     """Runs python"""
 
@@ -970,10 +940,10 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
-        log_entries = []
+        print_collectors: list[PrintCollector] = []
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, context, output_state, log_entries),
+                additional_globals=self._get_custom_functions(state, context, output_state, print_collectors),
                 input=context.input,
                 node_inputs=context.inputs,
             )
@@ -986,8 +956,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             raise CodeNodeRunError(message) from exc
 
         output_metadata = {}
-        if log_entries:
-            output_metadata["console_output"] = "".join(log_entries)
+        console_output = "".join(collector() for collector in print_collectors)
+        if console_output:
+            output_metadata["console_output"] = console_output
 
         if isinstance(result, Command):
             return result
@@ -1007,14 +978,14 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         state: PipelineState,
         context: "NodeContext",
         output_state: PipelineState,
-        log_entries: list[str],
+        print_collectors: list[PrintCollector],
     ) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
             context: The NodeContext for read access.
             output_state: An empty state dict to which state modifications should be made.
-            log_entries: A list that will be populated with log/print output from user code.
+            print_collectors: A list that collects PrintCollector instances created during execution.
         """
         pipeline_state = PipelineState.clone(state)
 
@@ -1033,8 +1004,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         http_client = RestrictedHttpClient(team=team)
 
         def _print_factory(_getattr_=None):
-            """RestrictedPython print collector that captures output to log_entries."""
-            return LogCapturePrintCollector(log_entries, _getattr_)
+            collector = PrintCollector(_getattr_)
+            print_collectors.append(collector)
+            return collector
 
         # We create a PipelineAccessor wrapping a *cloned* state with the current node
         # injected into outputs (line above). The clone also isolates user code mutations
