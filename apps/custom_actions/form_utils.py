@@ -58,7 +58,9 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         holder: The holder model instance, an Experiment or an OpenAiAssistant.
         custom_action_infos: A list of dictionaries containing the custom action information.
     """
-    from apps.custom_actions.models import CustomActionOperation  # noqa: PLC0415
+    from apps.custom_actions.models import (
+        CustomActionOperation,  # noqa: PLC0415 - circular: custom_actions.models imports form_utils
+    )
 
     if not hasattr(holder, "custom_action_operations"):
         raise FieldDoesNotExist(f"{holder.__class__.__name__} does not have a custom_action_operations field")
