@@ -117,9 +117,15 @@ class MessageProcessingContext:
     files_to_send: list[File] = field(default_factory=list)
 
     # Control flow — set by the pipeline orchestrator when it catches
-    # an EarlyExitResponse exception. Stages do NOT set this directly;
+    # an EarlyExitResponse exception OR when the catch-all error handler
+    # generates an error message. Stages do NOT set this directly;
     # they raise EarlyExitResponse instead.
     early_exit_response: str | None = None
+
+    # Sending error — set by ResponseSendingStage when a send fails.
+    # SendingErrorHandlerStage reads this to handle platform-specific
+    # side effects (e.g., Telegram 403 consent revocation).
+    sending_exception: Exception | None = None
 
     # Error tracking — each stage handles its own errors internally
     # and appends to this list for observability
@@ -128,10 +134,12 @@ class MessageProcessingContext:
 
 > **Review decisions applied**:
 > - **Exception-based early exit**: Stages raise `EarlyExitResponse` to short-circuit. The pipeline catches it, sets `ctx.early_exit_response`, then runs terminal stages. Stages never check or set this field directly.
-> - **Core vs terminal stages**: Core stages (validation, session, consent, query, bot, formatting) can be short-circuited. Terminal stages (EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage) always run.
+> - **Catch-all error handling**: The pipeline also catches unexpected exceptions from core stages. It generates an error message via `EventBot` (preserving the `ChatException` distinction for more specific prompts), falls back to `DEFAULT_ERROR_RESPONSE_TEXT` if generation fails, sets `ctx.early_exit_response`, runs terminal stages, then **re-raises** the original exception so the caller knows processing failed.
+> - **Core vs terminal stages**: Core stages (validation, session, consent, query, bot, formatting) can be short-circuited. Terminal stages (ResponseSendingStage, SendingErrorHandlerStage, EarlyExitResponseStage, ActivityTrackingStage) always run.
 > - **Callbacks/sender/capabilities on context**: Stages are zero-arg constructors. They access channel-specific dependencies via `ctx.callbacks`, `ctx.sender`, and `ctx.capabilities`. This simplifies pipeline construction and makes stages fully reusable.
 > - **No `stage_timings`**: Observability is handled by trace spans in `ProcessingStage.__call__`, not manual timing.
 > - **Error handling per-stage**: Each stage handles its own errors internally. `processing_errors` is an observability list, not a pipeline-level error control mechanism.
+> - **`sending_exception`**: Single field (not a list). `ResponseSendingStage` sets this when a send fails. `SendingErrorHandlerStage` inspects it for platform-specific side effects.
 
 **Design Choice: Immutable vs Mutable**
 
@@ -552,19 +560,133 @@ class ResponseFormattingStage(ProcessingStage):
 
 > Zero-arg: capabilities accessed via `ctx.capabilities`.
 
-#### Stage 10: EarlyExitResponseStage (Terminal)
+#### Stage 10: ResponseSendingStage (Terminal)
+
+```py
+class ResponseSendingStage(ProcessingStage):
+    """Sends response to user via channel.
+
+    TERMINAL STAGE — runs first among terminal stages.
+    This is the ONLY stage that sends messages to the user.
+    Handles both normal bot responses and early exit responses.
+
+    All send calls are wrapped in try/except. On failure:
+    - Creates a delivery failure notification (in-app)
+    - Sets ctx.sending_exception for SendingErrorHandlerStage
+    - Appends to ctx.processing_errors
+    - Never propagates exceptions
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        # Always fire — we have either a formatted_message or an early_exit_response
+        return ctx.formatted_message is not None or ctx.early_exit_response is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        try:
+            if ctx.early_exit_response:
+                # Early exit path — send the early exit response
+                ctx.sender.send_text(ctx.early_exit_response, ctx.participant_identifier)
+                return
+
+            # Normal path — send formatted bot response
+            if ctx.voice_audio:
+                ctx.sender.send_voice(ctx.voice_audio, ctx.participant_identifier)
+                if ctx.additional_text_message:
+                    ctx.sender.send_text(
+                        ctx.additional_text_message,
+                        ctx.participant_identifier
+                    )
+            else:
+                ctx.sender.send_text(ctx.formatted_message, ctx.participant_identifier)
+
+            # Send supported files — each file handles its own error
+            for file in ctx.files_to_send:
+                try:
+                    ctx.sender.send_file(file, ctx.participant_identifier, ctx.experiment_session.id)
+                except Exception as e:
+                    ctx.processing_errors.append(f"Failed to send file: {e}")
+                    # Fallback to link
+                    link = file.download_link(ctx.experiment_session.id)
+                    ctx.sender.send_text(link, ctx.participant_identifier)
+        except Exception as e:
+            logger.exception("Failed to send message to user")
+            message_delivery_failure_notification(
+                ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
+                context="message",
+            )
+            ctx.sending_exception = e
+            ctx.processing_errors.append(f"Send failed: {e}")
+```
+
+**Maps to**: `send_text_to_user()`, `send_voice_to_user()`, `send_file_to_user()` (various lines)
+
+> **Review decisions applied**:
+> - **Single sending stage**: `ResponseSendingStage` is the ONLY stage that sends messages. All other stages set `early_exit_response` and let this stage handle delivery.
+> - **Always fires**: `should_run` returns `True` when there's either a `formatted_message` or `early_exit_response`. The early exit path sends the response text; the normal path sends the formatted bot response with files.
+> - **Resilient**: All sends wrapped in try/except. On failure, creates delivery failure notification, sets `ctx.sending_exception`, and never propagates. This ensures subsequent terminal stages still run.
+> - **`send_file` receives `session_id`**: Extra parameter for download link generation.
+
+#### Stage 11: SendingErrorHandlerStage (Terminal)
+
+```py
+class SendingErrorHandlerStage(ProcessingStage):
+    """Handles platform-specific side effects from send failures.
+
+    TERMINAL STAGE — runs after ResponseSendingStage.
+    Inspects ctx.sending_exception for platform-specific errors
+    that require action beyond logging (e.g., Telegram 403 "bot
+    was blocked" → revoke participant consent).
+
+    Non-actionable exceptions are ignored (already logged by
+    ResponseSendingStage).
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.sending_exception is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        self._handle_exception(ctx, ctx.sending_exception)
+
+    def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
+        """Handle platform-specific sending exceptions."""
+        from telebot.apihelper import ApiTelegramException
+
+        if isinstance(exc, ApiTelegramException):
+            if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
+                try:
+                    participant_data = ParticipantData.objects.get(
+                        participant__identifier=ctx.participant_identifier,
+                        experiment=ctx.experiment,
+                    )
+                    participant_data.update_consent(False)
+                except ParticipantData.DoesNotExist:
+                    ctx.processing_errors.append(
+                        "Participant data not found during consent revocation"
+                    )
+        # Other platform-specific exception handling can be added here
+```
+
+> **Review decision**: Dedicated terminal stage for platform-specific send error side effects. Telegram 403 "bot was blocked" triggers consent revocation. This exception is not re-raised — it's already been logged and notified by `ResponseSendingStage`.
+
+#### Stage 12: EarlyExitResponseStage (Terminal)
 
 ```py
 class EarlyExitResponseStage(ProcessingStage):
     """Persists early_exit_response to chat history.
 
-    TERMINAL STAGE — always runs after core stages complete (or after
-    an EarlyExitResponse exception is caught by the pipeline).
+    TERMINAL STAGE — runs after ResponseSendingStage and
+    SendingErrorHandlerStage.
 
-    When a core stage raises EarlyExitResponse, the pipeline catches it
-    and sets ctx.early_exit_response. This stage then creates the
-    corresponding ChatMessage DB record so the response appears in
-    the conversation history.
+    When a core stage raises EarlyExitResponse, or the pipeline's
+    catch-all error handler generates an error message, the pipeline
+    sets ctx.early_exit_response. This stage creates the corresponding
+    ChatMessage DB record so the response appears in the conversation
+    history.
+
+    Persists regardless of whether sending succeeded — chat history
+    serves as an audit trail.
 
     Uses _add_to_history (extracted from the old ConsentFlowStage)
     to persist the message.
@@ -586,59 +708,12 @@ class EarlyExitResponseStage(ProcessingStage):
         )
 ```
 
-> **Review decision**: Early exit responses are persisted via this dedicated terminal stage. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
-
-#### Stage 11: ResponseSendingStage (Terminal)
-
-```py
-class ResponseSendingStage(ProcessingStage):
-    """Sends response to user via channel.
-
-    TERMINAL STAGE — always runs after core stages complete.
-    This is the ONLY stage that sends messages to the user.
-    Handles both normal bot responses and early exit responses.
-    """
-
-    def should_run(self, ctx: MessageProcessingContext) -> bool:
-        # Always fire — we have either a formatted_message or an early_exit_response
-        return ctx.formatted_message is not None or ctx.early_exit_response is not None
-
-    def process(self, ctx: MessageProcessingContext) -> None:
-        if ctx.early_exit_response:
-            # Early exit path — send the early exit response
-            ctx.sender.send_text(ctx.early_exit_response, ctx.participant_identifier)
-            return
-
-        # Normal path — send formatted bot response
-        if ctx.voice_audio:
-            ctx.sender.send_voice(ctx.voice_audio, ctx.participant_identifier)
-            if ctx.additional_text_message:
-                ctx.sender.send_text(
-                    ctx.additional_text_message,
-                    ctx.participant_identifier
-                )
-        else:
-            ctx.sender.send_text(ctx.formatted_message, ctx.participant_identifier)
-
-        # Send supported files — each file handles its own error
-        for file in ctx.files_to_send:
-            try:
-                ctx.sender.send_file(file, ctx.participant_identifier)
-            except Exception as e:
-                ctx.processing_errors.append(f"Failed to send file: {e}")
-                # Fallback to link
-                link = file.download_link(ctx.experiment_session.id)
-                ctx.sender.send_text(link, ctx.participant_identifier)
-```
-
-**Maps to**: `send_text_to_user()`, `send_voice_to_user()`, `send_file_to_user()` (various lines)
-
 > **Review decisions applied**:
-> - **Single sending stage**: `ResponseSendingStage` is the ONLY stage that sends messages. All other stages set `early_exit_response` and let this stage handle delivery.
-> - **Always fires**: `should_run` returns `True` when there's either a `formatted_message` or `early_exit_response`. The early exit path sends the response text; the normal path sends the formatted bot response with files.
-> - Error handling is per-stage (Decision 5).
+> - Early exit responses are persisted via this dedicated terminal stage. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
+> - **Persists regardless of sending exceptions**: Even if `ResponseSendingStage` failed to deliver the message, the response is still persisted to chat history for audit purposes.
+> - **Runs after sending**: Placed after `ResponseSendingStage` and `SendingErrorHandlerStage` because the pipeline's catch-all error handler can also produce an `early_exit_response`, and `ResponseSendingStage` may produce a `sending_exception` — both should be settled before persistence.
 
-#### Stage 12: ActivityTrackingStage (Terminal)
+#### Stage 13: ActivityTrackingStage (Terminal)
 
 ```py
 class ActivityTrackingStage(ProcessingStage):
@@ -675,8 +750,16 @@ class MessageProcessingPipeline:
     EarlyExitResponse. Terminal stages always run — they handle both
     normal responses and early exit responses.
 
-    The pipeline is the ONLY place that handles EarlyExitResponse.
-    Individual stages never check ctx.early_exit_response.
+    The pipeline is the ONLY place that handles EarlyExitResponse and
+    unexpected exceptions. Individual stages never check
+    ctx.early_exit_response.
+
+    Error handling has two tiers:
+    1. EarlyExitResponse — intentional short-circuit by a stage
+    2. Unexpected Exception — catch-all generates an error message
+       via EventBot (or falls back to DEFAULT_ERROR_RESPONSE_TEXT),
+       runs terminal stages, then RE-RAISES so the caller knows
+       processing failed.
     """
 
     def __init__(
@@ -688,27 +771,77 @@ class MessageProcessingPipeline:
         self.terminal_stages = terminal_stages
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
-        """Run core stages, catch EarlyExitResponse, then run terminal stages.
+        """Run core stages, catch exceptions, then run terminal stages.
 
         1. Run core stages sequentially. If any raises EarlyExitResponse,
            remaining core stages are skipped.
-        2. Catch the exception and store the response on ctx.early_exit_response.
+        2. If any raises an unexpected exception, generate an error message
+           and set ctx.early_exit_response.
         3. Run terminal stages unconditionally (they always fire).
+        4. If there was an unexpected exception, re-raise it after terminal
+           stages complete.
         """
+        unexpected_exception = None
+
         try:
             for stage in self.core_stages:
                 stage(ctx)
         except EarlyExitResponse as e:
             ctx.early_exit_response = e.response
+        except Exception as e:
+            unexpected_exception = e
+            ctx.early_exit_response = self._generate_error_message(ctx, e)
+            ctx.processing_errors.append(str(e))
 
-        # Terminal stages always run — regardless of early exit
+        # Terminal stages always run — regardless of early exit or error
         for stage in self.terminal_stages:
             stage(ctx)
 
+        # Re-raise unexpected exceptions after terminal stages complete
+        if unexpected_exception is not None:
+            raise unexpected_exception
+
         return ctx
+
+    def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
+        """Generate a user-facing error message using EventBot.
+
+        Preserves the ChatException distinction: ChatException instances
+        get a more specific prompt that includes the error message.
+        Falls back to DEFAULT_ERROR_RESPONSE_TEXT if EventBot fails.
+
+        Maps to the old _inform_user_of_error() but WITHOUT sending —
+        sending is ResponseSendingStage's responsibility.
+        """
+        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
+        prompt = (
+            "Tell the user that something went wrong while processing their message"
+            " and that they should try again later."
+        )
+        if isinstance(exception, ChatException):
+            prompt = (
+                f"Tell the user that you were unable to process their message and that "
+                f"they should try again later or adjust the message type or contents "
+                f"according to the following error message: {exception}"
+            )
+
+        event_bot = EventBot(
+            ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service
+        )
+        try:
+            return event_bot.get_user_message(prompt)
+        except Exception:
+            logger.exception(
+                "Failed to generate error message via EventBot, falling back to default"
+            )
+            return DEFAULT_ERROR_RESPONSE_TEXT
 ```
 
-> **Review decision applied**: The pipeline orchestrator is the sole owner of early exit control flow. Core stages raise `EarlyExitResponse` to short-circuit; the pipeline catches it and feeds the response into terminal stages. Terminal stages (EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage) always run. Individual stages never check `ctx.early_exit_response`.
+> **Review decisions applied**:
+> - The pipeline orchestrator is the sole owner of control flow. Core stages raise `EarlyExitResponse` to short-circuit; the pipeline catches it and feeds the response into terminal stages.
+> - **Catch-all error handling**: Unexpected exceptions from core stages trigger error message generation via `EventBot`, preserving the `ChatException` distinction for more specific prompts. Falls back to `DEFAULT_ERROR_RESPONSE_TEXT` if generation fails.
+> - **Re-raise after terminal stages**: The original exception is re-raised after terminal stages complete, so the caller (webhook view / Celery task) knows processing failed. Terminal stages (ResponseSendingStage, SendingErrorHandlerStage, EarlyExitResponseStage, ActivityTrackingStage) always run first.
+> - **No sending in error handler**: `_generate_error_message` only generates the message. `ResponseSendingStage` handles delivery. This cleanly separates concerns and means the web channel (which never sends) still gets the error message returned via `new_user_message`'s return value.
 
 ### 6\. Channel Implementation
 
@@ -773,8 +906,9 @@ class ChannelBase(ABC):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
-                EarlyExitResponseStage(),
                 ResponseSendingStage(),
+                SendingErrorHandlerStage(),
+                EarlyExitResponseStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -850,10 +984,11 @@ class ChannelBase(ABC):
 > - **ChannelCapabilities dataclass**: `supports_conversational_consent` lives here (not as a ClassVar on ChannelBase). `frozen=True` for safety.
 > - **Zero-arg stages**: Pipeline construction is trivial — no callbacks/sender/capabilities passed to stage constructors.
 > - **Dependencies on context**: `new_user_message` injects callbacks, sender, and capabilities into the context object.
-> - **Core vs terminal stages**: 9 core stages (can be short-circuited by `EarlyExitResponse`) + 3 terminal stages (always run).
+> - **Core vs terminal stages**: 9 core stages (can be short-circuited by `EarlyExitResponse`) + 4 terminal stages (always run): ResponseSendingStage → SendingErrorHandlerStage → EarlyExitResponseStage → ActivityTrackingStage.
 > - **SessionActivationStage before ConsentFlowStage**: Handles non-consent session activation as a dedicated stage. `ConsentFlowStage.should_run()` is a pure precondition check with no side effects.
 > - **ConsentFlowStage always included**: No conditional in `_build_pipeline`. The stage's `should_run()` handles the skip logic.
 > - **Dynamic `_get_capabilities()`** (Decision 3): Method can be overridden for channels where capabilities depend on runtime state (e.g., provider-dependent file support).
+> - **Channel-specific pipelines**: Channels like `ApiChannel`, `EvaluationChannel`, and `CommCareConnectChannel` override `_build_pipeline` to customize their stage lists (e.g., omitting `ResponseSendingStage` for channels that don't send, adding `CommCareConsentCheckStage` after `SessionResolutionStage`).
 
 ### 7\. Concrete Channel Example
 
@@ -892,6 +1027,105 @@ class TelegramChannel(ChannelBase):
 ```
 
 **Much simpler\!** Channel-specific behavior is isolated to callbacks, sender, and capabilities — not spread throughout the base class. Stages are zero-arg, so `_build_pipeline()` rarely needs overriding.
+
+### 8\. Channel-Specific Pipeline Overrides
+
+Some channels need custom pipelines:
+
+```py
+class ApiChannel(ChannelBase):
+    """API channel — request/response, no message sending."""
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                SessionResolutionStage(),
+                MessageTypeValidationStage(),
+                SessionActivationStage(),
+                ConsentFlowStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                # No ResponseSendingStage or SendingErrorHandlerStage —
+                # API returns the response directly via new_user_message()
+                EarlyExitResponseStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+
+    def _get_sender(self) -> ChannelSender:
+        # Not used — no sending stage in pipeline
+        return NoOpSender()
+
+
+class EvaluationChannel(ChannelBase):
+    """Evaluation channel — internal, no message sending."""
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        # Similar to ApiChannel — omit sending stages
+        return MessageProcessingPipeline(
+            core_stages=[...],  # Same core stages
+            terminal_stages=[
+                EarlyExitResponseStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+
+
+class CommCareConnectChannel(ChannelBase):
+    """CommCare Connect — adds platform-specific consent check."""
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                SessionResolutionStage(),
+                CommCareConsentCheckStage(),  # Platform-specific consent
+                MessageTypeValidationStage(),
+                SessionActivationStage(),
+                ConsentFlowStage(),
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                ResponseSendingStage(),
+                SendingErrorHandlerStage(),
+                EarlyExitResponseStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+
+
+class CommCareConsentCheckStage(ProcessingStage):
+    """Checks CommCare Connect platform-specific consent.
+
+    Separate from ConsentFlowStage — this checks system_metadata["consent"]
+    on ParticipantData, not the conversational consent state machine.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.experiment_session is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        try:
+            participant_data = ParticipantData.objects.get(
+                participant__identifier=ctx.participant_identifier,
+                experiment=ctx.experiment,
+            )
+        except ParticipantData.DoesNotExist:
+            raise EarlyExitResponse("Participant has not given consent to chat")
+
+        if not participant_data.system_metadata.get("consent", False):
+            raise EarlyExitResponse("Participant has not given consent to chat")
+```
+
+> **Review decision applied**: Channels customize their pipelines by overriding `_build_pipeline()`. This is cleaner than capability flags for structural differences (e.g., "don't send at all" vs "send differently"). `ApiChannel` and `EvaluationChannel` omit sending stages entirely. `CommCareConnectChannel` inserts a platform-specific consent stage.
 
 ## Advantages of Context-Based Architecture
 
@@ -1374,8 +1608,9 @@ def test_full_pipeline_happy_path(mock_bot):
             # ... remaining core stages
         ],
         terminal_stages=[
-            EarlyExitResponseStage(),
             ResponseSendingStage(),
+            SendingErrorHandlerStage(),
+            EarlyExitResponseStage(),
             ActivityTrackingStage(),
         ],
     )
@@ -1429,9 +1664,11 @@ Each stage should have tests for these edge cases (where applicable):
 - **ChatMessageCreationStage**: Normal creation, session without chat
 - **BotInteractionStage**: Successful response, bot error, response with files, response without files
 - **ResponseFormattingStage**: Text response, voice response, citations, no citations, unsupported files
-- **EarlyExitResponseStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips)
-- **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (fallback to link), no response at all (no-op)
+- **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (fallback to link), no response at all (no-op), send failure sets `ctx.sending_exception`, delivery failure notification created on error
+- **SendingErrorHandlerStage**: Telegram 403 "bot blocked" (revokes consent), non-Telegram exception (no-op), no sending exception (skips)
+- **EarlyExitResponseStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exception is set
 - **ActivityTrackingStage**: Session update, versioned experiment tracking
+- **Pipeline catch-all**: Unexpected exception generates error message, `ChatException` gets specific prompt, `EventBot` failure falls back to `DEFAULT_ERROR_RESPONSE_TEXT`, terminal stages run, original exception re-raised
 
 ## Implementation Roadmap (Based on Your Choices)
 
@@ -1539,7 +1776,12 @@ class ChannelCallbacks:
 
 
 class ChannelSender(ABC):
-    """Abstract base for sending messages to users."""
+    """Abstract base for sending messages to users.
+
+    Sender implementations encapsulate platform-specific sending details
+    (e.g., from_number, bot token, thread_ts) at construction time.
+    The send methods receive only the data that varies per call.
+    """
 
     @abstractmethod
     def send_text(self, text: str, recipient: str) -> None: ...
@@ -1548,7 +1790,7 @@ class ChannelSender(ABC):
     def send_voice(self, audio: 'SynthesizedAudio', recipient: str) -> None: ...
 
     @abstractmethod
-    def send_file(self, file: 'File', recipient: str) -> None: ...
+    def send_file(self, file: 'File', recipient: str, session_id: int) -> None: ...
 ```
 
 **1.3 Update ChannelBase** (still in `apps/chat/channels.py`):
@@ -1916,13 +2158,28 @@ class ResponseFormattingStage(ProcessingStage):
 
 **Commit**: "Extract ResponseFormattingStage"
 
-**3.9 Terminal Stages: EarlyExitResponseStage, ResponseSendingStage, ActivityTrackingStage** (Week 6):
+**3.9 Terminal Stages** (Week 6):
 
-Extract the three terminal stages. These always run — the pipeline passes them both normal and early-exit contexts.
+Extract the four terminal stages. These always run — the pipeline passes them both normal and early-exit contexts.
+
+Order: `ResponseSendingStage` → `SendingErrorHandlerStage` → `EarlyExitResponseStage` → `ActivityTrackingStage`
 
 ```py
+class ResponseSendingStage(ProcessingStage):
+    """TERMINAL STAGE: Sends response to user. Wraps all sends in try/except.
+    On failure: creates delivery failure notification, sets ctx.sending_exception.
+    """
+    # ... (see section 4 for full implementation)
+
+class SendingErrorHandlerStage(ProcessingStage):
+    """TERMINAL STAGE: Handles platform-specific send error side effects.
+    E.g., Telegram 403 "bot blocked" → revoke participant consent.
+    """
+    # ... (see section 4 for full implementation)
+
 class EarlyExitResponseStage(ProcessingStage):
     """TERMINAL STAGE: Persists early_exit_response to chat history.
+    Persists regardless of sending exceptions.
     Uses _add_to_history (moved out of ConsentFlowStage).
     """
 
@@ -1932,11 +2189,15 @@ class EarlyExitResponseStage(ProcessingStage):
     def process(self, ctx) -> None:
         if ctx.experiment_session:
             self._add_to_history(ctx, ctx.early_exit_response)
+
+class ActivityTrackingStage(ProcessingStage):
+    """TERMINAL STAGE: Updates session activity timestamp and experiment versions."""
+    # ... (see section 4 for full implementation)
 ```
 
-**Tests**: Test persistence with early exit set, test no-op when no early exit
+**Tests**: Test each terminal stage independently (see edge case checklist)
 
-**Commit**: "Extract terminal stages (EarlyExitResponse, ResponseSending, ActivityTracking)"
+**Commit**: "Extract terminal stages (ResponseSending, SendingErrorHandler, EarlyExitResponse, ActivityTracking)"
 
 ---
 
@@ -1951,7 +2212,8 @@ class MessageProcessingPipeline:
     """Orchestrates message processing through core and terminal stages.
 
     Core stages can be short-circuited by EarlyExitResponse.
-    Terminal stages always run.
+    Unexpected exceptions generate an error message, run terminal stages,
+    then re-raise. Terminal stages always run.
     """
 
     def __init__(
@@ -1963,18 +2225,32 @@ class MessageProcessingPipeline:
         self.terminal_stages = terminal_stages
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
-        """Run core stages, catch EarlyExitResponse, then run terminal stages."""
+        """Run core stages, catch exceptions, then run terminal stages."""
+        unexpected_exception = None
+
         try:
             for stage in self.core_stages:
                 stage(ctx)
         except EarlyExitResponse as e:
             ctx.early_exit_response = e.response
+        except Exception as e:
+            unexpected_exception = e
+            ctx.early_exit_response = self._generate_error_message(ctx, e)
+            ctx.processing_errors.append(str(e))
 
         # Terminal stages always run
         for stage in self.terminal_stages:
             stage(ctx)
 
+        # Re-raise after terminal stages complete
+        if unexpected_exception is not None:
+            raise unexpected_exception
+
         return ctx
+
+    def _generate_error_message(self, ctx, exception):
+        """Generate user-facing error message. See pipeline orchestrator section."""
+        # ... (see section 5 for full implementation)
 ```
 
 **4.2 Update ChannelBase**:
@@ -2002,8 +2278,9 @@ class ChannelBase(ABC):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
-                EarlyExitResponseStage(),
                 ResponseSendingStage(),
+                SendingErrorHandlerStage(),
+                EarlyExitResponseStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -2113,7 +2390,7 @@ All decisions below were made during the plan review and are reflected throughou
 | # | Area | Decision | Summary |
 |---|------|----------|---------|
 | 1 | Architecture | `EarlyExitResponse` exception | Stages raise `EarlyExitResponse` to short-circuit. Pipeline catches it, sets `ctx.early_exit_response`, runs terminal stages. |
-| 2 | Architecture | Core vs terminal stages | 9 core stages (short-circuitable) + 3 terminal stages (always run). Pipeline orchestrator owns control flow. |
+| 2 | Architecture | Core vs terminal stages | 9 core stages (short-circuitable) + 4 terminal stages (always run). Pipeline orchestrator owns control flow. |
 | 3 | Architecture | Callbacks/sender/capabilities on context | Stages are zero-arg. Channel-specific dependencies are injected into `ctx` by `ChannelBase.new_user_message()`. |
 | 4 | Architecture | Runtime `_get_capabilities()` | Method on ChannelBase, overridable for provider-dependent channels (e.g., WhatsApp file support varies). |
 | 5 | Architecture | Pre-set session on context | Web/Slack channels set `ctx.experiment_session` at creation. `SessionResolutionStage` respects this. |
@@ -2122,8 +2399,17 @@ All decisions below were made during the plan review and are reflected throughou
 | 8 | Code Quality | `/reset` inside `SessionResolutionStage` | Reset is session lifecycle — belongs in the stage that manages sessions. Raises `EarlyExitResponse`. |
 | 9 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message. Raises `EarlyExitResponse`. |
 | 16 | Code Quality | `SessionActivationStage` for non-consent path | Dedicated stage activates session when consent is disabled. Keeps `ConsentFlowStage.should_run()` side-effect-free. |
-| — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Uses `_add_to_history` (moved out of ConsentFlowStage). |
-| — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. |
+| 17 | Architecture | Pipeline catch-all error handler | Unexpected exceptions from core stages: generate error message via `EventBot` (preserving `ChatException` distinction), fall back to `DEFAULT_ERROR_RESPONSE_TEXT`, set `ctx.early_exit_response`, run terminal stages, then **re-raise**. |
+| 18 | Architecture | Terminal stage order | `ResponseSendingStage` → `SendingErrorHandlerStage` → `EarlyExitResponseStage` → `ActivityTrackingStage`. Sending first, then error handling, then persistence, then tracking. |
+| 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles platform-specific send error side effects (e.g., Telegram 403 consent revocation). Reads `ctx.sending_exception`. Non-actionable exceptions are ignored. |
+| 20 | Architecture | `ResponseSendingStage` resilience | All sends wrapped in try/except. On failure: creates delivery failure notification, sets `ctx.sending_exception`, never propagates. Ensures subsequent terminal stages run. |
+| 21 | Architecture | `ctx.sending_exception` | Single `Exception | None` field (not a list). Set by `ResponseSendingStage` on send failure. Read by `SendingErrorHandlerStage`. |
+| 22 | Architecture | Early exit persistence regardless | `EarlyExitResponseStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
+| 23 | Architecture | Channel-specific pipelines | `ApiChannel` and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |
+| 24 | Architecture | `ChannelSender.send_file` signature | `send_file(file, recipient, session_id)` — session_id as extra param since session may not exist when sender is constructed. |
+| 25 | Architecture | No web channel `_inform_user_of_error` override | Web channel no longer needs a no-op override. Error message generation is separated from sending. The generated error message flows back to the web UI via `new_user_message`'s return value. |
+| — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Runs after sending stages. Uses `_add_to_history` (moved out of ConsentFlowStage). |
+| — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
 | — | Update | Callbacks receive targeted parameters | Callback methods receive `recipient: str` (not full context). No chicken-and-egg problem — `participant_identifier` passed at call time. |
 | 10 | Testing | DB-free stage unit tests | Use stubs/mocks (`unittest.mock.Mock`), not factories. Test `EarlyExitResponse` with `pytest.raises`. |
