@@ -519,7 +519,13 @@ class BotInteractionStage(ProcessingStage):
 
 ```py
 class ResponseFormattingStage(ProcessingStage):
-    """Formats bot response for channel (handles citations, voice, etc.)"""
+    """Formats bot response for channel (handles citations, voice, etc.)
+
+    Voice synthesis failures are caught here and gracefully degraded to
+    text — the user still gets a useful response. This is NOT an
+    unrecoverable error, so it does not propagate to the pipeline's
+    catch-all.
+    """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.bot_response is not None
@@ -534,13 +540,23 @@ class ResponseFormattingStage(ProcessingStage):
         if should_reply_voice:
             # Strip URLs and emojis for voice
             message, extracted_urls = strip_urls_and_emojis(message)
-            ctx.formatted_message = message
-            ctx.voice_audio = self._synthesize_voice(ctx, message)
-            # URLs will be sent as text after voice
-            if extracted_urls or files:
-                ctx.additional_text_message = self._format_links_and_files(
-                    extracted_urls, files
+            urls_to_append = "\n".join(extracted_urls)
+            urls_to_append = self._append_attachment_links(
+                urls_to_append, unsupported_files
+            )
+            try:
+                ctx.voice_audio = self._synthesize_voice(ctx, message)
+                ctx.formatted_message = message
+                if urls_to_append:
+                    ctx.additional_text_message = urls_to_append
+            except AudioSynthesizeException:
+                # Graceful fallback to text — not an unrecoverable error
+                logger.exception("Error generating voice response")
+                audio_synthesis_failure_notification(
+                    ctx.experiment, session=ctx.experiment_session
                 )
+                ctx.voice_audio = None
+                ctx.formatted_message = f"{message}\n\n{urls_to_append}"
         else:
             # Text reply - format citations
             message, uncited_files = self._format_reference_section(
@@ -1687,7 +1703,7 @@ Each stage should have tests for these edge cases (where applicable):
 - **QueryExtractionStage**: Text message, voice message, voice transcription failure
 - **ChatMessageCreationStage**: Normal creation, session without chat
 - **BotInteractionStage**: Successful response, bot error, response with files, response without files
-- **ResponseFormattingStage**: Text response, voice response, citations, no citations, unsupported files
+- **ResponseFormattingStage**: Text response, voice response, citations, no citations, unsupported files, voice synthesis failure (fallback to text)
 - **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (fallback to link), no response at all (no-op), send failure sets `ctx.sending_exception`, delivery failure notification created on error
 - **SendingErrorHandlerStage**: Telegram 403 "bot blocked" (revokes consent), non-Telegram exception (no-op), no sending exception (skips)
 - **EarlyExitResponseStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exception is set
@@ -2432,6 +2448,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 23 | Architecture | Channel-specific pipelines | `ApiChannel` and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |
 | 24 | Architecture | `ChannelSender.send_file` signature | `send_file(file, recipient, session_id)` — session_id as extra param since session may not exist when sender is constructed. |
 | 25 | Architecture | No web channel `_inform_user_of_error` override | Web channel no longer needs a no-op override. Error message generation is separated from sending. The generated error message flows back to the web UI via `new_user_message`'s return value. |
+| 26 | Architecture | Voice synthesis fallback in `ResponseFormattingStage` | `AudioSynthesizeException` is caught in `ResponseFormattingStage` and gracefully degraded to text formatting. Not an unrecoverable error — does not propagate to the pipeline's catch-all. Creates `audio_synthesis_failure_notification`. |
 | — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Runs after sending stages. Uses `_add_to_history` (moved out of ConsentFlowStage). |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |

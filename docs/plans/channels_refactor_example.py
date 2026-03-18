@@ -650,14 +650,21 @@ class BotInteractionStage(ProcessingStage):
 
 
 class ResponseFormattingStage(ProcessingStage):
-    """Formats the bot response for the channel (text, voice, citations, files)."""
+    """Formats the bot response for the channel (text, voice, citations, files).
+
+    Voice synthesis failures are caught here and gracefully degraded to
+    text — the user still gets a useful response. This is NOT an
+    unrecoverable error, so it does not propagate to the pipeline's catch-all.
+    """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.bot_response is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
         from apps.chat.channels import MESSAGE_TYPES, strip_urls_and_emojis
+        from apps.chat.exceptions import AudioSynthesizeException
         from apps.experiments.models import VoiceResponseBehaviours
+        from apps.ocs_notifications.notifications import audio_synthesis_failure_notification
 
         message = ctx.bot_response.content
         files = ctx.files_to_send
@@ -688,14 +695,19 @@ class ResponseFormattingStage(ProcessingStage):
 
         if should_reply_voice:
             message, extracted_urls = strip_urls_and_emojis(message)
-            ctx.formatted_message = message
-            ctx.voice_audio = self._synthesize_voice(ctx, message)
-            # Collect URLs and file links for a follow-up text message
-            extra_parts = list(extracted_urls)
-            for f in unsupported_files:
-                extra_parts.append(f"{f.name}\n{f.download_link(ctx.experiment_session.id)}")
-            if extra_parts:
-                ctx.additional_text_message = "\n".join(extra_parts)
+            urls_to_append = "\n".join(extracted_urls)
+            urls_to_append = self._append_attachment_links(urls_to_append, unsupported_files, ctx)
+            try:
+                ctx.voice_audio = self._synthesize_voice(ctx, message)
+                ctx.formatted_message = message
+                if urls_to_append:
+                    ctx.additional_text_message = urls_to_append
+            except AudioSynthesizeException:
+                # Graceful fallback to text — not an unrecoverable error
+                logger.exception("Error generating voice response")
+                audio_synthesis_failure_notification(ctx.experiment, session=ctx.experiment_session)
+                ctx.voice_audio = None
+                ctx.formatted_message = f"{message}\n\n{urls_to_append}"
         else:
             message, uncited_files = self._format_reference_section(message, files, ctx)
             unsupported_uncited = [f for f in unsupported_files if f in uncited_files]
