@@ -143,7 +143,7 @@ class MessageProcessingContext:
 > **Review decisions applied**:
 > - **Exception-based early exit**: Stages raise `EarlyExitResponse` to short-circuit. The pipeline catches it, sets `ctx.early_exit_response`, then runs terminal stages. Stages never check or set this field directly.
 > - **Catch-all error handling**: The pipeline also catches unexpected exceptions from core stages. It generates an error message via `EventBot` (preserving the `ChatException` distinction for more specific prompts), falls back to `DEFAULT_ERROR_RESPONSE_TEXT` if generation fails, sets `ctx.early_exit_response`, runs terminal stages, then **re-raises** the original exception so the caller knows processing failed.
-> - **Core vs terminal stages**: Core stages (validation, session, consent, query, bot, formatting) can be short-circuited. Terminal stages (ResponseSendingStage, SendingErrorHandlerStage, EarlyExitResponseStage, ActivityTrackingStage) always run.
+> - **Core vs terminal stages**: Core stages (validation, session, consent, query, bot, formatting) can be short-circuited. Terminal stages (ResponseSendingStage, SendingErrorHandlerStage, PersistenceStage, ActivityTrackingStage) always run.
 > - **Callbacks/sender/capabilities on context**: Stages are zero-arg constructors. They access channel-specific dependencies via `ctx.callbacks`, `ctx.sender`, and `ctx.capabilities`. This simplifies pipeline construction and makes stages fully reusable.
 > - **No `stage_timings`**: Observability is handled by trace spans in `ProcessingStage.__call__`, not manual timing.
 > - **Error handling per-stage**: Each stage handles its own errors internally. `processing_errors` is an observability list, not a pipeline-level error control mechanism.
@@ -369,7 +369,7 @@ class ConsentFlowStage(ProcessingStage):
     This stage only manages consent state transitions and raises
     EarlyExitResponse. It does NOT:
     - Send messages (ResponseSendingStage handles that)
-    - Persist to chat history (EarlyExitResponseStage handles that)
+    - Persist to chat history (PersistenceStage handles that)
 
     Sub-behaviors:
     1. Seed message: Raise EarlyExitResponse with consent prompt
@@ -430,7 +430,7 @@ class ConsentFlowStage(ProcessingStage):
 
 > **Review decisions applied**:
 > - **`supports_conversational_consent` on ChannelCapabilities** (not a ClassVar on ChannelBase): `should_run` checks `ctx.capabilities.supports_conversational_consent`. This stage is always included in the pipeline — the skip logic is internal.
-> - **Sub-behaviors documented** (Decision 9): State transitions and seed message are this stage's responsibility. Chat history persistence and message sending are handled downstream by `EarlyExitResponseStage` and `ResponseSendingStage` respectively.
+> - **Sub-behaviors documented** (Decision 9): State transitions and seed message are this stage's responsibility. Chat history persistence and message sending are handled downstream by `PersistenceStage` and `ResponseSendingStage` respectively.
 > - **Exception-based early exit**: This stage raises `EarlyExitResponse` instead of setting a field. The pipeline catches it and runs terminal stages.
 > - **No message sending**: This stage only raises `EarlyExitResponse`. The `ResponseSendingStage` is the sole stage that sends messages to the user.
 
@@ -726,46 +726,68 @@ class SendingErrorHandlerStage(ProcessingStage):
 
 > **Review decision**: Dedicated terminal stage for platform-specific send error side effects. Telegram 403 "bot was blocked" triggers consent revocation. This exception is not re-raised — it's already been logged and notified by `ResponseSendingStage`.
 
-#### Stage 12: EarlyExitResponseStage (Terminal)
+#### Stage 12: PersistenceStage (Terminal)
 
 ```py
-class EarlyExitResponseStage(ProcessingStage):
-    """Persists early_exit_response to chat history.
+class PersistenceStage(ProcessingStage):
+    """Persists chat messages and voice attachments to the database.
 
     TERMINAL STAGE — runs after ResponseSendingStage and
     SendingErrorHandlerStage.
 
-    When a core stage raises EarlyExitResponse, or the pipeline's
-    catch-all error handler generates an error message, the pipeline
-    sets ctx.early_exit_response. This stage creates the corresponding
-    ChatMessage DB record so the response appears in the conversation
-    history.
+    Handles two persistence concerns:
+    1. Early exit responses: When a core stage raises EarlyExitResponse
+       or the pipeline's catch-all generates an error message, this stage
+       creates the corresponding ChatMessage DB record.
+    2. Voice attachments: When the bot response was synthesized as voice,
+       this stage tags the AI message and saves the audio as an attachment.
 
     Persists regardless of whether sending succeeded — chat history
     serves as an audit trail.
-
-    Uses _add_to_history (extracted from the old ConsentFlowStage)
-    to persist the message.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.early_exit_response is not None
+        return (
+            ctx.early_exit_response is not None
+            or ctx.voice_audio is not None
+        )
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        if ctx.experiment_session:
-            self._add_to_history(ctx, ctx.early_exit_response)
+        if not ctx.experiment_session:
+            return
 
-    def _add_to_history(self, ctx: MessageProcessingContext, content: str) -> None:
-        """Persist the early exit response as an AI message in chat history."""
-        ChatMessage.objects.create(
-            chat=ctx.experiment_session.chat,
-            message_type=ChatMessageType.AI,
-            content=content,
+        # 1. Persist early exit response to chat history
+        if ctx.early_exit_response is not None:
+            ChatMessage.objects.create(
+                chat=ctx.experiment_session.chat,
+                message_type=ChatMessageType.AI,
+                content=ctx.early_exit_response,
+            )
+
+        # 2. Tag and save voice attachment on bot response
+        if ctx.voice_audio is not None and ctx.bot_response is not None:
+            ctx.bot_response.create_and_add_tag(
+                "voice", ctx.experiment.team, TagCategories.MEDIA_TYPE
+            )
+            self._save_voice_attachment(ctx)
+
+    def _save_voice_attachment(self, ctx: MessageProcessingContext) -> None:
+        """Save synthesized voice audio as attachment on the bot response."""
+        ctx.voice_audio.audio.seek(0)
+        file = File.create(
+            "voice_note.ogg",
+            ctx.voice_audio.audio,
+            ctx.experiment.team_id,
+            purpose=FilePurpose.MESSAGE_MEDIA,
+            content_type=ctx.voice_audio.content_type,
         )
+        ctx.bot_response.add_attachment_id(file.id)
 ```
 
 > **Review decisions applied**:
-> - Early exit responses are persisted via this dedicated terminal stage. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
+> - **Renamed from `PersistenceStage`**: Now `PersistenceStage` — handles both early exit response persistence and voice attachment saving.
+> - Early exit responses are persisted here. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
+> - **Voice attachment saving**: Tags the bot response as "voice" and saves the synthesized audio as a file attachment. Moved from post-send logic in the old `_handle_supported_message`.
 > - **Persists regardless of sending exceptions**: Even if `ResponseSendingStage` failed to deliver the message, the response is still persisted to chat history for audit purposes.
 > - **Runs after sending**: Placed after `ResponseSendingStage` and `SendingErrorHandlerStage` because the pipeline's catch-all error handler can also produce an `early_exit_response`, and `ResponseSendingStage` may produce a `sending_exception` — both should be settled before persistence.
 
@@ -896,7 +918,7 @@ class MessageProcessingPipeline:
 > **Review decisions applied**:
 > - The pipeline orchestrator is the sole owner of control flow. Core stages raise `EarlyExitResponse` to short-circuit; the pipeline catches it and feeds the response into terminal stages.
 > - **Catch-all error handling**: Unexpected exceptions from core stages trigger error message generation via `EventBot`, preserving the `ChatException` distinction for more specific prompts. Falls back to `DEFAULT_ERROR_RESPONSE_TEXT` if generation fails.
-> - **Re-raise after terminal stages**: The original exception is re-raised after terminal stages complete, so the caller (webhook view / Celery task) knows processing failed. Terminal stages (ResponseSendingStage, SendingErrorHandlerStage, EarlyExitResponseStage, ActivityTrackingStage) always run first.
+> - **Re-raise after terminal stages**: The original exception is re-raised after terminal stages complete, so the caller (webhook view / Celery task) knows processing failed. Terminal stages (ResponseSendingStage, SendingErrorHandlerStage, PersistenceStage, ActivityTrackingStage) always run first.
 > - **No sending in error handler**: `_generate_error_message` only generates the message. `ResponseSendingStage` handles delivery. This cleanly separates concerns and means the web channel (which never sends) still gets the error message returned via `new_user_message`'s return value.
 
 ### 6\. Channel Implementation
@@ -965,7 +987,7 @@ class ChannelBase(ABC):
             terminal_stages=[
                 ResponseSendingStage(),
                 SendingErrorHandlerStage(),
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1041,7 +1063,7 @@ class ChannelBase(ABC):
 > - **ChannelCapabilities dataclass**: `supports_conversational_consent` lives here (not as a ClassVar on ChannelBase). `frozen=True` for safety.
 > - **Zero-arg stages**: Pipeline construction is trivial — no callbacks/sender/capabilities passed to stage constructors.
 > - **Dependencies on context**: `new_user_message` injects callbacks, sender, and capabilities into the context object.
-> - **Core vs terminal stages**: 9 core stages (can be short-circuited by `EarlyExitResponse`) + 4 terminal stages (always run): ResponseSendingStage → SendingErrorHandlerStage → EarlyExitResponseStage → ActivityTrackingStage.
+> - **Core vs terminal stages**: 9 core stages (can be short-circuited by `EarlyExitResponse`) + 4 terminal stages (always run): ResponseSendingStage → SendingErrorHandlerStage → PersistenceStage → ActivityTrackingStage.
 > - **SessionActivationStage before ConsentFlowStage**: Handles non-consent session activation as a dedicated stage. `ConsentFlowStage.should_run()` is a pure precondition check with no side effects.
 > - **ConsentFlowStage always included**: No conditional in `_build_pipeline`. The stage's `should_run()` handles the skip logic.
 > - **Dynamic `_get_capabilities()`** (Decision 3): Method can be overridden for channels where capabilities depend on runtime state (e.g., provider-dependent file support).
@@ -1109,7 +1131,7 @@ class ApiChannel(ChannelBase):
             terminal_stages=[
                 # No ResponseSendingStage or SendingErrorHandlerStage —
                 # API returns the response directly via new_user_message()
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1147,7 +1169,7 @@ class WebChannel(ChannelBase):
             terminal_stages=[
                 # No ResponseSendingStage or SendingErrorHandlerStage —
                 # responses returned via new_user_message()
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1222,7 +1244,7 @@ class EvaluationChannel(ChannelBase):
             ],
             terminal_stages=[
                 # No sending stages — evaluations are internal
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1254,7 +1276,7 @@ class CommCareConnectChannel(ChannelBase):
             terminal_stages=[
                 ResponseSendingStage(),
                 SendingErrorHandlerStage(),
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1768,7 +1790,7 @@ def test_full_pipeline_happy_path(mock_bot):
         terminal_stages=[
             ResponseSendingStage(),
             SendingErrorHandlerStage(),
-            EarlyExitResponseStage(),
+            PersistenceStage(),
             ActivityTrackingStage(),
         ],
     )
@@ -1824,7 +1846,7 @@ Each stage should have tests for these edge cases (where applicable):
 - **ResponseFormattingStage**: Text response, voice response, citations, no citations, unsupported files, voice synthesis failure (fallback to text)
 - **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (fallback to link), no response at all (no-op), send failure sets `ctx.sending_exception`, delivery failure notification created on error
 - **SendingErrorHandlerStage**: Telegram 403 "bot blocked" (revokes consent), non-Telegram exception (no-op), no sending exception (skips)
-- **EarlyExitResponseStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exception is set
+- **PersistenceStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exception is set, voice response (tags + saves attachment), voice response without bot_response (no-op)
 - **ActivityTrackingStage**: Session update, versioned experiment tracking
 - **Pipeline catch-all**: Unexpected exception generates error message, `ChatException` gets specific prompt, `EventBot` failure falls back to `DEFAULT_ERROR_RESPONSE_TEXT`, terminal stages run, original exception re-raised
 
@@ -2321,7 +2343,7 @@ class ResponseFormattingStage(ProcessingStage):
 
 Extract the four terminal stages. These always run — the pipeline passes them both normal and early-exit contexts.
 
-Order: `ResponseSendingStage` → `SendingErrorHandlerStage` → `EarlyExitResponseStage` → `ActivityTrackingStage`
+Order: `ResponseSendingStage` → `SendingErrorHandlerStage` → `PersistenceStage` → `ActivityTrackingStage`
 
 ```py
 class ResponseSendingStage(ProcessingStage):
@@ -2336,7 +2358,7 @@ class SendingErrorHandlerStage(ProcessingStage):
     """
     # ... (see section 4 for full implementation)
 
-class EarlyExitResponseStage(ProcessingStage):
+class PersistenceStage(ProcessingStage):
     """TERMINAL STAGE: Persists early_exit_response to chat history.
     Persists regardless of sending exceptions.
     Uses _add_to_history (moved out of ConsentFlowStage).
@@ -2439,7 +2461,7 @@ class ChannelBase(ABC):
             terminal_stages=[
                 ResponseSendingStage(),
                 SendingErrorHandlerStage(),
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -2559,11 +2581,11 @@ All decisions below were made during the plan review and are reflected throughou
 | 9 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message. Raises `EarlyExitResponse`. |
 | 16 | Code Quality | `SessionActivationStage` for non-consent path | Dedicated stage activates session when consent is disabled. Keeps `ConsentFlowStage.should_run()` side-effect-free. |
 | 17 | Architecture | Pipeline catch-all error handler | Unexpected exceptions from core stages: generate error message via `EventBot` (preserving `ChatException` distinction), fall back to `DEFAULT_ERROR_RESPONSE_TEXT`, set `ctx.early_exit_response`, run terminal stages, then **re-raise**. |
-| 18 | Architecture | Terminal stage order | `ResponseSendingStage` → `SendingErrorHandlerStage` → `EarlyExitResponseStage` → `ActivityTrackingStage`. Sending first, then error handling, then persistence, then tracking. |
+| 18 | Architecture | Terminal stage order | `ResponseSendingStage` → `SendingErrorHandlerStage` → `PersistenceStage` → `ActivityTrackingStage`. Sending first, then error handling, then persistence, then tracking. |
 | 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles platform-specific send error side effects (e.g., Telegram 403 consent revocation). Reads `ctx.sending_exception`. Non-actionable exceptions are ignored. |
 | 20 | Architecture | `ResponseSendingStage` resilience | `_send_text` and `_send_voice` wrappers decorated with `@notify_on_delivery_failure` (updated to read from `ctx`). Outer try/except catches any propagated exception, sets `ctx.sending_exception`, never re-raises. |
 | 21 | Architecture | `ctx.sending_exception` | Single `Exception | None` field (not a list). Set by `ResponseSendingStage` on send failure. Read by `SendingErrorHandlerStage`. |
-| 22 | Architecture | Early exit persistence regardless | `EarlyExitResponseStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
+| 22 | Architecture | Early exit persistence regardless | `PersistenceStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
 | 23 | Architecture | Channel-specific pipelines | `ApiChannel`, `WebChannel`, and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `WebChannel` also omits `ConsentFlowStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |
 | 24 | Architecture | `ChannelSender.send_file` signature | `send_file(file, recipient, session_id)` — session_id as extra param since session may not exist when sender is constructed. |
 | 25 | Architecture | No web channel `_inform_user_of_error` override | Web channel no longer needs a no-op override. Error message generation is separated from sending. The generated error message flows back to the web UI via `new_user_message`'s return value. |
@@ -2571,7 +2593,8 @@ All decisions below were made during the plan review and are reflected throughou
 | 27 | Architecture | `WebChannel` pipeline | Overrides `_build_pipeline` to omit `ResponseSendingStage`, `SendingErrorHandlerStage`, `SessionResolutionStage`, and `ConsentFlowStage`. Sets `supports_conversational_consent: False`. Requires pre-existing session. `start_new_session` and `check_and_process_seed_message` class methods remain on the channel class (outside the pipeline). |
 | 28 | Architecture | `EvaluationChannel` + `channel_context` | Uses `ctx.channel_context` dict to pass `participant_data` to `EvalsBotInteractionStage`. This is a **workaround** scoped to `EvaluationChannel` only — it should NOT be used as a general-purpose extension mechanism. `EvalsBotInteractionStage` replaces `BotInteractionStage` and creates `EvalsBot` instead of calling `get_bot()`. |
 | 29 | Architecture | `NEW_HUMAN_MESSAGE` trigger in `ChatMessageCreationStage` | `enqueue_static_triggers` for `NEW_HUMAN_MESSAGE` fires in `ChatMessageCreationStage` after the DB record is created. Gated by `capabilities.supports_static_triggers` (default `True`, `EvaluationChannel` sets `False`). Session creation triggers (`PARTICIPANT_JOINED_EXPERIMENT`, `CONVERSATION_START`) remain in `_start_experiment_session`. |
-| — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Runs after sending stages. Uses `_add_to_history` (moved out of ConsentFlowStage). |
+| — | Update | `PersistenceStage` (terminal) | Renamed from `EarlyExitResponseStage`. Persists early exit responses to chat history AND saves voice attachments (tag + file). Runs after sending stages. |
+| 30 | Architecture | Voice attachment persistence | `PersistenceStage` tags the bot response as "voice" and saves synthesized audio as a file attachment. Moved from post-send logic in the old `_handle_supported_message`. |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
 | — | Update | Callbacks receive targeted parameters | Callback methods receive `recipient: str` (not full context). No chicken-and-egg problem — `participant_identifier` passed at call time. |

@@ -22,7 +22,7 @@ architecture with all review decisions applied:
   - Issue 19: SendingErrorHandlerStage for platform-specific send error side effects
   - Issue 20: ResponseSendingStage resilience (try/except, delivery failure notifications)
   - Issue 21: ctx.sending_exception (single Exception | None)
-  - Issue 22: EarlyExitResponseStage persists regardless of sending exceptions
+  - Issue 22: PersistenceStage persists regardless of sending exceptions
   - Issue 23: Channel-specific pipelines (ApiChannel, CommCareConnectChannel override _build_pipeline)
   - Issue 24: ChannelSender.send_file receives session_id as extra param
   - Issue 25: No web channel _inform_user_of_error override needed
@@ -432,7 +432,7 @@ class ConsentFlowStage(ProcessingStage):
     This stage only manages consent state transitions and raises
     EarlyExitResponse. It does NOT:
       - Send messages (ResponseSendingStage handles that)
-      - Persist to chat history (EarlyExitResponseStage handles that)
+      - Persist to chat history (PersistenceStage handles that)
 
     Sub-behaviors:
       - Builds consent/survey prompt text and raises EarlyExitResponse
@@ -879,37 +879,52 @@ class SendingErrorHandlerStage(ProcessingStage):
         # Other platform-specific exception handling can be added here
 
 
-class EarlyExitResponseStage(ProcessingStage):
-    """TERMINAL STAGE: Persists early_exit_response to chat history.
+class PersistenceStage(ProcessingStage):
+    """TERMINAL STAGE: Persists chat messages and voice attachments.
 
     Runs after ResponseSendingStage and SendingErrorHandlerStage.
     Persists regardless of whether sending succeeded — chat history
     serves as an audit trail.
 
-    When a core stage raises EarlyExitResponse, or the pipeline's
-    catch-all error handler generates an error message, the pipeline
-    sets ctx.early_exit_response. This stage creates the corresponding
-    ChatMessage DB record.
-
-    Uses _add_to_history (moved out of ConsentFlowStage) to persist.
+    Handles two persistence concerns:
+    1. Early exit responses: Creates ChatMessage DB record for the
+       early exit response text.
+    2. Voice attachments: Tags the bot response as "voice" and saves
+       the synthesized audio as a file attachment.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.early_exit_response is not None
+        return ctx.early_exit_response is not None or ctx.voice_audio is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        if ctx.experiment_session:
-            self._add_to_history(ctx, ctx.early_exit_response)
+        if not ctx.experiment_session:
+            return
 
-    def _add_to_history(self, ctx: MessageProcessingContext, content: str) -> None:
-        """Persist the early exit response as an AI message in chat history."""
-        from apps.chat.models import ChatMessage, ChatMessageType
+        # 1. Persist early exit response to chat history
+        if ctx.early_exit_response is not None:
+            from apps.chat.models import ChatMessage, ChatMessageType
 
-        ChatMessage.objects.create(
-            chat=ctx.experiment_session.chat,
-            message_type=ChatMessageType.AI,
-            content=content,
-        )
+            ChatMessage.objects.create(
+                chat=ctx.experiment_session.chat,
+                message_type=ChatMessageType.AI,
+                content=ctx.early_exit_response,
+            )
+
+        # 2. Tag and save voice attachment on bot response
+        if ctx.voice_audio is not None and ctx.bot_response is not None:
+            from apps.annotations.models import TagCategories
+            from apps.files.models import File, FilePurpose
+
+            ctx.bot_response.create_and_add_tag("voice", ctx.experiment.team, TagCategories.MEDIA_TYPE)
+            ctx.voice_audio.audio.seek(0)
+            file = File.create(
+                "voice_note.ogg",
+                ctx.voice_audio.audio,
+                ctx.experiment.team_id,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+                content_type=ctx.voice_audio.content_type,
+            )
+            ctx.bot_response.add_attachment_id(file.id)
 
 
 class ActivityTrackingStage(ProcessingStage):
@@ -1131,7 +1146,7 @@ class ChannelBase(ABC):
             terminal_stages=[
                 ResponseSendingStage(),
                 SendingErrorHandlerStage(),
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1408,7 +1423,7 @@ class ApiChannel(ChannelBase):
             terminal_stages=[
                 # No ResponseSendingStage or SendingErrorHandlerStage —
                 # API returns the response directly via new_user_message()
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1506,7 +1521,7 @@ class EvaluationChannel(ChannelBase):
             ],
             terminal_stages=[
                 # No sending stages — evaluations are internal
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1571,7 +1586,7 @@ class WebChannel(ChannelBase):
             terminal_stages=[
                 # No ResponseSendingStage or SendingErrorHandlerStage —
                 # responses returned via new_user_message()
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1661,7 +1676,7 @@ class CommCareConnectChannel(ChannelBase):
             terminal_stages=[
                 ResponseSendingStage(),
                 SendingErrorHandlerStage(),
-                EarlyExitResponseStage(),
+                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
@@ -1741,8 +1756,8 @@ def example_message_flow():
     #          (wraps sends in try/except, sets ctx.sending_exception on failure)
     #       2. SendingErrorHandler: handles platform-specific send errors
     #          (e.g., Telegram 403 → revoke consent)
-    #       3. EarlyExitResponse: persists early exit response to chat history
-    #          (regardless of sending success — audit trail)
+    #       3. Persistence: persists early exit responses to chat history
+    #          and saves voice attachments (regardless of sending success)
     #       4. ActivityTracking: updates session timestamps
 
     return response
