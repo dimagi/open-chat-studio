@@ -42,7 +42,7 @@ Password: My0riginalP@ssw0rd!
 2. Click **Add New**
    - Name: `My First Evaluator`
    - Evaluator Type: **LLM Evaluator**
-   - First dropdown (model provider): `Working OpenAI`
+   - First dropdown (model provider): select any available OpenAI provider (e.g. `Working OpenAI` if an API key is configured, otherwise `Non-working OpenAI`)
    - Second dropdown (model): `o4-mini`
    - Prompt: `Evaluate friendliness. Output "friendly" if the conversation was friendly, otherwise "unfriendly"`
    - Output Schema:

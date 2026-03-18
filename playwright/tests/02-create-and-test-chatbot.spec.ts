@@ -11,10 +11,35 @@ async function hideDebugToolbar(page: import('@playwright/test').Page) {
   });
 }
 
+// Find a chatbot URL that has at least one published version using direct HTTP requests
+async function findPublishedChatbotUrl(page: import('@playwright/test').Page): Promise<string | null> {
+  // Fetch the chatbots table to get all chatbot IDs
+  const tableResp = await page.request.get(`/a/${TEAM_SLUG}/chatbots/table/`);
+  if (!tableResp.ok()) return null;
+  const tableHtml = await tableResp.text();
+
+  // Extract chatbot IDs from table links
+  const idMatches = tableHtml.matchAll(/href="\/a\/[^/]+\/chatbots\/(\d+)\/"/g);
+  const ids = [...new Set([...idMatches].map(m => m[1]))];
+
+  // Check each chatbot's versions endpoint for a published version
+  for (const id of ids) {
+    const versionsResp = await page.request.get(`/a/${TEAM_SLUG}/chatbots/${id}/versions/`);
+    if (!versionsResp.ok()) continue;
+    const versionsHtml = await versionsResp.text();
+    // Look for the checkmark indicating a published version
+    if (versionsHtml.includes('class="true"')) {
+      return `/a/${TEAM_SLUG}/chatbots/${id}/`;
+    }
+  }
+  return null;
+}
+
 test.describe.serial('Flow 1: Create and Test a Chatbot', () => {
   test.setTimeout(60000);
 
   let chatbotDetailUrl: string;
+  let publishedChatbotUrl: string;
 
   test('create a new chatbot and verify pipeline nodes', async ({ page }) => {
     await setupPage(page);
@@ -63,18 +88,29 @@ test.describe.serial('Flow 1: Create and Test a Chatbot', () => {
     test.setTimeout(120000);
     await setupPage(page);
 
-    // Use the pre-existing "My first chatbot" (ID 1011) that has a published version
-    await page.goto(`/a/${TEAM_SLUG}/chatbots/1011/`);
+    // Dynamically find a chatbot that has a published version (via fast HTTP requests)
+    const url = await findPublishedChatbotUrl(page);
+    if (!url) {
+      test.skip(true, 'No chatbot with a published version found in the environment');
+      return;
+    }
+    publishedChatbotUrl = url;
+
+    // Navigate to the chatbot detail page
+    await page.goto(url);
     await hideDebugToolbar(page);
 
-    // Go to Versions tab and click the "Start web chat" button for the published version
+    // Go to Versions tab
     await page.getByRole('tab', { name: 'Versions' }).click();
+
+    // Wait for HTMX to load the versions table content
+    await page.locator('#versions-table table').waitFor({ state: 'visible', timeout: 10000 });
 
     // Find the published version row (has ✓ in the Published column) and click its chat button
     const publishedRow = page.locator('table tbody tr').filter({ hasText: '✓' }).first();
     await expect(publishedRow).toBeVisible({ timeout: 5000 });
-    // Click the "Start web chat" button (inside .tooltip within .inline)
-    await publishedRow.locator('.inline > .tooltip > .btn').click({ force: true });
+    // Click the "Start web chat" button (form.inline > .tooltip > button)
+    await publishedRow.locator('form.inline .tooltip .btn').click({ force: true });
 
     // Should navigate to the chat session page
     await expect(page).toHaveURL(/\/session\/\d+\//, { timeout: 10000 });
@@ -100,8 +136,14 @@ test.describe.serial('Flow 1: Create and Test a Chatbot', () => {
   test('verify session appears in chatbot sessions', async ({ page }) => {
     await setupPage(page);
 
-    // Use the same pre-existing chatbot
-    await page.goto(`/a/${TEAM_SLUG}/chatbots/1011/`);
+    // Use the chatbot found in the previous test, or find one dynamically
+    const chatbotUrl = publishedChatbotUrl ?? await findPublishedChatbotUrl(page);
+    if (!chatbotUrl) {
+      test.skip(true, 'No chatbot with a published version found in the environment');
+      return;
+    }
+
+    await page.goto(chatbotUrl);
     await hideDebugToolbar(page);
 
     // Click Sessions tab

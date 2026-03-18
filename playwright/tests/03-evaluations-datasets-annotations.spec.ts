@@ -25,8 +25,11 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     // Wait for the LLM evaluator form fields to appear
     await expect(page.getByLabel('LLM Model').first()).toBeVisible();
 
-    // Select model provider: "Working OpenAI"
-    await page.getByLabel('LLM Model').first().selectOption('Working OpenAI');
+    // Select model provider: use the first available provider (may be "Non-working OpenAI" if no API key is configured)
+    const providerSelect = page.getByLabel('LLM Model').first();
+    const providerOptions = await providerSelect.locator('option').allTextContents();
+    const providerOption = providerOptions.find(opt => opt.includes('OpenAI') && !opt.includes('Select'));
+    await providerSelect.selectOption({ label: providerOption! });
 
     // Select model: "o4-mini"
     await page.getByLabel('LLM Model').nth(1).selectOption({ label: 'OpenAI: o4-mini' });
