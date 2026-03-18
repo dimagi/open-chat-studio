@@ -286,7 +286,8 @@
   }
 
   :host([mode="kiosk"]) {
-    position: relative;
+    position: absolute;
+    inset: 0;
     right: auto;
     bottom: auto;
     width: 100%;
