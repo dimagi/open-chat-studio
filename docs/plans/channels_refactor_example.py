@@ -1415,7 +1415,83 @@ class ApiChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 15. Concrete Channel: CommCare Connect (platform-specific consent)
+# 15. Concrete Channel: Web (no sending, no conversational consent)
+# ---------------------------------------------------------------------------
+
+
+class WebChannel(ChannelBase):
+    """Web channel — no message sending, no conversational consent.
+
+    Responses are returned by new_user_message() and picked up by
+    periodic polling from the browser. Session is always pre-set
+    (created by start_new_session class method before pipeline runs).
+
+    start_new_session() and check_and_process_seed_message() are class
+    methods used outside the pipeline (from web views) and remain on
+    the channel class unchanged.
+    """
+
+    voice_replies_supported = False
+
+    def __init__(self, experiment, experiment_channel, experiment_session=None):
+        if not experiment_session:
+            from apps.chat.exceptions import ChannelException
+
+            raise ChannelException("WebChannel requires an existing session")
+        super().__init__(experiment, experiment_channel, experiment_session)
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                # No SessionResolutionStage — session always pre-set
+                MessageTypeValidationStage(),
+                SessionActivationStage(),
+                # No ConsentFlowStage — web uses UI-based consent
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                # No ResponseSendingStage or SendingErrorHandlerStage —
+                # responses returned via new_user_message()
+                EarlyExitResponseStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return ChannelCallbacks()  # All no-ops
+
+    def _get_sender(self) -> ChannelSender:
+        return NoOpSender()
+
+    def _get_capabilities(self) -> ChannelCapabilities:
+        from apps.chat.channels import MESSAGE_TYPES
+
+        return ChannelCapabilities(
+            supports_voice=False,
+            supports_files=False,
+            supports_conversational_consent=False,
+            supported_message_types=[MESSAGE_TYPES.TEXT],
+        )
+
+    @classmethod
+    def start_new_session(cls, working_experiment, participant_identifier, **kwargs):
+        """Session creation — called from web views, outside the pipeline."""
+        # ... existing class method logic unchanged
+        pass
+
+    @classmethod
+    def check_and_process_seed_message(cls, session, experiment):
+        """Seed message processing — called from web views, outside the pipeline."""
+        # ... existing class method logic unchanged
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 16. Concrete Channel: CommCare Connect (platform-specific consent)
 # ---------------------------------------------------------------------------
 
 

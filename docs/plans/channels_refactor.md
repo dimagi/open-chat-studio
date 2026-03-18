@@ -1102,6 +1102,51 @@ class ApiChannel(ChannelBase):
         return NoOpSender()
 
 
+class WebChannel(ChannelBase):
+    """Web channel — no message sending, no conversational consent.
+
+    Responses are returned by new_user_message() and picked up by
+    periodic polling from the browser. Session is always pre-set
+    (created by start_new_session class method before pipeline runs).
+
+    start_new_session() and check_and_process_seed_message() are class
+    methods used outside the pipeline (from web views) and remain on
+    the channel class unchanged.
+    """
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        return MessageProcessingPipeline(
+            core_stages=[
+                ParticipantValidationStage(),
+                # No SessionResolutionStage — session always pre-set
+                MessageTypeValidationStage(),
+                SessionActivationStage(),
+                # No ConsentFlowStage — web uses UI-based consent
+                QueryExtractionStage(),
+                ChatMessageCreationStage(),
+                BotInteractionStage(),
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                # No ResponseSendingStage or SendingErrorHandlerStage —
+                # responses returned via new_user_message()
+                EarlyExitResponseStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+
+    def _get_capabilities(self) -> ChannelCapabilities:
+        return ChannelCapabilities(
+            supports_voice=False,
+            supports_files=False,
+            supports_conversational_consent=False,
+            supported_message_types=[MESSAGE_TYPES.TEXT],
+        )
+
+    def _get_sender(self) -> ChannelSender:
+        return NoOpSender()
+
+
 class EvaluationChannel(ChannelBase):
     """Evaluation channel — internal, no message sending."""
 
@@ -2445,10 +2490,11 @@ All decisions below were made during the plan review and are reflected throughou
 | 20 | Architecture | `ResponseSendingStage` resilience | `_send_text` and `_send_voice` wrappers decorated with `@notify_on_delivery_failure` (updated to read from `ctx`). Outer try/except catches any propagated exception, sets `ctx.sending_exception`, never re-raises. |
 | 21 | Architecture | `ctx.sending_exception` | Single `Exception | None` field (not a list). Set by `ResponseSendingStage` on send failure. Read by `SendingErrorHandlerStage`. |
 | 22 | Architecture | Early exit persistence regardless | `EarlyExitResponseStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
-| 23 | Architecture | Channel-specific pipelines | `ApiChannel` and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |
+| 23 | Architecture | Channel-specific pipelines | `ApiChannel`, `WebChannel`, and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `WebChannel` also omits `ConsentFlowStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |
 | 24 | Architecture | `ChannelSender.send_file` signature | `send_file(file, recipient, session_id)` — session_id as extra param since session may not exist when sender is constructed. |
 | 25 | Architecture | No web channel `_inform_user_of_error` override | Web channel no longer needs a no-op override. Error message generation is separated from sending. The generated error message flows back to the web UI via `new_user_message`'s return value. |
 | 26 | Architecture | Voice synthesis fallback in `ResponseFormattingStage` | `AudioSynthesizeException` is caught in `ResponseFormattingStage` and gracefully degraded to text formatting. Not an unrecoverable error — does not propagate to the pipeline's catch-all. Creates `audio_synthesis_failure_notification`. |
+| 27 | Architecture | `WebChannel` pipeline | Overrides `_build_pipeline` to omit `ResponseSendingStage`, `SendingErrorHandlerStage`, and `ConsentFlowStage`. Sets `supports_conversational_consent: False`. Requires pre-existing session. `start_new_session` and `check_and_process_seed_message` class methods remain on the channel class (outside the pipeline). |
 | — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Runs after sending stages. Uses `_add_to_history` (moved out of ConsentFlowStage). |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
