@@ -24,19 +24,17 @@
         </div>
       {% endif %}
       {% flag "flag_chat_widget" %}
-        <div class="flex-1 flex items-center justify-center">
+        <div class="flex-1 relative overflow-hidden">
           <open-chat-studio-widget
             id="public-chat-widget"
-            visible="true"
+            mode="kiosk"
             chatbot-id="{{ experiment.public_id }}"
             api-base-url="{{ request.scheme }}://{{ request.get_host }}"
             {% if not request.user.is_anonymous %}
               user-id="{{ request.user.email }}"
               user-name="{{ request.user.get_full_name }}"
             {% endif %}
-            position="center"
             persistent-session="true"
-            style="position: relative;"
           ></open-chat-studio-widget>
         </div>
       {% else %}
