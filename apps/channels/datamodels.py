@@ -197,6 +197,10 @@ class TurnWhatsappMessage(BaseMessage):
         )
 
 
+# Meta Cloud API uses the same WhatsApp Business API message format as Turn.io
+MetaCloudAPIMessage = TurnWhatsappMessage
+
+
 class FacebookMessage(BaseMessage):
     """
     A wrapper class for user messages coming from Facebook

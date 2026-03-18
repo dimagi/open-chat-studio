@@ -245,6 +245,8 @@ class ExperimentChannel(BaseTeamModel):
             uri = reverse("channels:new_twilio_message")
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
+        elif provider_type == MessagingProviderType.meta_cloud_api:
+            uri = reverse("channels:new_meta_cloud_api_message")
         elif provider_type == MessagingProviderType.sureadhere:
             uri = reverse(
                 "channels:new_sureadhere_message",

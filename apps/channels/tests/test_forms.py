@@ -1,5 +1,6 @@
 from unittest.mock import Mock, PropertyMock, patch
 
+import httpx
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
@@ -74,11 +75,44 @@ def test_whatsapp_form_checks_number(
     provider = MessagingProviderFactory.create(type=provider_type, config={"account_sid": "123", "auth_token": "123"})
     messaging_provider.return_value = provider
     form = WhatsappChannelForm(experiment=experiment, data={"number": number, "messaging_provider": provider.id})
-    assert form.is_valid(), f"Form errors: {form.errors}"
-    if not number_found_at_provider:
-        assert form.warning_message == (
+    if number_found_at_provider:
+        assert form.is_valid(), f"Form errors: {form.errors}"
+    else:
+        assert form.errors["number"][0] == (
             f"{number} was not found at the provider. Please make sure it is there before proceeding"
         )
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
+@patch("apps.service_providers.messaging_service.httpx.get")
+def test_whatsapp_form_meta_cloud_api_resolves_phone_number_id(mock_httpx_get, messaging_provider, experiment):
+    """Test that the phone number ID is fetched from Meta API and stored in extra_data"""
+
+    mock_httpx_get.return_value = httpx.Response(
+        200,
+        json={
+            "data": [
+                {"id": "12345", "display_phone_number": "+1 (212) 555-2368"},
+            ]
+        },
+        request=httpx.Request("GET", "https://test"),
+    )
+    provider = MessagingProviderFactory.create(
+        type=MessagingProviderType.meta_cloud_api,
+        config={"access_token": "test_token", "business_id": "biz_123"},
+    )
+    messaging_provider.return_value = provider
+
+    form = WhatsappChannelForm(
+        experiment=experiment, data={"number": "+12125552368", "messaging_provider": provider.id}
+    )
+    assert form.is_valid(), f"Form errors: {form.errors}"
+
+    # ChannelFormWrapper.save() passes extra_form.cleaned_data as channel.extra_data,
+    # so phone_number_id should be in cleaned_data directly.
+    assert form.cleaned_data["phone_number_id"] == "12345"
+    assert form.cleaned_data["number"] == "+12125552368"
 
 
 # Slack channel keyword uniqueness tests

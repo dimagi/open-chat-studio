@@ -2,6 +2,7 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from django.core.cache import cache
 from django.urls import reverse
 
 from apps.chatbots.tables import ChatbotTable
@@ -16,6 +17,9 @@ def test_chatbot_table_redirect_url(team_with_users):
     experiment = Experiment.objects.create(
         name="Redirect Test", description="Testing redirect URLs", owner=user, team=team, is_archived=False
     )
+
+    # Clear cached team slugs to avoid stale entries from previous tests
+    cache.delete(f"team_slug:{team.id}")
 
     table = ChatbotTable(Experiment.objects.filter(id=experiment.id))
     row_attrs = list(table.rows)[0].attrs
