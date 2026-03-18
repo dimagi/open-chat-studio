@@ -100,7 +100,6 @@ def status_message():
 
 
 def audio_message():
-    """A WhatsApp audio message (type='audio') - used by Meta Cloud API directly."""
     return {
         "contacts": [{"wa_id": "27826419977", "profile": {"name": "Test"}}],
         "messages": [
