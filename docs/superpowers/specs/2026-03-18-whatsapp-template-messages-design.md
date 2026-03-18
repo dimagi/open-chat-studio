@@ -131,12 +131,16 @@ When `send_text_message()` raises `ServiceWindowExpiredException` because the te
 
 **Out of scope:** `TurnIOService` (also WhatsApp, but Turn.io may handle templating at their layer — can be added later following the same pattern). Language internationalization for templates (hardcoded to `"en"` for v1).
 
-### 7. Logging
+### 7. Assumptions
+
+- Consent and survey messages also flow through `send_text_message()` and will hit the service window check. This is acceptable because WhatsApp requires user-initiated contact to open a conversation, so these messages always occur in response to a user message (i.e., within the 24-hour service window).
+
+### 8. Logging
 
 - **INFO** level when falling back to template message (text or voice→text)
 - **WARNING** level when failing due to expired window and no template configured
 
-### 8. Testing
+### 9. Testing
 
 - Unit test `_is_within_service_window` with: None, 23 hours ago, 25 hours ago, exactly 24 hours ago
 - Unit test `send_text_message` routes to template when outside window + template configured
@@ -146,3 +150,4 @@ When `send_text_message()` raises `ServiceWindowExpiredException` because the te
 - Unit test `ChannelBase.send_message_to_user` catches `ServiceWindowExpiredException` and falls back to text
 - Integration test: voice outside window → exception → `@notify_on_delivery_failure` fires and re-raises → fallback to text → template message sent
 - Test that `@notify_on_delivery_failure` does not swallow `ServiceWindowExpiredException`
+- Unit test `ChannelBase.send_message_to_user` in **text mode** (not voice fallback): verify `ServiceWindowExpiredException` propagates up to caller when template is not configured and window is expired, and that `@notify_on_delivery_failure` fires before propagation
