@@ -28,6 +28,7 @@ from apps.chat.channels import (
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.models import MessagingProviderType
+from apps.teams.utils import set_current_team
 from apps.utils.taskbadger import update_taskbadger_data
 
 log = get_task_logger("ocs.channels")
@@ -205,6 +206,8 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     if not experiment_channel:
         log.info("No experiment channel found for channel_id=%s team=%s", channel_id, team_slug)
         return
+
+    set_current_team(experiment_channel.team)
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)

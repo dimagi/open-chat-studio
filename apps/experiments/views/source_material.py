@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db.models import Q
 from django.http import HttpResponse
@@ -14,8 +15,9 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
 
-class SourceMaterialHome(LoginAndTeamRequiredMixin, TemplateView):
+class SourceMaterialHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
+    permission_required = "experiments.view_sourcematerial"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         return {
@@ -27,10 +29,11 @@ class SourceMaterialHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class SourceMaterialTableView(SingleTableView):
+class SourceMaterialTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = SourceMaterial
     table_class = SourceMaterialTable
     template_name = "table/single_table.html"
+    permission_required = "experiments.view_sourcematerial"
 
     def get_queryset(self):
         query_set = SourceMaterial.objects.filter(team=self.request.team, is_version=False)
@@ -47,7 +50,7 @@ class SourceMaterialTableView(SingleTableView):
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateSourceMaterial(CreateView):
+class CreateSourceMaterial(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = SourceMaterial
     fields = [
         "topic",
@@ -61,6 +64,7 @@ class CreateSourceMaterial(CreateView):
         "button_text": "Create",
         "active_tab": "source_material",
     }
+    permission_required = "experiments.add_sourcematerial"
 
     def get_success_url(self):
         return reverse("experiments:source_material_home", args=[self.request.team.slug])
@@ -72,7 +76,7 @@ class CreateSourceMaterial(CreateView):
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class EditSourceMaterial(UpdateView):
+class EditSourceMaterial(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = SourceMaterial
     fields = [
         "topic",
@@ -86,6 +90,7 @@ class EditSourceMaterial(UpdateView):
         "button_text": "Update",
         "active_tab": "source_material",
     }
+    permission_required = "experiments.change_sourcematerial"
 
     def get_queryset(self):
         return SourceMaterial.objects.filter(team=self.request.team)
@@ -94,7 +99,9 @@ class EditSourceMaterial(UpdateView):
         return reverse("experiments:source_material_home", args=[self.request.team.slug])
 
 
-class DeleteSourceMaterial(LoginAndTeamRequiredMixin, View):
+class DeleteSourceMaterial(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "experiments.delete_sourcematerial"
+
     def delete(self, request, team_slug: str, pk: int):
         source_material = get_object_or_404(SourceMaterial, id=pk, team=request.team)
         source_material.archive()

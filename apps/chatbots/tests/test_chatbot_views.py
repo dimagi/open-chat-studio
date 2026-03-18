@@ -1,4 +1,4 @@
-from datetime import UTC
+from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -22,6 +22,7 @@ from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.utils import set_current_team
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -299,6 +300,7 @@ def test_chatbot_sessions_table_view(team_with_users):
     request.team = team
     request.team_membership = get_team_membership_for_request(request)
     attach_session_middleware_to_request(request)
+    set_current_team(team)
 
     view = ChatbotSessionsTableView.as_view()
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
@@ -478,7 +480,6 @@ def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
     recently-active one, causing the Last Activity column to appear blank even
     when real activity exists.
     """
-    from datetime import datetime
 
     team = team_with_users
     user = team.members.first()

@@ -1,0 +1,56 @@
+{% load i18n %}
+
+<div class="p-4">
+  <h3 class="font-bold text-lg mb-2">{% translate "Remove Session from Queue" %}</h3>
+  <p class="text-sm text-gray-600 mb-4">
+    {% blocktranslate with session=item queue_name=queue.name %}
+      Are you sure you want to remove <strong>{{ session }}</strong> from <strong>{{ queue_name }}</strong>?
+    {% endblocktranslate %}
+  </p>
+
+  <div class="alert alert-warning mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <span>{% translate "All annotation data associated with this session will be permanently deleted." %}</span>
+  </div>
+
+  {% if annotations %}
+  <div class="mb-4">
+    <h4 class="font-medium text-sm mb-2">{% translate "Annotation data that will be lost:" %}</h4>
+    <div class="border border-base-300 rounded-lg divide-y divide-base-300 max-h-60 overflow-y-auto">
+      {% for ann in annotations %}
+      <div class="p-3 text-sm">
+        <div class="flex justify-between items-center mb-1">
+          <span class="font-medium">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>
+          <span class="text-xs text-gray-400">{{ ann.created_at|date:"M d, Y H:i" }}</span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          {% for key, value in ann.data.items %}
+            <span class="badge badge-sm badge-outline">{{ key }}: {{ value }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <p class="text-sm text-gray-500 mb-4">{% translate "No annotations have been submitted for this session." %}</p>
+  {% endif %}
+
+  {% if item.flags %}
+  <div class="mb-4">
+    <h4 class="font-medium text-sm mb-2">{% translate "Flags:" %}</h4>
+    <div class="flex flex-wrap gap-2">
+      {% for flag in item.flags %}
+        <span class="badge badge-sm badge-warning">{{ flag.user|default:"Unknown" }}{% if flag.reason %}: {{ flag.reason }}{% endif %}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="flex justify-between items-center text-sm text-gray-500 mb-4">
+    <span>{% translate "Status" %}: <span class="badge badge-sm badge-outline">{{ item.get_status_display }}</span></span>
+    <span>{% translate "Reviews" %}: {{ item.review_count }}/{{ queue.num_reviews_required }}</span>
+  </div>
+</div>

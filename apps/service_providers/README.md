@@ -1,19 +1,23 @@
 # Service Providers App
 
-This app contains various models that are used to represent service providers such as LLM APIs,
-Voice synthesis APIs, etc.
+This app provides a unified framework for integrating external services (LLMs, voice synthesis APIs, messaging platforms, etc.) into the platform. Rather than hardcoding integrations throughout the codebase, this app centralizes provider management.
 
-Much of the app relies on certain conventions and structure in the classes which allow for a more generic
-approach to using the service providers.
+Much of the app relies on consistent conventions and structure across all provider types. This allows the framework to be generic and reusable.
+
+The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio) 
 
 ## Service Provider Models
 
-Each type of provider should have its own model e.g LlmProvider, VoiceProvider etc. These models are used
-to store the configuration for the different providers that they represent. Since each provider may require
-a different set of configration parameters we store this as an encrypted JSON field in the model.
+To support this flexibility, each provider type requires these components that work together:
 
-To differentiate between the subtypes we use the `type` field on the model which is an enum (Django Choices enum).
-This enum must have a `form_cls` property which returns the appropriate form class for the provider type.
+1. **Model** — Stores credentials and configuration (encrypted for security)
+2. **Enum** — Defines available provider types and routes to the appropriate form and service
+3. **Form Class** — Validates user input and generates the UI for configuration
+4. **Service Class** — Implements runtime interactions with the provider API
+
+Each type of provider should have its own model (e.g., `LlmProvider`, `VoiceProvider`) that inherits from `BaseTeamModel` to support multi-tenancy. Since each provider may require different configuration parameters, we store this flexibly as an encrypted JSON field in the model.
+
+To differentiate between the subtypes, we use the `type` field on the model (an Enum) which serves two purposes: (1) at configuration time, it routes to the appropriate form class for validation via a `form_cls` property, and (2) at runtime, it routes to the appropriate service class via a factory method. This single enum acts as the contract that ties everything together.
 
 Here is an example:
 
@@ -35,7 +39,7 @@ class MyProviderType(models.TextChoices):
             case MyProviderType.type_b:
                 return forms.MyProviderTypeBConfigForm
         raise Exception(f"No config form configured for {self}")
-   
+
 
 class MyProvider(BaseTeamModel):
     type = models.CharField(max_length=20, choices=MyProviderType.choices)
@@ -53,7 +57,7 @@ subtype should have its own form class which is used to generate the UI and to v
 class MyProviderTypeAConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     """Form for configuring a MyProviderTypeA."""
     obfuscate_fields = ["api_key"]
-    
+
     username = forms.CharField()
     api_key = forms.CharField()
 ```

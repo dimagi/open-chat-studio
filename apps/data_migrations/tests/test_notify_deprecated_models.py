@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from django.core.management import call_command
 
+from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.default_models import Model
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -112,7 +113,7 @@ class TestNotifyDeprecatedModelsCommand:
 
 def _make_pipeline_referencing(llm_provider_model):
     """Create a pipeline with a node referencing the given LlmProviderModel."""
-    pipeline = PipelineFactory()
+    pipeline: Pipeline = PipelineFactory()  # type: ignore[assignment]
     pipeline.data["nodes"].append(
         {
             "id": "1",

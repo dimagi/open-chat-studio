@@ -245,19 +245,18 @@ class WhatsappChannelForm(WebhookUrlFormBase):
 
         service = self.messaging_provider.get_messaging_service()
         try:
-            if not service.is_valid_number(number):
-                self.warning_message = (
-                    f"{number} was not found at the provider. Please make sure it is there before proceeding"
+            resolved_number = service.resolve_number(number)
+            if not resolved_number:
+                self.add_error(
+                    "number", f"{number} was not found at the provider. Please make sure it is there before proceeding"
                 )
-        except ValueError as e:
-            self.add_error("number", str(e))
-            return cleaned_data
+                return cleaned_data
+            elif self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
+                cleaned_data["phone_number_id"] = resolved_number
         except Exception:
             self.add_error("number", "Could not validate this number right now. Please try again.")
             return cleaned_data
 
-        if self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
-            cleaned_data["phone_number_id"] = service.get_phone_number_id()
         return cleaned_data
 
 

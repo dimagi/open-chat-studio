@@ -50,11 +50,9 @@ class MessagingService(pydantic.BaseModel):
         """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
 
-    def is_valid_number(self, number: str) -> bool:
-        """Returns False if `number` does not belong to this account. Returns `True` by default so that this
-        doesn't prevent users from adding numbers if we cannot check the account.
-        """
-        return True
+    def resolve_number(self, number: str) -> str | None:
+        """Returns `number` if the number is verified to belong to the account, otherwise return `None`"""
+        return number
 
 
 class TwilioService(MessagingService):
@@ -79,14 +77,14 @@ class TwilioService(MessagingService):
 
     @property
     def client(self) -> "Client":
-        from twilio.rest import Client
+        from twilio.rest import Client  # noqa: PLC0415 - lazy: optional provider dep (twilio SDK)
 
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
-        import boto3
-        from botocore.client import Config
+        import boto3  # noqa: PLC0415 - TID253: heavy lib, slow startup
+        from botocore.client import Config  # noqa: PLC0415 - lazy: used with boto3
 
         return boto3.client(
             "s3",
@@ -199,13 +197,13 @@ class TwilioService(MessagingService):
         """Returns all numbers associated with this client account"""
         return [num.phone_number for num in self.client.incoming_phone_numbers.list() if num.phone_number is not None]
 
-    def is_valid_number(self, number: str) -> bool:
+    def resolve_number(self, number: str) -> str | None:
         if settings.DEBUG:
             # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
-            # let's just always return True
-            return True
+            # let's just always return the number
+            return number
 
-        return number in self._get_account_numbers()
+        return number if number in self._get_account_numbers() else None
 
     def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
@@ -226,7 +224,7 @@ class TurnIOService(MessagingService):
 
     @property
     def client(self) -> "TurnClient":
-        from turn import TurnClient
+        from turn import TurnClient  # noqa: PLC0415 - lazy: optional provider dep (Turn SDK)
 
         return TurnClient(token=self.auth_token)
 
@@ -346,7 +344,6 @@ class MetaCloudAPIService(MessagingService):
     business_id: str
     app_secret: str = ""
     verify_token: str = ""
-    _phone_number_id: str | None = pydantic.PrivateAttr(default=None)
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
     META_API_TIMEOUT: ClassVar[int] = 30
@@ -359,20 +356,7 @@ class MetaCloudAPIService(MessagingService):
             "Content-Type": "application/json",
         }
 
-    def is_valid_number(self, number: str) -> bool:
-        self._phone_number_id = self._fetch_phone_number_id(number)
-        if not self._phone_number_id:
-            raise ValueError(
-                f"{number} was not found in the WhatsApp Business Account. "
-                "Please verify the number is registered with your business."
-            )
-        return True
-
-    def get_phone_number_id(self) -> str | None:
-        """Return the phone number ID resolved by a prior `is_valid_number` call."""
-        return self._phone_number_id
-
-    def _fetch_phone_number_id(self, phone_number: str) -> str | None:
+    def resolve_number(self, number: str) -> str | None:
         """Look up the phone number ID for the given E.164 phone number
         using the WhatsApp Business Account Phone Number Management API."""
         url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
@@ -387,7 +371,7 @@ class MetaCloudAPIService(MessagingService):
                 normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
             except phonenumbers.NumberParseException:
                 continue
-            if normalized == phone_number:
+            if normalized == number:
                 return entry["id"]
         return None
 
@@ -489,7 +473,7 @@ class SlackService(MessagingService):
     @property
     def client(self) -> "WebClient":
         if not self._client:
-            from apps.slack.client import get_slack_client
+            from apps.slack.client import get_slack_client  # noqa: PLC0415 - lazy: optional slack_sdk/slack_bolt deps
 
             self._client = get_slack_client(self.slack_installation_id)
         return self._client
@@ -508,7 +492,7 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
-        from slack_sdk.errors import SlackApiError
+        from slack_sdk.errors import SlackApiError  # noqa: PLC0415 - lazy: optional provider dep (slack_sdk)
 
         try:
             self.client.conversations_info(channel=channel_id)

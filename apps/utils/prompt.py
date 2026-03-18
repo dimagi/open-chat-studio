@@ -30,6 +30,21 @@ class PromptVars(models.TextChoices):
         prompt_vars = {"participant_data"} | PromptVars.pipeline_extra_known_vars()
         return [{"label": v, "value": v} for v in prompt_vars]
 
+    @staticmethod
+    def get_jinja_vars() -> list[dict]:
+        vars_ = [
+            "input",
+            "node_inputs",
+            "temp_state",
+            "session_state",
+            "participant_data",
+            "participant_details",
+            "participant_schedules",
+            "input_message_id",
+            "input_message_url",
+        ]
+        return [{"label": v, "value": v} for v in vars_]
+
 
 PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.DELETE_REMINDER: [PromptVars.PARTICIPANT_DATA],

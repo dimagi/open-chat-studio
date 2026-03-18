@@ -194,6 +194,19 @@
                     <p class="text-base-content/60">No participant data available</p>
                 </div>
             {% endif %}
+
+            {% with changes=trace.participant_data_diff|participant_data_diff_display %}
+            {% if changes %}
+                <div class="border-t border-base-200 mt-4 pt-4">
+                    <h4 class="text-sm font-semibold text-base-content/70 mb-3">
+                        <i class="fa-solid fa-code-compare mr-1"></i> Changes during this trace
+                    </h4>
+                    <div class="space-y-1">
+                        {% include "generic/components/participant_data_diff_changes.html" with changes=changes %}
+                    </div>
+                </div>
+            {% endif %}
+            {% endwith %}
         </div>
     </div>
 

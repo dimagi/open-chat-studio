@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from "axios";
+import Cookies from "js-cookie";
 import { PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
@@ -71,9 +72,23 @@ class ApiClient {
     return this.makeRequest<AiHelpResponse>("post", `/help/code_generate/`, {query: prompt, context: currentCode});
   }
 
+  public async validateJinja(
+    template: string,
+    checks: string[] = ["jinja", "html"],
+  ): Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}> {
+    return this.makeRequest<{errors: Array<{line: number, column: number, message: string, severity: string}>}>(
+      "post",
+      `/pipelines/validate-jinja/`,
+      { template, checks },
+    );
+  }
+
   private createClient(): AxiosInstance {
     return axios.create({
       baseURL: `/a/${this.team}`,
+      headers: {
+        "X-CSRFToken": Cookies.get("csrftoken") ?? "",
+      },
     });
   }
 

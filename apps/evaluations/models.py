@@ -14,6 +14,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.utils import make_evaluation_messages_from_sessions
+from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import get_slug_for_team
@@ -115,7 +116,6 @@ class EvaluationMessage(BaseModel):
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
     ) -> list[EvaluationMessage]:
-        from apps.experiments.filters import ChatMessageFilter
 
         base_queryset = (
             ChatMessage.objects.filter(
@@ -295,7 +295,9 @@ class EvaluationConfig(BaseTeamModel):
             type=run_type,
         )
 
-        from apps.evaluations.tasks import run_evaluation_task
+        from apps.evaluations.tasks import (
+            run_evaluation_task,  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
+        )
 
         run_evaluation_task.delay(run.id)
         return run

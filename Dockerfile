@@ -84,10 +84,7 @@ ENV PATH="/code/.venv/bin:$PATH"
 
 COPY --chown=django:django . /code
 
-ARG SECRET_KEY
-ARG DJANGO_ALLOWED_HOSTS
-
-RUN SECRET_KEY=${SECRET_KEY} DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS} python manage.py collectstatic --noinput --settings=config.settings_production
+RUN SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost python manage.py collectstatic --noinput --settings=config.settings_production
 RUN chown django:django -R static_root
 
 USER django

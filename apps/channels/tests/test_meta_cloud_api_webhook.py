@@ -228,6 +228,119 @@ class TestNewMetaCloudApiMessage:
         response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 200
 
+    @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
+    def test_multi_phone_number_payload_routes_to_correct_channels(
+        self, mock_delay, meta_cloud_api_channel, meta_cloud_api_provider
+    ):
+        """Messages for different phone numbers must be routed to their own channels, not all to the first."""
+        # Both channels share the same provider (same app, same app_secret) — only the phone number differs.
+        second_channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=meta_cloud_api_provider,
+            experiment__team=meta_cloud_api_provider.team,
+            extra_data={"number": "+15559999999", "phone_number_id": "99999"},
+        )
+
+        # Build a payload with two entries for two different phone numbers
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "BIZ_ID",
+                    "changes": [
+                        {
+                            "value": _meta_webhook_payload("12345")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                        {
+                            "value": _meta_webhook_payload("99999")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                    ],
+                }
+            ],
+        }
+        response = self._post(payload)
+        assert response.status_code == 200
+        assert mock_delay.call_count == 2
+        called_channel_ids = {call.kwargs["channel_id"] for call in mock_delay.call_args_list}
+        assert called_channel_ids == {meta_cloud_api_channel.id, second_channel.id}
+
+    @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
+    def test_unknown_phone_number_in_multi_payload_skipped(self, mock_delay, meta_cloud_api_channel):
+        """A value with an unknown phone_number_id is skipped; other values are still dispatched."""
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "BIZ_ID",
+                    "changes": [
+                        {
+                            "value": _meta_webhook_payload("12345")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                        {
+                            "value": _meta_webhook_payload("unknown_id")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                    ],
+                }
+            ],
+        }
+        response = self._post(payload)
+        assert response.status_code == 200
+        assert mock_delay.call_count == 1
+        mock_delay.assert_called_once_with(
+            channel_id=meta_cloud_api_channel.id,
+            team_slug=meta_cloud_api_channel.team.slug,
+            message_data=_meta_webhook_payload("12345")["entry"][0]["changes"][0]["value"],
+        )
+
+    @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
+    def test_cross_provider_payload_is_rejected(self, mock_delay, meta_cloud_api_channel):
+        """An attacker with their own legitimate channel cannot forge messages for a victim's
+        phone number by including it in a payload signed with their own app_secret."""
+        attacker_secret = "attacker_app_secret"
+        attacker_provider = MessagingProviderFactory.create(
+            type=MessagingProviderType.meta_cloud_api,
+            config={
+                "access_token": "attacker_token",
+                "business_id": "attacker_biz",
+                "app_secret": attacker_secret,
+                "verify_token": "attacker_verify",
+            },
+        )
+        ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=attacker_provider,
+            experiment__team=attacker_provider.team,
+            extra_data={"number": "+15550000001", "phone_number_id": "attacker_phone_id"},
+        )
+
+        # Payload targeting BOTH attacker's phone_number_id and victim's phone_number_id,
+        # signed with the attacker's app_secret.
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "BIZ_ID",
+                    "changes": [
+                        {
+                            "value": _meta_webhook_payload("attacker_phone_id")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                        {
+                            "value": _meta_webhook_payload("12345")["entry"][0]["changes"][0]["value"],
+                            "field": "messages",
+                        },
+                    ],
+                }
+            ],
+        }
+        response = self._post(payload, app_secret=attacker_secret)
+        assert response.status_code == 200
+        mock_delay.assert_not_called()
+
     def test_invalid_json_returns_400(self):
         factory = RequestFactory()
         body = b"not json"

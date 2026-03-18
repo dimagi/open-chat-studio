@@ -8,7 +8,7 @@ from django.core import mail
 from django.test import override_settings
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolCall, ToolCallChunk
-from langchain_openai.chat_models.base import OpenAIRefusalError
+from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: TID253
 from pydantic import Field, create_model
 from pydantic import ValidationError as PydanticValidationError
 

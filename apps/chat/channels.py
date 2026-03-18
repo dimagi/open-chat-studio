@@ -1021,7 +1021,9 @@ class WebChannel(ChannelBase):
 
     @classmethod
     def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
-        from apps.experiments.tasks import get_response_for_webchat_task
+        from apps.experiments.tasks import (
+            get_response_for_webchat_task,  # noqa: PLC0415 - circular: experiments.tasks imports chat.channels
+        )
 
         if seed_message := experiment.seed_message:
             session.seed_task_id = get_response_for_webchat_task.delay(

@@ -88,6 +88,14 @@ nav:
     - Testing:
       - Integration Testing: developer_guides/integration_testing.md
       - developer_guides/twilio_testing.md
+      - Help Agent Evals: developer_guides/help_agent_evals.md
+  - Self-Hosting:
+    - Overview: hosting/index.md
+    - Configuration: hosting/configuration.md
+    - Docker Compose: hosting/docker.md
+    - Heroku: hosting/heroku.md
+    - AWS Fargate: hosting/aws.md
+    - Kamal: hosting/kamal.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md

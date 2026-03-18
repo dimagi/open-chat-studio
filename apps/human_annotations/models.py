@@ -28,6 +28,27 @@ class AnnotationItemStatus(models.TextChoices):
     FLAGGED = "flagged", "Flagged"
 
 
+class AnnotationQueueQuerySet(models.QuerySet):
+    def visible_to(self, user, team):
+        """Return queues visible to the user within a team.
+
+        Admins (with add_annotationqueue permission) see all team queues.
+        Reviewers only see queues they are directly assigned to.
+        """
+        qs = self.filter(team=team)
+        if not user.has_perm("human_annotations.add_annotationqueue"):
+            qs = qs.filter(assignees=user)
+        return qs
+
+
+class AnnotationQueueManager(models.Manager):
+    def get_queryset(self):
+        return AnnotationQueueQuerySet(self.model, using=self._db)
+
+    def visible_to(self, user, team):
+        return self.get_queryset().visible_to(user, team)
+
+
 class AnnotationQueue(BaseTeamModel):
     """A queue of items to be annotated by assigned reviewers."""
 
@@ -49,6 +70,8 @@ class AnnotationQueue(BaseTeamModel):
         help_text="Number of reviews required before an item is marked complete (1-10)",
     )
     status = models.CharField(max_length=20, choices=QueueStatus.choices, default=QueueStatus.ACTIVE)
+
+    objects = AnnotationQueueManager()
 
     class Meta:
         unique_together = ("team", "name")
@@ -214,7 +237,9 @@ class Annotation(BaseTeamModel):
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
 
-        from apps.human_annotations.aggregation import compute_aggregates_for_queue
+        from apps.human_annotations.aggregation import (
+            compute_aggregates_for_queue,  # noqa: PLC0415 - circular: aggregation imports human_annotations.models
+        )
 
         try:
             compute_aggregates_for_queue(item.queue)

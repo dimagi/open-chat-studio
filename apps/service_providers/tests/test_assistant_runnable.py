@@ -270,7 +270,7 @@ def test_assistant_runnable_cancels_existing_run(
 
 
 @pytest.mark.django_db()
-@patch("apps.assistants.sync.create_files_remote")
+@patch("apps.service_providers.llm_service.runnables.create_files_remote")
 @patch("openai.resources.beta.threads.messages.Messages.list")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
@@ -313,7 +313,7 @@ def test_assistant_uploads_new_file(
 @pytest.mark.django_db()
 @pytest.mark.parametrize("cited_file_missing", [False, True])
 @patch("openai.resources.files.Files.retrieve")
-@patch("apps.assistants.sync.get_and_store_openai_file")
+@patch("apps.service_providers.llm_service.runnables.get_and_store_openai_file")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")
@@ -492,7 +492,7 @@ def test_assistant_response_with_annotations_and_assistant_file(
 
 @pytest.mark.django_db()
 @patch("openai.resources.files.Files.retrieve")
-@patch("apps.assistants.sync.get_and_store_openai_file")
+@patch("apps.service_providers.llm_service.runnables.get_and_store_openai_file")
 @patch("openai.resources.beta.threads.runs.Runs.retrieve")
 @patch("openai.resources.beta.Threads.create_and_run")
 @patch("openai.resources.beta.threads.messages.Messages.list")

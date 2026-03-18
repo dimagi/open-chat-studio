@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytz
 from django.db.models import Q, QuerySet
 
-from apps.experiments.models import SessionStatus
+from apps.experiments.models import Experiment, SessionStatus
 
 from .base import DATE_RANGE_OPTIONS, TYPE_TIMESTAMP, ChoiceColumnFilter, ColumnFilter, StringColumnFilter
 
@@ -25,7 +25,6 @@ class ExperimentFilter(ChoiceColumnFilter):
     )
 
     def prepare(self, team, **_):
-        from apps.experiments.models import Experiment
 
         experiments = (
             Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")

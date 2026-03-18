@@ -8,7 +8,7 @@ from langchain.agents.middleware import AgentState
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
-from apps.chat.agent.tools import SearchIndexTool, SearchToolConfig, get_node_tools
+from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -157,8 +157,9 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
 
 
 def _get_search_tool(node):
-    from apps.chat.agent.tools import SearchCollectionByIdTool
-    from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+    from apps.service_providers.llm_service.main import (  # noqa: PLC0415 - lazy: llm_service.main loads heavy langchain deps
+        OpenAIBuiltinTool,
+    )
 
     if not node.collection_index_ids:
         return None

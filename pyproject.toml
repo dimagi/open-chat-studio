@@ -84,7 +84,9 @@ dependencies = [
     "langchain-classic>=1.0.0",
     "langchain-google-vertexai",
     "python-json-logger>=3.2.1",
-    "chardet"
+    "chardet",
+    "dictdiffer>=0.9.0",
+    "djlint>=1.36.4",
 ]
 
 [project.urls]
@@ -117,7 +119,7 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "PLC0415", "TID253"]
 ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
 fixable = ["ALL"]
 unfixable = []
@@ -136,6 +138,17 @@ line-ending = "auto"
 mark-parentheses = true
 fixture-parentheses = true
 
+[tool.ruff.lint.flake8-tidy-imports]
+# These libraries are expensive to import and should be lazy-loaded inside functions.
+# See docs/agents/django_performance.md for details.
+banned-module-level-imports = [
+    "langchain_google_vertexai",
+    "langchain_google_genai",
+    "langchain_anthropic",
+    "langchain_openai",
+    "boto3",
+]
+
 [dependency-groups]
 dev = [
     "ruff",
@@ -151,7 +164,6 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
     "django-debug-toolbar>=5.2.0",
-    "djlint>=1.36.4",
     "prek>=0.3.2",
     "django-types",
     "ty",

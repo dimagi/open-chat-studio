@@ -7,6 +7,7 @@ from apps.help.evals.checks import (
     check_max_words,
     check_syntax,
 )
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 class TestCheckSyntax:
@@ -95,7 +96,6 @@ class TestCheckMaxWords:
 
 class TestCheckFilterParams:
     def _make_filter(self, column):
-        from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
         return ColumnFilterData(column=column, operator="any of", value="x")
 

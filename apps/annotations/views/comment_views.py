@@ -11,7 +11,7 @@ from apps.annotations.models import UserComment
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 
-class LinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class LinkComment(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "annotations.add_usercomment"
 
     def post(self, request, team_slug: str):
@@ -32,7 +32,7 @@ class LinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
         )
 
 
-class UnlinkComment(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class UnlinkComment(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "annotations.delete_usercomment"
 
     def post(self, request, team_slug: str):

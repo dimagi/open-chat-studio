@@ -3,6 +3,7 @@ from django.urls import reverse
 from apps.users.adapter import AccountAdapter
 
 from .invitations import clear_invite_from_session
+from .models import Invitation
 
 
 class AcceptInvitationAdapter(AccountAdapter):
@@ -18,8 +19,6 @@ class AcceptInvitationAdapter(AccountAdapter):
 
         See `templates/teams/accept_invite.html` for the main way to redirect after login.
         """
-        from .models import Invitation
-
         if request.session.get("invitation_id"):
             invite_id = request.session.get("invitation_id")
             try:

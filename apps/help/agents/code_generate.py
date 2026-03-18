@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
+from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION, CodeNode
 
 
 @functools.cache
@@ -37,7 +38,6 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
         return input.query
 
     def run(self) -> CodeGenerateOutput:
-        from apps.pipelines.nodes.nodes import DEFAULT_FUNCTION
 
         current_code = self.input.context
         if current_code == DEFAULT_FUNCTION:
@@ -55,8 +55,6 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
         response = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
 
         response_code = response["messages"][-1].text
-
-        from apps.pipelines.nodes.nodes import CodeNode
 
         try:
             CodeNode.model_validate({"code": response_code, "name": "code", "node_id": "code", "django_node": None})

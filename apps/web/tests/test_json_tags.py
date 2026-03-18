@@ -1,6 +1,6 @@
 from django.utils.safestring import SafeData
 
-from apps.web.templatetags.json_tags import highlight_json, readable_value
+from apps.web.templatetags.json_tags import format_participant_data_diff, highlight_json, readable_value
 
 
 class TestHighlightJson:
@@ -235,3 +235,55 @@ class TestReadableValue:
             }
         )
         assert result == "assistant: I'll search for that.\n→ search(query='hello')"
+
+
+class TestFormatParticipantDataDiff:
+    def test_format_diff_add(self):
+        diff = [["add", "", [["score", 100]]]]
+        result = format_participant_data_diff(diff)
+        assert len(result) == 1
+        assert result[0]["type"] == "add"
+        assert result[0]["path"] == "score"
+        assert result[0]["value"] == repr(100)
+
+    def test_format_diff_remove(self):
+        diff = [["remove", "", [["old_key", "old_val"]]]]
+        result = format_participant_data_diff(diff)
+        assert len(result) == 1
+        assert result[0]["type"] == "remove"
+        assert result[0]["path"] == "old_key"
+        assert result[0]["value"] == repr("old_val")
+
+    def test_format_diff_change(self):
+        diff = [["change", "plan", ["free", "pro"]]]
+        result = format_participant_data_diff(diff)
+        assert len(result) == 1
+        assert result[0]["type"] == "change"
+        assert result[0]["path"] == "plan"
+        assert result[0]["old"] == repr("free")
+        assert result[0]["new"] == repr("pro")
+
+    def test_format_diff_nested_path(self):
+        diff = [["change", "preferences.lang", ["en", "fr"]]]
+        result = format_participant_data_diff(diff)
+        assert result[0]["path"] == "preferences.lang"
+
+    def test_format_diff_list_path(self):
+        diff = [["change", ["tags", 0], ["old", "new"]]]
+        result = format_participant_data_diff(diff)
+        assert result[0]["path"] == "tags.0"
+
+    def test_format_diff_multiple_adds_in_one_entry(self):
+        diff = [["add", "", [["name", "Alice"], ["age", 30]]]]
+        result = format_participant_data_diff(diff)
+        assert len(result) == 2
+        assert result[0]["path"] == "name"
+        assert result[1]["path"] == "age"
+
+    def test_format_diff_empty(self):
+        assert format_participant_data_diff([]) == []
+
+    def test_format_diff_nested_add(self):
+        diff = [["add", "preferences", [["theme", "dark"]]]]
+        result = format_participant_data_diff(diff)
+        assert result[0]["path"] == "preferences.theme"

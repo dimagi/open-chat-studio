@@ -3,6 +3,7 @@ from collections import defaultdict
 from apps.data_migrations.management.commands.base import IdempotentCommand
 from apps.events.models import EventAction, StaticTrigger, TimeoutTrigger
 from apps.teams.email import collect_team_admin_emails, send_bulk_team_admin_emails
+from apps.teams.models import Team
 
 
 class Command(IdempotentCommand):
@@ -45,8 +46,6 @@ class Command(IdempotentCommand):
 
         if self.verbosity > 1:
             # Verbose output: show details for each team
-            from apps.teams.models import Team
-
             teams = {t.id: t for t in Team.objects.filter(id__in=teams_context.keys())}
 
             self.stdout.write(f"\nFound {total_actions} summarize actions affecting {total_teams} teams:")

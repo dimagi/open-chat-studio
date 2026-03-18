@@ -21,12 +21,14 @@ from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
+from apps.documents.models import Collection
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
-from apps.files.models import FileChunkEmbedding
+from apps.files.models import File, FileChunkEmbedding
 from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
+from apps.pipelines.nodes.base import Intents
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
@@ -185,7 +187,6 @@ class SearchToolConfig:
     generate_citations: bool = True
 
     def get_index(self):
-        from apps.documents.models import Collection
 
         return Collection.objects.get(id=self.index_id)
 
@@ -399,7 +400,6 @@ class EndSessionTool(CustomBaseTool):
     )
 
     def action(self, *args, **kwargs):
-        from apps.pipelines.nodes.base import Intents
 
         self.tool_callbacks.register_intent(Intents.END_SESSION)
         return "Your intent to end the session has been registered."
@@ -423,8 +423,6 @@ class AttachMediaTool(CustomBaseTool):
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
             return "A maximum of 5 files can be attached."
-
-        from apps.files.models import File
 
         response = []
         include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
@@ -510,7 +508,6 @@ class SearchCollectionByIdTool(CustomBaseTool):
         """
         Search a specific collection index for the most relevant file chunks based on the query.
         """
-        from apps.documents.models import Collection
 
         not_found = f"Collection index with ID {collection_index_id} not found."
         if collection_index_id not in self.allowed_collection_ids:

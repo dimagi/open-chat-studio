@@ -1,11 +1,12 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
+from apps.chat.models import Chat
 from apps.teams.models import Team
 
 from ..teams.utils import current_team
 from .const import DEFAULT_CONSENT_TEXT
-from .models import ConsentForm
+from .models import ConsentForm, ExperimentSession
 
 
 @receiver(post_save, sender=Team)
@@ -24,3 +25,9 @@ def create_default_consent_for_team(team):
                 "consent_text": DEFAULT_CONSENT_TEXT,
             },
         )
+
+
+@receiver(post_delete, sender=ExperimentSession)
+def delete_chat_on_session_delete(sender, instance, **kwargs):
+    if instance.chat_id:
+        Chat.objects.filter(id=instance.chat_id).delete()
