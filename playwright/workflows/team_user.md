@@ -4,118 +4,102 @@ Password: My0riginalP@ssw0rd!
 
 # Core Workflows
 
-## 1. Chatbot Management
+## Flow 1: Create and Test a Chatbot
 
-### Create a Chatbot
-1. Click on "Chatbots" in the sidebar
-2. Click "Add New" button at the top right
-3. In the dialog, fill in "Name" and optionally "Description"
-4. Click "Create Chatbot"
-5. Verify the chatbot appears in the list table (shows Name, Total Participants, Total Sessions, Total Interactions, Last Activity, Trends, Actions)
-
-### View Chatbot Details
-1. Click on a chatbot name in the list
-2. Verify the detail page shows: chatbot name, description, channels section, and tabs (Sessions, Versions, Settings)
-3. Actions available: "Chat to the bot", "Edit" (opens pipeline editor), "Copy"
-
-### Edit Chatbot Pipeline
-1. From the chatbot detail page, click "Edit" (pencil icon)
-2. Pipeline editor opens with a React Flow canvas showing Input, processing nodes (e.g., LLM), and Output
-3. Click the "+" button to add new nodes
-4. Configure nodes by editing their inline properties (e.g., prompt text, history mode)
-5. Click "Advanced" on an LLM node to see full configuration (model selection, etc.)
-6. Click the save button (lock icon, bottom-left of canvas)
-
-### Edit Chatbot Settings
-1. From the chatbot detail page, click the "Settings" tab
-2. Click the "Edit" button
-3. Modify settings:
-   - Name and Description
-   - Speech: Provider, Synthetic Voice, Response Type (Always/Reciprocal/Never), Echo Transcript
-   - Tracing: Provider, Debug Mode
-   - Consent: Conversational consent toggle, Consent Form selection
-   - Surveys: Pre-survey and Post-survey dropdowns
-   - Participant Allowlist: Add/remove identifiers (supports E164 phone format)
-   - Seed Message
-   - Web Chat Features: File uploads toggle
-4. Click "Save"
-
-### Archive a Chatbot
-1. From the chatbot detail page, click the "Settings" tab
-2. Click the "Archive" button
-3. Confirm the chatbot is removed from the chatbot list, but is shown when the "Show Archived" toggle at the top of the list it ON
-
-### Copy a Chatbot
-1. From the chatbot detail page, click the "Copy" button in the header area
-2. A "Copy Chatbot" dialog appears with a "New Chatbot Name" field pre-filled with "{original name} (copy)"
-3. Optionally modify the name
-4. Click "Confirm"
-5. Verify redirect to the new chatbot's detail page
-6. Navigate back to the chatbots list and verify the copied chatbot appears in the table
+1. Log in
+2. Go to the **Chatbots** tab
+3. Click **Add New** to add a chatbot
+   - Name: `My First Chatbot`
+   - Leave description empty
+   - Create the chatbot
+4. Verify that you see an **LLM node**, an **Input node**, and an **Output node**, all connected
+5. In the breadcrumbs at the top, click on the chatbot name ("My First Chatbot")
+6. Verify the chatbot is in **Draft** mode
+7. Go to the **Versions** tab
+   - Click **Create Version**
+   - Description: `Added my first chatbot`
+   - Check **Set as published version**
+   - Create the version
+   - Wait ~4 seconds
+8. At the top right, there will be three buttons — click the **Speech** button
+   - Click **Published Version**
+   - Now you can chat with the chatbot
+9. Exchange three messages:
+   - Send: `Hi` — wait for response
+   - Send: `Tell me a joke` — wait for response
+   - Send: `That's great` — wait for response
+10. In the left sidebar, click **Chatbots** tab
+11. Find the created chatbot in the list and click it
+12. Verify that a session appears in the **Sessions** table (just verify there is one)
 
 ---
 
-## 2. Chatbot Versions
+## Flow 2: Evaluations, Datasets, and Annotations
 
-### View Versions
-1. From the chatbot detail page, click the "Versions" tab
-2. View the version table: version number, created date, description, published status, archived status
+### Create an Evaluator
 
-### Create a Version
-1. From the Versions tab, click "+ Create Version"
-2. Fill in version details and submit
-3. The button changes to "Creating Version" (disabled) while the version is being created asynchronously
-4. Wait a few seconds for the version to appear in the versions table without reloading the page. If this takes more than 10 seconds, this test fails.
-5. Verify the new version row shows: version number, created date, description, published status, and archived status
+1. In the sidebar, go to **Evaluations** → **Evaluators**
+2. Click **Add New**
+   - Name: `My First Evaluator`
+   - Evaluator Type: **LLM Evaluator**
+   - First dropdown (model provider): `Working OpenAI`
+   - Second dropdown (model): `o4-mini`
+   - Prompt: `Evaluate friendliness. Output "friendly" if the conversation was friendly, otherwise "unfriendly"`
+   - Output Schema:
+     - Field name: `friendliness`
+     - Type: `text`
+3. Create the evaluator
 
----
+### Create a Dataset
 
-## 3. Channels
+1. In the left sidebar, go to **Datasets** → **Add New**
+   - Name: `My Data Set`
+   - Select **From Sessions** radio
+   - Select **All Experiment Sessions**
+   - Verify all selected
+2. Create the dataset
 
-### Copy API Channel URL
-1. From the chatbot detail page, click the "API" channel button
-2. The API URL is copied to clipboard (button text changes to "Copied!")
+### Create and Run an Evaluation
 
-### Access Web Channel
-1. From the chatbot detail page, click the "Web" channel button
+1. In the left sidebar, go to **Evaluations** → **Add New**
+   - Name: `My First Eval`
+   - Dataset: select the one just created
+   - Evaluators: select the evaluator just created
+   - Check **Run generation step before evaluation**
+   - Chatbot: `My First Chatbot`
+   - Chatbot Version: **Latest Published Version**
+2. Create the evaluation
+3. On the evaluations list, click the **Run** (play button) on the first row
 
-### Add a New Channel
-1. From the chatbot detail page, click the "+" button next to existing channels
-2. Note: WhatsApp, Facebook, Sureadhere channels require configuring the respective messaging provider first on the team page
-3. For each inaccessible channel (WhatsApp, Facebook, Sureadhere):
-   a. Navigate to the team page
-   b. Under "Messaging Providers", click "Add new"
-   c. Configure the respective provider (WhatsApp, Facebook, or Sureadhere) with required fields
-   d. Click "Create"
-   e. Return to the chatbot detail page
-   f. Click the "+" button and verify the previously inaccessible channel is now available
+### Create and Use an Annotation
 
----
+1. In the left sidebar, go to **Annotations** → **Add New**
+   - Name: `My First Annotation`
+   - Number of reviews required: leave as-is
+   - Schema Fields:
+     - Name: `accuracy`
+     - Type: `text`
+     - Description: leave empty
+2. Create the annotation
+3. Click **Annotations** in the left sidebar to see the annotation queue
+4. Click the first annotation just created
+5. Click **Add Sessions**
+   - Select the first session checkbox
+   - Scroll down and click **Add to Queue**
+   - This redirects back to the annotation
+6. Verify the session has been added
+7. Click **Start Annotating**
+   - On the left: session messages
+   - On the right: the `accuracy` label with a text field
+   - Enter: `5`
+   - Click **Submit**
+8. Verify on the annotation dashboard:
+   - Items table shows one item (the session)
+   - Status: **Completed**
+   - Annotations column shows: `test user; accuracy; 5`
 
-## 4. Sessions
+### Verify Evaluation Results
 
-### View All Sessions (Global)
-1. Navigate to "All sessions" in the sidebar (under Chatbots)
-2. Verify the sessions table is visible with expected columns
-
-### View Chatbot Sessions
-1. From the chatbot detail page, click the "Sessions" tab
-2. View the sessions table: Participant, Message Count, Last Activity, Tags, Versions, State, Remote Id
-3. Click "Session Details" link for a specific session
-
-### View Session Details
-1. From a session list, click "Session Details"
-2. View session metadata: Participant, Remote ID, Status, Start/End times, Chatbot, Platform, Tags, Comments
-3. View tabs: Messages, Participant Data, Participant Schedules, Session State, Chatbot Events
-
-### End a Session
-1. From the session list, click "Session Details"
-2. From the session detail page, click "End Session"
-
-### Start New Session (from Session Detail)
-1. From the session detail page, click "New Session"
-2. Expect session status to be "awaiting final review"
-
-### Generate Chat Export
-1. From the chatbot's sessions tab, click "Generate Chat Export"
-2. Expect report to be downloadable after a few seconds
+1. Go to the **Evaluations** tab
+2. Find the evaluation created earlier
+3. In the **Actions** column, click the middle button (**Preview** / info icon)
