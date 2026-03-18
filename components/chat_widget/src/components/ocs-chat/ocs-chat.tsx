@@ -267,7 +267,7 @@ export class OcsChat {
     setTimeout(() => {
       // Restore visible state after dimensions are read so initializePosition
       // uses the correct CSS-derived chatWindowWidth/chatWindowHeight.
-      if (!this.isKioskMode() && this.persistentSession && this.isLocalStorageAvailable()) {
+      if (!this.isKioskMode() && this.showButton && this.persistentSession && this.isLocalStorageAvailable()) {
         this.restoreVisibleState();
       }
 

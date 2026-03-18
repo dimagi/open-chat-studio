@@ -410,6 +410,7 @@
 
   .chat-window-kiosk {
     @apply absolute inset-0 w-full h-full overflow-hidden flex flex-col;
+
     border-radius: 0;
     box-shadow: none;
     background-color: var(--chat-window-bg-color);
