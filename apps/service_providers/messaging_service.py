@@ -440,7 +440,10 @@ class MetaCloudAPIService(MessagingService):
     def _get_media_url(self, media_id: str) -> str:
         url = f"{self.META_API_BASE_URL}/{media_id}"
         response = httpx.get(url, headers=self._headers, timeout=self.META_API_TIMEOUT)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise AudioConversionError("Unable to resolve media URL") from e
         return response.json()["url"]
 
 

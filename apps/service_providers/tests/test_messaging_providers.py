@@ -302,6 +302,26 @@ class TestMetaCloudAPIServiceAudio:
         with pytest.raises(AudioConversionError):
             meta_cloud_api_service.get_message_audio(message)
 
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_get_message_audio_raises_on_media_url_http_error(self, mock_get, meta_cloud_api_service):
+        """Should raise AudioConversionError if resolving the media URL fails."""
+        error_response = httpx.Response(
+            404,
+            request=httpx.Request("GET", "https://graph.facebook.com/v25.0/bad_id"),
+        )
+        mock_get.side_effect = [error_response]
+
+        message = TurnWhatsappMessage(
+            participant_id="27826419977",
+            message_text="",
+            content_type="voice",
+            media_id="bad_id",
+            content_type_unparsed="voice",
+        )
+
+        with pytest.raises(AudioConversionError, match="Unable to resolve media URL"):
+            meta_cloud_api_service.get_message_audio(message)
+
     @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_voice_message(self, mock_post, meta_cloud_api_service):
         """send_voice_message should:
