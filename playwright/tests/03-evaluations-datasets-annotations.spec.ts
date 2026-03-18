@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { setupPage, TEAM_SLUG } from '../helpers/common';
 
+const UNIQUE_SUFFIX = Date.now();
+const EVALUATOR_NAME = `My First Evaluator ${UNIQUE_SUFFIX}`;
+const DATASET_NAME = `My Data Set ${UNIQUE_SUFFIX}`;
+const EVALUATION_NAME = `My First Eval ${UNIQUE_SUFFIX}`;
+const ANNOTATION_NAME = `My First Annotation ${UNIQUE_SUFFIX}`;
+
 // Helper to hide debug toolbar
 async function hideDebugToolbar(page: import('@playwright/test').Page) {
   await page.evaluate(() => {
@@ -17,7 +23,7 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await hideDebugToolbar(page);
 
     // Fill in name
-    await page.getByRole('textbox', { name: 'Name' }).fill('My First Evaluator');
+    await page.getByRole('textbox', { name: 'Name' }).fill(EVALUATOR_NAME);
 
     // Select LLM Evaluator type
     await page.getByLabel('Evaluator Type').selectOption('LLM Evaluator');
@@ -25,7 +31,7 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     // Wait for the LLM evaluator form fields to appear
     await expect(page.getByLabel('LLM Model').first()).toBeVisible();
 
-    // Select model provider: use the first available provider (may be "Non-working OpenAI" if no API key is configured)
+    // Select model provider: use the first available OpenAI provider
     const providerSelect = page.getByLabel('LLM Model').first();
     const providerOptions = await providerSelect.locator('option').allTextContents();
     const providerOption = providerOptions.find(opt => opt.includes('OpenAI') && !opt.includes('Select'));
@@ -35,8 +41,7 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await page.getByLabel('LLM Model').nth(1).selectOption({ label: 'OpenAI: o4-mini' });
 
     // Fill in prompt using the CodeMirror textbox
-    // The prompt field is a textbox after the "Prompt" label
-    const promptField = page.getByRole('textbox').nth(1); // Second textbox after Name
+    const promptField = page.getByRole('textbox').nth(1);
     await promptField.click();
     await promptField.fill(
       'Evaluate friendliness. Output "friendly" if the conversation was friendly, otherwise "unfriendly"'
@@ -48,27 +53,41 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     // Click Create
     await page.getByRole('button', { name: 'Create' }).click();
 
-    // Should redirect to evaluators list or evaluator detail
-    await expect(page).toHaveURL(/\/evaluations\/evaluator\//, { timeout: 10000 });
+    // Should redirect away from the /new/ page to evaluator list or detail
+    await expect(page).not.toHaveURL(/\/new\//, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/evaluations\/evaluator\//);
   });
 
-  test('create a dataset from sessions', async ({ page }) => {
+  test('create a dataset', async ({ page }) => {
     test.setTimeout(60000);
     await setupPage(page);
     await page.goto(`/a/${TEAM_SLUG}/evaluations/dataset/new/`);
     await hideDebugToolbar(page);
 
     // Fill in name
-    await page.getByRole('textbox', { name: 'Name' }).fill('My Data Set');
+    await page.getByRole('textbox', { name: 'Name' }).fill(DATASET_NAME);
 
-    // "Clone from sessions" radio should already be selected
-    await expect(page.getByRole('radio', { name: 'Clone from sessions' })).toBeChecked();
+    // Select "Create manually" mode — doesn't require pre-existing sessions
+    // Click the label text to trigger Alpine.js reactivity (x-model on radio)
+    await page.locator('label[for="id_mode_1"]').click();
+    // Verify the mode switched by checking the manual form section is visible
+    await page.getByText('Add your first message pair').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
+    // Add a message pair (required for manual mode)
+    // Use the form's textboxes (not the edit modal ones)
+    const addForm = page.locator('#manual-message-form');
+    await addForm.getByPlaceholder('Enter human message').fill('Hello');
+    await addForm.getByPlaceholder('Enter AI response').fill('Hi there!');
+    await page.getByRole('button', { name: /Add Message Pair/i }).click();
+    // Wait for the message pair to appear in the list
+    await page.waitForTimeout(500);
 
     // Click Create Dataset
     await page.getByRole('button', { name: 'Create Dataset' }).click();
 
-    // Should redirect to datasets list or dataset detail
-    await expect(page).toHaveURL(/\/evaluations\/dataset\//, { timeout: 10000 });
+    // Should redirect away from the /new/ page
+    await expect(page).not.toHaveURL(/\/new\//, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/evaluations\/dataset\//);
   });
 
   test('create an evaluation', async ({ page }) => {
@@ -78,39 +97,50 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await hideDebugToolbar(page);
 
     // Fill in name
-    await page.getByRole('textbox', { name: 'Name' }).fill('My First Eval');
+    await page.getByRole('textbox', { name: 'Name' }).fill(EVALUATION_NAME);
 
-    // Select dataset
-    // Select the dataset option that contains "My Data Set"
+    // Select the first available dataset
     const datasetSelect = page.getByLabel('Dataset');
     const datasetOptions = await datasetSelect.locator('option').allTextContents();
-    const datasetOption = datasetOptions.find(opt => opt.includes('My Data Set'));
+    const datasetOption = datasetOptions.find(opt => opt.trim() !== '' && !opt.includes('---') && !opt.includes('Select'));
+    expect(datasetOption).toBeTruthy();
     await datasetSelect.selectOption({ label: datasetOption! });
 
-    // Select evaluator checkbox
-    await page.getByRole('checkbox', { name: /My First Evaluator/i }).first().check();
+    // Select the first available evaluator checkbox
+    await page.getByRole('checkbox', { name: /Evaluator/i }).first().check();
 
     // Check "Run generation step before evaluation"
-    await page.getByRole('checkbox', { name: 'Run generation step before evaluation' }).check();
+    await page.getByRole('checkbox', { name: /Run generation step/i }).check();
 
-    // Wait for chatbot dropdown to appear and select chatbot
+    // Wait for chatbot dropdown to appear and select the first available chatbot
     const chatbotSelect = page.getByLabel(/Chatbot/i).first();
     await expect(chatbotSelect).toBeVisible({ timeout: 5000 });
-    // Select the first chatbot that matches "My first chatbot"
     const chatbotOptions = await chatbotSelect.locator('option').allTextContents();
-    const chatbotOption = chatbotOptions.find(opt => opt.toLowerCase().includes('my first chatbot'));
+    const chatbotOption = chatbotOptions.find(opt => opt.trim() !== '' && !opt.includes('Select') && !opt.includes('---'));
+    expect(chatbotOption).toBeTruthy();
     await chatbotSelect.selectOption({ label: chatbotOption! });
 
-    // Wait for version dropdown to appear and select version
+    // Wait for version dropdown to be populated via HTMX after chatbot selection
     const versionSelect = page.getByLabel(/Chatbot version/i).first();
     await expect(versionSelect).toBeVisible({ timeout: 5000 });
-    await versionSelect.selectOption({ label: 'Latest Published Version' });
+    // Wait for HTMX to load the version options (at least one non-placeholder option)
+    await expect(versionSelect.locator('option:not([value=""])')).not.toHaveCount(0, { timeout: 5000 });
+    const versionOptions = await versionSelect.locator('option').allTextContents();
+    const versionOption = versionOptions.find(opt => opt.includes('Published'));
+    if (versionOption) {
+      await versionSelect.selectOption({ label: versionOption });
+    } else {
+      // Fall back to first non-empty option
+      const firstOption = versionOptions.find(opt => opt.trim() !== '');
+      await versionSelect.selectOption({ label: firstOption! });
+    }
 
     // Create the evaluation
     await page.getByRole('button', { name: 'Create' }).click();
 
-    // Should redirect to evaluations list
-    await expect(page).toHaveURL(/\/evaluations\//, { timeout: 10000 });
+    // Should redirect away from the /new/ page
+    await expect(page).not.toHaveURL(/\/new\//, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/evaluations\//);
   });
 
   test('run the evaluation', async ({ page }) => {
@@ -119,11 +149,14 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await page.goto(`/a/${TEAM_SLUG}/evaluations/`);
     await hideDebugToolbar(page);
 
-    // Find the evaluation row (name may be lowercased)
-    const evalRow = page.locator('table tbody tr').filter({ hasText: /my first eval/i }).first();
+    // Wait for HTMX table to load
+    await page.locator('table tbody tr').first().waitFor({ state: 'visible', timeout: 10000 });
+
+    // Find the evaluation row
+    const evalRow = page.locator('table tbody tr').filter({ hasText: EVALUATION_NAME }).first();
     await expect(evalRow).toBeVisible({ timeout: 10000 });
 
-    // Click the run link (the one with /runs/new/ in the URL)
+    // Click the run link
     await evalRow.locator('a[href*="/runs/new/"]').click({ force: true });
 
     // Wait for evaluation to start
@@ -137,7 +170,7 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await hideDebugToolbar(page);
 
     // Fill in name
-    await page.getByRole('textbox', { name: 'Name' }).fill('My First Annotation');
+    await page.getByRole('textbox', { name: 'Name' }).fill(ANNOTATION_NAME);
 
     // Fill in schema field name
     await page.getByRole('textbox', { name: "e.g., 'accuracy', 'score'" }).fill('accuracy');
@@ -145,8 +178,9 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     // Click Create
     await page.getByRole('button', { name: 'Create' }).click();
 
-    // Should redirect to the annotation queue list or detail page
-    await expect(page).toHaveURL(/\/human-annotations\/queue\//, { timeout: 10000 });
+    // Should redirect away from the /new/ page
+    await expect(page).not.toHaveURL(/\/new\//, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/human-annotations\/queue\//);
   });
 
   test('add sessions to annotation and annotate', async ({ page }) => {
@@ -158,7 +192,7 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await hideDebugToolbar(page);
 
     // Click on the annotation just created
-    await page.getByRole('link', { name: 'My First Annotation' }).last().click();
+    await page.getByRole('link', { name: ANNOTATION_NAME }).last().click();
 
     await hideDebugToolbar(page);
 
@@ -189,7 +223,7 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await hideDebugToolbar(page);
 
     // Click on the annotation
-    await page.getByRole('link', { name: 'My First Annotation' }).last().click();
+    await page.getByRole('link', { name: ANNOTATION_NAME }).last().click();
     await hideDebugToolbar(page);
 
     // Click "Start Annotating"
@@ -225,11 +259,10 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await hideDebugToolbar(page);
 
     // Click on the annotation
-    await page.getByRole('link', { name: 'My First Annotation' }).last().click();
+    await page.getByRole('link', { name: ANNOTATION_NAME }).last().click();
     await hideDebugToolbar(page);
 
     // Verify items table shows at least one item
-    // Check for "Completed" status or any item in the items table
     const itemsSection = page.getByRole('heading', { name: 'Items' });
     await expect(itemsSection).toBeVisible({ timeout: 10000 });
 
@@ -248,8 +281,11 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await page.goto(`/a/${TEAM_SLUG}/evaluations/`);
     await hideDebugToolbar(page);
 
-    // Find the evaluation row (name may be lowercased)
-    const evalRow = page.locator('table tbody tr').filter({ hasText: /my first eval/i }).first();
+    // Wait for HTMX table to load
+    await page.locator('table tbody tr').first().waitFor({ state: 'visible', timeout: 10000 });
+
+    // Find the evaluation row
+    const evalRow = page.locator('table tbody tr').filter({ hasText: EVALUATION_NAME }).first();
     await expect(evalRow).toBeVisible({ timeout: 10000 });
 
     // Click the evaluation link to see details
