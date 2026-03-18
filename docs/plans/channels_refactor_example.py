@@ -64,6 +64,7 @@ class ChannelCapabilities:
     supports_voice: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
+    supports_static_triggers: bool = True
     supported_message_types: list = field(default_factory=list)
     # File-level checking is delegated to a callable so that channel-specific
     # size/mime rules don't leak into the capabilities dataclass.
@@ -627,6 +628,13 @@ class ChatMessageCreationStage(ProcessingStage):
         # Link to trace
         if ctx.trace_service:
             ctx.trace_service.set_input_message_id(ctx.human_message.id)
+
+        # Fire NEW_HUMAN_MESSAGE trigger (gated by capability)
+        if ctx.capabilities.supports_static_triggers:
+            from apps.events.models import StaticTriggerType
+            from apps.events.tasks import enqueue_static_triggers
+
+            enqueue_static_triggers.delay(ctx.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
 
 
 class BotInteractionStage(ProcessingStage):
@@ -1516,6 +1524,7 @@ class EvaluationChannel(ChannelBase):
             supports_voice=False,
             supports_files=False,
             supports_conversational_consent=False,
+            supports_static_triggers=False,
             supported_message_types=[MESSAGE_TYPES.TEXT],
         )
 

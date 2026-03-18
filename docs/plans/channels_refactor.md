@@ -484,11 +484,19 @@ class ChatMessageCreationStage(ProcessingStage):
             message_type=ChatMessageType.HUMAN,
             content=ctx.user_query,
         )
+
+        # Fire NEW_HUMAN_MESSAGE trigger (gated by capability)
+        if ctx.capabilities.supports_static_triggers:
+            enqueue_static_triggers.delay(
+                ctx.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE
+            )
 ```
 
-**Maps to**: `_create_chat_message_from_user_message()` (line 486-495)
+**Maps to**: `_create_chat_message_from_user_message()` (line 486-495) and `enqueue_static_triggers` (line 422)
 
-> **Review decision applied** (Decision 6): Separate ChatMessageCreationStage ensures the DB record is created as its own concern, independent of query extraction and bot interaction.
+> **Review decisions applied**:
+> - (Decision 6): Separate ChatMessageCreationStage ensures the DB record is created as its own concern, independent of query extraction and bot interaction.
+> - (Decision 29): `NEW_HUMAN_MESSAGE` static trigger fires in `ChatMessageCreationStage` after the DB record is created. Gated by `ctx.capabilities.supports_static_triggers` — `EvaluationChannel` sets this to `False`.
 
 #### Stage 8: BotInteractionStage
 
@@ -902,6 +910,7 @@ class ChannelCapabilities:
     supports_voice: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
+    supports_static_triggers: bool = True
     supported_message_types: list = field(default_factory=list)
     can_send_file: Callable = lambda file: False
 
@@ -1898,6 +1907,7 @@ class ChannelCapabilities:
     supports_voice: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
+    supports_static_triggers: bool = True
     supported_message_types: list = field(default_factory=list)
     can_send_file: Callable = lambda file: False
 
@@ -2560,6 +2570,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 26 | Architecture | Voice synthesis fallback in `ResponseFormattingStage` | `AudioSynthesizeException` is caught in `ResponseFormattingStage` and gracefully degraded to text formatting. Not an unrecoverable error — does not propagate to the pipeline's catch-all. Creates `audio_synthesis_failure_notification`. |
 | 27 | Architecture | `WebChannel` pipeline | Overrides `_build_pipeline` to omit `ResponseSendingStage`, `SendingErrorHandlerStage`, `SessionResolutionStage`, and `ConsentFlowStage`. Sets `supports_conversational_consent: False`. Requires pre-existing session. `start_new_session` and `check_and_process_seed_message` class methods remain on the channel class (outside the pipeline). |
 | 28 | Architecture | `EvaluationChannel` + `channel_context` | Uses `ctx.channel_context` dict to pass `participant_data` to `EvalsBotInteractionStage`. This is a **workaround** scoped to `EvaluationChannel` only — it should NOT be used as a general-purpose extension mechanism. `EvalsBotInteractionStage` replaces `BotInteractionStage` and creates `EvalsBot` instead of calling `get_bot()`. |
+| 29 | Architecture | `NEW_HUMAN_MESSAGE` trigger in `ChatMessageCreationStage` | `enqueue_static_triggers` for `NEW_HUMAN_MESSAGE` fires in `ChatMessageCreationStage` after the DB record is created. Gated by `capabilities.supports_static_triggers` (default `True`, `EvaluationChannel` sets `False`). Session creation triggers (`PARTICIPANT_JOINED_EXPERIMENT`, `CONVERSATION_START`) remain in `_start_experiment_session`. |
 | — | Update | `EarlyExitResponseStage` (terminal) | Persists `ctx.early_exit_response` to chat history. Runs after sending stages. Uses `_add_to_history` (moved out of ConsentFlowStage). |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
