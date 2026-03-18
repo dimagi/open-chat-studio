@@ -571,6 +571,70 @@ class GetSessionStateTool(CustomBaseTool):
         return f"The value for key '{key}' is: {value}"
 
 
+class AppendToSessionStateTool(CustomBaseTool):
+    name: str = AgentTools.APPEND_TO_SESSION_STATE
+    description: str = (
+        "Append a value to session state at a specific key. This will convert any existing "
+        "value to a list and append the new value to the end of the list. Use this tool to "
+        "track lists of items within the current session."
+    )
+    requires_session: bool = True
+    args_schema: type[schemas.AppendToSessionStateSchema] = schemas.AppendToSessionStateSchema
+
+    def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
+        if key in settings.RESERVED_SESSION_STATE_KEYS:
+            return f"Cannot modify the '{key}' key in session state - this is read-only"
+
+        state = graph_state.get("session_state") or {}
+        value_at_key = state.get(key, [])
+        if not isinstance(value_at_key, list):
+            value_at_key = [value_at_key]
+
+        if isinstance(value, list):
+            value_at_key.extend(value)
+        else:
+            value_at_key.append(value)
+
+        if len(value_at_key) > 10:
+            new_value_msg = f"The last 10 items in the list are: {value_at_key[-10:]}"
+        else:
+            new_value_msg = f"The new list is: {value_at_key}"
+        message = f"The value was appended to the end of the list. {new_value_msg}"
+        return Command(
+            update={
+                "session_state": {key: value_at_key},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
+
+
+class IncrementSessionStateCounterTool(CustomBaseTool):
+    name: str = AgentTools.INCREMENT_SESSION_STATE_COUNTER
+    description: str = "Increment the value of a counter stored in session state."
+    requires_session: bool = True
+    args_schema: type[schemas.IncrementSessionStateCounterSchema] = schemas.IncrementSessionStateCounterSchema
+
+    def action(self, counter: str, value: int, tool_call_id: str, graph_state: dict):
+        namespaced_key = f"_counter_{counter}"
+        if namespaced_key in settings.RESERVED_SESSION_STATE_KEYS:
+            return f"Cannot modify the '{namespaced_key}' key in session state - this is read-only"
+
+        state = graph_state.get("session_state") or {}
+        current_value = state.get(namespaced_key, 0)
+
+        if not isinstance(current_value, int | float):
+            current_value = 0
+
+        new_value = current_value + value
+        message = f"The '{counter}' counter has been successfully incremented. The new value is {new_value}."
+        return Command(
+            update={
+                "session_state": {namespaced_key: new_value},
+                "messages": [ToolMessage(message, tool_call_id=tool_call_id)],
+            }
+        )
+
+
 class CalculatorTool(CustomBaseTool):
     name: str = AgentTools.CALCULATOR
     description: str = (
@@ -650,6 +714,8 @@ TOOL_CLASS_MAP = {
     AgentTools.SEARCH_INDEX_BY_ID: SearchCollectionByIdTool,
     AgentTools.SET_SESSION_STATE: SetSessionStateTool,
     AgentTools.GET_SESSION_STATE: GetSessionStateTool,
+    AgentTools.APPEND_TO_SESSION_STATE: AppendToSessionStateTool,
+    AgentTools.INCREMENT_SESSION_STATE_COUNTER: IncrementSessionStateCounterTool,
     AgentTools.CALCULATOR: CalculatorTool,
 }
 
