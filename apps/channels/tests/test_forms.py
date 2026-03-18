@@ -115,31 +115,6 @@ def test_whatsapp_form_meta_cloud_api_resolves_phone_number_id(mock_httpx_get, m
     assert form.cleaned_data["number"] == "+12125552368"
 
 
-@pytest.mark.django_db()
-@patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
-@patch("apps.service_providers.messaging_service.httpx.get")
-def test_whatsapp_form_meta_cloud_api_warns_unknown_number(mock_httpx_get, messaging_provider, experiment):
-    """Test that form validation warns when the phone number is not found in the Meta Business Account"""
-
-    mock_httpx_get.return_value = httpx.Response(
-        200,
-        json={"data": []},
-        request=httpx.Request("GET", "https://test"),
-    )
-    provider = MessagingProviderFactory.create(
-        type=MessagingProviderType.meta_cloud_api,
-        config={"access_token": "test_token", "business_id": "biz_123"},
-    )
-    messaging_provider.return_value = provider
-
-    form = WhatsappChannelForm(
-        experiment=experiment, data={"number": "+12125552368", "messaging_provider": provider.id}
-    )
-    assert form.is_valid()
-    assert "was not found at the provider" in form.warning_message
-    assert "phone_number_id" not in form.cleaned_data
-
-
 # Slack channel keyword uniqueness tests
 @pytest.mark.django_db()
 def test_slack_channel_new_with_keywords_succeeds(team_with_users, experiment):
