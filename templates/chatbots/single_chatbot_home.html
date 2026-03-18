@@ -222,6 +222,7 @@
     {% flag "flag_chat_widget" %}
       <open-chat-studio-widget
         id="chatbot-widget"
+        show-button="false"
         visible="false"
         chatbot-id="{{ experiment.public_id }}"
         api-base-url="{{ request.scheme }}://{{ request.get_host }}"
