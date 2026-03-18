@@ -4,6 +4,7 @@ from celery import Celery, signals
 from celery.app import trace
 from django import db
 
+from apps.teams.utils import unset_current_team
 from apps.utils.logging import CeleryContextFilter
 
 # set the default Django settings module for the 'celery' program.
@@ -44,6 +45,7 @@ def on_task_prerun(sender, task_id, task, args, kwargs, **_):
 @signals.task_postrun.connect
 def on_task_postrun(sender, **_):
     CeleryContextFilter.clear_task_context()
+    unset_current_team()
 
 
 def close_db_connection(sender, **kwargs):
