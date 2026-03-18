@@ -42,6 +42,7 @@ jobs:
       DJANGO_DATABASE_USER: postgres
       DJANGO_DATABASE_PASSWORD: postgres_password
       SECRET_KEY: secret-test-key
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -83,7 +84,7 @@ jobs:
         run: uv run python manage.py migrate
 
       - name: Seed database
-        run: uv run python manage.py bootstrap_data --email tester@playwright.com --password My0riginalP@ssw0rd! --team-slug agent --team-name Agent --reset
+        run: uv run python manage.py bootstrap_data --email tester@playwright.com --password My0riginalP@ssw0rd! --team-slug agent --team-name Agent --superuser --reset
 
       - name: Start Celery worker
         run: uv run celery -A config worker -l INFO --pool=solo &

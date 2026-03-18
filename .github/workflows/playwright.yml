@@ -42,6 +42,7 @@ jobs:
       DJANGO_DATABASE_PASSWORD: postgres_password
       SECRET_KEY: secret-test-key
       REDIS_URL: redis://localhost:6379
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
