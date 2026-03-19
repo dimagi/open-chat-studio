@@ -11,6 +11,7 @@ import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
+from django.utils import timezone  # noqa: F401
 from telebot.util import smart_split
 
 if TYPE_CHECKING:
@@ -23,6 +24,7 @@ from apps.channels import audio
 from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.exceptions import ServiceWindowExpiredException  # noqa: F401
 from apps.files.models import File
 from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
@@ -37,13 +39,33 @@ class MessagingService(pydantic.BaseModel):
     voice_replies_supported: ClassVar[bool] = False
     supports_multimedia: ClassVar[bool] = False
     supported_message_types: ClassVar[list] = []
+    supports_template_messages: ClassVar[bool] = False
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         raise NotImplementedError
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
     ):
+        raise NotImplementedError
+
+    def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        """Internal method for sending template messages. Called by send_text_message()
+        when the service window is expired. Should not be called directly from channel code."""
         raise NotImplementedError
 
     def get_message_audio(self, message: TwilioMessage | TurnWhatsappMessage):
@@ -139,7 +161,15 @@ class TwilioService(MessagingService):
         message = message_context.fetch()
         return cast(str, message.status)
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         """
         Sends a text message to the user. If the message is too long, it will be split into chunks of
         `MESSAGE_CHARACTER_LIMIT` characters and sent as multiple messages. Sending chunks is done sequentially,
@@ -166,6 +196,7 @@ class TwilioService(MessagingService):
         from_: str,
         to: str,
         platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
         **kwargs,
     ):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
@@ -226,11 +257,25 @@ class TurnIOService(MessagingService):
 
         return TurnClient(token=self.auth_token)
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         self.client.messages.send_text(to, message)
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
     ):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
@@ -323,7 +368,15 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
@@ -373,7 +426,15 @@ class MetaCloudAPIService(MessagingService):
                 return entry["id"]
         return None
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
         for chunk in chunks:
@@ -387,7 +448,13 @@ class MetaCloudAPIService(MessagingService):
             response.raise_for_status()
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
     ):
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
         media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg")
@@ -458,7 +525,14 @@ class SlackService(MessagingService):
     _client: "WebClient | None" = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
-        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str | None = None, **kwargs
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        thread_ts: str | None = None,
+        **kwargs,
     ):
         self.client.chat_postMessage(
             channel=to,
