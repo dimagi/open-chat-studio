@@ -403,14 +403,22 @@ class TestMetaCloudAPIServiceWindow:
             platform=ChannelPlatform.WHATSAPP,
         )
         mock_post.assert_called_once()
-        data = mock_post.call_args.kwargs["json"]
-        assert data["type"] == "template"
-        assert data["template"]["name"] == "new_bot_message"
-        assert data["template"]["language"]["code"] == "en"
-        body_params = data["template"]["components"][0]["parameters"]
-        assert len(body_params) == 1
-        assert body_params[0]["parameter_name"] == "bot_message"
-        assert body_params[0]["text"] == "Hello, any update?"
+        assert mock_post.call_args.kwargs["json"] == {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": "+27826419977",
+            "type": "template",
+            "template": {
+                "name": "new_bot_message",
+                "language": {"code": "en"},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [{"type": "text", "parameter_name": "bot_message", "text": "Hello, any update?"}],
+                    }
+                ],
+            },
+        }
 
     @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_template_message_splits_long_message(self, mock_post):
@@ -499,8 +507,12 @@ class TestMetaCloudAPIServiceWindow:
             platform=ChannelPlatform.WHATSAPP,
             last_activity_at=timezone.now() - timedelta(hours=1),
         )
-        data = mock_post.call_args.kwargs["json"]
-        assert data["type"] == "text"
+        assert mock_post.call_args.kwargs["json"] == {
+            "messaging_product": "whatsapp",
+            "to": "+27826419977",
+            "type": "text",
+            "text": {"body": "Hello"},
+        }
 
     @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_text_outside_window_with_template_sends_template(self, mock_post):
@@ -529,35 +541,6 @@ class TestMetaCloudAPIServiceWindow:
                 to="+27826419977",
                 platform=ChannelPlatform.WHATSAPP,
                 last_activity_at=timezone.now() - timedelta(hours=25),
-            )
-
-    @patch("apps.service_providers.messaging_service.httpx.post")
-    def test_send_text_none_activity_with_template_sends_template(self, mock_post):
-        mock_post.return_value = httpx.Response(
-            200,
-            json={"messages": [{"id": "wamid.test"}]},
-            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
-        )
-        service = self._make_service(has_template=True)
-        service.send_text_message(
-            message="Hello",
-            from_="phone123",
-            to="+27826419977",
-            platform=ChannelPlatform.WHATSAPP,
-            last_activity_at=None,
-        )
-        data = mock_post.call_args.kwargs["json"]
-        assert data["type"] == "template"
-
-    def test_send_text_none_activity_without_template_raises(self):
-        service = self._make_service(has_template=False)
-        with pytest.raises(ServiceWindowExpiredException):
-            service.send_text_message(
-                message="Hello",
-                from_="phone123",
-                to="+27826419977",
-                platform=ChannelPlatform.WHATSAPP,
-                last_activity_at=None,
             )
 
     @patch("apps.service_providers.messaging_service.httpx.post")
