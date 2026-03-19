@@ -65,6 +65,10 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
                     required_permissions=["assistants.add_openaiassistant"],
                 )
             ],
+            "deprecation_notice": (
+                "The OpenAI Assistants API has been deprecated and will shut down on August 26, 2026. "
+                "Please migrate your integrations to the Responses API."
+            ),
         }
 
 
