@@ -57,8 +57,8 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         """Fetch messages from the database until a marker is found. The marker must be one of the
         PipelineChatHistoryModes values.
         """
-        from apps.pipelines.models import (
-            PipelineChatHistoryModes,  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+            PipelineChatHistoryModes,
         )
 
         messages = []
@@ -154,8 +154,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def make_summary_message(cls, message):
         """A 'summary message' is a special message only ever exists in memory. It is
         not saved to the database. It is used to represent the summary of a chat up to a certain point."""
-        from apps.pipelines.models import (
-            PipelineChatHistoryModes,  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+            PipelineChatHistoryModes,
         )
 
         return ChatMessage(
@@ -200,8 +200,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_summary(self):
-        from apps.pipelines.models import (
-            PipelineChatHistoryModes,  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+            PipelineChatHistoryModes,
         )
 
         return self.metadata.get("compression_marker") == PipelineChatHistoryModes.SUMMARIZE

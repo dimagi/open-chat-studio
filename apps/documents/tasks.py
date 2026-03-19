@@ -170,8 +170,8 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 @shared_task(ignore_result=True)
 def sync_document_source_task(document_source_id: int):
     """Sync a specific document source"""
-    from apps.documents.document_source_service import (
-        sync_document_source,  # noqa: PLC0415 - circular: document_source_service imports documents.tasks
+    from apps.documents.document_source_service import (  # noqa: PLC0415 - circular: document_source_service imports documents.tasks
+        sync_document_source,
     )
 
     try:

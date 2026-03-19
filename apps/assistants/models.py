@@ -137,8 +137,8 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return assistant_version
 
     def archive(self):
-        from apps.assistants.tasks import (
-            delete_openai_assistant_task,  # noqa: PLC0415 - circular: tasks.py → sync.py → assistants.models
+        from apps.assistants.tasks import (  # noqa: PLC0415 - circular: tasks.py → sync.py → assistants.models
+            delete_openai_assistant_task,
         )
 
         if self._is_actively_used:

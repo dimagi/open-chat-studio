@@ -295,8 +295,8 @@ class EvaluationConfig(BaseTeamModel):
             type=run_type,
         )
 
-        from apps.evaluations.tasks import (
-            run_evaluation_task,  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
+        from apps.evaluations.tasks import (  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
+            run_evaluation_task,
         )
 
         run_evaluation_task.delay(run.id)
