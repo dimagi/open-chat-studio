@@ -94,6 +94,7 @@ export class OcsChat {
    * The operating mode of the widget.
    * - 'standard': Default floating window with launcher button.
    * - 'kiosk': Fills parent container, always visible, no header or launcher button.
+   *   The parent element must establish a containing block (e.g. `position: relative`).
    */
   @Prop() mode: 'standard' | 'kiosk' = 'standard';
 
