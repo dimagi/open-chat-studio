@@ -43,11 +43,19 @@ Password: My0riginalP@ssw0rd!
    - Name: `My First Evaluator`
    - Evaluator Type: **LLM Evaluator**
    - First dropdown (model provider): select any available OpenAI provider (e.g. `Working OpenAI` if an API key is configured, otherwise `Non-working OpenAI`)
-   - Second dropdown (model): `o4-mini`
-   - Prompt: `Evaluate friendliness. Output "friendly" if the conversation was friendly, otherwise "unfriendly"`
+   - Second dropdown (model): `OpenAI: o4-mini`
+   - Prompt:
+     ```
+     # Human message
+     {input.content}.
+
+     # AI message
+     {generated_response}
+     ```
    - Output Schema:
      - Field name: `friendliness`
-     - Type: `text`
+     - Type: `Text`
+     - Description: `whether or not this conversation is friendly`
 3. Create the evaluator
 
 ### Create a Dataset
@@ -70,6 +78,10 @@ Password: My0riginalP@ssw0rd!
    - Chatbot Version: **Latest Published Version**
 2. Create the evaluation
 3. On the evaluations list, click the **Run** (play button) on the first row
+4. This redirects to the **Evaluation Run Results** page
+   - The status initially shows **Processing**
+   - Wait for the status to change to **Completed** (this may take up to 1 minute)
+5. Verify the **Results** heading and results table are visible
 
 ### Create and Use an Annotation
 

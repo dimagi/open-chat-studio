@@ -143,8 +143,8 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     await expect(page).toHaveURL(/\/evaluations\//);
   });
 
-  test('run the evaluation', async ({ page }) => {
-    test.setTimeout(60000);
+  test('run the evaluation and verify results', async ({ page }) => {
+    test.setTimeout(120000);
     await setupPage(page);
     await page.goto(`/a/${TEAM_SLUG}/evaluations/`);
     await hideDebugToolbar(page);
@@ -159,8 +159,21 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     // Click the run link
     await evalRow.locator('a[href*="/runs/new/"]').click({ force: true });
 
-    // Wait for evaluation to start - verify we navigated away or see a success indicator
+    // Step 4: Should redirect to the Evaluation Run Results page
     await expect(page).not.toHaveURL(/\/runs\/new\//, { timeout: 10000 });
+
+    // Wait for status to change from "Processing" to "Completed" (up to 90 seconds)
+    // Poll by reloading until we see "Completed"
+    await expect(async () => {
+      await page.reload();
+      await hideDebugToolbar(page);
+      const statusText = await page.getByText('Completed').first().isVisible();
+      expect(statusText).toBe(true);
+    }).toPass({ intervals: [5000], timeout: 90000 });
+
+    // Step 5: Verify the Results heading and results table are visible
+    await expect(page.getByRole('heading', { name: 'Evaluation Run Results', exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('table').last()).toBeVisible({ timeout: 10000 });
   });
 
   test('create an annotation queue', async ({ page }) => {
@@ -273,24 +286,4 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('verify evaluation results', async ({ page }) => {
-    test.setTimeout(60000);
-    await setupPage(page);
-
-    // Go to evaluations list
-    await page.goto(`/a/${TEAM_SLUG}/evaluations/`);
-    await hideDebugToolbar(page);
-
-    // Wait for HTMX table to load
-    await page.locator('table tbody tr').first().waitFor({ state: 'visible', timeout: 10000 });
-
-    // Find the evaluation row
-    const evalRow = page.locator('table tbody tr').filter({ hasText: EVALUATION_NAME }).first();
-    await expect(evalRow).toBeVisible({ timeout: 10000 });
-
-    // Click the evaluation link to see details
-    await evalRow.getByRole('link').first().click();
-
-    await page.waitForTimeout(3000);
-  });
 });
