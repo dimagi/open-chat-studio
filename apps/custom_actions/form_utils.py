@@ -58,8 +58,8 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
         holder: The holder model instance, an Experiment or an OpenAiAssistant.
         custom_action_infos: A list of dictionaries containing the custom action information.
     """
-    from apps.custom_actions.models import (
-        CustomActionOperation,  # noqa: PLC0415 - circular: custom_actions.models imports form_utils
+    from apps.custom_actions.models import (  # noqa: PLC0415 - circular: custom_actions.models imports form_utils
+        CustomActionOperation,
     )
 
     if not hasattr(holder, "custom_action_operations"):

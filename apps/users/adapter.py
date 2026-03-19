@@ -6,6 +6,7 @@ from allauth.account.utils import user_email, user_field
 from allauth.mfa.adapter import DefaultMFAAdapter
 from django.conf import settings
 from django.utils.encoding import force_bytes, force_str
+from django_cryptography.utils.crypto import FernetBytes
 
 
 class EmailAsUsernameAdapter(DefaultAccountAdapter):
@@ -30,7 +31,6 @@ class MfaAdapter(DefaultMFAAdapter):
 
     def encrypt(self, text: str) -> str:
         """Encrypt TOTP secrets using Django cryptography if configured."""
-        from django_cryptography.utils.crypto import FernetBytes
 
         if not settings.CRYPTOGRAPHY_SALT:
             return text
@@ -39,7 +39,6 @@ class MfaAdapter(DefaultMFAAdapter):
 
     def decrypt(self, encrypted_text: str) -> str:
         """Decrypt TOTP secrets."""
-        from django_cryptography.utils.crypto import FernetBytes
 
         if not settings.CRYPTOGRAPHY_SALT:
             return encrypted_text

@@ -237,8 +237,8 @@ class Annotation(BaseTeamModel):
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
 
-        from apps.human_annotations.aggregation import (
-            compute_aggregates_for_queue,  # noqa: PLC0415 - circular: aggregation imports human_annotations.models
+        from apps.human_annotations.aggregation import (  # noqa: PLC0415 - circular: aggregation imports human_annotations.models
+            compute_aggregates_for_queue,
         )
 
         try:
