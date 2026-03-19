@@ -390,15 +390,20 @@ class MetaCloudAPIService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_template_messages: ClassVar[bool] = True
 
     access_token: str
     business_id: str
     app_secret: str = ""
     verify_token: str = ""
+    has_template_message_configured: bool = False
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
     META_API_TIMEOUT: ClassVar[int] = 30
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
+    SERVICE_WINDOW_HOURS: ClassVar[int] = 24
+    TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 974
+    TEMPLATE_ELLIPSIS: ClassVar[str] = "..."
 
     @property
     def _headers(self) -> dict:
@@ -426,6 +431,58 @@ class MetaCloudAPIService(MessagingService):
                 return entry["id"]
         return None
 
+    def _is_within_service_window(self, last_activity_at: datetime | None) -> bool:
+        """Check if the last user activity is within the WhatsApp 24-hour service window.
+        Returns False if last_activity_at is None (no activity = outside window, require template).
+        """
+        if last_activity_at is None:
+            return False
+        return (timezone.now() - last_activity_at) < timedelta(hours=self.SERVICE_WINDOW_HOURS)
+
+    def _split_template_message(self, message: str) -> list[str]:
+        """Split a message into chunks that fit within the template parameter limit.
+        Non-final chunks get '...' appended (so effective split point is limit - 3).
+        Final chunk gets the remainder as-is.
+        """
+        limit = self.TEMPLATE_MESSAGE_CHAR_LIMIT
+        ellipsis = self.TEMPLATE_ELLIPSIS
+        if len(message) <= limit:
+            return [message]
+        chunks = []
+        remaining = message
+        while remaining:
+            if len(remaining) <= limit:
+                chunks.append(remaining)
+                break
+            split_at = limit - len(ellipsis)
+            chunks.append(remaining[:split_at] + ellipsis)
+            remaining = remaining[split_at:]
+        return chunks
+
+    def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        """Send a WhatsApp template message using the 'new_bot_message' template."""
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        chunks = self._split_template_message(message)
+        for chunk in chunks:
+            data = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to,
+                "type": "template",
+                "template": {
+                    "name": "new_bot_message",
+                    "language": {"code": "en"},
+                    "components": [
+                        {
+                            "type": "body",
+                            "parameters": [{"type": "text", "parameter_name": "bot_message", "text": chunk}],
+                        }
+                    ],
+                },
+            }
+            response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+            response.raise_for_status()
+
     def send_text_message(
         self,
         message: str,
@@ -435,6 +492,13 @@ class MetaCloudAPIService(MessagingService):
         last_activity_at: datetime | None = None,
         **kwargs,
     ):
+        if not self._is_within_service_window(last_activity_at):
+            if self.has_template_message_configured:
+                logger.info("Service window expired, sending template message instead of text")
+                return self.send_template_message(message=message, from_=from_, to=to, platform=platform)
+            logger.warning("Service window expired and template message not configured, cannot send message")
+            raise ServiceWindowExpiredException("Service window expired and template message not configured")
+
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
         for chunk in chunks:
@@ -456,6 +520,10 @@ class MetaCloudAPIService(MessagingService):
         last_activity_at: datetime | None = None,
         **kwargs,
     ):
+        if not self._is_within_service_window(last_activity_at):
+            logger.info("Service window expired, cannot send voice message via template")
+            raise ServiceWindowExpiredException("Service window expired, voice messages cannot be sent via template")
+
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
         media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg")
 

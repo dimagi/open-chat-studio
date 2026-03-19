@@ -1,15 +1,18 @@
+from datetime import timedelta
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
 import httpx
 import pytest
+from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.service_providers.exceptions import AudioConversionError
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
@@ -333,6 +336,7 @@ class TestMetaCloudAPIServiceAudio:
             from_="phone123",
             to="27826419977",
             platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now(),
         )
 
         # Should have called get_audio_bytes with ogg format and opus codec
@@ -352,6 +356,254 @@ class TestMetaCloudAPIServiceAudio:
         assert send_data["type"] == "audio"
         assert send_data["audio"]["id"] == "media_id_abc"
         assert send_data["to"] == "27826419977"
+
+
+class TestMetaCloudAPIServiceWindow:
+    """Tests for MetaCloudAPIService service window logic."""
+
+    def _make_service(self, has_template=False):
+        return MetaCloudAPIService(
+            access_token="test_token",
+            business_id="123456",
+            has_template_message_configured=has_template,
+        )
+
+    def test_none_last_activity_is_outside_window(self):
+        service = self._make_service()
+        assert service._is_within_service_window(None) is False
+
+    def test_23_hours_ago_is_within_window(self):
+        service = self._make_service()
+        last_activity = timezone.now() - timedelta(hours=23)
+        assert service._is_within_service_window(last_activity) is True
+
+    def test_25_hours_ago_is_outside_window(self):
+        service = self._make_service()
+        last_activity = timezone.now() - timedelta(hours=25)
+        assert service._is_within_service_window(last_activity) is False
+
+    def test_exactly_24_hours_ago_is_outside_window(self):
+        service = self._make_service()
+        last_activity = timezone.now() - timedelta(hours=24)
+        assert service._is_within_service_window(last_activity) is False
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_short_message(self, mock_post):
+        """Template message with text under the char limit sends one request."""
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        service.send_template_message(
+            message="Hello, any update?",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        mock_post.assert_called_once()
+        data = mock_post.call_args.kwargs["json"]
+        assert data["type"] == "template"
+        assert data["template"]["name"] == "new_bot_message"
+        assert data["template"]["language"]["code"] == "en"
+        body_params = data["template"]["components"][0]["parameters"]
+        assert len(body_params) == 1
+        assert body_params[0]["parameter_name"] == "bot_message"
+        assert body_params[0]["text"] == "Hello, any update?"
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_splits_long_message(self, mock_post):
+        """Messages exceeding 974 chars are split into multiple template messages."""
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        long_message = "A" * 1500
+        service.send_template_message(
+            message=long_message,
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        assert mock_post.call_count == 2
+        first_text = mock_post.call_args_list[0].kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
+        assert first_text == "A" * 971 + "..."
+        assert len(first_text) == 974
+        second_text = mock_post.call_args_list[1].kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
+        assert second_text == "A" * 529
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_exactly_at_limit(self, mock_post):
+        """Message exactly at 974 chars should send as one message without ellipsis."""
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        service.send_template_message(
+            message="A" * 974,
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        mock_post.assert_called_once()
+        text = mock_post.call_args.kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
+        assert text == "A" * 974
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_multiple_splits(self, mock_post):
+        """Very long messages produce 3+ template messages."""
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        service.send_template_message(
+            message="B" * 2500,
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        assert mock_post.call_count == 3
+        for i in range(2):
+            text = mock_post.call_args_list[i].kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
+            assert text.endswith("...")
+            assert len(text) == 974
+        last_text = mock_post.call_args_list[2].kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
+        assert not last_text.endswith("...")
+        assert last_text == "B" * (2500 - 971 * 2)
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_within_window_sends_normal(self, mock_post):
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        service.send_text_message(
+            message="Hello",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        data = mock_post.call_args.kwargs["json"]
+        assert data["type"] == "text"
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_outside_window_with_template_sends_template(self, mock_post):
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        service.send_text_message(
+            message="Hello",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=25),
+        )
+        data = mock_post.call_args.kwargs["json"]
+        assert data["type"] == "template"
+
+    def test_send_text_outside_window_without_template_raises(self):
+        service = self._make_service(has_template=False)
+        with pytest.raises(ServiceWindowExpiredException):
+            service.send_text_message(
+                message="Hello",
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+                last_activity_at=timezone.now() - timedelta(hours=25),
+            )
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_none_activity_with_template_sends_template(self, mock_post):
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service(has_template=True)
+        service.send_text_message(
+            message="Hello",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=None,
+        )
+        data = mock_post.call_args.kwargs["json"]
+        assert data["type"] == "template"
+
+    def test_send_text_none_activity_without_template_raises(self):
+        service = self._make_service(has_template=False)
+        with pytest.raises(ServiceWindowExpiredException):
+            service.send_text_message(
+                message="Hello",
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+                last_activity_at=None,
+            )
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_voice_within_window_sends_normal(self, mock_post):
+        upload_response = httpx.Response(
+            200,
+            json={"id": "media_id_abc"},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/media"),
+        )
+        send_response = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.xyz"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        mock_post.side_effect = [upload_response, send_response]
+        service = self._make_service(has_template=True)
+        synthetic_voice = MagicMock(spec=SynthesizedAudio)
+        synthetic_voice.get_audio_bytes.return_value = b"fake-ogg-audio"
+        service.send_voice_message(
+            synthetic_voice=synthetic_voice,
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        assert mock_post.call_count == 2
+
+    def test_send_voice_outside_window_raises_regardless_of_template(self):
+        service = self._make_service(has_template=True)
+        synthetic_voice = MagicMock(spec=SynthesizedAudio)
+        with pytest.raises(ServiceWindowExpiredException):
+            service.send_voice_message(
+                synthetic_voice=synthetic_voice,
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+                last_activity_at=timezone.now() - timedelta(hours=25),
+            )
+        synthetic_voice.get_audio_bytes.assert_not_called()
+
+    def test_send_voice_none_activity_raises(self):
+        service = self._make_service(has_template=True)
+        synthetic_voice = MagicMock(spec=SynthesizedAudio)
+        with pytest.raises(ServiceWindowExpiredException):
+            service.send_voice_message(
+                synthetic_voice=synthetic_voice,
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+                last_activity_at=None,
+            )
+        synthetic_voice.get_audio_bytes.assert_not_called()
 
 
 def _test_messaging_provider(team, provider_type: MessagingProviderType, data):
