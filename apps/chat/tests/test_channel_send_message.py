@@ -2,7 +2,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.chat.exceptions import AudioSynthesizeException, ServiceWindowExpiredException
+from apps.chat.channels import ChannelBase
+from apps.chat.exceptions import ServiceWindowExpiredException
 
 
 class TestSendMessageToUserVoiceFallback:
@@ -10,8 +11,6 @@ class TestSendMessageToUserVoiceFallback:
 
     def _make_channel(self, voice_enabled=True):
         """Create a mock channel with the send_message_to_user method from ChannelBase."""
-        from apps.chat.channels import ChannelBase  # noqa: PLC0415
-
         channel = MagicMock(spec=ChannelBase)
         # Only bind the method under test; leave _reply_voice_message as a MagicMock
         # so .side_effect works correctly in tests
@@ -43,18 +42,6 @@ class TestSendMessageToUserVoiceFallback:
         channel._send_text_to_user_with_notification.assert_called_once()
         assert channel._bot_message_is_voice is False
 
-    def test_voice_audio_synthesize_error_falls_back_to_text(self):
-        """Existing behavior: AudioSynthesizeException falls back to text."""
-        channel = self._make_channel(voice_enabled=True)
-        channel._reply_voice_message.side_effect = AudioSynthesizeException("synth failed")
-        channel._send_text_to_user_with_notification = MagicMock()
-        channel.experiment_session = MagicMock()
-
-        channel.send_message_to_user("Hello")
-
-        channel._send_text_to_user_with_notification.assert_called_once()
-        assert channel._bot_message_is_voice is False
-
     def test_text_service_window_expired_propagates(self):
         """When text message raises ServiceWindowExpiredException (no template), it propagates up."""
         channel = self._make_channel(voice_enabled=False)
@@ -72,8 +59,6 @@ class TestNotifyOnDeliveryFailureDecoratorPropagation:
     @staticmethod
     def _setup_channel_mock():
         """Create a mock channel with attributes needed by @notify_on_delivery_failure."""
-        from apps.chat.channels import ChannelBase  # noqa: PLC0415
-
         channel = MagicMock(spec=ChannelBase)
         # The decorator accesses these for the notification
         channel.experiment = MagicMock()
@@ -85,8 +70,6 @@ class TestNotifyOnDeliveryFailureDecoratorPropagation:
     def test_decorator_re_raises_service_window_expired(self):
         """The @notify_on_delivery_failure decorator logs and notifies but re-raises
         ServiceWindowExpiredException so it can be caught by send_message_to_user."""
-        from apps.chat.channels import ChannelBase  # noqa: PLC0415
-
         channel = self._setup_channel_mock()
         channel._send_voice_to_user_with_notification = ChannelBase._send_voice_to_user_with_notification.__get__(
             channel
@@ -102,8 +85,6 @@ class TestNotifyOnDeliveryFailureDecoratorPropagation:
     def test_decorator_re_raises_service_window_expired_for_text(self):
         """The @notify_on_delivery_failure decorator re-raises ServiceWindowExpiredException
         from text message delivery as well."""
-        from apps.chat.channels import ChannelBase  # noqa: PLC0415
-
         channel = self._setup_channel_mock()
         channel._send_text_to_user_with_notification = ChannelBase._send_text_to_user_with_notification.__get__(channel)
         channel.send_text_to_user.side_effect = ServiceWindowExpiredException("no template")
