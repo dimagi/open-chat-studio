@@ -435,6 +435,16 @@ No DB needed. All stages are `MagicMock` instances.
 - `CommCareConsentCheckStage`: no consent in `ParticipantData.system_metadata` → raises `EarlyExitResponse`.
 - `CommCareConsentCheckStage`: `ParticipantData.DoesNotExist` → raises `EarlyExitResponse`.
 
+### `ChannelBase` utility methods (not pipeline, stay as-is)
+- `from_experiment_session()` → returns correct channel subclass for each platform.
+- `from_experiment_session()` with unsupported platform → raises exception.
+- `get_channel_class_for_platform()` → maps platform strings to channel classes.
+- `start_new_session()` with working experiment → session created.
+- `start_new_session()` with versioned experiment → raises `VersionedExperimentSessionsNotAllowedException`.
+- `ensure_session_exists_for_participant()` → loads or creates session for identifier.
+- `ensure_session_exists_for_participant(new_session=True)` → ends existing session, creates new.
+- `ensure_session_exists_for_participant()` with mismatched identifier → raises `ChannelException`.
+
 ---
 
 ## Reusable Existing Infrastructure
