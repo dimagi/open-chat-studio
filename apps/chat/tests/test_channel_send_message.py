@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -64,3 +64,52 @@ class TestSendMessageToUserVoiceFallback:
 
         with pytest.raises(ServiceWindowExpiredException):
             channel.send_message_to_user("Hello")
+
+
+class TestNotifyOnDeliveryFailureDecoratorPropagation:
+    """Tests that @notify_on_delivery_failure does not swallow ServiceWindowExpiredException."""
+
+    @staticmethod
+    def _setup_channel_mock():
+        """Create a mock channel with attributes needed by @notify_on_delivery_failure."""
+        from apps.chat.channels import ChannelBase  # noqa: PLC0415
+
+        channel = MagicMock(spec=ChannelBase)
+        # The decorator accesses these for the notification
+        channel.experiment = MagicMock()
+        channel._experiment_session = MagicMock()
+        channel.experiment_channel = MagicMock()
+        channel.experiment_channel.platform_enum.title.return_value = "WhatsApp"
+        return channel
+
+    def test_decorator_re_raises_service_window_expired(self):
+        """The @notify_on_delivery_failure decorator logs and notifies but re-raises
+        ServiceWindowExpiredException so it can be caught by send_message_to_user."""
+        from apps.chat.channels import ChannelBase  # noqa: PLC0415
+
+        channel = self._setup_channel_mock()
+        channel._send_voice_to_user_with_notification = ChannelBase._send_voice_to_user_with_notification.__get__(
+            channel
+        )
+        channel.send_voice_to_user.side_effect = ServiceWindowExpiredException("window expired")
+
+        with patch("apps.chat.decorators.message_delivery_failure_notification") as mock_notify:
+            with pytest.raises(ServiceWindowExpiredException):
+                channel._send_voice_to_user_with_notification(MagicMock())
+
+            mock_notify.assert_called_once()
+
+    def test_decorator_re_raises_service_window_expired_for_text(self):
+        """The @notify_on_delivery_failure decorator re-raises ServiceWindowExpiredException
+        from text message delivery as well."""
+        from apps.chat.channels import ChannelBase  # noqa: PLC0415
+
+        channel = self._setup_channel_mock()
+        channel._send_text_to_user_with_notification = ChannelBase._send_text_to_user_with_notification.__get__(channel)
+        channel.send_text_to_user.side_effect = ServiceWindowExpiredException("no template")
+
+        with patch("apps.chat.decorators.message_delivery_failure_notification") as mock_notify:
+            with pytest.raises(ServiceWindowExpiredException):
+                channel._send_text_to_user_with_notification("Hello")
+
+            mock_notify.assert_called_once()
