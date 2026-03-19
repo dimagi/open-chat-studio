@@ -14,8 +14,8 @@ If a list of failing tests is provided as the second argument (e.g. `"02-create-
 
 | Spec filename | Workflow section |
 |---|---|
-| `02-create-and-test-chatbot.spec.ts` | Flow 1: Create and Test a Chatbot |
-| `03-evaluations-datasets-annotations.spec.ts` | Flow 2: Evaluations, Datasets, and Annotations |
+| `01-create-and-test-chatbot.spec.ts` | Flow 1: Create and Test a Chatbot |
+| `02-evaluations-datasets-annotations.spec.ts` | Flow 2: Evaluations, Datasets, and Annotations |
 
 Run **only** those sections instead of all workflows.
 
