@@ -1069,6 +1069,63 @@ class ChannelBase(ABC):
 > - **Dynamic `_get_capabilities()`** (Decision 3): Method can be overridden for channels where capabilities depend on runtime state (e.g., provider-dependent file support).
 > - **Channel-specific pipelines**: Channels like `ApiChannel`, `EvaluationChannel`, and `CommCareConnectChannel` override `_build_pipeline` to customize their stage lists (e.g., omitting `ResponseSendingStage` for channels that don't send, adding `CommCareConsentCheckStage` after `SessionResolutionStage`).
 
+### 6b\. Ad Hoc Bot Messages (`send_message_to_user`)
+
+Ad hoc bot messages (e.g., reminders, check-ins from `ExperimentSession.ad_hoc_bot_message`)
+bypass the full pipeline. They use a **mini pipeline** that runs only the formatting and
+sending stages.
+
+```py
+class ChannelBase(ABC):
+    # ... (existing methods)
+
+    def send_message_to_user(self, bot_message: str, files: list[File] | None = None):
+        """Send a bot-generated message to the user outside the normal pipeline.
+
+        Used by ExperimentSession.try_send_message() for ad hoc bot messages
+        (reminders, check-ins, event-triggered messages).
+
+        Runs a mini pipeline: ResponseFormattingStage → terminal stages.
+        Voice/text decision, citation formatting, and file handling all apply.
+        """
+        files = files or []
+
+        # Build a context with the bot message as a fake bot_response
+        ctx = MessageProcessingContext(
+            message=None,  # No inbound message for ad hoc
+            experiment=self.experiment,
+            experiment_channel=self.experiment_channel,
+            experiment_session=self.experiment_session,
+            callbacks=self._get_callbacks(),
+            sender=self._get_sender(),
+            capabilities=self._get_capabilities(),
+            trace_service=self.trace_service,
+            participant_identifier=self.experiment_session.participant.identifier,
+            bot_response=ChatMessage(content=bot_message),
+            files_to_send=files,
+        )
+
+        # Mini pipeline: format + send (no message processing stages)
+        mini_pipeline = MessageProcessingPipeline(
+            core_stages=[
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                ResponseSendingStage(),
+                SendingErrorHandlerStage(),
+                PersistenceStage(),
+            ],
+        )
+        mini_pipeline.process(ctx)
+```
+
+> **Review decision applied** (Decision 31):
+> - Ad hoc messages use a mini pipeline with `ResponseFormattingStage` + terminal stages.
+> - The EventBot-generated message is set as `ctx.bot_response` so `ResponseFormattingStage` works as-is (voice/text decision, citations, file splitting all apply).
+> - `ctx.message` is `None` since there's no inbound user message.
+> - No `ActivityTrackingStage` — session activity is managed by the caller.
+> - Called from `ExperimentSession.try_send_message()` which uses `ChannelBase.from_experiment_session()` to create the channel.
+
 ### 7\. Concrete Channel Example
 
 ```py
@@ -2595,6 +2652,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 29 | Architecture | `NEW_HUMAN_MESSAGE` trigger in `ChatMessageCreationStage` | `enqueue_static_triggers` for `NEW_HUMAN_MESSAGE` fires in `ChatMessageCreationStage` after the DB record is created. Gated by `capabilities.supports_static_triggers` (default `True`, `EvaluationChannel` sets `False`). Session creation triggers (`PARTICIPANT_JOINED_EXPERIMENT`, `CONVERSATION_START`) remain in `_start_experiment_session`. |
 | — | Update | `PersistenceStage` (terminal) | Renamed from `EarlyExitResponseStage`. Persists early exit responses to chat history AND saves voice attachments (tag + file). Runs after sending stages. |
 | 30 | Architecture | Voice attachment persistence | `PersistenceStage` tags the bot response as "voice" and saves synthesized audio as a file attachment. Moved from post-send logic in the old `_handle_supported_message`. |
+| 31 | Architecture | Ad hoc bot messages via mini pipeline | `send_message_to_user` uses a mini pipeline (`ResponseFormattingStage` + terminal stages) for ad hoc messages. EventBot-generated message set as `ctx.bot_response`. Voice/text decision, citations, file handling all apply. No `ActivityTrackingStage`. |
 | — | Update | `ResponseSendingStage` (terminal) | Sole stage that sends messages. Handles both normal responses and early exit responses. Wraps all sends in try/except with delivery failure notifications. |
 | — | Update | `ActivityTrackingStage` (terminal) | Updates session timestamps. Always runs when session exists. |
 | — | Update | Callbacks receive targeted parameters | Callback methods receive `recipient: str` (not full context). No chicken-and-egg problem — `participant_identifier` passed at call time. |

@@ -1178,6 +1178,46 @@ class ChannelBase(ABC):
     def _get_sender(self) -> ChannelSender:
         """Return channel-specific sender."""
 
+    def send_message_to_user(self, bot_message: str, files: list | None = None):
+        """Send a bot-generated message to the user outside the normal pipeline.
+
+        Used by ExperimentSession.try_send_message() for ad hoc bot messages
+        (reminders, check-ins, event-triggered messages).
+
+        Runs a mini pipeline: ResponseFormattingStage → terminal stages.
+        Voice/text decision, citation formatting, and file handling all apply.
+        """
+        from apps.chat.models import ChatMessage
+
+        files = files or []
+
+        ctx = MessageProcessingContext(
+            message=None,  # No inbound message for ad hoc
+            experiment=self.experiment,
+            experiment_channel=self.experiment_channel,
+            experiment_session=self.experiment_session,
+            callbacks=self._get_callbacks(),
+            sender=self._get_sender(),
+            capabilities=self._get_capabilities(),
+            trace_service=self.trace_service,
+            participant_identifier=self.experiment_session.participant.identifier,
+            bot_response=ChatMessage(content=bot_message),
+            files_to_send=files,
+        )
+
+        mini_pipeline = MessageProcessingPipeline(
+            core_stages=[
+                ResponseFormattingStage(),
+            ],
+            terminal_stages=[
+                ResponseSendingStage(),
+                SendingErrorHandlerStage(),
+                PersistenceStage(),
+                # No ActivityTrackingStage — caller manages session activity
+            ],
+        )
+        mini_pipeline.process(ctx)
+
 
 # ---------------------------------------------------------------------------
 # 12. Concrete Channel: Telegram

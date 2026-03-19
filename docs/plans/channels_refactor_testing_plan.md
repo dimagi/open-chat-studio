@@ -235,6 +235,9 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
 | `ResponseSendingStage` is the ONLY place *responses* reach the user (callbacks may send indicators/echoes mid-pipeline) | new |
 | Send failure → `ctx.sending_exception` set, `SendingErrorHandlerStage` runs | new |
 | `NEW_HUMAN_MESSAGE` trigger fires after chat message creation (gated by `supports_static_triggers`) | new |
+| Ad hoc bot message (`send_message_to_user`) → mini pipeline runs formatting + sending | `test_ad_hoc_bot_message` |
+| Ad hoc bot message with voice config → voice/text decision applies | new |
+| Ad hoc bot message with files → supported sent directly, unsupported as links | new |
 
 ---
 
