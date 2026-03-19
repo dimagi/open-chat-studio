@@ -4,6 +4,7 @@ import contextlib
 import logging
 import re
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
@@ -190,6 +191,11 @@ class ChannelBase(ABC):
     def experiment_session(self, value: ExperimentSession):
         self._experiment_session = value
         self.reset_bot()
+
+    @property
+    def last_activity_at(self) -> datetime | None:
+        """Returns last_activity_at from the session, or None if no session exists."""
+        return self._experiment_session.last_activity_at if self._experiment_session else None
 
     @property
     def message(self) -> BaseMessage:
@@ -554,12 +560,14 @@ class ChannelBase(ABC):
                 self._reply_voice_message(bot_message)
                 if urls_to_append:
                     self._send_text_to_user_with_notification(urls_to_append)
-            except (AudioSynthesizeException, ServiceWindowExpiredException) as exc:
-                if isinstance(exc, AudioSynthesizeException):
-                    logger.exception("Error generating voice response")
-                    audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
-                else:
-                    logger.info("Service window expired, falling back to text message")
+            except AudioSynthesizeException:
+                logger.exception("Error generating voice response")
+                audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
+                self._bot_message_is_voice = False
+                bot_message = f"{bot_message}\n\n{urls_to_append}"
+                self._send_text_to_user_with_notification(bot_message)
+            except ServiceWindowExpiredException:
+                logger.info("Service window expired, falling back to text message")
                 self._bot_message_is_voice = False
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
                 self._send_text_to_user_with_notification(bot_message)
@@ -1181,7 +1189,7 @@ class WhatsappChannel(ChannelBase):
             from_=self.from_identifier,
             to=self.participant_identifier,
             platform=ChannelPlatform.WHATSAPP,
-            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
+            last_activity_at=self.last_activity_at,
         )
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -1191,7 +1199,7 @@ class WhatsappChannel(ChannelBase):
             from_=self.from_identifier,
             to=self.participant_identifier,
             platform=ChannelPlatform.WHATSAPP,
-            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
+            last_activity_at=self.last_activity_at,
         )
 
     def send_file_to_user(self, file: File):
@@ -1216,7 +1224,7 @@ class SureAdhereChannel(ChannelBase):
             from_=from_,
             to=to_patient,
             platform=ChannelPlatform.SUREADHERE,
-            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
+            last_activity_at=self.last_activity_at,
         )
 
     @property
@@ -1232,7 +1240,7 @@ class FacebookMessengerChannel(ChannelBase):
             from_=from_,
             to=self.participant_identifier,
             platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
+            last_activity_at=self.last_activity_at,
         )
 
     @property
@@ -1254,7 +1262,7 @@ class FacebookMessengerChannel(ChannelBase):
             from_=from_,
             to=self.participant_identifier,
             platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
+            last_activity_at=self.last_activity_at,
         )
 
 
@@ -1345,7 +1353,7 @@ class SlackChannel(ChannelBase):
             to=channel_id,
             platform=ChannelPlatform.SLACK,
             thread_ts=thread_ts,
-            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
+            last_activity_at=self.last_activity_at,
         )
 
     def _ensure_sessions_exists(self):
