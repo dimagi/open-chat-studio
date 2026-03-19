@@ -106,6 +106,12 @@ class VersionFieldDisplayFormatters:
         """code_interpreter, file_search -> Code Interpreter, File Search"""
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
 
+    @staticmethod
+    def format_custom_action_operation(op) -> str:
+        action = op.custom_action
+        op_details = action.get_operations_by_id().get(op.operation_id)
+        return f"{action.name}: {op_details}"
+
 
 class PromptObjectManager(AuditingManager):
     pass
