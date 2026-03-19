@@ -440,23 +440,9 @@ class MetaCloudAPIService(MessagingService):
         return (timezone.now() - last_activity_at) < timedelta(hours=self.SERVICE_WINDOW_HOURS)
 
     def _split_template_message(self, message: str) -> list[str]:
-        """Split a message into chunks that fit within the template parameter limit.
-        Non-final chunks get '...' appended (so effective split point is limit - 3).
-        Final chunk gets the remainder as-is.
-        """
-        limit = self.TEMPLATE_MESSAGE_CHAR_LIMIT
-        if len(message) <= limit:
-            return [message]
-        chunks = []
-        remaining = message
-        while remaining:
-            if len(remaining) <= limit:
-                chunks.append(remaining)
-                break
-            split_at = limit - 3  # account for the ellipses
-            chunks.append(remaining[:split_at] + "...")
-            remaining = remaining[split_at:]
-        return chunks
+        """Split a message into chunks that fit within the template parameter limit,
+        splitting at word boundaries to avoid cutting words."""
+        return [chunk for chunk in smart_split(message, chars_per_string=self.TEMPLATE_MESSAGE_CHAR_LIMIT) if chunk]
 
     def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         """Send a WhatsApp template message using the 'new_bot_message' template."""
