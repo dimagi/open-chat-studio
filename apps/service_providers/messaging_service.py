@@ -402,8 +402,8 @@ class MetaCloudAPIService(MessagingService):
     META_API_TIMEOUT: ClassVar[int] = 30
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
     SERVICE_WINDOW_HOURS: ClassVar[int] = 24
+    # allow 50 characters for the template message without the bot message. 1024 - 50
     TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 974
-    TEMPLATE_ELLIPSIS: ClassVar[str] = "..."
 
     @property
     def _headers(self) -> dict:
@@ -445,7 +445,6 @@ class MetaCloudAPIService(MessagingService):
         Final chunk gets the remainder as-is.
         """
         limit = self.TEMPLATE_MESSAGE_CHAR_LIMIT
-        ellipsis = self.TEMPLATE_ELLIPSIS
         if len(message) <= limit:
             return [message]
         chunks = []
@@ -454,8 +453,8 @@ class MetaCloudAPIService(MessagingService):
             if len(remaining) <= limit:
                 chunks.append(remaining)
                 break
-            split_at = limit - len(ellipsis)
-            chunks.append(remaining[:split_at] + ellipsis)
+            split_at = limit - 3  # account for the ellipses
+            chunks.append(remaining[:split_at] + "...")
             remaining = remaining[split_at:]
         return chunks
 
