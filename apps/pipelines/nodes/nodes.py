@@ -955,10 +955,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             message = get_code_error_message("<inline_code>", self.code)
             raise CodeNodeRunError(message) from exc
 
-        output_metadata = {}
-        console_output = "".join(collector() for collector in print_collectors)
-        if console_output:
-            output_metadata["console_output"] = console_output
+        output_metadata = {
+            "console_output": "".join(collector() for collector in print_collectors)
+        }
 
         if isinstance(result, Command):
             return result
