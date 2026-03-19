@@ -11,7 +11,7 @@ import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
-from django.utils import timezone  # noqa: F401
+from django.utils import timezone
 from telebot.util import smart_split
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ from apps.channels import audio
 from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
-from apps.chat.exceptions import ServiceWindowExpiredException  # noqa: F401
+from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
 from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
