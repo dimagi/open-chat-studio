@@ -74,7 +74,14 @@ def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
     )
     session.ad_hoc_bot_message("Hello", TraceInfo(name="slack test"))
     assert messaging_service.send_text_message.call_args_list == [
-        mock.call("Hi", from_="", to="channel_id", thread_ts="thread_ts", platform=ChannelPlatform.SLACK)
+        mock.call(
+            "Hi",
+            from_="",
+            to="channel_id",
+            platform=ChannelPlatform.SLACK,
+            thread_ts="thread_ts",
+            last_activity_at=mock.ANY,
+        )
     ]
 
 
