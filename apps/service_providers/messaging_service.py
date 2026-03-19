@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 import backoff
 import httpx
+import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
@@ -49,11 +50,9 @@ class MessagingService(pydantic.BaseModel):
         """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
 
-    def is_valid_number(self, number: str) -> bool:
-        """Returns False if `number` does not belong to this account. Returns `True` by default so that this
-        doesn't prevent users from adding numbers if we cannot check the account.
-        """
-        return True
+    def resolve_number(self, number: str) -> str | None:
+        """Returns `number` if the number is verified to belong to the account, otherwise return `None`"""
+        return number
 
 
 class TwilioService(MessagingService):
@@ -198,13 +197,13 @@ class TwilioService(MessagingService):
         """Returns all numbers associated with this client account"""
         return [num.phone_number for num in self.client.incoming_phone_numbers.list() if num.phone_number is not None]
 
-    def is_valid_number(self, number: str) -> bool:
+    def resolve_number(self, number: str) -> str | None:
         if settings.DEBUG:
             # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
-            # let's just always return True
-            return True
+            # let's just always return the number
+            return number
 
-        return number in self._get_account_numbers()
+        return number if number in self._get_account_numbers() else None
 
     def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
@@ -333,6 +332,61 @@ class SureAdhereService(MessagingService):
         data = {"patient_Id": to, "message_Body": message}
         response = httpx.post(send_msg_url, headers=headers, json=data)
         response.raise_for_status()
+
+
+class MetaCloudAPIService(MessagingService):
+    _type: ClassVar[str] = "meta_cloud_api"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    voice_replies_supported: ClassVar[bool] = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    access_token: str
+    business_id: str
+    app_secret: str = ""
+    verify_token: str = ""
+
+    META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
+    META_API_TIMEOUT: ClassVar[int] = 30
+    WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
+
+    @property
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+    def resolve_number(self, number: str) -> str | None:
+        """Look up the phone number ID for the given E.164 phone number
+        using the WhatsApp Business Account Phone Number Management API."""
+        url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
+        response = httpx.get(
+            url, headers=self._headers, params={"fields": "id,display_phone_number"}, timeout=self.META_API_TIMEOUT
+        )
+        response.raise_for_status()
+        for entry in response.json().get("data", []):
+            display = entry.get("display_phone_number", "")
+            try:
+                parsed = phonenumbers.parse(display)
+                normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            except phonenumbers.NumberParseException:
+                continue
+            if normalized == number:
+                return entry["id"]
+        return None
+
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
+        for chunk in chunks:
+            data = {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "text",
+                "text": {"body": chunk},
+            }
+            response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+            response.raise_for_status()
 
 
 class SlackService(MessagingService):

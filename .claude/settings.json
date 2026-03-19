@@ -16,7 +16,9 @@
       "Bash(npm run type-check:*)",
       "Bash(npx stencil test:*)",
       "WebFetch(domain:docs.openchatstudio.com)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run ruff format:*)"
     ]
   },
   "enableAllProjectMcpServers": false,

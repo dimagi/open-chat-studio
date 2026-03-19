@@ -52,6 +52,7 @@ from apps.ocs_notifications.notifications import (
 )
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
+from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
@@ -1020,8 +1021,8 @@ class WebChannel(ChannelBase):
 
     @classmethod
     def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
-        from apps.experiments.tasks import (
-            get_response_for_webchat_task,  # noqa: PLC0415 - circular: experiments.tasks imports chat.channels
+        from apps.experiments.tasks import (  # noqa: PLC0415 - circular: experiments.tasks imports chat.channels
+            get_response_for_webchat_task,
         )
 
         if seed_message := experiment.seed_message:
@@ -1156,34 +1157,38 @@ class WhatsappChannel(ChannelBase):
     def supported_message_types(self):
         return self.messaging_service.supported_message_types
 
+    @property
+    def from_identifier(self) -> str:
+        """Returns the phone number ID for Meta Cloud API, or the phone number for other providers."""
+        extra_data = self.experiment_channel.extra_data
+        if self.experiment_channel.messaging_provider.type == MessagingProviderType.meta_cloud_api:
+            phone_number_id = extra_data.get("phone_number_id")
+            if not phone_number_id:
+                raise ValueError("Meta Cloud API channel is missing phone_number_id in extra_data")
+            return phone_number_id
+        return extra_data["number"]
+
     def echo_transcript(self, transcript: str):
         self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
 
     def send_text_to_user(self, text: str):
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.participant_identifier
-
         self.messaging_service.send_text_message(
-            message=text, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            message=text, from_=self.from_identifier, to=self.participant_identifier, platform=ChannelPlatform.WHATSAPP
         )
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """
-        Uploads the synthesized voice to AWS and send the public link to twilio
-        """
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.participant_identifier
-
+        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_number, to=to_number, platform=ChannelPlatform.WHATSAPP
+            synthetic_voice,
+            from_=self.from_identifier,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.WHATSAPP,
         )
 
     def send_file_to_user(self, file: File):
-        from_number = self.experiment_channel.extra_data["number"]
-        to_number = self.participant_identifier
         self.messaging_service.send_file_to_user(
-            from_=from_number,
-            to=to_number,
+            from_=self.from_identifier,
+            to=self.participant_identifier,
             platform=ChannelPlatform.WHATSAPP,
             file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
@@ -1225,9 +1230,7 @@ class FacebookMessengerChannel(ChannelBase):
         self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """
-        Uploads the synthesized voice to AWS and send the public link to twilio
-        """
+        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
             synthetic_voice, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK

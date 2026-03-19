@@ -359,7 +359,9 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             )
 
         if not self._has_triggers_left(working_version, session, reference_message):
-            from apps.events.tasks import enqueue_static_triggers  # noqa: PLC0415
+            from apps.events.tasks import (  # noqa: PLC0415 - circular: events.tasks imports events.models
+                enqueue_static_triggers,
+            )
 
             enqueue_static_triggers.delay(session.id, StaticTriggerType.LAST_TIMEOUT)
 
@@ -484,7 +486,9 @@ class ScheduledMessage(BaseTeamModel):
 
     def safe_trigger(self, attempt_number=1):
         """Wraps _trigger with attempt tracking and retry"""
-        from apps.events.tasks import retry_scheduled_message  # noqa: PLC0415
+        from apps.events.tasks import (  # noqa: PLC0415 - circular: events.tasks imports events.models
+            retry_scheduled_message,
+        )
 
         trigger_number = self.total_triggers
         attempt = ScheduledMessageAttempt(

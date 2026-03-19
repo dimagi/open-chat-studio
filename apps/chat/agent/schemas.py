@@ -108,6 +108,20 @@ class GetSessionStateSchema(BaseModel):
     graph_state: Annotated[dict, InjectedState]
 
 
+class AppendToSessionStateSchema(BaseModel):
+    key: str = Field(description="The key in the session state to append to")
+    value: str | int | list = Field(description="The value to append")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+    graph_state: Annotated[dict, InjectedState]
+
+
+class IncrementSessionStateCounterSchema(BaseModel):
+    counter: str = Field(description="The name of the counter to increment")
+    value: int = Field(description="The value to increment the counter by", default=1)
+    tool_call_id: Annotated[str, InjectedToolCallId]
+    graph_state: Annotated[dict, InjectedState]
+
+
 class CalculatorSchema(BaseModel):
     expression: str = Field(
         description="The mathematical expression to evaluate. "

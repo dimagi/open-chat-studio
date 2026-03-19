@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.documents.readers import Document
+from apps.files.models import File
 
 logger = logging.getLogger("ocs.channels")
 
@@ -51,7 +53,6 @@ class Attachment(BaseModel):
 
     @cached_property
     def _file(self):
-        from apps.files.models import File  # noqa: PLC0415
 
         try:
             return File.objects.get(id=self.file_id)
@@ -61,7 +62,6 @@ class Attachment(BaseModel):
 
     @cached_property
     def document(self):
-        from apps.documents.readers import Document  # noqa: PLC0415
 
         return Document.from_file(self._file)
 
@@ -195,6 +195,10 @@ class TurnWhatsappMessage(BaseMessage):
             media_id=message.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
         )
+
+
+# Meta Cloud API uses the same WhatsApp Business API message format as Turn.io
+MetaCloudAPIMessage = TurnWhatsappMessage
 
 
 class FacebookMessage(BaseMessage):

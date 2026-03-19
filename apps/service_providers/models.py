@@ -382,6 +382,7 @@ class MessagingProviderType(models.TextChoices):
     turnio = "turnio", _("Turn.io")
     sureadhere = "sureadhere", _("SureAdhere")
     slack = "slack", _("Slack")
+    meta_cloud_api = "meta_cloud_api", _("Meta Cloud API (WhatsApp)")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -396,6 +397,8 @@ class MessagingProviderType(models.TextChoices):
                 return forms.SureAdhereMessagingConfigForm
             case MessagingProviderType.slack:
                 return forms.SlackMessagingConfigForm
+            case MessagingProviderType.meta_cloud_api:
+                return forms.MetaCloudAPIMessagingConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_messaging_service(self, config: dict) -> "messaging_service.MessagingService":
@@ -410,6 +413,8 @@ class MessagingProviderType(models.TextChoices):
                 return messaging_service.SureAdhereService(**config)
             case MessagingProviderType.slack:
                 return messaging_service.SlackService(**config)
+            case MessagingProviderType.meta_cloud_api:
+                return messaging_service.MetaCloudAPIService(**config)
         raise Exception(f"No messaging service configured for {self}")
 
     @staticmethod
@@ -430,6 +435,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    extra_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ("type", "name")

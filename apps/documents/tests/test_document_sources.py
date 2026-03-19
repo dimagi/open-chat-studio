@@ -16,7 +16,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
-from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.documents.source_loaders.base import BaseDocumentLoader, SyncResult
 
 
 @pytest.fixture()
@@ -171,8 +171,6 @@ class TestDocumentSourceManager:
         manager = DocumentSourceManager(document_source)
 
         with patch.object(manager, "_sync_documents") as mock_sync:
-            from apps.documents.source_loaders.base import SyncResult  # noqa: PLC0415
-
             mock_sync.return_value = SyncResult(success=True, files_added=1)
 
             with patch("apps.documents.document_source_service.create_loader") as mock_create_loader:

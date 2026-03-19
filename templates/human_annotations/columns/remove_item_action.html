@@ -1,0 +1,36 @@
+{% load i18n %}
+
+{% if perms.human_annotations.delete_annotationitem %}
+<button class="btn btn-sm btn-ghost join-item"
+        title="{% translate "Remove from queue" %}"
+        type="button"
+        onclick="document.getElementById('remove-modal-{{ record.pk }}').showModal()"
+        hx-get="{% url 'human_annotations:queue_remove_item' request.team.slug record.queue_id record.pk %}"
+        hx-target="#remove-modal-{{ record.pk }}-body"
+        hx-swap="innerHTML"
+        hx-trigger="click once">
+  <i class="fa-solid fa-trash"></i>
+</button>
+<dialog id="remove-modal-{{ record.pk }}" class="modal">
+  <div class="modal-box w-11/12 max-w-lg">
+    <div id="remove-modal-{{ record.pk }}-body">
+      <span class="loading loading-spinner loading-md"></span>
+    </div>
+    <div class="modal-action">
+      <button class="btn btn-error btn-sm"
+              hx-delete="{% url 'human_annotations:queue_remove_item' request.team.slug record.queue_id record.pk %}"
+              hx-target="#record-{{ record.id }}"
+              hx-swap="outerHTML"
+              hx-on::after-request="if(event.detail.successful) document.getElementById('remove-modal-{{ record.pk }}').close()">
+        {% translate "Remove" %}
+      </button>
+      <form method="dialog">
+        <button class="btn btn-sm">{% translate "Cancel" %}</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+{% endif %}

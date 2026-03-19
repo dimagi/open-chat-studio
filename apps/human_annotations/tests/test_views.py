@@ -1001,3 +1001,82 @@ def test_reviewer_items_table_returns_empty_for_unassigned_queue(reviewer_client
     response = reviewer_client.get(url)
     assert response.status_code == 200
     assert unassigned_queue.name not in response.content.decode()
+
+
+# ===== Remove Session from Queue =====
+
+
+@pytest.mark.django_db()
+def test_remove_session_get_shows_confirmation(client, team_with_users, queue, user):
+    """GET returns the confirmation modal partial with annotation data."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": "Good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Remove Session from Queue" in content
+    assert "quality_score" in content
+
+
+@pytest.mark.django_db()
+def test_remove_session_get_no_annotations(client, team_with_users, queue):
+    """GET for an item with no annotations shows the empty state."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "No annotations" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_remove_session_delete_removes_item(client, team_with_users, queue):
+    """DELETE removes the annotation item from the queue."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = client.delete(url)
+    assert response.status_code == 200
+    assert not AnnotationItem.objects.filter(pk=item.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_remove_session_delete_cascades_annotations(client, team_with_users, queue, user):
+    """DELETE also removes all associated annotations."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    annotation = Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": "Good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    client.delete(url)
+    assert not Annotation.objects.filter(pk=annotation.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_remove_session_wrong_queue_returns_404(client, team_with_users, queue, user):
+    """DELETE with item from a different queue returns 404."""
+    other_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    item = AnnotationItemFactory.create(queue=other_queue, team=team_with_users)
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = client.delete(url)
+    assert response.status_code == 404
+    assert AnnotationItem.objects.filter(pk=item.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_reviewer_cannot_remove_session(reviewer_client, team_with_users, queue):
+    """Reviewers (without delete_annotationitem perm) cannot remove sessions."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = reviewer_client.delete(url)
+    assert response.status_code == 403
+    assert AnnotationItem.objects.filter(pk=item.pk).exists()

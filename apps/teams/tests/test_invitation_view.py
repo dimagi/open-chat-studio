@@ -27,9 +27,7 @@ class AcceptInvitationViewTests(TestCase):
 
     def test_user_email_matches_case_insensitive(self):
         """Users with email in different case than the invitation should still match."""
-        upper_email_user = CustomUser.objects.create_user(
-            username="upperuser", email="TEST@EXAMPLE.COM", password="12345"
-        )
+        CustomUser.objects.create_user(username="upperuser", email="TEST@EXAMPLE.COM", password="12345")
         self.client.login(username="upperuser", password="12345")
         response = self.client.get(reverse("teams:accept_invitation", args=[self.invitation.id]))
         assert response.status_code == 200

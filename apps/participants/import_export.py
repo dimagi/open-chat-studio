@@ -5,6 +5,7 @@ import json
 from django.db import transaction
 from django.http import HttpResponse
 
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant, ParticipantData
 
 
@@ -20,7 +21,6 @@ def process_participant_import(csv_file, experiment, team):
 
     Returns dict with 'created', 'updated', 'errors' counts/lists
     """
-    from apps.channels.models import ChannelPlatform  # noqa: PLC0415
 
     # Read and decode file
     csv_file.seek(0)

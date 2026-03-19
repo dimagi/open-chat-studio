@@ -38,6 +38,23 @@ export function postProcessMarkdownHTML(html: string): string {
 }
 
 
+export const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'code', 'pre',
+    'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'blockquote', 'a', 'img', 'hr', 'table', 'thead', 'tbody',
+    'tr', 'td', 'th', 'del', 'ins', 'sub', 'sup'
+  ],
+  ALLOWED_ATTR: [
+    'href', 'target', 'rel', 'class', 'src', 'alt', 'title',
+    'width', 'height', 'align', 'colspan', 'rowspan'
+  ],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+  ADD_ATTR: ['target'],
+  FORBID_TAGS: ['script', 'style', 'form', 'input', 'button', 'iframe', 'object', 'embed', 'svg', 'math'],
+  FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],
+};
+
 export function renderMarkdownSync(content: string): string {
   if (!content || typeof content !== 'string') {
     return '';
@@ -45,22 +62,7 @@ export function renderMarkdownSync(content: string): string {
 
   try {
     const html = marked.parse(content);
-    const sanitized = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'code', 'pre',
-        'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'blockquote', 'a', 'img', 'hr', 'table', 'thead', 'tbody',
-        'tr', 'td', 'th', 'del', 'ins', 'sub', 'sup'
-      ],
-      ALLOWED_ATTR: [
-        'href', 'target', 'rel', 'class', 'src', 'alt', 'title',
-        'width', 'height', 'align', 'colspan', 'rowspan'
-      ],
-      ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
-      ADD_ATTR: ['target'],
-      FORBID_TAGS: ['script', 'style', 'form', 'input', 'button'],
-      FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],
-    });
+    const sanitized = DOMPurify.sanitize(html, SANITIZE_CONFIG);
 
     return postProcessMarkdownHTML(sanitized);
   } catch (error) {
