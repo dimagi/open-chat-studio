@@ -2,9 +2,9 @@
 
 ## Context
 
-We are refactoring `apps/chat/channels.py` into a new stage-based pipeline architecture (reference: `docs/plans/channels_refactor_example.py`). The new implementation will be built alongside the old one. New tests are written from scratch — existing tests are not touched.
+We are refactoring `apps/chat/channels.py` into a new stage-based pipeline architecture (reference: `docs/plans/channels_refactor_example.py`). The new implementation lives in `apps/chat/channels_v2.py` alongside the old code. New tests are written from scratch — existing tests are not touched.
 
-Once the new tests pass against the new implementation, we do a hard switchover: delete the old `channels.py` and old tests, update `apps/channels/tasks.py` import paths, done.
+Once all new tests pass, we do a cold-turkey switchover: delete old `channels.py`, rename `channels_v2.py` → `channels.py` (zero import changes needed), and delete old test files.
 
 **Goal here:** Define the full test suite for the new architecture before writing a line of implementation.
 
@@ -30,23 +30,27 @@ Once the new tests pass against the new implementation, we do a hard switchover:
 ## New Architecture Components (from refactor example)
 
 **Data / exceptions:**
-- `ChannelCapabilities` — frozen dataclass (voice, files, consent, message types, `can_send_file` callable)
-- `MessageProcessingContext` — mutable dataclass carrying all pipeline state
+- `ChannelCapabilities` — frozen dataclass (voice, files, consent, static_triggers, message types, `can_send_file` callable)
+- `MessageProcessingContext` — mutable dataclass carrying all pipeline state (includes `sending_exception`, `channel_context`)
 - `EarlyExitResponse(Exception)` — raised by core stages to short-circuit
 
 **Protocols:**
 - `ChannelCallbacks` — no-op base hooks (transcription_started, echo_transcript, submit_input_to_llm, get_message_audio)
-- `ChannelSender(ABC)` — send_text, send_voice, send_file
+- `ChannelSender(ABC)` — send_text, send_voice, send_file (send_file takes session_id as extra param)
 
 **Pipeline:**
 - `ProcessingStage(ABC)` — `should_run(ctx)` + `process(ctx)`; callable via `__call__`
-- `MessageProcessingPipeline` — runs core stages, catches `EarlyExitResponse`, always runs terminal stages
+- `MessageProcessingPipeline` — runs core stages, catches `EarlyExitResponse` + unexpected exceptions (catch-all generates error message via EventBot, re-raises after terminal stages), always runs terminal stages
 
 **Core stages** (can raise `EarlyExitResponse`):
-`ParticipantValidationStage` → `SessionResolutionStage` → `MessageTypeValidationStage` → `ConsentFlowStage` → `QueryExtractionStage` → `ChatMessageCreationStage` → `BotInteractionStage` → `ResponseFormattingStage`
+`ParticipantValidationStage` → `SessionResolutionStage` → `MessageTypeValidationStage` → `SessionActivationStage` → `ConsentFlowStage` → `QueryExtractionStage` → `ChatMessageCreationStage` → `BotInteractionStage` → `ResponseFormattingStage`
 
-**Terminal stages** (always run):
-`EarlyExitResponseStage` → `ResponseSendingStage` → `ActivityTrackingStage`
+**Terminal stages** (always run, in order):
+`ResponseSendingStage` → `SendingErrorHandlerStage` → `PersistenceStage` → `ActivityTrackingStage`
+
+**Channel-specific stages:**
+- `CommCareConsentCheckStage` — platform-specific consent check (inserted after SessionResolutionStage)
+- `EvalsBotInteractionStage` — uses EvalsBot instead of get_bot() (replaces BotInteractionStage)
 
 ---
 
@@ -65,13 +69,15 @@ apps/channels/tests/new_arch/
         test_participant_validation.py
         test_session_resolution.py
         test_message_type_validation.py
+        test_session_activation.py       # SessionActivationStage
         test_consent_flow.py
         test_query_extraction.py
         test_chat_message_creation.py
         test_bot_interaction.py
         test_response_formatting.py
-        test_early_exit_response.py      # EarlyExitResponseStage (terminal)
         test_response_sending.py         # ResponseSendingStage (terminal)
+        test_sending_error_handler.py    # SendingErrorHandlerStage (terminal)
+        test_persistence.py             # PersistenceStage (terminal)
         test_activity_tracking.py        # ActivityTrackingStage (terminal)
     senders/
         __init__.py
@@ -85,6 +91,10 @@ apps/channels/tests/new_arch/
         __init__.py
         test_telegram_channel.py
         test_whatsapp_channel.py
+        test_api_channel.py
+        test_web_channel.py
+        test_evaluation_channel.py
+        test_commcare_channel.py
 ```
 
 ---
@@ -99,11 +109,11 @@ class TestNewSender(ChannelSender):
     def __init__(self):
         self.text_messages = []   # list of (text, recipient)
         self.voice_messages = []  # list of (audio, recipient)
-        self.files_sent = []      # list of (file, recipient)
+        self.files_sent = []      # list of (file, recipient, session_id)
 
     def send_text(self, text, recipient): self.text_messages.append((text, recipient))
     def send_voice(self, audio, recipient): self.voice_messages.append((audio, recipient))
-    def send_file(self, file, recipient): self.files_sent.append((file, recipient))
+    def send_file(self, file, recipient, session_id): self.files_sent.append((file, recipient, session_id))
 ```
 
 ### `TestNewCallbacks` — records callback invocations
@@ -137,6 +147,7 @@ class TestNewChannel(ChannelBase):
         return self._override_capabilities or ChannelCapabilities(
             supports_voice=True, supports_files=False,
             supports_conversational_consent=True,
+            supports_static_triggers=True,
             supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
         )
 
@@ -153,7 +164,8 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
                  experiment_session=None, sender=None, callbacks=None,
                  capabilities=None, participant_identifier="test_user_123",
                  participant_allowed=True, user_query=None, bot_response=None,
-                 early_exit_response=None, **extra):
+                 early_exit_response=None, sending_exception=None,
+                 channel_context=None, **extra):
     return MessageProcessingContext(
         message=message or text_message(),  # from base_messages
         experiment=experiment or ExperimentFactory.build(),
@@ -168,6 +180,8 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
         user_query=user_query,
         bot_response=bot_response,
         early_exit_response=early_exit_response,
+        sending_exception=sending_exception,
+        channel_context=channel_context or {},
         **extra,
     )
 ```
@@ -200,7 +214,8 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
 | Voice NEVER → text reply | parameterized |
 | Voice RECIPROCAL + voice input → voice; + text input → text | parameterized |
 | Voice reply with URLs → voice + URL text fallback | `test_voice_response_with_urls` |
-| Voice message → `voice` tag on ChatMessage | `test_voice_tag_created_on_message` |
+| Voice message → `voice` tag on ChatMessage (via PersistenceStage) | `test_voice_tag_created_on_message` |
+| Voice synthesis failure → notification + text fallback (in ResponseFormattingStage) | `TestNotifications.*` |
 | No synthetic voice → text reply | `test_reply_with_text_when_synthetic_voice_not_specified` |
 | Non-allowlisted participant → refusal, no session | `test_participant_authorization` |
 | Versioned experiment → version tracked on session after each message | `test_incoming_message_adds_version_on_session` |
@@ -208,13 +223,18 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
 | Supported attachments sent directly; unsupported appended as links | `test_supported_and_unsupported_attachments` |
 | `GenerationCancelled` → empty ChatMessage, no exception | `test_chat_message_returned_for_cancelled_generate` |
 | Failed transcription → user informed | `test_failed_transcription_informs_the_user` |
-| Bot error → user informed, `processing_errors` updated | (new) |
+| Bot error → catch-all generates error message via EventBot, user informed, exception re-raised | (new) |
+| Bot error + EventBot fails → DEFAULT_ERROR_RESPONSE_TEXT used | (new) |
+| ChatException → specific error prompt via EventBot | (new) |
 | Audio synthesis failure → notification + text fallback | `TestNotifications.*` |
 | File delivery failure → notification + download link sent | `TestNotifications.*` |
 | Transcription failure → notification triggered | `TestNotifications.*` |
 | Pre-existing session on context → SessionResolution is no-op (Web/Slack) | new |
 | EarlyExitResponse from any core stage → terminal stages still run | new |
+| Unexpected exception from core stage → terminal stages run, then re-raised | new |
 | `ResponseSendingStage` is the ONLY place *responses* reach the user (callbacks may send indicators/echoes mid-pipeline) | new |
+| Send failure → `ctx.sending_exception` set, `SendingErrorHandlerStage` runs | new |
+| `NEW_HUMAN_MESSAGE` trigger fires after chat message creation (gated by `supports_static_triggers`) | new |
 
 ---
 
@@ -224,7 +244,10 @@ No DB needed. All stages are `MagicMock` instances.
 
 - All core stages run in order on happy path; terminal stages follow.
 - Core stage N raises `EarlyExitResponse` → stages N+1..M skipped; `ctx.early_exit_response` set.
-- ALL terminal stages run regardless of early exit (even if stage 1 raised).
+- Core stage raises unexpected exception → `_generate_error_message` called, `ctx.early_exit_response` set, terminal stages run, exception re-raised.
+- `_generate_error_message` with `ChatException` → specific prompt used.
+- `_generate_error_message` with EventBot failure → `DEFAULT_ERROR_RESPONSE_TEXT` used.
+- ALL terminal stages run regardless of early exit or unexpected exception.
 - `stage.should_run(ctx)` returning `False` → `process(ctx)` not called.
 - `None` entries in stage lists are filtered out by constructor.
 - Returns the final `MessageProcessingContext`.
@@ -258,9 +281,16 @@ No DB needed. All stages are `MagicMock` instances.
 - Unsupported type → raises `EarlyExitResponse` with bot-generated or fallback text.
 - `EventBot.get_user_message` fails → fallback string, `ctx.processing_errors` updated.
 
+### `SessionActivationStage`
+- `experiment_session is None` → `should_run()` False.
+- Consent disabled → activates session to ACTIVE.
+- No consent form → activates session to ACTIVE.
+- Consent enabled with form → `should_run()` False (skips).
+
 ### `ConsentFlowStage` (`@pytest.mark.django_db`)
 - `supports_conversational_consent=False` → `should_run()` False.
-- Consent not enabled → `should_run()` False, side effect: session set to ACTIVE.
+- Consent not enabled → `should_run()` False.
+- No consent form → `should_run()` False.
 - Session already ACTIVE → `should_run()` False.
 - SETUP → PENDING + raises `EarlyExitResponse` with consent text.
 - PENDING + non-consent input → repeat consent prompt.
@@ -284,29 +314,26 @@ No DB needed. All stages are `MagicMock` instances.
 - Voice message → HUMAN message gets `voice` tag.
 - `ctx.human_message` set; `trace_service.set_input_message_id()` called.
 - Attachments → IDs in metadata.
+- `supports_static_triggers=True` → `enqueue_static_triggers(NEW_HUMAN_MESSAGE)` called.
+- `supports_static_triggers=False` → `enqueue_static_triggers` NOT called.
 
 ### `BotInteractionStage`
 - `user_query is None` → `should_run()` False.
 - `submit_input_to_llm()` called before bot.
 - `ctx.bot` is None → bot created lazily; already set → reused.
 - Successful call → `ctx.bot_response` and `ctx.files_to_send` set.
-- Bot raises → `EventBot` called for error message → `EarlyExitResponse` raised with that message.
-- `EventBot` also fails → default error string used.
+- Exceptions propagate (caught by pipeline catch-all, NOT by the stage).
 
 ### `ResponseFormattingStage`
 - `bot_response is None` → `should_run()` False.
 - Voice ALWAYS + voice provider → `ctx.voice_audio` set, URLs in `ctx.additional_text_message`.
 - Voice NEVER → text path, `ctx.voice_audio` is None.
 - Voice RECIPROCAL: voice input → voice; text input → text.
+- `AudioSynthesizeException` → fallback to text, notification created, `ctx.voice_audio` set to None.
 - `supports_files=False` → all files in `unsupported_files`.
 - `supports_files=True` → files split via `can_send_file`.
 - Unsupported files appended as links to `ctx.formatted_message` (text path).
 - Voice path + unsupported files → in `ctx.additional_text_message`.
-
-### `EarlyExitResponseStage` (terminal) (`@pytest.mark.django_db`)
-- `early_exit_response is None` → `should_run()` False.
-- `experiment_session is None` → no ChatMessage created.
-- Session present → `ChatMessage(AI, content=early_exit_response)` created.
 
 ### `ResponseSendingStage` (terminal)
 - Both `formatted_message` and `early_exit_response` are None → `should_run()` False.
@@ -314,8 +341,24 @@ No DB needed. All stages are `MagicMock` instances.
 - Normal text path → `sender.send_text(formatted_message)`.
 - Normal voice path → `sender.send_voice()`; `additional_text_message` present → `sender.send_text()` too.
 - Voice send fails → notification + fallback text.
-- Files in `files_to_send` → `sender.send_file()` per file.
+- Files in `files_to_send` → `sender.send_file(file, recipient, session_id)` per file.
 - File send fails → notification + download link sent via `sender.send_text()`.
+- Outer send failure → `ctx.sending_exception` set, delivery failure notification created, exception NOT propagated.
+- `@notify_on_delivery_failure` decorator on `_send_text` / `_send_voice` wrappers.
+
+### `SendingErrorHandlerStage` (terminal)
+- `sending_exception is None` → `should_run()` False.
+- Telegram `ApiTelegramException(403, "bot was blocked")` → participant consent revoked via `ParticipantData.update_consent(False)`.
+- Telegram 403 + `ParticipantData.DoesNotExist` → error appended to `ctx.processing_errors`.
+- Non-Telegram exception → no-op (already logged by ResponseSendingStage).
+
+### `PersistenceStage` (terminal) (`@pytest.mark.django_db`)
+- Both `early_exit_response` and `voice_audio` are None → `should_run()` False.
+- `experiment_session is None` → no persistence (early return).
+- Early exit present + session → `ChatMessage(AI, content=early_exit_response)` created.
+- Early exit persists even when `sending_exception` is set (audit trail).
+- Voice audio present + bot_response → bot_response tagged "voice" + audio saved as File attachment.
+- Voice audio present but bot_response is None → no voice persistence (no-op).
 
 ### `ActivityTrackingStage` (terminal)
 - `experiment_session is None` → `should_run()` False.
@@ -331,15 +374,14 @@ No DB needed. All stages are `MagicMock` instances.
 ### `TelegramSender` (mock `telegram_bot` at constructor)
 - Short text → `antiflood(send_message)` called once.
 - Long text → multiple chunks → called multiple times.
-- `ApiTelegramException(403, "bot was blocked")` → raises `ChannelException`.
-- Other `ApiTelegramException` → raises `ChannelException`.
+- `ApiTelegramException` → propagates (NOT caught by sender — caught by ResponseSendingStage).
 - Voice send → `antiflood(send_voice, audio, duration)`.
-- File: image→`send_photo`, video→`send_video`, audio→`send_audio`, other→`send_document`.
+- File (`send_file(file, recipient, session_id)`): image→`send_photo`, video→`send_video`, audio→`send_audio`, other→`send_document`.
 
 ### `WhatsappSender` (mock `messaging_service`)
 - `send_text()` → `service.send_text_message(platform=WHATSAPP)`.
 - `send_voice()` → `service.send_voice_message()`.
-- `send_file()` → `service.send_file_to_user(platform=WHATSAPP)`.
+- `send_file(file, recipient, session_id)` → `service.send_file_to_user(platform=WHATSAPP, download_link=file.download_link(session_id))`.
 
 ### `TelegramCallbacks` (mock `TelegramSender` + `telegram_bot`)
 - `transcription_started()` → `send_chat_action(action="upload_voice")` via raw bot.
@@ -358,15 +400,37 @@ No DB needed. All stages are `MagicMock` instances.
 - `__init__()` instantiates `TeleBot` with `extra_data["bot_token"]`.
 - `_get_callbacks()` returns `TelegramCallbacks`.
 - `_get_sender()` returns `TelegramSender`.
-- `_get_capabilities()` → `supports_voice=True, supports_files=True, [TEXT, VOICE]`.
+- `_get_capabilities()` → `supports_voice=True, supports_files=True, supports_static_triggers=True, [TEXT, VOICE]`.
 - `_can_send_file()`: image <10MB→True; image >10MB→False; video <50MB→True; unknown MIME→False.
-- `_build_pipeline()` → pipeline with correct stage types and count.
+- `_build_pipeline()` → default pipeline with correct stage types and count.
 
 ### `WhatsappChannel`
 - `messaging_service` lazily resolved and cached.
 - `_get_capabilities()` delegates all fields from messaging service.
 - `_get_sender()` uses `extra_data["number"]` as `from_number`.
 - `_get_callbacks()` wraps the sender.
+
+### `ApiChannel`
+- `_build_pipeline()` omits `ResponseSendingStage` and `SendingErrorHandlerStage`.
+- `_get_sender()` returns `NoOpSender`.
+- `_get_capabilities()` → text only, no voice/files.
+
+### `WebChannel`
+- Requires pre-existing session (raises if not provided).
+- `_build_pipeline()` omits `SessionResolutionStage`, `ConsentFlowStage`, `ResponseSendingStage`, `SendingErrorHandlerStage`.
+- `_get_capabilities()` → `supports_conversational_consent=False`.
+- `start_new_session()` and `check_and_process_seed_message()` class methods unchanged.
+
+### `EvaluationChannel`
+- Requires pre-existing session.
+- `_create_context()` sets `channel_context={"participant_data": ...}`.
+- `_build_pipeline()` uses `EvalsBotInteractionStage` instead of `BotInteractionStage`, omits sending stages.
+- `_get_capabilities()` → `supports_static_triggers=False`.
+
+### `CommCareConnectChannel`
+- `_build_pipeline()` inserts `CommCareConsentCheckStage` after `SessionResolutionStage`.
+- `CommCareConsentCheckStage`: no consent in `ParticipantData.system_metadata` → raises `EarlyExitResponse`.
+- `CommCareConsentCheckStage`: `ParticipantData.DoesNotExist` → raises `EarlyExitResponse`.
 
 ---
 
@@ -400,9 +464,9 @@ No DB needed. All stages are `MagicMock` instances.
 
 ---
 
-## Note on Implementation Location
+## Implementation Location
 
-The new implementation will live in a new file (e.g., `apps/chat/channels_v2.py` or a package — TBD when implementation is written). The `new_arch/conftest.py` import paths will be set to point there. No decision needed now; the test plan is location-agnostic.
+The new implementation lives in `apps/chat/channels_v2.py`. At switchover time, delete `apps/chat/channels.py`, rename `channels_v2.py` → `channels.py`. This means zero import changes — all existing `from apps.chat.channels import ...` statements continue to work.
 
 ---
 
@@ -424,4 +488,4 @@ uv run ruff check apps/channels/tests/new_arch/ --fix
 uv run ty check apps/channels/tests/new_arch/
 ```
 
-**Switchover gate:** All tests in `apps/channels/tests/new_arch/` pass → safe to remove `apps/chat/channels.py`, old test files, and update `apps/channels/tasks.py` imports.
+**Switchover gate:** All tests in `apps/channels/tests/new_arch/` pass → safe to delete `apps/chat/channels.py`, rename `channels_v2.py` → `channels.py`, and delete old test files.
