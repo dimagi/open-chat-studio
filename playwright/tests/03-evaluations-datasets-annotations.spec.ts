@@ -159,8 +159,8 @@ test.describe.serial('Flow 2: Evaluations, Datasets, and Annotations', () => {
     // Click the run link
     await evalRow.locator('a[href*="/runs/new/"]').click({ force: true });
 
-    // Wait for evaluation to start
-    await page.waitForTimeout(3000);
+    // Wait for evaluation to start - verify we navigated away or see a success indicator
+    await expect(page).not.toHaveURL(/\/runs\/new\//, { timeout: 10000 });
   });
 
   test('create an annotation queue', async ({ page }) => {

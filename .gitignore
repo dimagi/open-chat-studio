@@ -46,3 +46,4 @@ playwright-report/
 playwright-results*
 .playwright-cli
 test-results/
+playwright/.auth/

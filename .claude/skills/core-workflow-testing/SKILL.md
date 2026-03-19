@@ -10,7 +10,14 @@ argument-hint: "[server-port] [optional: comma-separated list of failing test na
 
 Run workflows defined in the `playwright/workflows/` folder (relative to the repo root) using the playwright-cli skill. The server is running on port $0.
 
-If a list of failing tests is provided as the second argument (e.g. `"05-chatbot-management.spec.ts > Chatbot Management > Create a chatbot, 02-team-management.spec.ts > Team Management > Invite a Team Member"`), extract the unique workflow sections from that list by mapping spec file prefixes to their corresponding numbered sections (e.g. `05-chatbot-management.spec.ts` → section 5 "Chatbot Management"). Run **only** those sections instead of all workflows.
+If a list of failing tests is provided as the second argument (e.g. `"02-create-and-test-chatbot.spec.ts > Chatbot Management > Create a chatbot, 03-evaluations-datasets-annotations.spec.ts > Evaluations > Run evaluation"`), extract the unique workflow sections from that list using the following explicit mapping:
+
+| Spec filename | Workflow section |
+|---|---|
+| `02-create-and-test-chatbot.spec.ts` | Flow 1: Create and Test a Chatbot |
+| `03-evaluations-datasets-annotations.spec.ts` | Flow 2: Evaluations, Datasets, and Annotations |
+
+Run **only** those sections instead of all workflows.
 
 If no test list is provided, run all workflows.
 

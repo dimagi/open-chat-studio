@@ -80,9 +80,10 @@ playwright-cli run-code "async page => {
 ## Wait Strategies
 
 ```bash
-# Wait for network idle
+# Wait for DOM content loaded
+# Note: avoid 'networkidle' — it is discouraged/deprecated and prohibited by the playwright-test-healer agent.
 playwright-cli run-code "async page => {
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 }"
 
 # Wait for specific element
