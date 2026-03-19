@@ -30,6 +30,7 @@ from apps.chat.exceptions import (
     ChannelException,
     ChatException,
     ParticipantNotAllowedException,
+    ServiceWindowExpiredException,
     UserReportableError,
     VersionedExperimentSessionsNotAllowedException,
 )
@@ -553,9 +554,12 @@ class ChannelBase(ABC):
                 self._reply_voice_message(bot_message)
                 if urls_to_append:
                     self._send_text_to_user_with_notification(urls_to_append)
-            except AudioSynthesizeException:
-                logger.exception("Error generating voice response")
-                audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
+            except (AudioSynthesizeException, ServiceWindowExpiredException) as exc:
+                if isinstance(exc, AudioSynthesizeException):
+                    logger.exception("Error generating voice response")
+                    audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
+                else:
+                    logger.info("Service window expired, falling back to text message")
                 self._bot_message_is_voice = False
                 bot_message = f"{bot_message}\n\n{urls_to_append}"
                 self._send_text_to_user_with_notification(bot_message)
@@ -1021,8 +1025,8 @@ class WebChannel(ChannelBase):
 
     @classmethod
     def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
-        from apps.experiments.tasks import (
-            get_response_for_webchat_task,  # noqa: PLC0415 - circular: experiments.tasks imports chat.channels
+        from apps.experiments.tasks import (  # noqa: PLC0415 - circular: experiments.tasks imports chat.channels
+            get_response_for_webchat_task,
         )
 
         if seed_message := experiment.seed_message:
@@ -1173,7 +1177,11 @@ class WhatsappChannel(ChannelBase):
 
     def send_text_to_user(self, text: str):
         self.messaging_service.send_text_message(
-            message=text, from_=self.from_identifier, to=self.participant_identifier, platform=ChannelPlatform.WHATSAPP
+            message=text,
+            from_=self.from_identifier,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
         )
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -1183,6 +1191,7 @@ class WhatsappChannel(ChannelBase):
             from_=self.from_identifier,
             to=self.participant_identifier,
             platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
         )
 
     def send_file_to_user(self, file: File):
@@ -1203,7 +1212,11 @@ class SureAdhereChannel(ChannelBase):
         from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(
-            message=text, from_=from_, to=to_patient, platform=ChannelPlatform.SUREADHERE
+            message=text,
+            from_=from_,
+            to=to_patient,
+            platform=ChannelPlatform.SUREADHERE,
+            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
         )
 
     @property
@@ -1215,7 +1228,11 @@ class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(
-            message=text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+            message=text,
+            from_=from_,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.FACEBOOK,
+            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
         )
 
     @property
@@ -1233,7 +1250,11 @@ class FacebookMessengerChannel(ChannelBase):
         """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+            synthetic_voice,
+            from_=from_,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.FACEBOOK,
+            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
         )
 
 
@@ -1324,6 +1345,7 @@ class SlackChannel(ChannelBase):
             to=channel_id,
             platform=ChannelPlatform.SLACK,
             thread_ts=thread_ts,
+            last_activity_at=self.experiment_session.last_activity_at if self.experiment_session else None,
         )
 
     def _ensure_sessions_exists(self):
