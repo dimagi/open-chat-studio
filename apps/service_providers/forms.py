@@ -269,6 +269,11 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         label=_("Webhook Verify Token"),
         help_text=_("Token used by Meta to verify the webhook URL. Must match the token configured in your Meta app."),
     )
+    has_template_message_configured = forms.BooleanField(
+        label=_("I have configured the 'new_bot_message' template in my Meta Business account"),
+        required=False,
+        initial=False,
+    )
 
     def save(self, instance):
         instance = super().save(instance)
@@ -313,7 +318,6 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     slack_installation_id = forms.CharField(widget=forms.HiddenInput())
 
     def get_slack_installation(self):
-
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()
 
