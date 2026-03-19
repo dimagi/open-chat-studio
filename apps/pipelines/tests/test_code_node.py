@@ -547,7 +547,7 @@ def main(input, **kwargs):
     state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
     node_output = node._process(state, NodeContext(state))
     outputs = node_output.update["outputs"]["test"]  # ty: ignore[not-subscriptable]
-    assert "console_output" not in outputs
+    assert outputs["console_output"] == ""
 
 
 def test_add_file_attachment_requires_bytes():
