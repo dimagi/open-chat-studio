@@ -177,6 +177,8 @@ class TurnWhatsappMessage(BaseMessage):
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
+        if value == "audio":
+            return MESSAGE_TYPES.VOICE
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
 

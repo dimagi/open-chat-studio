@@ -21,9 +21,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 # don't log task result
-trace.LOG_SUCCESS = """\
-Task %(name)s[%(id)s] succeeded in %(runtime)ss\
-"""
+trace.LOG_SUCCESS = "Task %(name)s[%(id)s] succeeded in %(runtime)ss"  # type: ignore[assignment]
 
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
@@ -43,7 +41,10 @@ def on_task_prerun(sender, task_id, task, args, kwargs, **_):
 
 @signals.task_postrun.connect
 def on_task_postrun(sender, **_):
+    from apps.teams.utils import unset_current_team  # noqa: PLC0415 - apps aren't fully loaded when celery loads
+
     CeleryContextFilter.clear_task_context()
+    unset_current_team()
 
 
 def close_db_connection(sender, **kwargs):
