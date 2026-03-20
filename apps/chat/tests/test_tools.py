@@ -608,6 +608,101 @@ class TestGetSessionStateTool(BaseTestAgentTool):
         assert "No value found" in response
 
 
+@pytest.mark.django_db()
+class TestAppendToSessionStateTool(BaseTestAgentTool):
+    tool_cls = tools.AppendToSessionStateTool
+
+    def test_append_when_data_does_not_exist(self, session):
+        response = self._invoke_tool(session, key="test", value="new_value", tool_call_id="123", graph_state={})
+        assert (
+            response.update["messages"][-1].content
+            == "The value was appended to the end of the list. The new list is: ['new_value']"
+        )
+        assert response.update["session_state"] == {"test": ["new_value"]}
+
+    def test_append_when_data_exists(self, session):
+        response = self._invoke_tool(
+            session,
+            key="test",
+            value="second_value",
+            tool_call_id="123",
+            graph_state={"session_state": {"test": "first_value"}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == "The value was appended to the end of the list. The new list is: ['first_value', 'second_value']"
+        )
+        assert response.update["session_state"] == {"test": ["first_value", "second_value"]}
+
+    @pytest.mark.parametrize(
+        ("existing_value", "new_value", "expected_result"),
+        [
+            ("string", "new_value", ["string", "new_value"]),
+            ("string", ["new_value1", "new_value2"], ["string", "new_value1", "new_value2"]),
+            ({"key": "value"}, "new_value", [{"key": "value"}, "new_value"]),
+            (["val1", "val2"], "new_value", ["val1", "val2", "new_value"]),
+        ],
+    )
+    def test_append_different_values(self, session, existing_value, new_value, expected_result):
+        response = self._invoke_tool(
+            session,
+            key="test",
+            value=new_value,
+            tool_call_id="123",
+            graph_state={"session_state": {"test": existing_value}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == f"The value was appended to the end of the list. The new list is: {expected_result}"
+        )
+        assert response.update["session_state"] == {"test": expected_result}
+
+    def test_reserved_key_rejected(self, session):
+        response = self._invoke_tool(session, key="user_input", value="test", tool_call_id="123", graph_state={})
+        assert response == "Cannot modify the 'user_input' key in session state - this is read-only"
+
+
+@pytest.mark.django_db()
+class TestIncrementSessionStateCounterTool(BaseTestAgentTool):
+    tool_cls = tools.IncrementSessionStateCounterTool
+
+    def test_increment_new_counter(self, session):
+        response = self._invoke_tool(session, counter="test", value=1, tool_call_id="1", graph_state={})
+        assert (
+            response.update["messages"][-1].content
+            == "The 'test' counter has been successfully incremented. The new value is 1."
+        )
+        assert response.update["session_state"] == {"_counter_test": 1}
+
+    def test_increment_existing_counter(self, session):
+        response = self._invoke_tool(
+            session,
+            counter="test",
+            value=3,
+            tool_call_id="1",
+            graph_state={"session_state": {"_counter_test": 5}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == "The 'test' counter has been successfully incremented. The new value is 8."
+        )
+        assert response.update["session_state"] == {"_counter_test": 8}
+
+    def test_increment_non_numeric_resets_to_zero(self, session):
+        response = self._invoke_tool(
+            session,
+            counter="test",
+            value=1,
+            tool_call_id="1",
+            graph_state={"session_state": {"_counter_test": "not_a_number"}},
+        )
+        assert (
+            response.update["messages"][-1].content
+            == "The 'test' counter has been successfully incremented. The new value is 1."
+        )
+        assert response.update["session_state"] == {"_counter_test": 1}
+
+
 class TestAttachMediaTool(BaseTestAgentTool):
     tool_cls = tools.AttachMediaTool
 

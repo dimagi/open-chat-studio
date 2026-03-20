@@ -24,6 +24,7 @@ def test_serialize_trace_data():
             "content_type": "application/octet-stream",
             "file_id": 123,
             "name": "file.txt",
+            "send_to_llm": True,
             "size": 100,
             "type": "file_search",
             "upload_to_assistant": False,

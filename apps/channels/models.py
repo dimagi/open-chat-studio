@@ -41,8 +41,8 @@ class ChannelPlatform(models.TextChoices):
     @classmethod
     def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
-        from apps.service_providers.models import (
-            MessagingProvider,  # noqa: PLC0415 - circular: service_providers.models imports channels.models
+        from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
+            MessagingProvider,
         )
 
         all_platforms = cls.as_list(exclude=[cls.API, cls.WEB, cls.EVALUATIONS])
@@ -233,8 +233,8 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def webhook_url(self) -> str:
         """The wehook URL that should be used in external services"""
-        from apps.service_providers.models import (
-            MessagingProviderType,  # noqa: PLC0415 - circular: service_providers.models imports channels.models
+        from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
+            MessagingProviderType,
         )
 
         if not self.messaging_provider:

@@ -23,6 +23,7 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
+from RestrictedPython.PrintCollector import PrintCollector
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
@@ -939,9 +940,10 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
+        print_collectors: list[PrintCollector] = []
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, context, output_state),
+                additional_globals=self._get_custom_functions(state, context, output_state, print_collectors),
                 input=context.input,
                 node_inputs=context.inputs,
             )
@@ -953,21 +955,36 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             message = get_code_error_message("<inline_code>", self.code)
             raise CodeNodeRunError(message) from exc
 
+        output_metadata = {
+            "console_output": "".join(collector() for collector in print_collectors)
+        }
+
         if isinstance(result, Command):
             return result
         return Command(
             goto=self._outgoing_nodes,
             update=PipelineState.from_node_output(
-                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+                node_name=self.name,
+                node_id=self.node_id,
+                output=str(result),
+                output_metadata=output_metadata or None,
+                **output_state,
             ),
         )
 
-    def _get_custom_functions(self, state: PipelineState, context: "NodeContext", output_state: PipelineState) -> dict:
+    def _get_custom_functions(
+        self,
+        state: PipelineState,
+        context: "NodeContext",
+        output_state: PipelineState,
+        print_collectors: list[PrintCollector],
+    ) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
             context: The NodeContext for read access.
             output_state: An empty state dict to which state modifications should be made.
+            print_collectors: A list that collects PrintCollector instances created during execution.
         """
         pipeline_state = PipelineState.clone(state)
 
@@ -985,12 +1002,18 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
         http_client = RestrictedHttpClient(team=team)
 
+        def _print_factory(_getattr_=None):
+            collector = PrintCollector(_getattr_)
+            print_collectors.append(collector)
+            return collector
+
         # We create a PipelineAccessor wrapping a *cloned* state with the current node
         # injected into outputs (line above). The clone also isolates user code mutations
         # from the real pipeline state. This is an intentional bypass of the NodeContext
         # abstraction for CodeNode's sandboxed execution environment.
         pipeline_accessor = PipelineAccessor(pipeline_state)
         return {
+            "_print_": _print_factory,
             "http": http_client,
             "get_participant_data": participant_data_proxy.get,
             "set_participant_data": participant_data_proxy.set,

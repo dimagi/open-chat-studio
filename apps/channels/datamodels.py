@@ -36,6 +36,9 @@ class Attachment(BaseModel):
     """Setting this to True will cause the Assistant Node to send the attachment
     as a file attachment with the message."""
 
+    send_to_llm: bool = True
+    """Setting this to False will prevent the attachment from being sent to the LLM node."""
+
     @classmethod
     def from_file(cls, file, type: AttachmentType, session_id: int):
         return cls(

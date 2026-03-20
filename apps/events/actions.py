@@ -33,8 +33,8 @@ class LogAction(EventActionHandlerBase):
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import (
-            StaticTriggerType,  # noqa: PLC0415 - circular: events.models imports events.actions
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports events.actions
+            StaticTriggerType,
         )
 
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
@@ -43,8 +43,8 @@ class EndConversationAction(EventActionHandlerBase):
 
 class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import (
-            ScheduledMessage,  # noqa: PLC0415 - circular: events.models imports events.actions
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports events.actions
+            ScheduledMessage,
         )
 
         ScheduledMessage.objects.create(
@@ -99,8 +99,8 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import (
-            Pipeline,  # noqa: PLC0415 - circular: pipelines.models → events.models → events.actions
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models → events.models → events.actions
+            Pipeline,
         )
 
         try:
@@ -138,8 +138,8 @@ class PipelineStartAction(EventActionHandlerBase):
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ) as span:
-            from apps.chat.bots import (
-                PipelineBot,  # noqa: PLC0415 - circular: chat.bots → experiments.models → events.models → events.actions
+            from apps.chat.bots import (  # noqa: PLC0415 - circular: chat.bots → experiments.models → events.models → events.actions
+                PipelineBot,
             )
 
             bot = PipelineBot(

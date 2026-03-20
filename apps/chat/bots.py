@@ -137,8 +137,8 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.pipelines.graph import (
-            PipelineGraph,  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
+        from apps.pipelines.graph import (  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
+            PipelineGraph,
         )
 
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
@@ -284,8 +284,8 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import (
-            PipelineGraph,  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
+        from apps.pipelines.graph import (  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
+            PipelineGraph,
         )
 
         with temporary_session(self.pipeline.team, self.user_id) as session:

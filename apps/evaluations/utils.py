@@ -80,8 +80,8 @@ def get_evaluators_with_schema(team) -> list[dict]:
     Returns:
         List of dicts containing evaluator info with schema data
     """
-    from apps.evaluations.models import (
-        Evaluator,  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
+    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
+        Evaluator,
     )
 
     evaluator_type_info = get_evaluator_type_info()

@@ -106,6 +106,12 @@ class VersionFieldDisplayFormatters:
         """code_interpreter, file_search -> Code Interpreter, File Search"""
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
 
+    @staticmethod
+    def format_custom_action_operation(op) -> str:
+        action = op.custom_action
+        op_details = action.get_operations_by_id().get(op.operation_id)
+        return f"{action.name}: {op_details}"
+
 
 class PromptObjectManager(AuditingManager):
     pass
@@ -498,6 +504,8 @@ class AgentTools(models.TextChoices):
     SEARCH_INDEX_BY_ID = "file-search-by-index", gettext("File Search by index ID")
     SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
     GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
+    APPEND_TO_SESSION_STATE = "append-to-session-state", gettext("Append to Session State")
+    INCREMENT_SESSION_STATE_COUNTER = "increment-session-state-counter", gettext("Increment Session State Counter")
     CALCULATOR = "calculator", gettext("Calculator")
 
     @classmethod
@@ -935,8 +943,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 self.pipeline.archive()
 
     def delete_experiment_channels(self):
-        from apps.channels.models import (
-            ExperimentChannel,  # noqa: PLC0415 - circular: channels.models imports experiments.models
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ExperimentChannel,
         )
 
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
@@ -1075,12 +1083,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
         - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
         the instance.
         """
-        from apps.assistants.models import (
-            OpenAiAssistant,  # noqa: PLC0415 - circular: assistants.models imports experiments.models
+        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
+            OpenAiAssistant,
         )
         from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models imports experiments.models
-        from apps.pipelines.nodes.nodes import (
-            AssistantNode,  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
+        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
+            AssistantNode,
         )
 
         if self.pipeline:
@@ -1154,8 +1162,8 @@ class Participant(BaseTeamModel):
         return self.identifier
 
     def get_platform_display(self):
-        from apps.channels.models import (
-            ChannelPlatform,  # noqa: PLC0415 - circular: channels.models imports experiments.models
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ChannelPlatform,
         )
 
         try:
@@ -1230,8 +1238,8 @@ class Participant(BaseTeamModel):
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
         """
-        from apps.events.models import (
-            ScheduledMessage,  # noqa: PLC0415 - circular: events.models imports experiments.models
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
+            ScheduledMessage,
         )
 
         messages = (
@@ -1472,8 +1480,8 @@ class ExperimentSession(BaseTeamModel):
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
-        from apps.channels.models import (
-            ChannelPlatform,  # noqa: PLC0415 - circular: channels.models imports experiments.models
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ChannelPlatform,
         )
 
         if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
@@ -1508,11 +1516,11 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
-        from apps.events.models import (
-            StaticTriggerType,  # noqa: PLC0415 - circular: events.models imports experiments.models
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
+            StaticTriggerType,
         )
-        from apps.events.tasks import (
-            enqueue_static_triggers,  # noqa: PLC0415 - circular: events.tasks imports experiments.models
+        from apps.events.tasks import (  # noqa: PLC0415 - circular: events.tasks imports experiments.models
+            enqueue_static_triggers,
         )
 
         if trigger_type and not commit:
@@ -1591,8 +1599,8 @@ class ExperimentSession(BaseTeamModel):
         message. The response from the bot will be saved to the chat history.
         """
         from apps.chat.bots import EventBot  # noqa: PLC0415 - circular: chat.bots imports experiments.models
-        from apps.service_providers.llm_service.history_managers import (
-            ExperimentHistoryManager,  # noqa: PLC0415 - circular: history_managers imports experiments.models
+        from apps.service_providers.llm_service.history_managers import (  # noqa: PLC0415 - circular: history_managers imports experiments.models
+            ExperimentHistoryManager,
         )
 
         experiment = use_experiment or self.experiment
@@ -1655,8 +1663,8 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.assistants.models import (
-            OpenAiAssistant,  # noqa: PLC0415 - circular: assistants.models imports experiments.models
+        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
+            OpenAiAssistant,
         )
         from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
             AssistantNode,
