@@ -57,3 +57,8 @@ def test_name_map():
     callback = MockCallback()
     wrapper = NameMappingWrapper(callback, {"llm_name": "mapped_name"}, [])
     wrapper.on_llm_start({"name": "llm_name"}, ["prompt"])
+
+
+def test_percy_cron_alert_canary():
+    """Temporary test to verify Percy's CI alert cron. Will be removed."""
+    assert False, "Percy canary: intentional failure to test cron alerting"
