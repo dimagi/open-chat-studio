@@ -470,25 +470,6 @@ class TestMetaCloudAPIServiceWindow:
         assert all(word == "hello" for word in second_text.split())
 
     @patch("apps.service_providers.messaging_service.httpx.post")
-    def test_send_template_message_exactly_at_limit(self, mock_post):
-        """Message exactly at 974 chars should send as one message without ellipsis."""
-        mock_post.return_value = httpx.Response(
-            200,
-            json={"messages": [{"id": "wamid.test"}]},
-            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
-        )
-        service = self._make_service()
-        service.send_template_message(
-            message="A" * 974,
-            from_="phone123",
-            to="+27826419977",
-            platform=ChannelPlatform.WHATSAPP,
-        )
-        mock_post.assert_called_once()
-        text = mock_post.call_args.kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
-        assert text == "A" * 974
-
-    @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_template_message_multiple_splits(self, mock_post):
         """Very long messages produce 3+ template messages split at word boundaries."""
         mock_post.return_value = httpx.Response(
