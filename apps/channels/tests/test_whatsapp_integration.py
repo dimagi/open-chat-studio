@@ -342,31 +342,3 @@ class TestMetaCloudApi:
             to="27456897512",
             message_id="wamid.abc123",
         )
-
-    @pytest.mark.django_db()
-    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
-    @patch("apps.chat.bots.PipelineBot.process_input")
-    def test_whatsapp_message_id_stored_in_human_message_metadata(
-        self,
-        bot_process_input,
-        send_text_message,
-        meta_cloud_api_whatsapp_channel,
-    ):
-        """Test that the WhatsApp message ID is stored in the human message metadata."""
-        experiment = ExperimentFactory.create(conversational_consent_enabled=True)
-        chat = Chat.objects.create(team=experiment.team)
-        bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
-
-        with patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator"):
-            incoming_message = _meta_message_data(meta_cloud_api_messages.text_message())
-            handle_meta_cloud_api_message(
-                channel_id=meta_cloud_api_whatsapp_channel.id,
-                team_slug=meta_cloud_api_whatsapp_channel.team.slug,
-                message_data=incoming_message,
-            )
-
-        human_message = ChatMessage.objects.filter(
-            message_type="human",
-        ).last()
-        assert human_message is not None
-        assert human_message.metadata.get("whatsapp_message_id") == "wamid.abc123"

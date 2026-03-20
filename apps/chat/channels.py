@@ -1216,14 +1216,6 @@ class WhatsappChannel(ChannelBase):
     def _can_send_file(self, file: File) -> bool:
         return self.messaging_service.can_send_file(file)
 
-    def _create_chat_message(self, message_text):
-        human_message = super()._create_chat_message(message_text)
-        whatsapp_message_id = getattr(self.message, "whatsapp_message_id", None)
-        if whatsapp_message_id:
-            human_message.metadata["whatsapp_message_id"] = whatsapp_message_id
-            human_message.save(update_fields=["metadata"])
-        return human_message
-
     def submit_input_to_llm(self):
         """Send a typing indicator to the user when using Meta Cloud API."""
         whatsapp_message_id = getattr(self.message, "whatsapp_message_id", None)
