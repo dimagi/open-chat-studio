@@ -1216,6 +1216,28 @@ class WhatsappChannel(ChannelBase):
     def _can_send_file(self, file: File) -> bool:
         return self.messaging_service.can_send_file(file)
 
+    def _create_chat_message(self, message_text):
+        human_message = super()._create_chat_message(message_text)
+        whatsapp_message_id = getattr(self.message, "whatsapp_message_id", None)
+        if whatsapp_message_id:
+            human_message.metadata["whatsapp_message_id"] = whatsapp_message_id
+            human_message.save(update_fields=["metadata"])
+        return human_message
+
+    def submit_input_to_llm(self):
+        """Send a typing indicator to the user when using Meta Cloud API."""
+        whatsapp_message_id = getattr(self.message, "whatsapp_message_id", None)
+        if not whatsapp_message_id:
+            return
+        try:
+            self.messaging_service.send_typing_indicator(
+                from_=self.from_identifier,
+                to=self.participant_identifier,
+                message_id=whatsapp_message_id,
+            )
+        except Exception:
+            logger.exception("Failed to send typing indicator")
+
 
 class SureAdhereChannel(ChannelBase):
     def send_text_to_user(self, text: str):
