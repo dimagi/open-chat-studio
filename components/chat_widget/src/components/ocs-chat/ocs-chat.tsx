@@ -174,6 +174,13 @@ export class OcsChat {
    */
   @Prop({ mutable: true }) pageContext?: Record<string, any>;
 
+  /**
+   * @internal
+   * Optional version number of the chatbot to use. Requires authentication.
+   * This is for internal use only and is not intended for public-facing widgets.
+   */
+  @Prop() versionNumber?: number;
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -420,6 +427,10 @@ export class OcsChat {
         requestBody.participant_name = this.userName;
       }
 
+      if (this.versionNumber != null) {
+        requestBody.version_number = this.versionNumber;
+      }
+
       const data = await this.getChatService().startSession(requestBody);
       this.sessionId = data.session_id;
       this.saveSessionToStorage();
@@ -523,6 +534,9 @@ export class OcsChat {
       }
       if (this.internalPageContext) {
         requestBody.context = this.internalPageContext;
+      }
+      if (this.versionNumber != null) {
+        requestBody.version_number = this.versionNumber;
       }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
