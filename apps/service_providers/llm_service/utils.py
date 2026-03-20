@@ -131,6 +131,7 @@ def get_openai_container_file_contents(
 
 
 def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
+    attachments = [a for a in attachments if getattr(a, "send_to_llm", True)]
     parts = [{"type": "text", "text": message}]
     for att in attachments:
         if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:

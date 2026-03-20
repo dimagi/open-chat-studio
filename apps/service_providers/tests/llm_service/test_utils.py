@@ -259,6 +259,27 @@ class TestFormatMultimodalInput:
         assert "Document content" in result.content[2]["text"]
         assert result.content[3]["type"] == "file"  # PDF as file
 
+    def test_format_multimodal_input_excludes_send_to_llm_false(self):
+        included = Mock()
+        included.size = 1024
+        included.content_type = "image/jpeg"
+        included.download_link = "http://example.com/image.jpg"
+        included.name = "image.jpg"
+        included.send_to_llm = True
+
+        excluded = Mock()
+        excluded.size = 1024
+        excluded.content_type = "image/png"
+        excluded.download_link = "http://example.com/other.png"
+        excluded.name = "other.png"
+        excluded.send_to_llm = False
+
+        result = format_multimodal_input("Hello", [included, excluded])
+
+        assert len(result.content) == 2
+        assert result.content[0] == {"type": "text", "text": "Hello"}
+        assert result.content[1]["url"] == "http://example.com/image.jpg"
+
     @patch("apps.service_providers.llm_service.utils.settings")
     def test_file_size_exceeds_max(self, mock_settings):
         mock_settings.MAX_FILE_SIZE_MB = 10
