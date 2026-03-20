@@ -276,6 +276,9 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         initial="en",
     )
 
+    def clean_template_language_code(self):
+        return self.cleaned_data.get("template_language_code") or "en"
+
     def save(self, instance):
         instance = super().save(instance)
         verify_token = self.cleaned_data["verify_token"]
