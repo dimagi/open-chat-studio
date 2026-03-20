@@ -361,11 +361,10 @@ class TestMetaCloudAPIServiceAudio:
 class TestMetaCloudAPIServiceWindow:
     """Tests for MetaCloudAPIService service window logic."""
 
-    def _make_service(self, has_template=False):
+    def _make_service(self):
         return MetaCloudAPIService(
             access_token="test_token",
             business_id="123456",
-            has_template_message_configured=has_template,
         )
 
     def test_none_last_activity_is_outside_window(self):
@@ -395,7 +394,7 @@ class TestMetaCloudAPIServiceWindow:
             json={"messages": [{"id": "wamid.test"}]},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         service.send_template_message(
             message="Hello, any update?",
             from_="phone123",
@@ -421,6 +420,28 @@ class TestMetaCloudAPIServiceWindow:
         }
 
     @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_custom_language_code(self, mock_post):
+        """Template message uses the configured language code."""
+        mock_post.return_value = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = MetaCloudAPIService(
+            access_token="test_token",
+            business_id="123456",
+            template_language_code="ES",
+        )
+        service.send_template_message(
+            message="Hola",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        sent_language = mock_post.call_args.kwargs["json"]["template"]["language"]
+        assert sent_language == {"code": "es"}
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_template_message_splits_long_message(self, mock_post):
         """Messages exceeding 974 chars are split into multiple template messages at word boundaries."""
         mock_post.return_value = httpx.Response(
@@ -428,7 +449,7 @@ class TestMetaCloudAPIServiceWindow:
             json={"messages": [{"id": "wamid.test"}]},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         # Use words so smart_split can find word boundaries
         long_message = ("hello " * 250).strip()  # 1499 chars
         service.send_template_message(
@@ -454,7 +475,7 @@ class TestMetaCloudAPIServiceWindow:
             json={"messages": [{"id": "wamid.test"}]},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         service.send_template_message(
             message="A" * 974,
             from_="phone123",
@@ -473,7 +494,7 @@ class TestMetaCloudAPIServiceWindow:
             json={"messages": [{"id": "wamid.test"}]},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         long_message = ("word " * 500).strip()  # 2499 chars
         service.send_template_message(
             message=long_message,
@@ -499,7 +520,7 @@ class TestMetaCloudAPIServiceWindow:
             json={"messages": [{"id": "wamid.test"}]},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         service.send_text_message(
             message="Hello",
             from_="phone123",
@@ -515,13 +536,13 @@ class TestMetaCloudAPIServiceWindow:
         }
 
     @patch("apps.service_providers.messaging_service.httpx.post")
-    def test_send_text_outside_window_with_template_sends_template(self, mock_post):
+    def test_send_text_outside_window_sends_template(self, mock_post):
         mock_post.return_value = httpx.Response(
             200,
             json={"messages": [{"id": "wamid.test"}]},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         service.send_text_message(
             message="Hello",
             from_="phone123",
@@ -532,9 +553,33 @@ class TestMetaCloudAPIServiceWindow:
         data = mock_post.call_args.kwargs["json"]
         assert data["type"] == "template"
 
-    def test_send_text_outside_window_without_template_raises(self):
-        service = self._make_service(has_template=False)
-        with pytest.raises(ServiceWindowExpiredException):
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_raises_on_template_not_found(self, mock_post):
+        """When Meta returns a 400 with template error, raise ServiceWindowExpiredException."""
+        mock_post.return_value = httpx.Response(
+            400,
+            json={"error": {"message": "template new_bot_message not found", "code": 132015}},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service()
+        with pytest.raises(ServiceWindowExpiredException, match="new_bot_message"):
+            service.send_template_message(
+                message="Hello",
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+            )
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_outside_window_raises_on_template_not_found(self, mock_post):
+        """When outside service window and template not configured on Meta, raise descriptive error."""
+        mock_post.return_value = httpx.Response(
+            400,
+            json={"error": {"message": "template new_bot_message not found", "code": 132015}},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        service = self._make_service()
+        with pytest.raises(ServiceWindowExpiredException, match="Please configure"):
             service.send_text_message(
                 message="Hello",
                 from_="phone123",
@@ -556,7 +601,7 @@ class TestMetaCloudAPIServiceWindow:
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
         mock_post.side_effect = [upload_response, send_response]
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         synthetic_voice = MagicMock(spec=SynthesizedAudio)
         synthetic_voice.get_audio_bytes.return_value = b"fake-ogg-audio"
         service.send_voice_message(
@@ -569,7 +614,7 @@ class TestMetaCloudAPIServiceWindow:
         assert mock_post.call_count == 2
 
     def test_send_voice_outside_window_raises_regardless_of_template(self):
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         synthetic_voice = MagicMock(spec=SynthesizedAudio)
         with pytest.raises(ServiceWindowExpiredException):
             service.send_voice_message(
@@ -582,7 +627,7 @@ class TestMetaCloudAPIServiceWindow:
         synthetic_voice.get_audio_bytes.assert_not_called()
 
     def test_send_voice_none_activity_raises(self):
-        service = self._make_service(has_template=True)
+        service = self._make_service()
         synthetic_voice = MagicMock(spec=SynthesizedAudio)
         with pytest.raises(ServiceWindowExpiredException):
             service.send_voice_message(

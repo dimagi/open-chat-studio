@@ -396,7 +396,7 @@ class MetaCloudAPIService(MessagingService):
     business_id: str
     app_secret: str = ""
     verify_token: str = ""
-    has_template_message_configured: bool = False
+    template_language_code: str = "en"
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
     META_API_TIMEOUT: ClassVar[int] = 30
@@ -445,7 +445,11 @@ class MetaCloudAPIService(MessagingService):
         return [chunk for chunk in smart_split(message, chars_per_string=self.TEMPLATE_MESSAGE_CHAR_LIMIT) if chunk]
 
     def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
-        """Send a WhatsApp template message using the 'new_bot_message' template."""
+        """Send a WhatsApp template message using the 'new_bot_message' template.
+
+        Raises ServiceWindowExpiredException if the template is not found on Meta's side,
+        prompting the operator to configure it in their Meta Business account.
+        """
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         chunks = self._split_template_message(message)
         for chunk in chunks:
@@ -456,7 +460,7 @@ class MetaCloudAPIService(MessagingService):
                 "type": "template",
                 "template": {
                     "name": "new_bot_message",
-                    "language": {"code": "en"},
+                    "language": {"code": self.template_language_code.lower()},
                     "components": [
                         {
                             "type": "body",
@@ -466,6 +470,15 @@ class MetaCloudAPIService(MessagingService):
                 },
             }
             response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+            if response.status_code == 404 or (response.status_code == 400 and "template" in response.text.lower()):
+                logger.warning(
+                    "Template message 'new_bot_message' not found on Meta's API. Response: %s",
+                    response.text,
+                )
+                raise ServiceWindowExpiredException(
+                    "The 24-hour service window has expired and the 'new_bot_message' template was not found. "
+                    "Please configure the 'new_bot_message' template in your Meta Business account."
+                )
             response.raise_for_status()
 
     def send_text_message(
@@ -478,11 +491,8 @@ class MetaCloudAPIService(MessagingService):
         **kwargs,
     ):
         if not self._is_within_service_window(last_activity_at):
-            if self.has_template_message_configured:
-                logger.info("Service window expired, sending template message instead of text")
-                return self.send_template_message(message=message, from_=from_, to=to, platform=platform)
-            logger.warning("Service window expired and template message not configured, cannot send message")
-            raise ServiceWindowExpiredException("Service window expired and template message not configured")
+            logger.info("Service window expired, sending template message instead of text")
+            return self.send_template_message(message=message, from_=from_, to=to, platform=platform)
 
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
