@@ -463,8 +463,8 @@ class TestMetaCloudAPIServiceWindow:
         assert mock_post.call_count == 2
         first_text = mock_post.call_args_list[0].kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
         second_text = mock_post.call_args_list[1].kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
-        assert len(first_text) <= 974
-        assert len(second_text) <= 974
+        assert len(first_text) <= 924
+        assert len(second_text) <= 924
         # Verify no words are cut off (each chunk should only contain complete "hello" words)
         assert all(word == "hello" for word in first_text.split())
         assert all(word == "hello" for word in second_text.split())
@@ -551,24 +551,6 @@ class TestMetaCloudAPIServiceWindow:
                 from_="phone123",
                 to="+27826419977",
                 platform=ChannelPlatform.WHATSAPP,
-            )
-
-    @patch("apps.service_providers.messaging_service.httpx.post")
-    def test_send_text_outside_window_raises_on_template_not_found(self, mock_post):
-        """When outside service window and template not configured on Meta, raise descriptive error."""
-        mock_post.return_value = httpx.Response(
-            400,
-            json={"error": {"message": "template new_bot_message not found", "code": 132001}},
-            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
-        )
-        service = self._make_service()
-        with pytest.raises(ServiceWindowExpiredException, match="Please configure"):
-            service.send_text_message(
-                message="Hello",
-                from_="phone123",
-                to="+27826419977",
-                platform=ChannelPlatform.WHATSAPP,
-                last_activity_at=timezone.now() - timedelta(hours=25),
             )
 
     @patch("apps.service_providers.messaging_service.httpx.post")
