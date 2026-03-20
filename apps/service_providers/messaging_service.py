@@ -39,7 +39,6 @@ class MessagingService(pydantic.BaseModel):
     voice_replies_supported: ClassVar[bool] = False
     supports_multimedia: ClassVar[bool] = False
     supported_message_types: ClassVar[list] = []
-    supports_template_messages: ClassVar[bool] = False
 
     def send_text_message(
         self,
@@ -390,8 +389,6 @@ class MetaCloudAPIService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
-    supports_template_messages: ClassVar[bool] = True
-
     access_token: str
     business_id: str
     app_secret: str = ""
@@ -402,6 +399,7 @@ class MetaCloudAPIService(MessagingService):
     META_API_TIMEOUT: ClassVar[int] = 30
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
     SERVICE_WINDOW_HOURS: ClassVar[int] = 24
+    TEMPLATE_NAME: ClassVar[str] = "new_bot_message"
     # allow 50 characters for the template message without the bot message. 1024 - 50
     TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 974
 
@@ -445,7 +443,7 @@ class MetaCloudAPIService(MessagingService):
         return [chunk for chunk in smart_split(message, chars_per_string=self.TEMPLATE_MESSAGE_CHAR_LIMIT) if chunk]
 
     def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
-        """Send a WhatsApp template message using the 'new_bot_message' template.
+        """Send a WhatsApp template message using the TEMPLATE_NAME template.
 
         Raises ServiceWindowExpiredException if the template is not found on Meta's side,
         prompting the operator to configure it in their Meta Business account.
@@ -459,7 +457,7 @@ class MetaCloudAPIService(MessagingService):
                 "to": to,
                 "type": "template",
                 "template": {
-                    "name": "new_bot_message",
+                    "name": self.TEMPLATE_NAME,
                     "language": {"code": self.template_language_code.lower()},
                     "components": [
                         {
@@ -472,12 +470,13 @@ class MetaCloudAPIService(MessagingService):
             response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
             if response.status_code == 404 or (response.status_code == 400 and "template" in response.text.lower()):
                 logger.warning(
-                    "Template message 'new_bot_message' not found on Meta's API. Response: %s",
+                    "Template message '%s' not found on Meta's API. Response: %s",
+                    self.TEMPLATE_NAME,
                     response.text,
                 )
                 raise ServiceWindowExpiredException(
-                    "The 24-hour service window has expired and the 'new_bot_message' template was not found. "
-                    "Please configure the 'new_bot_message' template in your Meta Business account."
+                    f"The 24-hour service window has expired and the '{self.TEMPLATE_NAME}' template was not found. "
+                    f"Please configure the '{self.TEMPLATE_NAME}' template in your Meta Business account."
                 )
             response.raise_for_status()
 

@@ -35,6 +35,7 @@ class TestSendMessageToUserVoiceFallback:
         """When voice message raises ServiceWindowExpiredException, falls back to text."""
         channel = self._make_channel(voice_enabled=True)
         channel._reply_voice_message.side_effect = ServiceWindowExpiredException("window expired")
+        channel._voice_fallback_to_text = ChannelBase._voice_fallback_to_text.__get__(channel)
         channel._send_text_to_user_with_notification = MagicMock()
 
         channel.send_message_to_user("Hello")

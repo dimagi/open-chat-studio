@@ -563,18 +563,20 @@ class ChannelBase(ABC):
             except AudioSynthesizeException:
                 logger.exception("Error generating voice response")
                 audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
-                self._bot_message_is_voice = False
-                bot_message = f"{bot_message}\n\n{urls_to_append}"
-                self._send_text_to_user_with_notification(bot_message)
+                self._voice_fallback_to_text(bot_message, urls_to_append)
             except ServiceWindowExpiredException:
                 logger.info("Service window expired, falling back to text message")
-                self._bot_message_is_voice = False
-                bot_message = f"{bot_message}\n\n{urls_to_append}"
-                self._send_text_to_user_with_notification(bot_message)
+                self._voice_fallback_to_text(bot_message, urls_to_append)
 
         # Finally send the attachments that are supported by the channel
         if supported_files:
             self._send_files_to_user(supported_files)
+
+    def _voice_fallback_to_text(self, bot_message: str, urls_to_append: str):
+        """Fall back to sending the bot message as text when voice delivery fails."""
+        self._bot_message_is_voice = False
+        bot_message = f"{bot_message}\n\n{urls_to_append}"
+        self._send_text_to_user_with_notification(bot_message)
 
     def _format_reference_section(self, text: str, files: list[File]) -> tuple[str, list[File]]:
         """
