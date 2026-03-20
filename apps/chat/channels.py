@@ -1218,14 +1218,17 @@ class WhatsappChannel(ChannelBase):
 
     def submit_input_to_llm(self):
         """Send a typing indicator to the user when using Meta Cloud API."""
-        whatsapp_message_id = getattr(self.message, "whatsapp_message_id", None)
-        if not whatsapp_message_id:
+        from apps.channels.datamodels import (  # noqa: PLC0415 - circular: datamodels imports chat.channels
+            MetaCloudAPIMessage,
+        )
+
+        if not isinstance(self.message, MetaCloudAPIMessage) or not self.message.whatsapp_message_id:
             return
         try:
             self.messaging_service.send_typing_indicator(
                 from_=self.from_identifier,
                 to=self.participant_identifier,
-                message_id=whatsapp_message_id,
+                message_id=self.message.whatsapp_message_id,
             )
         except Exception:
             logger.exception("Failed to send typing indicator")
