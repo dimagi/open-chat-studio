@@ -83,13 +83,17 @@ class File(BaseTeamModel, VersionsMixin):
     ):
         content = file_obj.read() if file_obj else None
 
-        content_type = content_type or mimetypes.guess_type(filename)[0]
         if not content_type and content:
-            # typically means the filename doesn't have an extension
-            content_type = magic.from_buffer(content, mime=True)
+            detected = magic.from_buffer(content[:2048], mime=True)
+            if detected and detected != "application/octet-stream":
+                content_type = detected
+
+        content_type = content_type or mimetypes.guess_type(filename)[0]
+
+        if content_type and not pathlib.Path(filename).suffix:
             extension = mimetypes.guess_extension(content_type)
-            # leading '.' is included
-            filename = f"{filename}{extension}"
+            if extension:
+                filename = f"{filename}{extension}"
 
         new_file = File(
             name=filename,
@@ -114,6 +118,16 @@ class File(BaseTeamModel, VersionsMixin):
 
     @staticmethod
     def get_content_type(file):
+        """Detect content type by inspecting file bytes first, falling back to filename."""
+        with contextlib.suppress(Exception):
+            file.seek(0)
+            header = file.read(2048)
+            file.seek(0)
+            if header:
+                detected = magic.from_buffer(header, mime=True)
+                if detected and detected != "application/octet-stream":
+                    return detected
+
         filename = file.name
         with contextlib.suppress(Exception):
             filename = pathlib.Path(filename).name
