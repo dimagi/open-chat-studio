@@ -557,6 +557,7 @@ class MetaCloudAPIService(MessagingService):
             "type": "typing_indicator",
             "typing_indicator": {"type": "text"},
             "message_id": message_id,
+            "mark_message_as_read": True,
         }
         response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
         response.raise_for_status()
