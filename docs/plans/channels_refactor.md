@@ -131,6 +131,12 @@ class MessageProcessingContext:
     # and appends to this list for observability
     processing_errors: list[str] = field(default_factory=list)
 
+    # Human message tags — set by stages (e.g. MessageTypeValidationStage)
+    # to tag the human message during persistence. PersistenceStage reads
+    # this list and applies the tags to the human ChatMessage record.
+    # Each entry is (tag_name, tag_category).
+    human_message_tags: list[tuple[str, str]] = field(default_factory=list)
+
     # Channel-specific context — WORKAROUND for EvaluationChannel only.
     # EvaluationChannel uses this to pass participant_data (a dict) to
     # EvalsBotInteractionStage, bypassing the normal DB-backed
@@ -215,12 +221,19 @@ class ProcessingStage(ABC):
         """
         pass
 
+    def get_span_notification_config(self):
+        """Override to attach a SpanNotificationConfig to this stage's trace span.
+        Default: None (no notification)."""
+        return None
+
     def __call__(self, ctx: MessageProcessingContext) -> None:
         """Execute stage inside a trace span if conditions are met"""
         if not self.should_run(ctx):
             return
         stage_name = self.__class__.__name__
-        with ctx.trace_service.span(stage_name, inputs={}) as span:
+        with ctx.trace_service.span(
+            stage_name, inputs={}, notification_config=self.get_span_notification_config()
+        ) as span:
             self.process(ctx)
             span.set_outputs({})
 ```
@@ -228,7 +241,7 @@ class ProcessingStage(ABC):
 > **Review decisions applied**:
 > - **`should_run` does NOT check `early_exit_response`**: Early exit short-circuiting is the pipeline's responsibility. `should_run` is only for stage-specific preconditions (e.g., "only run if user_query is set").
 > - **`EarlyExitResponse` exception**: Stages raise this to short-circuit. The pipeline catches it, stores the message on `ctx.early_exit_response`, then runs terminal stages.
-> - **Trace spans for observability**: `__call__` wraps `process` in a trace span, not manual `time.monotonic()` timing. Integrates with existing tracing infrastructure.
+> - **Trace spans for observability**: `__call__` wraps `process` in a trace span, not manual `time.monotonic()` timing. Integrates with existing tracing infrastructure. Stages can override `get_span_notification_config()` to attach a `SpanNotificationConfig` (e.g., `BotInteractionStage` uses this to set `experiments.change_experiment` permission).
 > - **Zero-arg stages**: No `__init__` parameters — stages get everything from `ctx`.
 
 ### 4\. Concrete Stages
@@ -326,12 +339,14 @@ class MessageTypeValidationStage(ProcessingStage):
 
     def process(self, ctx: MessageProcessingContext) -> None:
         if ctx.message.content_type not in ctx.capabilities.supported_message_types:
+            # Tag the human message for analytics (PersistenceStage applies the tag)
+            ctx.human_message_tags.append(("unsupported_message_type", TagCategories.ERROR))
             raise EarlyExitResponse(self._generate_unsupported_message_response(ctx))
 ```
 
 **Maps to**: `is_message_type_supported()` and `_handle_unsupported_message()` (lines 789-804)
 
-> Zero-arg: reads `supported_message_types` from `ctx.capabilities`.
+> Zero-arg: reads `supported_message_types` from `ctx.capabilities`. Sets `ctx.human_message_tags` for analytics tagging by `PersistenceStage`.
 
 #### Stage 4: SessionActivationStage
 
@@ -506,6 +521,9 @@ class BotInteractionStage(ProcessingStage):
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None
+
+    def get_span_notification_config(self):
+        return SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
     def process(self, ctx: MessageProcessingContext) -> None:
         # Channel-specific "typing" indicator
@@ -735,12 +753,16 @@ class PersistenceStage(ProcessingStage):
     TERMINAL STAGE — runs after ResponseSendingStage and
     SendingErrorHandlerStage.
 
-    Handles two persistence concerns:
-    1. Early exit responses: When a core stage raises EarlyExitResponse
-       or the pipeline's catch-all generates an error message, this stage
-       creates the corresponding ChatMessage DB record.
-    2. Voice attachments: When the bot response was synthesized as voice,
-       this stage tags the AI message and saves the audio as an attachment.
+    Handles three persistence concerns:
+    1. Human message tags: Applies tags set by earlier stages (e.g.
+       "unsupported_message_type" from MessageTypeValidationStage).
+    2. Early exit responses: Creates an AI ChatMessage for the early
+       exit response text. Skips /reset commands (intentionally not
+       recorded, matching current behavior). Also skips when
+       ctx.bot_response exists (bot.process_input already persisted
+       the AI message, e.g. seed message in ConsentFlowStage).
+    3. Voice attachments: Tags the bot response as "voice" and saves
+       the synthesized audio as a file attachment.
 
     Persists regardless of whether sending succeeded — chat history
     serves as an audit trail.
@@ -750,21 +772,43 @@ class PersistenceStage(ProcessingStage):
         return (
             ctx.early_exit_response is not None
             or ctx.voice_audio is not None
+            or ctx.human_message_tags
+        )
+
+    def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
+        """Check if the user's inbound message was the /reset command."""
+        return (
+            ctx.message is not None
+            and ctx.message.content_type == MESSAGE_TYPES.TEXT
+            and ctx.message.message_text.lower().strip() == SessionResolutionStage.RESET_COMMAND
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
         if not ctx.experiment_session:
             return
 
-        # 1. Persist early exit response to chat history
-        if ctx.early_exit_response is not None:
+        # Skip all persistence for /reset — matching current behavior
+        if self._is_reset_command(ctx):
+            return
+
+        # 1. Apply human message tags set by earlier stages
+        if ctx.human_message and ctx.human_message_tags:
+            for tag_name, tag_category in ctx.human_message_tags:
+                ctx.human_message.create_and_add_tag(
+                    tag_name, ctx.experiment.team, tag_category
+                )
+
+        # 2. Persist early exit response to chat history.
+        #    Skip when ctx.bot_response exists — bot.process_input()
+        #    already persisted the AI message (e.g. seed message).
+        if ctx.early_exit_response is not None and ctx.bot_response is None:
             ChatMessage.objects.create(
                 chat=ctx.experiment_session.chat,
                 message_type=ChatMessageType.AI,
                 content=ctx.early_exit_response,
             )
 
-        # 2. Tag and save voice attachment on bot response
+        # 3. Tag and save voice attachment on bot response
         if ctx.voice_audio is not None and ctx.bot_response is not None:
             ctx.bot_response.create_and_add_tag(
                 "voice", ctx.experiment.team, TagCategories.MEDIA_TYPE
@@ -834,7 +878,9 @@ class MessageProcessingPipeline:
 
     Error handling has two tiers:
     1. EarlyExitResponse — intentional short-circuit by a stage
-    2. Unexpected Exception — catch-all generates an error message
+    2. Passthrough exceptions (e.g. GenerationCancelled) — propagate
+       immediately without error handling or terminal stages.
+    3. Unexpected Exception — catch-all generates an error message
        via EventBot (or falls back to DEFAULT_ERROR_RESPONSE_TEXT),
        runs terminal stages, then RE-RAISES so the caller knows
        processing failed.
@@ -844,19 +890,25 @@ class MessageProcessingPipeline:
         self,
         core_stages: list[ProcessingStage],
         terminal_stages: list[ProcessingStage],
+        passthrough_exceptions: tuple[type[Exception], ...] | None = None,
     ):
+        from apps.service_providers.llm_service.runnables import GenerationCancelled
+
         self.core_stages = core_stages
         self.terminal_stages = terminal_stages
+        self.passthrough_exceptions = passthrough_exceptions if passthrough_exceptions is not None else (GenerationCancelled,)
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
         """Run core stages, catch exceptions, then run terminal stages.
 
         1. Run core stages sequentially. If any raises EarlyExitResponse,
            remaining core stages are skipped.
-        2. If any raises an unexpected exception, generate an error message
+        2. If any raises a passthrough exception (e.g. GenerationCancelled),
+           re-raise immediately without error handling or terminal stages.
+        3. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        3. Run terminal stages unconditionally (they always fire).
-        4. If there was an unexpected exception, re-raise it after terminal
+        4. Run terminal stages unconditionally (they always fire).
+        5. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         unexpected_exception = None
@@ -866,6 +918,8 @@ class MessageProcessingPipeline:
                 stage(ctx)
         except EarlyExitResponse as e:
             ctx.early_exit_response = e.response
+        except self.passthrough_exceptions:
+            raise  # Propagate immediately — no error handling, no terminal stages
         except Exception as e:
             unexpected_exception = e
             ctx.early_exit_response = self._generate_error_message(ctx, e)
@@ -976,11 +1030,11 @@ class ChannelBase(ABC):
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
-                ConsentFlowStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -1064,7 +1118,8 @@ class ChannelBase(ABC):
 > - **Zero-arg stages**: Pipeline construction is trivial — no callbacks/sender/capabilities passed to stage constructors.
 > - **Dependencies on context**: `new_user_message` injects callbacks, sender, and capabilities into the context object.
 > - **Core vs terminal stages**: 9 core stages (can be short-circuited by `EarlyExitResponse`) + 4 terminal stages (always run): ResponseSendingStage → SendingErrorHandlerStage → PersistenceStage → ActivityTrackingStage.
-> - **SessionActivationStage before ConsentFlowStage**: Handles non-consent session activation as a dedicated stage. `ConsentFlowStage.should_run()` is a pure precondition check with no side effects.
+> - **SessionActivationStage immediately after SessionResolution**: Groups session lifecycle stages (resolve → activate). Handles non-consent session activation as a dedicated stage. `ConsentFlowStage.should_run()` is a pure precondition check with no side effects.
+> - **QueryExtraction + ChatMessageCreation before ConsentFlow**: Ensures the user's message is always persisted before consent-related early exits (matching current code ordering).
 > - **ConsentFlowStage always included**: No conditional in `_build_pipeline`. The stage's `should_run()` handles the skip logic.
 > - **Dynamic `_get_capabilities()`** (Decision 3): Method can be overridden for channels where capabilities depend on runtime state (e.g., provider-dependent file support).
 > - **Channel-specific pipelines**: Channels like `ApiChannel`, `EvaluationChannel`, and `CommCareConnectChannel` override `_build_pipeline` to customize their stage lists (e.g., omitting `ResponseSendingStage` for channels that don't send, adding `CommCareConsentCheckStage` after `SessionResolutionStage`).
@@ -1177,11 +1232,11 @@ class ApiChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
-                ConsentFlowStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -1215,8 +1270,8 @@ class WebChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 # No SessionResolutionStage — session always pre-set
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
+                MessageTypeValidationStage(),
                 # No ConsentFlowStage — web uses UI-based consent
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
@@ -1292,8 +1347,8 @@ class EvaluationChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 # No SessionResolutionStage — session always pre-set
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 EvalsBotInteractionStage(),  # Instead of BotInteractionStage
@@ -1321,12 +1376,12 @@ class CommCareConnectChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
+                SessionActivationStage(),
                 CommCareConsentCheckStage(),  # Platform-specific consent
                 MessageTypeValidationStage(),
-                SessionActivationStage(),
-                ConsentFlowStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -2507,11 +2562,11 @@ class ChannelBase(ABC):
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
-                ConsentFlowStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -2633,7 +2688,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 4 | Architecture | Runtime `_get_capabilities()` | Method on ChannelBase, overridable for provider-dependent channels (e.g., WhatsApp file support varies). |
 | 5 | Architecture | Pre-set session on context | Web/Slack channels set `ctx.experiment_session` at creation. `SessionResolutionStage` respects this. |
 | 6 | Code Quality | Each stage handles own errors | Stages append to `ctx.processing_errors` for observability. |
-| 7 | Code Quality | Separate `ChatMessageCreationStage` | Stage between QueryExtraction and BotInteraction. DB record exists before bot call. |
+| 7 | Code Quality | Separate `ChatMessageCreationStage` | Stage between QueryExtraction and ConsentFlow (before BotInteraction). DB record exists before consent flow and bot call, matching current code ordering. |
 | 8 | Code Quality | `/reset` inside `SessionResolutionStage` | Reset is session lifecycle — belongs in the stage that manages sessions. Raises `EarlyExitResponse`. |
 | 9 | Code Quality | ConsentFlowStage sub-behaviors explicit | Docstring documents: state transitions, seed message. Raises `EarlyExitResponse`. |
 | 16 | Code Quality | `SessionActivationStage` for non-consent path | Dedicated stage activates session when consent is disabled. Keeps `ConsentFlowStage.should_run()` side-effect-free. |
@@ -2664,6 +2719,21 @@ All decisions below were made during the plan review and are reflected throughou
 | 15 | Performance | Document `select_related` for experiment FKs | Experiment queries throughout stages should use appropriate `select_related`. |
 | — | Example feedback | Trace spans in `__call__` | `ProcessingStage.__call__` uses `ctx.trace_service.span()`, not `time.monotonic()` timing. |
 | — | Example feedback | `supports_conversational_consent` on `ChannelCapabilities` | Not a ClassVar on ChannelBase. ConsentFlowStage checks `ctx.capabilities.supports_conversational_consent`. |
+
+### Gap Analysis Fixes (Post-Review)
+
+These fixes were identified during gap analysis comparing the new pipeline approach with the existing `apps/chat/channels.py` implementation:
+
+| # | Area | Fix | Summary |
+|---|------|-----|---------|
+| G1 | Stage ordering | QueryExtraction + ChatMessageCreation before ConsentFlow | Ensures the user's message is always persisted before consent-related early exits (matching current code ordering where `_create_chat_message_from_user_message` runs before `_handle_pre_conversation_requirements`). |
+| G2 | Persistence | Seed message dedup via `ctx.bot_response` | `ConsentFlowStage._process_seed_message` sets `ctx.bot_response` so `PersistenceStage` knows the AI message was already persisted by `bot.process_input()` and skips creating a duplicate (checks `ctx.bot_response is None`). |
+| G3 | Pipeline | `passthrough_exceptions` | Pipeline supports a tuple of exception types (e.g. `GenerationCancelled`) that propagate immediately without catch-all error handling or terminal stages. |
+| G4 | Persistence | /reset command not recorded | `PersistenceStage` detects the `/reset` command from the user's inbound message and skips all persistence (matching current behavior where reset is intentionally not recorded). |
+| G5 | Observability | `get_span_notification_config()` hook | `ProcessingStage` provides an overridable method for attaching `SpanNotificationConfig` to trace spans. `BotInteractionStage` uses it to set `experiments.change_experiment` permission. |
+| G6 | Analytics | `ctx.human_message_tags` + PersistenceStage tagging | `MessageTypeValidationStage` appends `("unsupported_message_type", ERROR)` tag. `PersistenceStage` applies tags to the human ChatMessage. Preserves current analytics behavior. |
+| G7 | CommCare | Late-binding `CommCareConnectSender` (visitor pattern) | Sender holds a channel reference and resolves `connect_channel_id`/`encryption_key` lazily on first send via `@cached_property` on the channel. |
+| G8 | Stage ordering | SessionActivation immediately after SessionResolution | Groups session lifecycle stages together: resolve → activate → validate message type. |
 
 ### Performance Notes (Deferred)
 

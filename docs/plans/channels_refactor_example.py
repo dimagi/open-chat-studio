@@ -2,8 +2,9 @@
 Example implementation of the proposed channel refactoring architecture.
 
 This file shows the base classes (context, stages, pipeline, callbacks, channel)
-and concrete channel implementations (Telegram, WhatsApp, API, CommCare Connect)
-to illustrate how the pieces fit together.
+and concrete channel implementations (Telegram, WhatsApp, Facebook Messenger,
+SureAdhere, Slack, API, Web, Evaluation, CommCare Connect) to illustrate how
+the pieces fit together.
 
 This is NOT production code — it's a reference for understanding the proposed
 architecture with all review decisions applied:
@@ -28,6 +29,24 @@ architecture with all review decisions applied:
   - Issue 25: No web channel _inform_user_of_error override needed
   - Issue 13: select_related on session query
   - Issue 14: select_related on experiment FK lookups
+
+Gap analysis fixes (post-review):
+  - Fix 1:  QueryExtractionStage and ChatMessageCreationStage moved BEFORE ConsentFlowStage
+            in the pipeline, so the user's message is always recorded before consent-related
+            early exits (matching current code ordering).
+  - Fix 2:  ConsentFlowStage._process_seed_message sets ctx.bot_response so PersistenceStage
+            knows the AI message was already persisted by bot.process_input() and skips creating
+            a duplicate (checks ctx.bot_response is None before persisting early exit responses).
+  - Fix 3:  Pipeline supports passthrough_exceptions (e.g. GenerationCancelled) that propagate
+            immediately without catch-all error handling or terminal stages.
+  - Fix 4:  PersistenceStage detects the /reset command from the user's inbound message and
+            skips all persistence (matching current behavior where reset is intentionally not recorded).
+  - Fix 5:  ProcessingStage.get_span_notification_config() hook — BotInteractionStage uses it to
+            attach SpanNotificationConfig with experiments.change_experiment permission.
+  - Fix 6:  ctx.human_message_tags field + PersistenceStage applies tags to human message.
+            MessageTypeValidationStage sets ("unsupported_message_type", ERROR) tag for analytics.
+  - Fix 7:  CommCareConnectSender uses late-binding (visitor pattern) — holds channel reference,
+            resolves connect_channel_id/encryption_key lazily on first send.
 """
 
 from __future__ import annotations
@@ -36,6 +55,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from functools import cached_property
 from io import BytesIO
 from typing import TYPE_CHECKING, ClassVar
 
@@ -237,6 +257,13 @@ class MessageProcessingContext:
     # --- Observability ------------------------------------------------------
     processing_errors: list[str] = field(default_factory=list)
 
+    # --- Human message tags -------------------------------------------------
+    # Set by stages (e.g. MessageTypeValidationStage) to tag the human
+    # message during persistence.  PersistenceStage reads this list and
+    # applies the tags to the human ChatMessage record.
+    human_message_tags: list[tuple[str, str]] = field(default_factory=list)
+    # Each entry is (tag_name, tag_category) — e.g. ("unsupported_message_type", TagCategories.ERROR)
+
     # --- Channel-specific context -------------------------------------------
     # WORKAROUND for EvaluationChannel only. EvaluationChannel uses this to
     # pass participant_data (a dict) to EvalsBotInteractionStage, bypassing
@@ -272,12 +299,19 @@ class ProcessingStage(ABC):
         """Process the context, modifying it in place.
         Raise EarlyExitResponse to short-circuit the pipeline."""
 
+    def get_span_notification_config(self):
+        """Override to attach a SpanNotificationConfig to this stage's trace span.
+        Default: None (no notification)."""
+        return None
+
     def __call__(self, ctx: MessageProcessingContext) -> None:
         """Execute stage: check should_run, run inside a trace span."""
         if not self.should_run(ctx):
             return
         stage_name = self.__class__.__name__
-        with ctx.trace_service.span(stage_name, inputs={}) as span:
+        with ctx.trace_service.span(
+            stage_name, inputs={}, notification_config=self.get_span_notification_config()
+        ) as span:
             self.process(ctx)
             span.set_outputs({})
 
@@ -384,6 +418,11 @@ class MessageTypeValidationStage(ProcessingStage):
 
     def process(self, ctx: MessageProcessingContext) -> None:
         if ctx.message.content_type not in ctx.capabilities.supported_message_types:
+            # Tag the human message for analytics (PersistenceStage applies the tag)
+            from apps.annotations.models import TagCategories
+
+            ctx.human_message_tags.append(("unsupported_message_type", TagCategories.ERROR))
+
             # Use EventBot to generate a friendly response
             try:
                 response = self._generate_unsupported_response(ctx)
@@ -491,12 +530,7 @@ class ConsentFlowStage(ProcessingStage):
             raise EarlyExitResponse(response)
 
     def _user_gave_consent(self, ctx: MessageProcessingContext) -> bool:
-        from apps.chat.channels import MESSAGE_TYPES
-
-        return (
-            ctx.message.content_type == MESSAGE_TYPES.TEXT
-            and ctx.message.message_text.strip() == self.USER_CONSENT_TEXT
-        )
+        return ctx.user_query is not None and ctx.user_query.strip() == self.USER_CONSENT_TEXT
 
     def _build_consent_prompt(self, ctx: MessageProcessingContext) -> str:
         """Build the consent prompt text. Does NOT send or persist — just returns the string."""
@@ -519,13 +553,18 @@ class ConsentFlowStage(ProcessingStage):
         return None
 
     def _process_seed_message(self, ctx: MessageProcessingContext) -> str:
-        """Invokes the bot with the seed message and returns the response text."""
+        """Invokes the bot with the seed message and returns the response text.
+
+        Note: bot.process_input() persists the AI response internally.
+        PersistenceStage detects this (ctx.bot_response is not None) and
+        skips creating a duplicate AI ChatMessage for the early exit response.
+        """
         from apps.chat.bots import get_bot
 
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
-        bot_response = ctx.bot.process_input(user_input=ctx.experiment.seed_message)
-        return bot_response.content
+        ctx.bot_response = ctx.bot.process_input(user_input=ctx.experiment.seed_message)
+        return ctx.bot_response.content
 
 
 class QueryExtractionStage(ProcessingStage):
@@ -647,6 +686,11 @@ class BotInteractionStage(ProcessingStage):
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None
+
+    def get_span_notification_config(self):
+        from apps.service_providers.tracing.base import SpanNotificationConfig
+
+        return SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
     def process(self, ctx: MessageProcessingContext) -> None:
         from apps.chat.bots import get_bot
@@ -886,31 +930,57 @@ class PersistenceStage(ProcessingStage):
     Persists regardless of whether sending succeeded — chat history
     serves as an audit trail.
 
-    Handles two persistence concerns:
-    1. Early exit responses: Creates ChatMessage DB record for the
-       early exit response text.
-    2. Voice attachments: Tags the bot response as "voice" and saves
+    Handles three persistence concerns:
+    1. Human message tags: Applies any tags set by earlier stages
+       (e.g. "unsupported_message_type" from MessageTypeValidationStage).
+    2. Early exit responses: Creates an AI ChatMessage DB record for the
+       early exit response text.  Detects the /reset command from the
+       user's inbound message and skips ALL persistence (matching current
+       behavior where reset is intentionally not recorded).
+    3. Voice attachments: Tags the bot response as "voice" and saves
        the synthesized audio as a file attachment.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.early_exit_response is not None or ctx.voice_audio is not None
+        return ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
+
+    def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
+        """Check if the user's inbound message was the /reset command."""
+        from apps.chat.channels import MESSAGE_TYPES
+
+        return (
+            ctx.message is not None
+            and ctx.message.content_type == MESSAGE_TYPES.TEXT
+            and ctx.message.message_text.lower().strip() == SessionResolutionStage.RESET_COMMAND
+        )
 
     def process(self, ctx: MessageProcessingContext) -> None:
+        from apps.chat.models import ChatMessage, ChatMessageType
+
         if not ctx.experiment_session:
             return
 
-        # 1. Persist early exit response to chat history
-        if ctx.early_exit_response is not None:
-            from apps.chat.models import ChatMessage, ChatMessageType
+        # Skip all persistence for /reset — matching current behavior
+        # where the reset command is intentionally not recorded.
+        if self._is_reset_command(ctx):
+            return
 
+        # 1. Apply human message tags set by earlier stages
+        if ctx.human_message and ctx.human_message_tags:
+            for tag_name, tag_category in ctx.human_message_tags:
+                ctx.human_message.create_and_add_tag(tag_name, ctx.experiment.team, tag_category)
+
+        # 2. Persist early exit response to chat history.
+        #    Skip when ctx.bot_response exists — bot.process_input() already
+        #    persisted the AI message (e.g. seed message in ConsentFlowStage).
+        if ctx.early_exit_response is not None and ctx.bot_response is None:
             ChatMessage.objects.create(
                 chat=ctx.experiment_session.chat,
                 message_type=ChatMessageType.AI,
                 content=ctx.early_exit_response,
             )
 
-        # 2. Tag and save voice attachment on bot response
+        # 3. Tag and save voice attachment on bot response
         if ctx.voice_audio is not None and ctx.bot_response is not None:
             from apps.annotations.models import TagCategories
             from apps.files.models import File, FilePurpose
@@ -981,19 +1051,27 @@ class MessageProcessingPipeline:
         self,
         core_stages: list[ProcessingStage],
         terminal_stages: list[ProcessingStage],
+        passthrough_exceptions: tuple[type[Exception], ...] | None = None,
     ):
+        from apps.service_providers.llm_service.runnables import GenerationCancelled
+
+        if passthrough_exceptions is None:
+            passthrough_exceptions = (GenerationCancelled,)
         self.core_stages = [s for s in core_stages if s is not None]
         self.terminal_stages = [s for s in terminal_stages if s is not None]
+        self.passthrough_exceptions = passthrough_exceptions
 
     def process(self, ctx: MessageProcessingContext) -> MessageProcessingContext:
         """Run core stages, catch exceptions, then run terminal stages.
 
         1. Run core stages sequentially. If any raises EarlyExitResponse,
            remaining core stages are skipped.
-        2. If any raises an unexpected exception, generate an error message
+        2. If any raises a passthrough exception, re-raise immediately
+           without error handling or terminal stages.
+        3. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        3. Run terminal stages unconditionally (they always fire).
-        4. If there was an unexpected exception, re-raise it after terminal
+        4. Run terminal stages unconditionally (they always fire).
+        5. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         unexpected_exception = None
@@ -1003,6 +1081,10 @@ class MessageProcessingPipeline:
                 stage(ctx)
         except EarlyExitResponse as e:
             ctx.early_exit_response = e.response
+        except self.passthrough_exceptions:
+            # Passthrough exceptions (e.g. GenerationCancelled) propagate
+            # immediately — no error message generation, no terminal stages.
+            raise
         except Exception as e:
             unexpected_exception = e
             ctx.early_exit_response = self._generate_error_message(ctx, e)
@@ -1131,15 +1213,16 @@ class ChannelBase(ABC):
         Core stages can be short-circuited by EarlyExitResponse.
         Terminal stages always run.
         """
+
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
-                ConsentFlowStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -1416,7 +1499,239 @@ class WhatsappChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 14. Concrete Channel: API (no sending)
+# 14. Concrete Channel: Facebook Messenger (messaging service, runtime caps)
+# ---------------------------------------------------------------------------
+
+
+class FacebookMessengerSender(ChannelSender):
+    """Sends messages via the Facebook Messenger messaging service."""
+
+    def __init__(self, messaging_service, page_id: str):
+        self._service = messaging_service
+        self._page_id = page_id
+
+    def send_text(self, text: str, recipient: str) -> None:
+        from apps.channels.models import ChannelPlatform
+
+        self._service.send_text_message(
+            message=text, from_=self._page_id, to=recipient, platform=ChannelPlatform.FACEBOOK
+        )
+
+    def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
+        from apps.channels.models import ChannelPlatform
+
+        self._service.send_voice_message(audio, from_=self._page_id, to=recipient, platform=ChannelPlatform.FACEBOOK)
+
+    def send_file(self, file: File, recipient: str, session_id: int) -> None:
+        # Facebook Messenger does not support file sending in the current codebase
+        raise NotImplementedError
+
+
+class FacebookMessengerCallbacks(ChannelCallbacks):
+    """Facebook Messenger callbacks — echo transcript via text message."""
+
+    def __init__(self, sender: FacebookMessengerSender):
+        self._sender = sender
+
+    def echo_transcript(self, recipient: str, transcript: str) -> None:
+        self._sender.send_text(text=f'I heard: "{transcript}"', recipient=recipient)
+
+
+class FacebookMessengerChannel(ChannelBase):
+    """Facebook Messenger channel — capabilities determined at runtime from
+    the messaging service (like WhatsApp). Supports voice if the service does."""
+
+    def __init__(self, experiment, experiment_channel, experiment_session=None):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self._messaging_service = None
+
+    @property
+    def messaging_service(self):
+        if self._messaging_service is None:
+            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+        return self._messaging_service
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return FacebookMessengerCallbacks(sender=self._get_sender())
+
+    def _get_sender(self) -> ChannelSender:
+        page_id = self.experiment_channel.extra_data.get("page_id")
+        return FacebookMessengerSender(self.messaging_service, page_id)
+
+    def _get_capabilities(self) -> ChannelCapabilities:
+        """Runtime capabilities from the messaging service."""
+        return ChannelCapabilities(
+            supports_voice=self.messaging_service.voice_replies_supported,
+            supports_files=False,  # No file sending in current codebase
+            supports_conversational_consent=True,
+            supported_message_types=self.messaging_service.supported_message_types,
+        )
+
+
+# ---------------------------------------------------------------------------
+# 15. Concrete Channel: SureAdhere (messaging service, text-only)
+# ---------------------------------------------------------------------------
+
+
+class SureAdhereSender(ChannelSender):
+    """Sends messages via the SureAdhere messaging service."""
+
+    def __init__(self, messaging_service, tenant_id: str):
+        self._service = messaging_service
+        self._tenant_id = tenant_id
+
+    def send_text(self, text: str, recipient: str) -> None:
+        from apps.channels.models import ChannelPlatform
+
+        self._service.send_text_message(
+            message=text, from_=self._tenant_id, to=recipient, platform=ChannelPlatform.SUREADHERE
+        )
+
+    def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
+        raise NotImplementedError
+
+    def send_file(self, file: File, recipient: str, session_id: int) -> None:
+        raise NotImplementedError
+
+
+class SureAdhereChannel(ChannelBase):
+    """SureAdhere channel — text-only, uses messaging service.
+    Supported message types determined at runtime from the messaging service."""
+
+    voice_replies_supported = False
+
+    def __init__(self, experiment, experiment_channel, experiment_session=None):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self._messaging_service = None
+
+    @property
+    def messaging_service(self):
+        if self._messaging_service is None:
+            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+        return self._messaging_service
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return ChannelCallbacks()  # All no-ops
+
+    def _get_sender(self) -> ChannelSender:
+        tenant_id = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
+        return SureAdhereSender(self.messaging_service, tenant_id)
+
+    def _get_capabilities(self) -> ChannelCapabilities:
+        """Runtime supported_message_types from the messaging service."""
+        return ChannelCapabilities(
+            supports_voice=False,
+            supports_files=False,
+            supports_conversational_consent=True,
+            supported_message_types=self.messaging_service.supported_message_types,
+        )
+
+
+# ---------------------------------------------------------------------------
+# 16. Concrete Channel: Slack (pre-set session, thread-based messaging, files)
+# ---------------------------------------------------------------------------
+
+
+class SlackSender(ChannelSender):
+    """Sends messages via the Slack messaging service.
+
+    Slack messages are scoped to a channel + thread. The channel_id and
+    thread_ts come from either the inbound message or the session's
+    external_id (for ad hoc messages where there is no inbound message).
+    """
+
+    def __init__(self, messaging_service, channel_id: str, thread_ts: str):
+        self._service = messaging_service
+        self._channel_id = channel_id
+        self._thread_ts = thread_ts
+
+    def send_text(self, text: str, recipient: str) -> None:
+        from apps.channels.models import ChannelPlatform
+
+        self._service.send_text_message(
+            text,
+            from_="",
+            to=self._channel_id,
+            platform=ChannelPlatform.SLACK,
+            thread_ts=self._thread_ts,
+        )
+
+    def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
+        raise NotImplementedError
+
+    def send_file(self, file: File, recipient: str, session_id: int) -> None:
+        self._service.send_file_message(
+            file=file,
+            to=self._channel_id,
+            thread_ts=self._thread_ts,
+        )
+
+
+class SlackChannel(ChannelBase):
+    """Slack channel — pre-set session (like Web), thread-based messaging,
+    supports file attachments, no voice.
+
+    Session is always pre-set (created by the Slack event handler before
+    the pipeline runs). The channel_id and thread_ts for sending are
+    derived from the inbound message or the session's external_id.
+    """
+
+    voice_replies_supported = False
+    supports_multimedia = True
+
+    def __init__(self, experiment, experiment_channel, experiment_session, messaging_service=None):
+        if not experiment_session:
+            from apps.chat.exceptions import ChannelException
+
+            raise ChannelException("SlackChannel requires an existing session")
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self._messaging_service = messaging_service
+        # Resolved lazily per-message in _get_sender
+        self._message = None
+
+    @property
+    def messaging_service(self):
+        if not self._messaging_service:
+            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
+        return self._messaging_service
+
+    def _get_callbacks(self) -> ChannelCallbacks:
+        return ChannelCallbacks()  # All no-ops — Slack has no typing indicators or transcript echo
+
+    def _get_sender(self) -> ChannelSender:
+        """Build a sender scoped to the correct Slack channel + thread.
+
+        For inbound messages, channel_id/thread_ts come from the message.
+        For ad hoc messages (send_message_to_user), they come from the
+        session's external_id.
+        """
+        from apps.slack.utils import parse_session_external_id
+
+        channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
+        return SlackSender(self.messaging_service, channel_id, thread_ts)
+
+    def _get_capabilities(self) -> ChannelCapabilities:
+        from apps.chat.channels import MESSAGE_TYPES
+
+        return ChannelCapabilities(
+            supports_voice=False,
+            supports_files=True,
+            supports_conversational_consent=True,
+            supported_message_types=[MESSAGE_TYPES.TEXT],
+            can_send_file=self._can_send_file,
+        )
+
+    def _can_send_file(self, file) -> bool:
+        from django.conf import settings
+
+        mime = file.content_type
+        size = file.content_size or 0
+        max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+        return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
+
+
+# ---------------------------------------------------------------------------
+# 17. NoOpSender + Concrete Channel: API (no sending)
 # ---------------------------------------------------------------------------
 
 
@@ -1452,11 +1767,11 @@ class ApiChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
-                ConsentFlowStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -1486,7 +1801,7 @@ class ApiChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 15. Concrete Channel: Evaluation (specialized bot, no sending)
+# 18. Concrete Channel: Evaluation (specialized bot, no sending)
 # ---------------------------------------------------------------------------
 
 
@@ -1552,8 +1867,8 @@ class EvaluationChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 # No SessionResolutionStage — session always pre-set
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
+                MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 EvalsBotInteractionStage(),  # Instead of BotInteractionStage
@@ -1585,7 +1900,7 @@ class EvaluationChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 16. Concrete Channel: Web (no sending, no conversational consent)
+# 19. Concrete Channel: Web (no sending, no conversational consent)
 # ---------------------------------------------------------------------------
 
 
@@ -1615,8 +1930,8 @@ class WebChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 # No SessionResolutionStage — session always pre-set
-                MessageTypeValidationStage(),
                 SessionActivationStage(),
+                MessageTypeValidationStage(),
                 # No ConsentFlowStage — web uses UI-based consent
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
@@ -1661,7 +1976,7 @@ class WebChannel(ChannelBase):
 
 
 # ---------------------------------------------------------------------------
-# 17. Concrete Channel: CommCare Connect (platform-specific consent)
+# 20. Concrete Channel: CommCare Connect (platform-specific consent)
 # ---------------------------------------------------------------------------
 
 
@@ -1690,6 +2005,35 @@ class CommCareConsentCheckStage(ProcessingStage):
             raise EarlyExitResponse("Participant has not given consent to chat")
 
 
+class CommCareConnectSender(ChannelSender):
+    """Late-binding sender for CommCare Connect (visitor pattern).
+
+    Holds a reference to the channel instance and resolves
+    connect_channel_id / encryption_key lazily on first send.
+    By the time send_text is called (in terminal ResponseSendingStage),
+    the session exists and participant_data is resolvable.
+    """
+
+    def __init__(self, channel: CommCareConnectChannel):
+        from apps.channels.clients.connect_client import CommCareConnectClient
+
+        self._channel = channel
+        self._client = CommCareConnectClient()
+
+    def send_text(self, text: str, recipient: str) -> None:
+        self._client.send_message_to_user(
+            channel_id=self._channel.connect_channel_id,
+            message=text,
+            encryption_key=self._channel.encryption_key,
+        )
+
+    def send_voice(self, audio: SynthesizedAudio, recipient: str) -> None:
+        raise NotImplementedError
+
+    def send_file(self, file: File, recipient: str, session_id: int) -> None:
+        raise NotImplementedError
+
+
 class CommCareConnectChannel(ChannelBase):
     """CommCare Connect channel — adds platform-specific consent check.
 
@@ -1704,12 +2048,12 @@ class CommCareConnectChannel(ChannelBase):
             core_stages=[
                 ParticipantValidationStage(),
                 SessionResolutionStage(),
+                SessionActivationStage(),
                 CommCareConsentCheckStage(),  # Platform-specific consent
                 MessageTypeValidationStage(),
-                SessionActivationStage(),
-                ConsentFlowStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
@@ -1725,8 +2069,7 @@ class CommCareConnectChannel(ChannelBase):
         return ChannelCallbacks()  # All no-ops
 
     def _get_sender(self) -> ChannelSender:
-        # CommCare Connect has its own sender (not shown for brevity)
-        raise NotImplementedError("CommCareConnectSender not shown in example")
+        return CommCareConnectSender(self)
 
     def _get_capabilities(self) -> ChannelCapabilities:
         from apps.chat.channels import MESSAGE_TYPES
@@ -1738,9 +2081,26 @@ class CommCareConnectChannel(ChannelBase):
             supported_message_types=[MESSAGE_TYPES.TEXT],
         )
 
+    @cached_property
+    def connect_channel_id(self) -> str:
+        channel_id = self.participant_data.system_metadata.get("commcare_connect_channel_id")
+        if not channel_id:
+            from apps.chat.exceptions import ChannelException
+
+            raise ChannelException(
+                f"channel_id is missing for participant {self.experiment_session.participant.identifier}"
+            )
+        return channel_id
+
+    @cached_property
+    def encryption_key(self) -> bytes:
+        if not self.participant_data.encryption_key:
+            self.participant_data.generate_encryption_key()
+        return self.participant_data.get_encryption_key_bytes()
+
 
 # ---------------------------------------------------------------------------
-# 18. How it all fits together
+# 21. How it all fits together
 # ---------------------------------------------------------------------------
 
 
@@ -1769,7 +2129,7 @@ def example_message_flow():
     #        QueryExtraction, ChatMessageCreation, BotInteraction,
     #        ResponseFormatting]
     #       terminal_stages: [ResponseSending, SendingErrorHandler,
-    #        EarlyExitResponse, ActivityTracking]
+    #        Persistence, ActivityTracking]
     #
     #    c. pipeline.process(ctx) runs core stages in sequence:
     #       - ParticipantValidation: sets ctx.participant_identifier, ctx.participant_allowed
