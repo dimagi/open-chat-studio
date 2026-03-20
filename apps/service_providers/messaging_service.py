@@ -400,8 +400,8 @@ class MetaCloudAPIService(MessagingService):
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
     SERVICE_WINDOW_HOURS: ClassVar[int] = 24
     TEMPLATE_NAME: ClassVar[str] = "new_bot_message"
-    # allow 50 characters for the template message without the bot message. 1024 - 50
-    TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 974
+    # allow 50 characters for the template message without the bot message. 1024 - 100
+    TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 924
 
     @property
     def _headers(self) -> dict:
@@ -458,7 +458,7 @@ class MetaCloudAPIService(MessagingService):
                 "type": "template",
                 "template": {
                     "name": self.TEMPLATE_NAME,
-                    "language": {"code": self.template_language_code.lower()},
+                    "language": {"code": self.template_language_code},
                     "components": [
                         {
                             "type": "body",

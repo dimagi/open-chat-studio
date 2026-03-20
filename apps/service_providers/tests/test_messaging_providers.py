@@ -383,8 +383,10 @@ class TestMetaCloudAPIServiceWindow:
 
     def test_exactly_24_hours_ago_is_outside_window(self):
         service = self._make_service()
-        last_activity = timezone.now() - timedelta(hours=24)
-        assert service._is_within_service_window(last_activity) is False
+        fixed_now = timezone.now()
+        last_activity = fixed_now - timedelta(hours=24)
+        with patch("apps.service_providers.messaging_service.timezone.now", return_value=fixed_now):
+            assert service._is_within_service_window(last_activity) is False
 
     @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_template_message_short_message(self, mock_post):
@@ -439,7 +441,7 @@ class TestMetaCloudAPIServiceWindow:
             platform=ChannelPlatform.WHATSAPP,
         )
         sent_language = mock_post.call_args.kwargs["json"]["template"]["language"]
-        assert sent_language == {"code": "es"}
+        assert sent_language == {"code": "ES"}
 
     @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_template_message_splits_long_message(self, mock_post):
@@ -558,7 +560,7 @@ class TestMetaCloudAPIServiceWindow:
         """When Meta returns a 400 with template error, raise ServiceWindowExpiredException."""
         mock_post.return_value = httpx.Response(
             400,
-            json={"error": {"message": "template new_bot_message not found", "code": 132015}},
+            json={"error": {"message": "template new_bot_message not found", "code": 132001}},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
         service = self._make_service()
@@ -575,7 +577,7 @@ class TestMetaCloudAPIServiceWindow:
         """When outside service window and template not configured on Meta, raise descriptive error."""
         mock_post.return_value = httpx.Response(
             400,
-            json={"error": {"message": "template new_bot_message not found", "code": 132015}},
+            json={"error": {"message": "template new_bot_message not found", "code": 132001}},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
         service = self._make_service()
