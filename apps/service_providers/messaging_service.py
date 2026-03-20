@@ -546,27 +546,19 @@ class MetaCloudAPIService(MessagingService):
     def send_typing_indicator(self, from_: str, to: str, message_id: str):
         """Send a typing indicator to the user.
 
-        Marks the incoming message as read and sends a typing indicator.
+        Marks the incoming message as read and sends a typing indicator in a single API call.
         See https://developers.facebook.com/documentation/business-messaging/whatsapp/typing-indicators/
         """
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
-        # Mark the message as read first
-        read_data = {
-            "messaging_product": "whatsapp",
-            "status": "read",
-            "message_id": message_id,
-        }
-        httpx.post(url, headers=self._headers, json=read_data, timeout=self.META_API_TIMEOUT)
-
-        # Send the typing indicator
-        typing_data = {
+        data = {
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": to,
             "type": "typing_indicator",
             "typing_indicator": {"type": "text"},
+            "message_id": message_id,
         }
-        response = httpx.post(url, headers=self._headers, json=typing_data, timeout=self.META_API_TIMEOUT)
+        response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
         response.raise_for_status()
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
