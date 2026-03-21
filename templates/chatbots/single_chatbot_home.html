@@ -47,16 +47,20 @@
                 </div>
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                   <li>
-                    <form method="post"
-                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
-                          class="inline">
-                      {% csrf_token %}
-                      <button type="submit">Unreleased version</button>
-                    </form>
+                    {% flag "flag_chat_widget" %}
+                      <button type="button" onclick="openChatWidget({{ experiment.version_number }})">Unreleased version</button>
+                    {% else %}
+                      <form method="post"
+                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
+                            class="inline">
+                        {% csrf_token %}
+                        <button type="submit">Unreleased version</button>
+                      </form>
+                    {% endflag %}
                   </li>
                   <li>
                     {% flag "flag_chat_widget" %}
-                      <button type="button" onclick="document.getElementById('chatbot-widget').setAttribute('visible', 'true')">Published version</button>
+                      <button type="button" onclick="openChatWidget(0)">Published version</button>
                     {% else %}
                       <form method="post"
                             action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
@@ -231,5 +235,12 @@
         position="right"
         persistent-session="false"
       ></open-chat-studio-widget>
+      <script>
+        function openChatWidget(versionNumber) {
+          const widget = document.getElementById('chatbot-widget');
+          widget.versionNumber = versionNumber;
+          widget.visible = true;
+        }
+      </script>
     {% endflag %}
 {% endblock app %}
