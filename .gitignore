@@ -40,3 +40,10 @@ tsconfig.tsbuildinfo
 
 # Code review artifacts
 CODE_REVIEW.md
+
+# Playwright
+playwright-report/
+playwright-results*
+.playwright-cli
+test-results/
+playwright/.auth/
