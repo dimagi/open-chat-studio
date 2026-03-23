@@ -983,7 +983,7 @@ Channels become **pipeline builders** \+ **dependency providers**:
 @dataclass(frozen=True)
 class ChannelCapabilities:
     """Declares what a channel supports. Frozen for safety."""
-    supports_voice: bool = False
+    supports_voice_replies: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
     supports_static_triggers: bool = True
@@ -1106,7 +1106,7 @@ class ChannelBase(ABC):
         provider at runtime (e.g., WhatsApp file support varies by provider).
         """
         return ChannelCapabilities(
-            supports_voice=self.voice_replies_supported,
+            supports_voice_replies=self.voice_replies_supported,
             supported_message_types=self.supported_message_types,
             supports_files=getattr(self, 'supports_multimedia', False),
             supports_conversational_consent=True,
@@ -1209,7 +1209,7 @@ class TelegramChannel(ChannelBase):
 
     def _get_capabilities(self) -> 'ChannelCapabilities':
         return ChannelCapabilities(
-            supports_voice=True,
+            supports_voice_replies=True,
             supports_files=True,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
@@ -1288,7 +1288,7 @@ class WebChannel(ChannelBase):
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=False,
             supported_message_types=[MESSAGE_TYPES.TEXT],
@@ -2038,7 +2038,7 @@ from abc import ABC, abstractmethod
 @dataclass(frozen=True)
 class ChannelCapabilities:
     """Declares what a channel supports. Frozen for safety."""
-    supports_voice: bool = False
+    supports_voice_replies: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
     supports_static_triggers: bool = True
@@ -2620,7 +2620,7 @@ class ChannelBase(ABC):
     def _get_capabilities(self) -> 'ChannelCapabilities':
         """Return channel capabilities. Override for provider-dependent channels."""
         return ChannelCapabilities(
-            supports_voice=self.voice_replies_supported,
+            supports_voice_replies=self.voice_replies_supported,
             supported_message_types=self.supported_message_types,
             supports_files=getattr(self, 'supports_multimedia', False),
             supports_conversational_consent=True,
@@ -2658,7 +2658,7 @@ class TelegramChannel(ChannelBase):
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
-            supports_voice=True,
+            supports_voice_replies=True,
             supports_files=True,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],

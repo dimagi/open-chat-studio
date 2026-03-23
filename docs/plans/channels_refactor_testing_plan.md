@@ -145,7 +145,7 @@ class TestNewChannel(ChannelBase):
     def _get_callbacks(self): return self._callbacks
     def _get_capabilities(self):
         return self._override_capabilities or ChannelCapabilities(
-            supports_voice=True, supports_files=False,
+            supports_voice_replies=True, supports_files=False,
             supports_conversational_consent=True,
             supports_static_triggers=True,
             supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
@@ -403,7 +403,7 @@ No DB needed. All stages are `MagicMock` instances.
 - `__init__()` instantiates `TeleBot` with `extra_data["bot_token"]`.
 - `_get_callbacks()` returns `TelegramCallbacks`.
 - `_get_sender()` returns `TelegramSender`.
-- `_get_capabilities()` → `supports_voice=True, supports_files=True, supports_static_triggers=True, [TEXT, VOICE]`.
+- `_get_capabilities()` → `supports_voice_replies=True, supports_files=True, supports_static_triggers=True, [TEXT, VOICE]`.
 - `_can_send_file()`: image <10MB→True; image >10MB→False; video <50MB→True; unknown MIME→False.
 - `_build_pipeline()` → default pipeline with correct stage types and count.
 

@@ -78,7 +78,7 @@ class ApiChannel(ChannelBase):
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT],

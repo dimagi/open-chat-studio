@@ -40,7 +40,7 @@ class TestResponseFormattingStage:
         experiment.synthetic_voice = MagicMock()
         experiment.voice_response_behaviour = VoiceResponseBehaviours.ALWAYS
         experiment.voice_provider.get_speech_service.return_value.synthesize_voice.return_value = MagicMock()
-        capabilities = make_capabilities(supports_voice=True)
+        capabilities = make_capabilities(supports_voice_replies=True)
         msg = text_message()
         ctx = make_context(
             bot_response=bot_response,
@@ -60,7 +60,7 @@ class TestResponseFormattingStage:
         experiment = MagicMock()
         experiment.synthetic_voice = MagicMock()
         experiment.voice_response_behaviour = VoiceResponseBehaviours.NEVER
-        capabilities = make_capabilities(supports_voice=True)
+        capabilities = make_capabilities(supports_voice_replies=True)
         ctx = make_context(
             bot_response=bot_response,
             experiment=experiment,
@@ -80,7 +80,7 @@ class TestResponseFormattingStage:
         experiment.synthetic_voice = MagicMock()
         experiment.voice_response_behaviour = VoiceResponseBehaviours.RECIPROCAL
         experiment.voice_provider.get_speech_service.return_value.synthesize_voice.return_value = MagicMock()
-        capabilities = make_capabilities(supports_voice=True)
+        capabilities = make_capabilities(supports_voice_replies=True)
         msg = audio_message()
         ctx = make_context(
             bot_response=bot_response,
@@ -100,7 +100,7 @@ class TestResponseFormattingStage:
         experiment = MagicMock()
         experiment.synthetic_voice = MagicMock()
         experiment.voice_response_behaviour = VoiceResponseBehaviours.RECIPROCAL
-        capabilities = make_capabilities(supports_voice=True)
+        capabilities = make_capabilities(supports_voice_replies=True)
         msg = text_message()
         ctx = make_context(
             bot_response=bot_response,
@@ -125,7 +125,7 @@ class TestResponseFormattingStage:
         experiment.voice_provider.get_speech_service.return_value.synthesize_voice.side_effect = (
             AudioSynthesizeException("synthesis failed")
         )
-        capabilities = make_capabilities(supports_voice=True)
+        capabilities = make_capabilities(supports_voice_replies=True)
         msg = text_message()
         ctx = make_context(
             bot_response=bot_response,

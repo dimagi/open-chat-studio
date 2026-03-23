@@ -115,7 +115,7 @@ class TestApiChannelCapabilities:
         )
         caps = channel._get_capabilities()
         assert isinstance(caps, ChannelCapabilities)
-        assert caps.supports_voice is False
+        assert caps.supports_voice_replies is False
         assert caps.supports_files is False
         assert caps.supported_message_types == [MESSAGE_TYPES.TEXT]
         assert caps.supports_static_triggers is True

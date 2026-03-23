@@ -437,7 +437,7 @@ class ResponseFormattingStage(ProcessingStage):
 
         # Determine voice vs text reply
         should_reply_voice = False
-        if ctx.capabilities.supports_voice and ctx.experiment.synthetic_voice:
+        if ctx.capabilities.supports_voice_replies and ctx.experiment.synthetic_voice:
             voice_config = ctx.experiment.voice_response_behaviour
             if (
                 voice_config == VoiceResponseBehaviours.ALWAYS

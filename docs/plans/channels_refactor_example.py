@@ -81,7 +81,7 @@ class ChannelCapabilities:
     """Describes what a channel can do. Populated at runtime — either from
     static ClassVars (Telegram) or from the messaging service (WhatsApp)."""
 
-    supports_voice: bool = False
+    supports_voice_replies: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
     supports_static_triggers: bool = True
@@ -732,7 +732,7 @@ class ResponseFormattingStage(ProcessingStage):
 
         # Determine voice vs text reply
         should_reply_voice = False
-        if ctx.capabilities.supports_voice and ctx.experiment.synthetic_voice:
+        if ctx.capabilities.supports_voice_replies and ctx.experiment.synthetic_voice:
             voice_config = ctx.experiment.voice_response_behaviour
             if (
                 voice_config == VoiceResponseBehaviours.ALWAYS
@@ -1242,7 +1242,7 @@ class ChannelBase(ABC):
     def _get_capabilities(self) -> ChannelCapabilities:
         """Default capabilities from ClassVars. Override for runtime capabilities."""
         return ChannelCapabilities(
-            supports_voice=self.voice_replies_supported,
+            supports_voice_replies=self.voice_replies_supported,
             supports_files=getattr(self, "supports_multimedia", False),
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,
@@ -1404,7 +1404,7 @@ class TelegramChannel(ChannelBase):
         from apps.chat.channels import MESSAGE_TYPES
 
         return ChannelCapabilities(
-            supports_voice=True,
+            supports_voice_replies=True,
             supports_files=True,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
@@ -1490,7 +1490,7 @@ class WhatsappChannel(ChannelBase):
     def _get_capabilities(self) -> ChannelCapabilities:
         """Issue 3: Runtime capabilities from the messaging service."""
         return ChannelCapabilities(
-            supports_voice=self.messaging_service.voice_replies_supported,
+            supports_voice_replies=self.messaging_service.voice_replies_supported,
             supports_files=self.messaging_service.supports_multimedia,
             supports_conversational_consent=True,
             supported_message_types=self.messaging_service.supported_message_types,
@@ -1561,7 +1561,7 @@ class FacebookMessengerChannel(ChannelBase):
     def _get_capabilities(self) -> ChannelCapabilities:
         """Runtime capabilities from the messaging service."""
         return ChannelCapabilities(
-            supports_voice=self.messaging_service.voice_replies_supported,
+            supports_voice_replies=self.messaging_service.voice_replies_supported,
             supports_files=False,  # No file sending in current codebase
             supports_conversational_consent=True,
             supported_message_types=self.messaging_service.supported_message_types,
@@ -1620,7 +1620,7 @@ class SureAdhereChannel(ChannelBase):
     def _get_capabilities(self) -> ChannelCapabilities:
         """Runtime supported_message_types from the messaging service."""
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=True,
             supported_message_types=self.messaging_service.supported_message_types,
@@ -1714,7 +1714,7 @@ class SlackChannel(ChannelBase):
         from apps.chat.channels import MESSAGE_TYPES
 
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=True,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT],
@@ -1793,7 +1793,7 @@ class ApiChannel(ChannelBase):
         from apps.chat.channels import MESSAGE_TYPES
 
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT],
@@ -1891,7 +1891,7 @@ class EvaluationChannel(ChannelBase):
         from apps.chat.channels import MESSAGE_TYPES
 
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=False,
             supports_static_triggers=False,
@@ -1956,7 +1956,7 @@ class WebChannel(ChannelBase):
         from apps.chat.channels import MESSAGE_TYPES
 
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=False,
             supported_message_types=[MESSAGE_TYPES.TEXT],
@@ -2075,7 +2075,7 @@ class CommCareConnectChannel(ChannelBase):
         from apps.chat.channels import MESSAGE_TYPES
 
         return ChannelCapabilities(
-            supports_voice=False,
+            supports_voice_replies=False,
             supports_files=False,
             supports_conversational_consent=True,
             supported_message_types=[MESSAGE_TYPES.TEXT],
