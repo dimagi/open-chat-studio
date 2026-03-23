@@ -788,6 +788,62 @@ def main(input, **kwargs):
         )
         assert output["messages"][-1] == "test.py,blog.md"
 
+    @django_db_with_data()
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    def test_code_node_sets_send_to_llm_false_excludes_attachment(
+        self, get_llm_service, provider, provider_model, pipeline
+    ):
+        """A code node sets attachment.send_to_llm = False, then the LLM node
+        should not include that attachment in the API call."""
+        fake_llm = FakeLlmSimpleTokenCount(responses=["LLM response"])
+        service = build_fake_llm_service(responses=["LLM response"], token_counts=[0], fake_llm=fake_llm)
+        get_llm_service.return_value = service
+
+        code_disable_attachment = """
+def main(input, **kwargs):
+    attachments = get_temp_state_key("attachments")
+    for att in attachments:
+        att.send_to_llm = False
+    return input
+"""
+        nodes = [
+            start_node(),
+            code_node(code_disable_attachment),
+            llm_response_with_prompt_node(str(provider.id), str(provider_model.id)),
+            end_node(),
+        ]
+        runnable = create_runnable(pipeline, nodes)
+
+        attachments = [
+            Attachment(
+                file_id=123,
+                type="code_interpreter",
+                name="test.py",
+                size=10,
+                content_type="image/png",
+                download_link="http://localhost:8000/test.png",
+            ),
+        ]
+        serialized_attachments = [att.model_dump() for att in attachments]
+        session = ExperimentSessionFactory.create()
+        config = {"configurable": {"repo": ORMRepository(session=session)}}
+        output = runnable.invoke(
+            PipelineState(
+                messages=["hello"],
+                experiment_session=session,
+                attachments=serialized_attachments,
+            ),
+            config=config,
+        )
+
+        assert output["messages"][-1] == "LLM response"
+        # Verify the LLM received only a text message, no image attachment
+        call_messages = fake_llm.get_call_messages()
+        human_message = call_messages[0][-1]
+        # With no attachments, content should be a list with only the text part
+        assert len(human_message.content) == 1
+        assert human_message.content[0] == {"type": "text", "text": "hello"}
+
 
 class TestDataExtraction:
     """Tests for data extraction nodes"""
