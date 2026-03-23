@@ -13,7 +13,6 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
 )
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.pytest import django_db_transactional
 
 
 @pytest.fixture()
@@ -27,7 +26,7 @@ def pipeline():
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_end_conversation_runs_pipeline(session, pipeline):
     input = "Does anything get lost going through the pipe?"
     chat = Chat.objects.create(team=session.team)

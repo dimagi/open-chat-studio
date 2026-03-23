@@ -10,10 +10,9 @@ from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import end_node, passthrough_node, start_node
-from apps.utils.pytest import django_db_transactional
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_empty_pipeline_gets_start_end_nodes(team):
     pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
     pipeline.update_nodes_from_data()
@@ -25,7 +24,7 @@ def test_empty_pipeline_gets_start_end_nodes(team):
     assert pipeline.node_set.filter(type=EndNode.__name__).exists()
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_recursive_pipeline_has_start_end_nodes(team):
     passthrough = passthrough_node()
     pipeline = Pipeline.objects.create(
@@ -56,7 +55,7 @@ def test_recursive_pipeline_has_start_end_nodes(team):
     assert pipeline.node_set.filter(type=EndNode.__name__).exists()
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_dangling_edge_has_start_end_nodes(team):
     passthrough = passthrough_node()
     pipeline = Pipeline.objects.create(
@@ -87,7 +86,7 @@ def test_dangling_edge_has_start_end_nodes(team):
     assert pipeline.node_set.filter(type=EndNode.__name__).exists()
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_sentry_6107296412(team):
     pipeline = Pipeline.objects.create(
         team=team,
@@ -158,7 +157,7 @@ def test_sentry_6107296412(team):
     assert pipeline.node_set.filter(type=EndNode.__name__).exists()
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_compliant_pipeline_not_modified(team):
     start = start_node()
     end = end_node()
@@ -182,7 +181,7 @@ def test_compliant_pipeline_not_modified(team):
     assert pipeline.node_set.get(type=EndNode.__name__).flow_id == end["id"]
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_pipeline_gets_start_end_nodes_with_edges(team):
     passthrough_1 = passthrough_node()
     passthrough_2 = passthrough_node()
@@ -214,7 +213,7 @@ def test_pipeline_gets_start_end_nodes_with_edges(team):
     assert len(pipeline.data["edges"]) == 3
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_remove_start_end_nodes(team):
     start = start_node()
     end = end_node()
@@ -272,7 +271,7 @@ def test_remove_start_end_nodes(team):
     }
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 @pytest.mark.parametrize("version_before_removing_node", [True, False])
 def test_remove_nodes(version_before_removing_node, team):
     """
@@ -356,7 +355,7 @@ def test_remove_nodes(version_before_removing_node, team):
         assert Node.objects.get_all().filter(flow_id=passthrough_2["id"]).count() == 0
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_pipeline_creation_without_llm(team):
     pipeline = Pipeline.create_default(team=team)
 
@@ -370,7 +369,7 @@ def test_pipeline_creation_without_llm(team):
     assert "EndNode" in node_types
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_pipeline_creation_with_llm(team):
     mock_llm_provider = MagicMock(id=str(uuid4()))
     mock_llm_model = MagicMock(id=str(uuid4()), max_token_limit=2048)
@@ -392,7 +391,7 @@ def test_pipeline_creation_with_llm(team):
     assert params["user_max_token_limit"] == mock_llm_model.max_token_limit
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_pipeline_edge_connections(team):
     mock_llm_provider = MagicMock(id=str(uuid4()))
     mock_llm_model = MagicMock(id=str(uuid4()), max_token_limit=2048)

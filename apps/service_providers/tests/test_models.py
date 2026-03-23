@@ -5,7 +5,6 @@ from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-from apps.utils.pytest import django_db_with_data
 
 
 @pytest.fixture()
@@ -47,7 +46,7 @@ def pipeline(llm_provider, llm_provider_model):
 
 
 class TestServiceProviderModel:
-    @django_db_with_data()
+    @pytest.mark.django_db()
     def test_provider_models_for_team_includes_global(self, llm_provider_model):
         team_models = LlmProviderModel.objects.for_team(llm_provider_model.team).all()
         # There is a single team model that we just created in the factory
@@ -63,27 +62,27 @@ class TestServiceProviderModel:
         assert len(global_models) == len(team_models) - 1
         assert all(not m.is_custom() for m in global_models)
 
-    @django_db_with_data()
+    @pytest.mark.django_db()
     def test_cannot_delete_provider_models_with_associated_models(self, assistant):
         # llm provider models that are associated with another model cannot be deleted
         provider_model = assistant.llm_provider_model
         with pytest.raises(ValidationError):
             provider_model.delete()
 
-    @django_db_with_data()
+    @pytest.mark.django_db()
     def test_cannot_delete_provider_models_with_associated_pipeline(self, pipeline):
         node = pipeline.node_set.get(flow_id="1")
         provider_model = LlmProviderModel.objects.get(id=node.params["llm_provider_model_id"])
         with pytest.raises(ValidationError, match=pipeline.name):
             provider_model.delete()
 
-    @django_db_with_data()
+    @pytest.mark.django_db()
     def test_can_delete_unassociated_provider_models(self):
         # custom llm provider models that are not attached to experiments can be deleted
         llm_provider_model = LlmProviderModelFactory.create()
         llm_provider_model.delete()
 
-    @django_db_with_data()
+    @pytest.mark.django_db()
     def test_can_delete_unassociated_global_provider_models(self):
         # global provider models can be deleted
         global_llm_provider_model = LlmProviderModelFactory.create(team=None)

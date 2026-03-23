@@ -48,12 +48,13 @@ def local_index_manager_mock():
 def _django_db_restore_serialized(
     request: pytest.FixtureRequest, django_db_keepdb, django_db_blocker
 ) -> Generator[None]:
-    """Restore database data at the end of the session. This is needed because we use transaction test cases
-    in certain places which flush the DB. Individual tests that require the default DB data should
-    use `apps.utils.pytest.django_db_with_data`.
+    """Restore database data at the end of the session.
 
-    This fixture ensures that the data is preserved between test runs when `reuse-db` (`keepdb`) is being
-    used.
+    Integration tests that use TransactionTestCase (e.g. live_server tests) flush the DB after each
+    test, destroying migration-seeded data. This fixture re-deserializes that data so the DB is clean
+    for the next run when `--reuse-db` (`keepdb`) is active.
+
+    This is only relevant when running integration tests (pytest -m integration) together with --reuse-db.
     """
     yield
 
