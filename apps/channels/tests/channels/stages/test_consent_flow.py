@@ -106,7 +106,7 @@ class TestConsentFlowStage:
             self.stage(ctx)
 
         session.update_status.assert_called_with(SessionStatus.PENDING_PRE_SURVEY)
-        assert "https://survey.example.com" in exc_info.value.response
+        assert exc_info.value.response == "Complete survey: https://survey.example.com"
 
     def test_pre_survey_consent_activates(self):
         session = self._make_session(status=SessionStatus.PENDING_PRE_SURVEY)

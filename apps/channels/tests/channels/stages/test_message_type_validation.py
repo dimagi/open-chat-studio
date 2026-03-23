@@ -15,7 +15,7 @@ class TestMessageTypeValidationStage:
         self.stage = MessageTypeValidationStage()
 
     def test_supported_type_passes(self):
-        capabilities = make_capabilities(supported_message_types=[MESSAGE_TYPES.TEXT])
+        capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))
         msg = text_message()
         ctx = make_context(message=msg, capabilities=capabilities)
 
@@ -23,7 +23,7 @@ class TestMessageTypeValidationStage:
         self.stage(ctx)
 
     def test_unsupported_type_raises_early_exit(self):
-        capabilities = make_capabilities(supported_message_types=[MESSAGE_TYPES.TEXT])
+        capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))
         msg = unsupported_content_type_message()
         ctx = make_context(message=msg, capabilities=capabilities)
 
@@ -31,7 +31,7 @@ class TestMessageTypeValidationStage:
             self.stage(ctx)
 
     def test_unsupported_tags_human_message(self):
-        capabilities = make_capabilities(supported_message_types=[MESSAGE_TYPES.TEXT])
+        capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))
         msg = unsupported_content_type_message()
         ctx = make_context(message=msg, capabilities=capabilities)
 
@@ -46,7 +46,7 @@ class TestMessageTypeValidationStage:
     @patch("apps.channels.channels_v2.stages.core.MessageTypeValidationStage._generate_unsupported_response")
     def test_eventbot_failure_uses_fallback(self, mock_generate):
         mock_generate.side_effect = Exception("EventBot failed")
-        capabilities = make_capabilities(supported_message_types=[MESSAGE_TYPES.TEXT])
+        capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))
         msg = unsupported_content_type_message()
         ctx = make_context(message=msg, capabilities=capabilities)
 
@@ -54,4 +54,4 @@ class TestMessageTypeValidationStage:
             self.stage(ctx)
 
         assert "only supports" in exc_info.value.response
-        assert "Failed to generate unsupported message response" in ctx.processing_errors
+        assert any("Failed to generate unsupported message response" in e for e in ctx.processing_errors)

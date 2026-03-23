@@ -59,7 +59,7 @@ class StubChannel(ChannelBase):
     """Minimal concrete channel for integration tests."""
 
     voice_replies_supported = True
-    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supported_message_types = (MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE)
 
     def __init__(self, *args, capabilities=None, **kwargs):
         self._override_capabilities = capabilities
@@ -79,7 +79,7 @@ class StubChannel(ChannelBase):
             supports_files=False,
             supports_conversational_consent=True,
             supports_static_triggers=True,
-            supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
+            supported_message_types=(MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE),
         )
 
     @property
@@ -113,7 +113,7 @@ def make_capabilities(**overrides):
         "supports_files": False,
         "supports_conversational_consent": True,
         "supports_static_triggers": True,
-        "supported_message_types": [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
+        "supported_message_types": (MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE),
     }
     defaults.update(overrides)
     return ChannelCapabilities(**defaults)

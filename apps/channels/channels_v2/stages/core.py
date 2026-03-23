@@ -88,12 +88,6 @@ class SessionResolutionStage(ProcessingStage):
             .first()
         )
 
-        # Handle /reset on an existing session
-        if ctx.experiment_session and self._is_reset_request(ctx):
-            if ctx.experiment_session.user_already_engaged():
-                self._handle_reset(ctx)
-                return
-
         # Create a new session if none found
         if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)

@@ -108,10 +108,10 @@ class TestSessionResolutionStage:
         assert ctx2.experiment_session is not None
         assert ctx2.experiment_session.id != first_session.id
 
-    def test_reset_with_no_engagement_does_not_reset(self):
+    def test_reset_with_no_engagement_still_creates_new_session(self):
         """When /reset is sent but the existing session has no engagement,
-        the stage loads the session and skips the reset (the engagement check
-        on line 77 prevents it). The user keeps the same session."""
+        a new session is still created because the reset check happens
+        before session loading."""
         experiment = ExperimentFactory()
         experiment_channel = ExperimentChannelFactory(experiment=experiment, team=experiment.team)
         # Create initial session with no engagement via a normal first message
