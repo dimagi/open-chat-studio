@@ -114,31 +114,40 @@ class TestCheckpointRoundTrip:
 
 
 class TestCheckpointState:
-    def test_monotonic_timestamp(self, tmp_path):
+    def test_update_records_id_only(self, tmp_path):
         filepath = str(tmp_path / "checkpoint.json")
         state = CheckpointState(migrated_ids=set(), checkpoint_file=filepath)
 
-        state.update("trace-1", "2024-01-15T10:00:00Z")
+        state.update("trace-1")
+        state.update("trace-2")
+
+        assert state.migrated_ids == {"trace-1", "trace-2"}
+        # update() should not change resume timestamp
+        assert state.max_resume_timestamp is None
+
+    def test_advance_resume_timestamp_monotonic(self, tmp_path):
+        filepath = str(tmp_path / "checkpoint.json")
+        state = CheckpointState(migrated_ids=set(), checkpoint_file=filepath)
+
+        state.advance_resume_timestamp("2024-01-15T10:00:00Z")
         assert state.max_resume_timestamp == "2024-01-15T10:00:00Z"
 
         # Earlier timestamp should not regress
-        state.update("trace-2", "2024-01-15T09:00:00Z")
+        state.advance_resume_timestamp("2024-01-15T09:00:00Z")
         assert state.max_resume_timestamp == "2024-01-15T10:00:00Z"
 
         # Later timestamp should advance
-        state.update("trace-3", "2024-01-15T11:00:00Z")
+        state.advance_resume_timestamp("2024-01-15T11:00:00Z")
         assert state.max_resume_timestamp == "2024-01-15T11:00:00Z"
 
-        assert state.migrated_ids == {"trace-1", "trace-2", "trace-3"}
-
-    def test_none_timestamp_doesnt_overwrite(self, tmp_path):
+    def test_advance_none_doesnt_overwrite(self, tmp_path):
         filepath = str(tmp_path / "checkpoint.json")
         state = CheckpointState(
             migrated_ids=set(),
             checkpoint_file=filepath,
             max_resume_timestamp="2024-01-15T10:00:00Z",
         )
-        state.update("trace-1", None)
+        state.advance_resume_timestamp(None)
         assert state.max_resume_timestamp == "2024-01-15T10:00:00Z"
 
     def test_thread_safety(self, tmp_path):
@@ -147,8 +156,7 @@ class TestCheckpointState:
 
         def update_batch(start):
             for i in range(100):
-                ts = f"2024-01-15T{10 + (start + i) % 14:02d}:00:00Z"
-                state.update(f"trace-{start}-{i}", ts)
+                state.update(f"trace-{start}-{i}")
 
         threads = [threading.Thread(target=update_batch, args=(n * 100,)) for n in range(5)]
         for t in threads:
@@ -157,8 +165,6 @@ class TestCheckpointState:
             t.join()
 
         assert len(state.migrated_ids) == 500
-        # Max timestamp should be the highest hour seen
-        assert state.max_resume_timestamp == "2024-01-15T23:00:00Z"
 
 
 class TestIsRateLimited:

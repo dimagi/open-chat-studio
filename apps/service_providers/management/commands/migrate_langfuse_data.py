@@ -42,12 +42,16 @@ class CheckpointState:
     max_resume_timestamp: str | None = None
     lock: threading.Lock = dataclasses.field(default_factory=threading.Lock)
 
-    def update(self, trace_id: str, trace_ts: str | None) -> None:
-        """Thread-safe checkpoint update. Only advances resume timestamp forward."""
+    def update(self, trace_id: str) -> None:
+        """Thread-safe checkpoint update. Records trace ID only; does not advance resume timestamp."""
         with self.lock:
             self.migrated_ids.add(trace_id)
-            if trace_ts and (self.max_resume_timestamp is None or trace_ts > self.max_resume_timestamp):
-                self.max_resume_timestamp = trace_ts
+            _save_checkpoint(self.checkpoint_file, self.migrated_ids, resume_from_timestamp=self.max_resume_timestamp)
+
+    def advance_resume_timestamp(self, timestamp: str | None) -> None:
+        """Advance resume timestamp after all traces in a page are complete (call from main thread only)."""
+        if timestamp and (self.max_resume_timestamp is None or timestamp > self.max_resume_timestamp):
+            self.max_resume_timestamp = timestamp
             _save_checkpoint(self.checkpoint_file, self.migrated_ids, resume_from_timestamp=self.max_resume_timestamp)
 
 
@@ -503,14 +507,14 @@ class Command(BaseCommand):
                 return fn()
             except Exception as e:
                 self.stdout.write(f"  Error {description} (attempt {attempt}/{retry_config.max_retries}): {e}")
+                if attempt >= retry_config.max_retries:
+                    if isinstance(on_exhausted, CommandError):
+                        raise on_exhausted from e
+                    return on_exhausted
                 if _is_rate_limited(e):
                     sleep_time = 2**attempt
                     self.stdout.write(f"    Rate limit hit. Sleeping {sleep_time}s...")
                     time.sleep(sleep_time)
-                elif attempt >= retry_config.max_retries:
-                    if isinstance(on_exhausted, CommandError):
-                        raise on_exhausted from e
-                    return on_exhausted
                 else:
                     self.stdout.write("    Transient error, retrying...")
         return on_exhausted
@@ -622,7 +626,7 @@ class Command(BaseCommand):
                     to_timestamp=to_timestamp,
                 ),
                 f"fetching trace list page {page}",
-                retry_config,
+                get_retry_config,
                 on_exhausted=CommandError(f"Max retries reached fetching page {page}. Stopping."),
             )
 
@@ -650,6 +654,14 @@ class Command(BaseCommand):
                         total_failed_transform += 1
                     elif status == "failed_push":
                         total_failed_push += 1
+
+            # Advance resume timestamp after all page traces complete (safe low-water mark)
+            page_earliest_ts = min(
+                (_safe_isoformat(getattr(t, "timestamp", None)) for t in trace_list.data),
+                default=None,
+            )
+            if page_earliest_ts:
+                checkpoint.advance_resume_timestamp(page_earliest_ts)
 
             current_page = getattr(meta, "page", page)
             total_pages = getattr(meta, "total_pages", page)
@@ -688,8 +700,7 @@ class Command(BaseCommand):
                     self.stdout.write(
                         f"      [DRY RUN] Would ingest {len(ingestion_batch)} events for trace {trace_id}"
                     )
-                    trace_ts = _safe_isoformat(getattr(source_trace_full, "timestamp", None))
-                    checkpoint.update(trace_id, trace_ts)
+                    checkpoint.update(trace_id)
                     return True
 
                 response = dest_client.api.ingestion.batch(batch=ingestion_batch)
@@ -709,8 +720,7 @@ class Command(BaseCommand):
                     return False
 
                 self.stdout.write(self.style.SUCCESS(f"      Successfully ingested trace {trace_id}"))
-                trace_ts = _safe_isoformat(getattr(source_trace_full, "timestamp", None))
-                checkpoint.update(trace_id, trace_ts)
+                checkpoint.update(trace_id)
                 return True
 
             except Exception as e:
