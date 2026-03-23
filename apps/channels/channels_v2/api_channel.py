@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.pipeline import MessageProcessingPipeline
+from apps.channels.channels_v2.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.channels_v2.stages.core import (
     BotInteractionStage,
@@ -64,6 +64,12 @@ class ApiChannel(ChannelBase):
         if not self.user and not self.experiment_session:
             raise ChannelException("ApiChannel requires either an existing session or a user")
 
+    def _create_context(self, message) -> MessageProcessingContext:
+        ctx = super()._create_context(message)
+        if self.user:
+            ctx.channel_context["participant_user"] = self.user
+        return ctx
+
     def _get_sender(self) -> ChannelSender:
         return NoOpSender()
 
@@ -75,7 +81,6 @@ class ApiChannel(ChannelBase):
             supports_voice=False,
             supports_files=False,
             supports_conversational_consent=True,
-            supports_static_triggers=True,
             supported_message_types=[MESSAGE_TYPES.TEXT],
         )
 

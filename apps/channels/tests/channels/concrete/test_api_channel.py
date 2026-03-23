@@ -122,6 +122,27 @@ class TestApiChannelCapabilities:
         assert caps.supports_conversational_consent is True
 
 
+class TestApiChannelContext:
+    def test_create_context_includes_user_in_channel_context(self):
+        mock_user = MagicMock(name="api_user")
+        channel = ApiChannel(
+            experiment=MagicMock(),
+            experiment_channel=MagicMock(),
+            user=mock_user,
+        )
+        ctx = channel._create_context(MagicMock())
+        assert ctx.channel_context["participant_user"] == mock_user
+
+    def test_create_context_without_user_has_no_participant_user_key(self):
+        channel = ApiChannel(
+            experiment=MagicMock(),
+            experiment_channel=MagicMock(),
+            experiment_session=MagicMock(),
+        )
+        ctx = channel._create_context(MagicMock())
+        assert "participant_user" not in ctx.channel_context
+
+
 class TestApiChannelParticipantUser:
     def test_participant_user_from_session(self):
         mock_session = MagicMock()

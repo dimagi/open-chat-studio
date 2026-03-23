@@ -117,6 +117,7 @@ class SessionResolutionStage(ProcessingStage):
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
             participant_identifier=ctx.participant_identifier,
+            participant_user=ctx.channel_context.get("participant_user"),
             session_status=SessionStatus.SETUP,
         )
 

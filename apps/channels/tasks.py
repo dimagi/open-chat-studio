@@ -6,6 +6,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
+from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import (
     BaseMessage,
@@ -17,7 +18,6 @@ from apps.channels.datamodels import (
 )
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
-    ApiChannel,
     CommCareConnectChannel,
     EvaluationChannel,
     FacebookMessengerChannel,
