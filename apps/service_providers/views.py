@@ -1,12 +1,13 @@
 from collections import defaultdict
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, render, resolve_url
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
@@ -22,6 +23,7 @@ from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProviderModel,
     MessagingProviderType,
+    VoiceProvider,
     VoiceProviderType,
 )
 from apps.utils.deletion import get_related_objects
@@ -170,6 +172,8 @@ class CreateServiceProvider(
         if file_formset:
             files = file_formset.save(self.request)
             instance.add_files(files)
+        if isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value:
+            instance.sync_voices()
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
@@ -238,3 +242,13 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
     except ValidationError as ex:
         return HttpResponseBadRequest(", ".join(ex.messages).encode("utf-8"))
     return HttpResponse()
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_voiceprovider", raise_exception=True)
+def sync_voices(request, team_slug: str, provider_type: str, pk: int):
+    provider = get_object_or_404(VoiceProvider, team=request.team, pk=pk)
+    provider.sync_voices()
+    messages.success(request, "Voices synced successfully.")
+    return redirect("single_team:manage_team", team_slug=team_slug)
