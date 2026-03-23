@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 
 from apps.service_providers.models import MessagingProviderType
@@ -41,5 +43,23 @@ def slack_provider():
         config={
             "slack_channel_id": "CHANNEL_ID",
             "slack_installation_id": 1,
+        },
+    )
+
+
+@pytest.fixture()
+def meta_cloud_api_provider():
+    verify_token = "test_verify_token"
+    return MessagingProviderFactory.create(
+        name="meta_cloud_api",
+        type=MessagingProviderType.meta_cloud_api,
+        config={
+            "access_token": "test_token",
+            "business_id": "biz_123",
+            "app_secret": "test_app_secret",
+            "verify_token": verify_token,
+        },
+        extra_data={
+            "verify_token_hash": hashlib.sha256(verify_token.encode()).hexdigest(),
         },
     )
