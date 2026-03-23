@@ -2752,8 +2752,8 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 | PR | Channel | Status |
 |---|---|---|
-| 0 | Foundation (pipeline infra, shared stages, base tests) | [ ] Not started |
-| 1 | ApiChannel | [ ] Not started |
+| 0 | Foundation (pipeline infra, shared stages, base tests) | [x] DONE |
+| 1 | ApiChannel | [x] DONE |
 | 2 | WebChannel | [ ] Not started |
 | 3 | EvaluationChannel | [ ] Not started |
 | 4 | TelegramChannel | [ ] Not started |
@@ -2778,11 +2778,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why first:** Everything else depends on this. The integration tests validate the pipeline end-to-end using `TestNewChannel` before any real channel is migrated. No old code is removed in this PR.
 
-### PR 1: ApiChannel — [ ] Not started
+### PR 1: ApiChannel — [x] DONE
 
-- [ ] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
-- [ ] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
+- [x] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
 
 **Why first real channel:** Simplest pipeline — no voice, no files, no `ResponseSendingStage` or `SendingErrorHandlerStage`. No sender/callbacks to test. Validates the basic pipeline customization (`_build_pipeline()` omitting stages) with minimal risk.
 
