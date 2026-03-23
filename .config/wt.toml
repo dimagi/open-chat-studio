@@ -1,3 +1,6 @@
 # Worktrunk Project Configuration
 [post-create]
 bootstrap = ".claude/hooks/setup-env.sh"
+
+[post-start]
+copy = "wt step copy-ignored"

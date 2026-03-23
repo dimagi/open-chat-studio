@@ -20,7 +20,6 @@ _dist/
 .DS_Store
 .direnv
 .envrc
-.python-version
 .coverage
 venv
 .claude/worktrees

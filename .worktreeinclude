@@ -1,0 +1,5 @@
+# Files to copy into new git worktrees.
+# These are gitignored but needed for the dev environment.
+.env
+.envrc
+node_modules/
