@@ -322,6 +322,7 @@ class ChannelBase(ABC):
         elif platform == "facebook":
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
 
             channel_cls = NewApiChannel
@@ -334,6 +335,7 @@ class ChannelBase(ABC):
         # elif platform == "evaluations":
         #  evals channel can't be called this way
         elif platform == "embedded_widget":
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
 
             channel_cls = NewApiChannel
