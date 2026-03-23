@@ -353,6 +353,32 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 except IntegrityError:
                     message = f"Unable to upload '{file.name}' voice. This voice might already exist"
                     raise ValidationError(message) from None
+        elif self.type == VoiceProviderType.elevenlabs:
+            from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
+
+            client = ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+            for file in files:
+                try:
+                    file_content = file.file.read()
+                    file.file.seek(0)
+                    response = client.voices.ivc.create(
+                        name=file.name,
+                        files=[file_content],
+                    )
+                    SyntheticVoice.objects.create(
+                        name=file.name,
+                        external_id=response.voice_id,
+                        neural=True,
+                        language="",
+                        language_code="",
+                        gender="",
+                        service=SyntheticVoice.ElevenLabs,
+                        voice_provider=self,
+                        file=file,
+                    )
+                except IntegrityError:
+                    message = f"Unable to upload '{file.name}' voice. This voice might already exist"
+                    raise ValidationError(message) from None
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
@@ -437,6 +463,20 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
     @transaction.atomic()
     def delete(self):  # ty: ignore[invalid-method-override]
         if self.type == VoiceProviderType.openai_voice_engine:
+            files_to_delete = self.get_files()
+            [f.delete() for f in files_to_delete]
+        elif self.type == VoiceProviderType.elevenlabs:
+            from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
+
+            client = ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+            # Delete only IVC-cloned voices from ElevenLabs API
+            cloned_voices = self.syntheticvoice_set.filter(file__isnull=False)
+            for voice in cloned_voices:
+                try:
+                    client.voices.delete(voice_id=voice.external_id)
+                except Exception:
+                    log.warning("Failed to delete ElevenLabs voice %s from API", voice.external_id)
+            # Delete local files
             files_to_delete = self.get_files()
             [f.delete() for f in files_to_delete]
         return super().delete()
