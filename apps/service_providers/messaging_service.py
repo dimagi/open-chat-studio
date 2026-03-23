@@ -308,7 +308,7 @@ class TurnIOService(MessagingService):
         mime = file.content_type
         size = file.content_size or 0  # in bytes
 
-        if mime is None:
+        if not mime:
             return False
 
         if mime.startswith("image/"):
