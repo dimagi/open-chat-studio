@@ -3,17 +3,16 @@ from typing import Any
 import httpx
 import pydantic
 import tenacity
+from django.conf import settings
 
 from apps.service_providers.auth_service.schemes import CommCareAuth, HeaderAuth
-
-DEFAULT_TIMEOUT = 30
 
 
 class AuthService(pydantic.BaseModel):
     def get_http_client(self) -> httpx.Client:
         kwargs = {
             **self._get_http_client_kwargs(),
-            "timeout": DEFAULT_TIMEOUT,
+            "timeout": settings.RESTRICTED_HTTP_MAX_TIMEOUT,
             "limits": httpx.Limits(max_keepalive_connections=5, max_connections=10),
         }
         return httpx.Client(**kwargs)
