@@ -373,6 +373,8 @@ class TestMetaCloudAPIServiceMedia:
             ("audio/mpeg", 17 * 1024 * 1024, False),
             ("application/pdf", 100 * 1024 * 1024, True),
             ("application/pdf", 101 * 1024 * 1024, False),
+            ("image/jpeg", None, False),
+            ("", 1024, False),
             ("text/plain", 1024, False),
             (None, 1024, False),
         ],
@@ -419,6 +421,7 @@ class TestMetaCloudAPIServiceMedia:
             platform=ChannelPlatform.WHATSAPP,
             file=file,
             download_link="https://example.com/file",
+            last_activity_at=timezone.now(),
         )
 
         assert mock_post.call_count == 2
@@ -426,6 +429,7 @@ class TestMetaCloudAPIServiceMedia:
         # First call: upload media
         upload_call = mock_post.call_args_list[0]
         assert "/media" in upload_call.args[0]
+        assert upload_call.kwargs["files"]["file"][0] == "test_file"
 
         # Second call: send message with correct media type
         send_call = mock_post.call_args_list[1]
@@ -680,6 +684,36 @@ class TestMetaCloudAPIServiceWindow:
                 last_activity_at=None,
             )
         synthetic_voice.get_audio_bytes.assert_not_called()
+
+    def test_send_file_outside_window_raises(self):
+        service = self._make_service()
+        file = MagicMock()
+        file.content_type = "image/jpeg"
+        file.name = "test.jpg"
+        with pytest.raises(ServiceWindowExpiredException):
+            service.send_file_to_user(
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+                file=file,
+                download_link="https://example.com/file",
+                last_activity_at=timezone.now() - timedelta(hours=25),
+            )
+
+    def test_send_file_none_activity_raises(self):
+        service = self._make_service()
+        file = MagicMock()
+        file.content_type = "image/jpeg"
+        file.name = "test.jpg"
+        with pytest.raises(ServiceWindowExpiredException):
+            service.send_file_to_user(
+                from_="phone123",
+                to="+27826419977",
+                platform=ChannelPlatform.WHATSAPP,
+                file=file,
+                download_link="https://example.com/file",
+                last_activity_at=None,
+            )
 
 
 def _test_messaging_provider(team, provider_type: MessagingProviderType, data):

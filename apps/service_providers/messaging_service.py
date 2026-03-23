@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import IO, TYPE_CHECKING, ClassVar, cast
 from urllib.parse import urljoin
 
 import backoff
@@ -532,13 +532,16 @@ class MetaCloudAPIService(MessagingService):
         response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
         response.raise_for_status()
 
-    def _upload_media(self, phone_number_id: str, file_bytes: bytes, mime_type: str, filename: str = "upload") -> str:
+    def _upload_media(
+        self, phone_number_id: str, file_data: bytes | IO[bytes], mime_type: str, filename: str = "upload"
+    ) -> str:
         url = f"{self.META_API_BASE_URL}/{phone_number_id}/media"
+        file_obj = BytesIO(file_data) if isinstance(file_data, bytes) else file_data
         response = httpx.post(
             url,
             headers={"Authorization": f"Bearer {self.access_token}"},
             data={"messaging_product": "whatsapp", "type": mime_type},
-            files={"file": (filename, BytesIO(file_bytes), mime_type)},
+            files={"file": (filename, file_obj, mime_type)},
             timeout=self.META_API_TIMEOUT,
         )
         response.raise_for_status()
@@ -546,9 +549,9 @@ class MetaCloudAPIService(MessagingService):
 
     def can_send_file(self, file: File) -> bool:
         mime = file.content_type
-        size = file.content_size or 0
+        size = file.content_size
 
-        if mime is None:
+        if mime is None or size is None:
             return False
 
         if mime.startswith("image/"):
@@ -560,7 +563,18 @@ class MetaCloudAPIService(MessagingService):
         else:
             return False
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+    def send_file_to_user(
+        self,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        file: File,
+        download_link: str,
+        last_activity_at: datetime | None = None,
+    ):
+        if not self._is_within_service_window(last_activity_at):
+            raise ServiceWindowExpiredException("Service window expired, file messages cannot be sent via template")
+
         mime_type = file.content_type
 
         if mime_type.startswith("image/"):
@@ -573,9 +587,7 @@ class MetaCloudAPIService(MessagingService):
             media_type = "document"
 
         with file.file.open("rb") as file_obj:
-            file_bytes = file_obj.read()
-
-        media_id = self._upload_media(from_, file_bytes, mime_type=mime_type, filename=file.name)
+            media_id = self._upload_media(from_, file_obj, mime_type=mime_type, filename=file.name)
 
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
