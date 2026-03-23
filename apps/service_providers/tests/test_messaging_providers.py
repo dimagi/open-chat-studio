@@ -358,6 +358,83 @@ class TestMetaCloudAPIServiceAudio:
         assert send_data["to"] == "27826419977"
 
 
+class TestMetaCloudAPIServiceMedia:
+    """Tests for MetaCloudAPIService file/media sending support."""
+
+    @pytest.mark.parametrize(
+        ("content_type", "content_size", "expected"),
+        [
+            ("image/jpeg", 1 * 1024 * 1024, True),
+            ("image/png", 5 * 1024 * 1024, True),
+            ("image/jpeg", 6 * 1024 * 1024, False),
+            ("video/mp4", 16 * 1024 * 1024, True),
+            ("video/mp4", 17 * 1024 * 1024, False),
+            ("audio/mpeg", 16 * 1024 * 1024, True),
+            ("audio/mpeg", 17 * 1024 * 1024, False),
+            ("application/pdf", 100 * 1024 * 1024, True),
+            ("application/pdf", 101 * 1024 * 1024, False),
+            ("text/plain", 1024, False),
+            (None, 1024, False),
+        ],
+    )
+    def test_can_send_file(self, meta_cloud_api_service, content_type, content_size, expected):
+        file = MagicMock()
+        file.content_type = content_type
+        file.content_size = content_size
+        assert meta_cloud_api_service.can_send_file(file) is expected
+
+    @pytest.mark.parametrize(
+        ("content_type", "expected_media_type"),
+        [
+            ("image/jpeg", "image"),
+            ("image/png", "image"),
+            ("video/mp4", "video"),
+            ("audio/mpeg", "audio"),
+            ("application/pdf", "document"),
+        ],
+    )
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_file_to_user(self, mock_post, meta_cloud_api_service, content_type, expected_media_type):
+        upload_response = httpx.Response(
+            200,
+            json={"id": "media_id_123"},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/media"),
+        )
+        send_response = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.xyz"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        mock_post.side_effect = [upload_response, send_response]
+
+        file = MagicMock()
+        file.content_type = content_type
+        file.name = "test_file"
+        file.file.open.return_value.__enter__ = MagicMock(return_value=BytesIO(b"file-content"))
+        file.file.open.return_value.__exit__ = MagicMock(return_value=False)
+
+        meta_cloud_api_service.send_file_to_user(
+            from_="phone123",
+            to="27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            file=file,
+            download_link="https://example.com/file",
+        )
+
+        assert mock_post.call_count == 2
+
+        # First call: upload media
+        upload_call = mock_post.call_args_list[0]
+        assert "/media" in upload_call.args[0]
+
+        # Second call: send message with correct media type
+        send_call = mock_post.call_args_list[1]
+        send_data = send_call.kwargs["json"]
+        assert send_data["type"] == expected_media_type
+        assert send_data[expected_media_type]["id"] == "media_id_123"
+        assert send_data["to"] == "27826419977"
+
+
 class TestMetaCloudAPIServiceWindow:
     """Tests for MetaCloudAPIService service window logic."""
 
