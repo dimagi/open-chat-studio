@@ -1,3 +1,4 @@
+from io import BytesIO
 from unittest import mock
 
 import factory
@@ -103,6 +104,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
         VoiceProviderType.azure: SyntheticVoice.Azure,
         VoiceProviderType.openai: SyntheticVoice.OpenAI,
         VoiceProviderType.openai_voice_engine: SyntheticVoice.OpenAIVoiceEngine,
+        VoiceProviderType.elevenlabs: SyntheticVoice.ElevenLabs,
     }[provider_type]
     voice = SyntheticVoice(
         name="test", neural=True, language="English", language_code="en", gender="female", service=service
@@ -259,3 +261,101 @@ def test_openai_ve_voice_provider_error(config_key):
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
     _test_voice_provider_error(VoiceProviderType.openai_voice_engine, data=form.cleaned_data)
+
+
+def test_elevenlabs_voice_provider(team_with_users):
+    _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.elevenlabs,
+        data={
+            "elevenlabs_api_key": "test_key",
+            "elevenlabs_model": "eleven_multilingual_v2",
+        },
+    )
+
+
+@pytest.mark.django_db()
+def test_elevenlabs_synthesize_voice(team_with_users):
+    """_synthesize_voice should call SDK with correct params and return SynthesizedAudio"""
+
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="Rachel",
+        external_id="voice_id_123",
+        neural=True,
+        language="English",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.ElevenLabs,
+        voice_provider=provider,
+    )
+
+    fake_mp3_bytes = b"\xff\xfb\x90\x00" * 100
+
+    speech_service = provider.get_speech_service()
+    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+        mock_client = mock_client_cls.return_value
+        mock_client.text_to_speech.convert.return_value = iter([fake_mp3_bytes])
+        with mock.patch("pydub.AudioSegment") as mock_audio:
+            mock_segment = mock.Mock()
+            mock_segment.__len__ = mock.Mock(return_value=2500)
+            mock_audio.from_file.return_value = mock_segment
+
+            result = speech_service._synthesize_voice("Hello world", voice)
+
+    mock_client.text_to_speech.convert.assert_called_once_with(
+        voice_id="voice_id_123",
+        model_id="eleven_multilingual_v2",
+        text="Hello world",
+        output_format="mp3_44100_128",
+    )
+    assert result.format == "mp3"
+    assert result.duration == 2.5
+    assert isinstance(result.audio, BytesIO)
+
+
+@pytest.mark.django_db()
+def test_elevenlabs_transcribe_audio(team_with_users):
+    """_transcribe_audio should call SDK and return transcript text"""
+
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+
+    speech_service = provider.get_speech_service()
+    mock_audio = BytesIO(b"fake audio data")
+
+    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+        mock_client = mock_client_cls.return_value
+        mock_result = mock.Mock()
+        mock_result.text = "Hello world"
+        mock_client.speech_to_text.convert.return_value = mock_result
+
+        transcript = speech_service._transcribe_audio(mock_audio)
+
+    assert transcript == "Hello world"
+    mock_client.speech_to_text.convert.assert_called_once_with(
+        file=mock_audio,
+        model_id="scribe_v2",
+    )
+
+
+@pytest.mark.parametrize("config_key", ["elevenlabs_api_key"])
+def test_elevenlabs_voice_provider_error(config_key):
+    """Test that missing API key causes failure"""
+    form = VoiceProviderType.elevenlabs.form_cls(
+        team=None,
+        data={
+            "elevenlabs_api_key": "test_key",
+            "elevenlabs_model": "eleven_multilingual_v2",
+        },
+    )
+    assert form.is_valid()
+    form.cleaned_data.pop(config_key)
+    _test_voice_provider_error(VoiceProviderType.elevenlabs, data=form.cleaned_data)

@@ -219,6 +219,40 @@ class OpenAISpeechService(SpeechService):
         return transcript.text
 
 
+class ElevenLabsSpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.ElevenLabs
+    supports_transcription: ClassVar[bool] = True
+    elevenlabs_api_key: str
+    elevenlabs_model: str = "eleven_multilingual_v2"
+
+    @property
+    def _client(self):
+        from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415 - lazy: optional provider dep
+
+        return ElevenLabsClient(api_key=self.elevenlabs_api_key)
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
+
+        audio_iter = self._client.text_to_speech.convert(
+            voice_id=synthetic_voice.external_id,
+            model_id=self.elevenlabs_model,
+            text=text,
+            output_format="mp3_44100_128",
+        )
+        audio_data = b"".join(audio_iter)
+        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        duration_seconds = len(audio_segment) / 1000
+        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
+
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
+        result = self._client.speech_to_text.convert(
+            file=audio,
+            model_id="scribe_v2",
+        )
+        return result.text
+
+
 class OpenAIVoiceEngineSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
     supports_transcription: ClassVar[bool] = True

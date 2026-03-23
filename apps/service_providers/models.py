@@ -262,6 +262,7 @@ class VoiceProviderType(models.TextChoices):
     azure = "azure", _("Azure Text to Speech")
     openai = "openai", _("OpenAI Text to Speech")
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
+    elevenlabs = "elevenlabs", _("ElevenLabs")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -276,6 +277,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIConfigForm
             case VoiceProviderType.openai_voice_engine:
                 return forms.OpenAIVoiceEngineConfigForm
+            case VoiceProviderType.elevenlabs:
+                return forms.ElevenLabsVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -291,6 +294,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.OpenAISpeechService(**config)
                 case VoiceProviderType.openai_voice_engine:
                     return speech_service.OpenAIVoiceEngineSpeechService(**config)
+                case VoiceProviderType.elevenlabs:
+                    return speech_service.ElevenLabsSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")

@@ -115,6 +115,39 @@ class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
     file_formset_form = OpenAIVoiceEngineFileFormset
 
 
+class ElevenLabsFileFormset(BaseFileFormSet):
+    accepted_file_types = ["mp3", "mp4", "wav"]
+
+    def clean(self) -> None:
+        invalid_extensions = set()
+        for _key, in_memory_file in self.files.items():
+            file_extension = in_memory_file.name.rsplit(".", 1)[-1].lower()
+            if file_extension not in self.accepted_file_types:
+                invalid_extensions.add(f".{file_extension}")
+        if invalid_extensions:
+            string = ", ".join(invalid_extensions)
+            raise forms.ValidationError(f"File extensions not supported: {string}")
+        return super().clean()
+
+
+class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["elevenlabs_api_key"]
+    allow_file_upload = True
+    file_formset_form = ElevenLabsFileFormset
+
+    elevenlabs_api_key = forms.CharField(label=_("API Key"))
+    elevenlabs_model = forms.ChoiceField(
+        label=_("Model"),
+        choices=[
+            ("eleven_multilingual_v2", "Multilingual v2 (default)"),
+            ("eleven_v3", "v3 (latest)"),
+            ("eleven_flash_v2_5", "Flash v2.5 (low latency)"),
+            ("eleven_turbo_v2_5", "Turbo v2.5"),
+        ],
+        initial="eleven_multilingual_v2",
+    )
+
+
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["openai_api_key"]
 
@@ -313,7 +346,6 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     slack_installation_id = forms.CharField(widget=forms.HiddenInput())
 
     def get_slack_installation(self):
-
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()
 
