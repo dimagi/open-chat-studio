@@ -2764,17 +2764,17 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 | 9 | CommCareConnectChannel | [ ] Not started |
 | 10 | Cleanup (remove old `channels.py`, update imports) | [ ] Not started |
 
-### PR 0: Foundation — [ ] Not started
+### PR 0: Foundation — [x] DONE
 
 **What ships:** Pipeline infrastructure only — no channel removal yet.
 
-- [ ] `MessageProcessingContext`, `EarlyExitResponse`, `ChannelCapabilities`, `ChannelCallbacks`, `ChannelSender(ABC)`, `ProcessingStage(ABC)`, `MessageProcessingPipeline`
-- [ ] All shared stage implementations (core + terminal)
-- [ ] `ChannelBase` with `new_user_message()`, `_build_pipeline()`, `_get_sender()`, `_get_callbacks()`, `_get_capabilities()` abstract methods
-- [ ] `conftest.py` with `TestNewChannel`, `TestNewSender`, `TestNewCallbacks`, `make_context()`
-- [ ] `test_pipeline_orchestrator.py` (pipeline unit tests with mock stages)
-- [ ] `test_pipeline_integration.py` (bounding-box tests using `TestNewChannel`)
-- [ ] All stage unit tests (`stages/test_*.py`)
+- [x] `MessageProcessingContext`, `EarlyExitResponse`, `ChannelCapabilities`, `ChannelCallbacks`, `ChannelSender(ABC)`, `ProcessingStage(ABC)`, `MessageProcessingPipeline`
+- [x] All shared stage implementations (core + terminal)
+- [x] `ChannelBase` with `new_user_message()`, `_build_pipeline()`, `_get_sender()`, `_get_callbacks()`, `_get_capabilities()` abstract methods
+- [x] `conftest.py` with `TestNewChannel`, `TestNewSender`, `TestNewCallbacks`, `make_context()`
+- [x] `test_pipeline_orchestrator.py` (pipeline unit tests with mock stages)
+- [x] `test_pipeline_integration.py` (bounding-box tests using `TestNewChannel`)
+- [x] All stage unit tests (`stages/test_*.py`)
 
 **Why first:** Everything else depends on this. The integration tests validate the pipeline end-to-end using `TestNewChannel` before any real channel is migrated. No old code is removed in this PR.
 
