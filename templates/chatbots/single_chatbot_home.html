@@ -236,12 +236,28 @@
         persistent-session="false"
       ></open-chat-studio-widget>
       <script>
+        const widgetStyles = {
+          published: {
+            '--header-bg-color': 'oklch(0.982 0.018 155.826)',
+            '--header-bg-hover-color': 'oklch(0.76 0.177 163.223)',
+            '--header-text-color': 'oklch(0.527 0.154 150.069)',
+          },
+          working: {
+            '--header-bg-color': 'oklch(0.987 0.026 102.212)',
+            '--header-bg-hover-color': 'oklch(0.82 0.189 84.429)',
+            '--header-text-color': 'oklch(0.476 0.114 61.907)',
+          },
+        };
         function openChatWidget(versionNumber) {
-          const header = versionNumber === 0 ? 'Published Version' : `Working Version (v${versionNumber})`
           const widget = document.getElementById('chatbot-widget');
           widget.versionNumber = versionNumber;
           widget.visible = true;
-          widget.headerText = header;
+          const isPublished = versionNumber === 0;
+          widget.headerText = isPublished ? 'Published Version' : `Working Version (v${versionNumber})`;
+          const styles = isPublished ? widgetStyles.published : widgetStyles.working;
+          for (const [prop, value] of Object.entries(styles)) {
+            widget.style.setProperty(prop, value);
+          }
         }
       </script>
     {% endflag %}
