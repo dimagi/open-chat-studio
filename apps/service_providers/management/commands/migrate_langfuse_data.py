@@ -365,7 +365,7 @@ class Command(BaseCommand):
                 secret_key=source_config["secret_key"],
                 host=source_config.get("host", "https://cloud.langfuse.com"),
             )
-            self.stdout.write(f"Source client initialized: {langfuse_source.base_url}")
+            self.stdout.write(f"Source client initialized: {source_config.get('host', 'https://cloud.langfuse.com')}")
             langfuse_source.auth_check()
             self.stdout.write("Source credentials verified.")
         except Exception as e:
@@ -377,7 +377,9 @@ class Command(BaseCommand):
                 secret_key=dest_config["secret_key"],
                 host=dest_config.get("host", "https://cloud.langfuse.com"),
             )
-            self.stdout.write(f"Destination client initialized: {langfuse_destination.base_url}")
+            self.stdout.write(
+                f"Destination client initialized: {dest_config.get('host', 'https://cloud.langfuse.com')}"
+            )
             langfuse_destination.auth_check()
             self.stdout.write("Destination credentials verified.")
         except Exception as e:
