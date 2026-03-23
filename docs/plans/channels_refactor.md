@@ -1736,7 +1736,7 @@ You can adopt context-based architecture incrementally:
 ### Phase 1: Add Context Class (No Breaking Changes)
 
 ```py
-# Still in apps/chat/channels.py
+# New code lives in apps/channels/
 class MessageProcessingContext:
     # ... definition
 
@@ -2086,7 +2086,7 @@ class ChannelSender(ABC):
     def send_file(self, file: 'File', recipient: str, session_id: int) -> None: ...
 ```
 
-**1.3 Update ChannelBase** (still in `apps/chat/channels.py`):
+**1.3 Update ChannelBase** (new code lives in `apps/channels/`):
 
 ```py
 class ChannelBase(ABC):
@@ -2722,7 +2722,7 @@ All decisions below were made during the plan review and are reflected throughou
 
 ### Gap Analysis Fixes (Post-Review)
 
-These fixes were identified during gap analysis comparing the new pipeline approach with the existing `apps/chat/channels.py` implementation:
+These fixes were identified during gap analysis comparing the new pipeline approach (in `apps/channels/`) with the existing `apps/chat/channels.py` implementation:
 
 | # | Area | Fix | Summary |
 |---|------|-----|---------|
@@ -2741,3 +2741,127 @@ These were noted during review but deferred for later implementation:
 
 - **`count()` → `exists()`**: Where the code checks if any sessions exist, use `.exists()` instead of `.count() > 0`.
 - **Bot instance reuse**: Consider caching bot instances across messages within the same session to avoid repeated initialization.
+
+---
+
+## Incremental Rollout Plan
+
+The rollout happens one channel at a time. Each PR adds the new channel implementation (in `apps/channels/`) along with all its relevant new tests, and simultaneously removes the old channel class from `apps/chat/channels.py` and its old tests. This keeps the codebase in a working state at every merge.
+
+### Rollout Status
+
+| PR | Channel | Status |
+|---|---|---|
+| 0 | Foundation (pipeline infra, shared stages, base tests) | [ ] Not started |
+| 1 | ApiChannel | [ ] Not started |
+| 2 | WebChannel | [ ] Not started |
+| 3 | EvaluationChannel | [ ] Not started |
+| 4 | TelegramChannel | [ ] Not started |
+| 5 | WhatsappChannel | [ ] Not started |
+| 6 | SlackChannel | [ ] Not started |
+| 7 | FacebookMessengerChannel | [ ] Not started |
+| 8 | SureAdhereChannel | [ ] Not started |
+| 9 | CommCareConnectChannel | [ ] Not started |
+| 10 | Cleanup (remove old `channels.py`, update imports) | [ ] Not started |
+
+### PR 0: Foundation — [ ] Not started
+
+**What ships:** Pipeline infrastructure only — no channel removal yet.
+
+- [ ] `MessageProcessingContext`, `EarlyExitResponse`, `ChannelCapabilities`, `ChannelCallbacks`, `ChannelSender(ABC)`, `ProcessingStage(ABC)`, `MessageProcessingPipeline`
+- [ ] All shared stage implementations (core + terminal)
+- [ ] `ChannelBase` with `new_user_message()`, `_build_pipeline()`, `_get_sender()`, `_get_callbacks()`, `_get_capabilities()` abstract methods
+- [ ] `conftest.py` with `TestNewChannel`, `TestNewSender`, `TestNewCallbacks`, `make_context()`
+- [ ] `test_pipeline_orchestrator.py` (pipeline unit tests with mock stages)
+- [ ] `test_pipeline_integration.py` (bounding-box tests using `TestNewChannel`)
+- [ ] All stage unit tests (`stages/test_*.py`)
+
+**Why first:** Everything else depends on this. The integration tests validate the pipeline end-to-end using `TestNewChannel` before any real channel is migrated. No old code is removed in this PR.
+
+### PR 1: ApiChannel — [ ] Not started
+
+- [ ] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
+- [ ] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why first real channel:** Simplest pipeline — no voice, no files, no `ResponseSendingStage` or `SendingErrorHandlerStage`. No sender/callbacks to test. Validates the basic pipeline customization (`_build_pipeline()` omitting stages) with minimal risk.
+
+### PR 2: WebChannel — [ ] Not started
+
+- [ ] **Add:** `WebChannel` implementation + `concrete/test_web_channel.py`
+- [ ] **Remove:** `WebChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why second:** Also a reduced pipeline (no sending stages, no `SessionResolutionStage`, no `ConsentFlowStage`). Requires pre-existing session — validates that pattern. No sender/callbacks. `start_new_session()` and `check_and_process_seed_message()` are utility methods outside the pipeline, so they move as-is.
+
+### PR 3: EvaluationChannel — [ ] Not started
+
+- [ ] **Add:** `EvaluationChannel` + `EvalsBotInteractionStage` + `concrete/test_evaluation_channel.py`
+- [ ] **Remove:** `EvaluationChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why third:** Reduced pipeline like Web, but introduces the first channel-specific stage (`EvalsBotInteractionStage` replacing `BotInteractionStage`). Validates `channel_context` pattern and custom stage injection. No sender/callbacks.
+
+### PR 4: TelegramChannel — [ ] Not started
+
+- [ ] **Add:** `TelegramChannel` + `TelegramSender` + `TelegramCallbacks` + `concrete/test_telegram_channel.py` + `senders/test_telegram_sender.py` + `callbacks/test_telegram_callbacks.py`
+- [ ] **Remove:** `TelegramChannel` from `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and `SendingErrorHandlerStage` (Telegram 403 consent revocation).
+
+### PR 5: WhatsappChannel — [ ] Not started
+
+- [ ] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `concrete/test_whatsapp_channel.py` + `senders/test_whatsapp_sender.py` + `callbacks/test_whatsapp_callbacks.py`
+- [ ] **Remove:** `WhatsappChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files.
+
+### PR 6: SlackChannel — [ ] Not started
+
+- [ ] **Add:** `SlackChannel` + `SlackSender` + `concrete/test_slack_channel.py` + `senders/test_slack_sender.py`
+- [ ] **Remove:** `SlackChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_slack_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why here:** Pre-existing session (like Web) but with full file support and a sender. Validates `_build_pipeline()` omitting `SessionResolutionStage` while keeping sending stages. `start_new_session()` with `session_external_id` for thread tracking moves as-is.
+
+### PR 7: FacebookMessengerChannel — [ ] Not started
+
+- [ ] **Add:** `FacebookMessengerChannel` + `FacebookSender` + `FacebookCallbacks` + `concrete/test_facebook_channel.py` + `senders/test_facebook_sender.py` + `callbacks/test_facebook_callbacks.py`
+- [ ] **Remove:** `FacebookMessengerChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_facebook_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why here:** Standard full pipeline. Validates messaging service delegation for voice support. Straightforward after Telegram and WhatsApp patterns are established.
+
+### PR 8: SureAdhereChannel — [ ] Not started
+
+- [ ] **Add:** `SureAdhereChannel` + `SureAdhereSender` + `concrete/test_sureadhere_channel.py` + `senders/test_sureadhere_sender.py`
+- [ ] **Remove:** `SureAdhereChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_sureadhere_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why here:** Simplest full-pipeline channel with a sender. No callbacks, no voice, no files. Quick PR.
+
+### PR 9: CommCareConnectChannel — [ ] Not started
+
+- [ ] **Add:** `CommCareConnectChannel` + `CommCareConsentCheckStage` + `CommCareConnectSender` + `concrete/test_commcare_channel.py`
+- [ ] **Remove:** `CommCareConnectChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_connect_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+
+**Why last:** Most complex channel-specific behavior — custom consent check stage inserted into the pipeline, encrypted messaging via `CommCareConnectClient`, lazy-binding sender (visitor pattern for `connect_channel_id`/`encryption_key`). Benefits from all prior patterns being established.
+
+### PR 10: Cleanup — [ ] Not started
+
+- [ ] **Remove:** `apps/chat/channels.py` (now empty except for `ChannelBase` utility methods and imports)
+- [ ] **Remove:** old `apps/channels/tests/test_base_channel_behavior.py`
+- [ ] **Update:** All remaining `from apps.chat.channels import ...` statements across the codebase to import from `apps/channels/`
+- [ ] **Verify:** All new tests pass (`uv run pytest apps/channels/tests/new_arch/ -v`). All existing tests still pass (`uv run pytest -v`).
+
+### Rollout Rules
+
+1. **One channel per PR.** No bundling channels together.
+2. **Old code removed in the same PR.** The old channel class and its tests are deleted in the same PR that adds the new ones. No period where both implementations coexist for the same channel.
+3. **All new tests pass before merge.** `uv run pytest apps/channels/tests/new_arch/ -v` must be green.
+4. **All existing tests pass before merge.** `uv run pytest apps/channels/tests/ -v` must still be green (remaining old tests for not-yet-migrated channels).
+5. **Update `get_channel_class_for_platform()`** in each PR to point to the new channel class location.
+6. **Update `apps/channels/tasks.py`** imports as each channel migrates (webhook handlers instantiate channels).

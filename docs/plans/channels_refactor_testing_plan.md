@@ -2,9 +2,9 @@
 
 ## Context
 
-We are refactoring `apps/chat/channels.py` into a new stage-based pipeline architecture (reference: `docs/plans/channels_refactor_example.py`). The new implementation lives in `apps/chat/channels_v2.py` alongside the old code. New tests are written from scratch — existing tests are not touched.
+We are refactoring `apps/chat/channels.py` into a new stage-based pipeline architecture (reference: `docs/plans/channels_refactor_example.py`). The new implementation lives inside the `apps/channels/` app (not in `apps/chat/`). New tests are written from scratch — existing tests are not touched.
 
-Once all new tests pass, we do a cold-turkey switchover: delete old `channels.py`, rename `channels_v2.py` → `channels.py` (zero import changes needed), and delete old test files.
+Once all new tests pass, we do a cold-turkey switchover: delete old `apps/chat/channels.py`, update imports to point to `apps/channels/`, and delete old test files.
 
 **Goal here:** Define the full test suite for the new architecture before writing a line of implementation.
 
@@ -479,7 +479,7 @@ No DB needed. All stages are `MagicMock` instances.
 
 ## Implementation Location
 
-The new implementation lives in `apps/chat/channels_v2.py`. At switchover time, delete `apps/chat/channels.py`, rename `channels_v2.py` → `channels.py`. This means zero import changes — all existing `from apps.chat.channels import ...` statements continue to work.
+The new implementation lives inside the `apps/channels/` app. At switchover time, delete `apps/chat/channels.py` and update all `from apps.chat.channels import ...` statements to import from `apps/channels/` instead.
 
 ---
 
@@ -501,4 +501,4 @@ uv run ruff check apps/channels/tests/new_arch/ --fix
 uv run ty check apps/channels/tests/new_arch/
 ```
 
-**Switchover gate:** All tests in `apps/channels/tests/new_arch/` pass → safe to delete `apps/chat/channels.py`, rename `channels_v2.py` → `channels.py`, and delete old test files.
+**Per-channel gate:** Each channel is migrated in its own PR. The PR adds the new channel + tests and removes the old channel + tests. All tests (new and remaining old) must pass before merge. See the **Incremental Rollout Plan** section in `docs/plans/channels_refactor.md` for the full PR sequence.
