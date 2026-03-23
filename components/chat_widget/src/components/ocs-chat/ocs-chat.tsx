@@ -649,6 +649,12 @@ export class OcsChat {
     this.loadInternalPageContext()
   }
 
+  @Watch('chatbotId')
+  @Watch('versionNumber')
+  async chatbotConfigHandler() {
+    await this.clearSession();
+  }
+
   /**
    * Watch for changes to the `visible` attribute and update accordingly.
    *
