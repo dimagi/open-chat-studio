@@ -2,6 +2,7 @@ from unittest import mock
 
 import factory
 import pytest
+from django.db import IntegrityError
 
 from apps.experiments.models import SyntheticVoice
 from apps.files.models import File
@@ -9,6 +10,7 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 
 
 def test_aws_voice_provider(team_with_users):
@@ -146,6 +148,53 @@ def test_openai_voice_provider_error(config_key):
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
     _test_voice_provider_error(VoiceProviderType.openai, data=form.cleaned_data)
+
+
+@pytest.mark.django_db()
+def test_synthetic_voice_external_id(team_with_users):
+    """SyntheticVoice should support an external_id field for opaque provider voice identifiers"""
+
+    provider = VoiceProviderFactory(team=team_with_users)
+    voice = SyntheticVoice.objects.create(
+        name="Rachel",
+        external_id="21m00Tcm4TlvDq8ikWAM",
+        neural=True,
+        language="English",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.ElevenLabs,
+        voice_provider=provider,
+    )
+    voice.refresh_from_db()
+    assert voice.external_id == "21m00Tcm4TlvDq8ikWAM"
+    assert voice.name == "Rachel"
+
+
+@pytest.mark.django_db()
+def test_synthetic_voice_external_id_uniqueness(team_with_users):
+    """Two voices with the same external_id, service, and voice_provider should be rejected"""
+    provider = VoiceProviderFactory(team=team_with_users)
+    SyntheticVoice.objects.create(
+        name="Rachel",
+        external_id="21m00Tcm4TlvDq8ikWAM",
+        neural=True,
+        language="English",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.ElevenLabs,
+        voice_provider=provider,
+    )
+    with pytest.raises(IntegrityError):
+        SyntheticVoice.objects.create(
+            name="Rachel Clone",
+            external_id="21m00Tcm4TlvDq8ikWAM",
+            neural=True,
+            language="English",
+            language_code="en",
+            gender="female",
+            service=SyntheticVoice.ElevenLabs,
+            voice_provider=provider,
+        )
 
 
 def test_openai_ve_voice_provider(team_with_users):
