@@ -3,6 +3,10 @@ from __future__ import annotations
 import ast
 import json
 
+from pydantic import ValidationError
+
+from apps.pipelines.nodes.nodes import CodeNode
+
 
 def check_syntax(code: str) -> str | None:
     """Check that code is valid Python. Returns None on success, error message on failure."""
@@ -43,10 +47,6 @@ def check_code_node(code: str) -> str | None:
     """Validate code against the CodeNode pydantic schema.
     Returns None on success, error message on failure.
     """
-    from pydantic import ValidationError
-
-    from apps.pipelines.nodes.nodes import CodeNode
-
     try:
         CodeNode.model_validate({"code": code, "name": "code", "node_id": "code", "django_node": None})
         return None
@@ -58,7 +58,6 @@ def check_execute(code: str, input_value: str, expected: str) -> str | None:
     """Execute the code in the RestrictedPython sandbox and check the output.
     Returns None on success, error message on failure.
     """
-    from apps.pipelines.nodes.nodes import CodeNode
 
     try:
         node = CodeNode.model_validate({"code": code, "name": "eval", "node_id": "eval", "django_node": None})

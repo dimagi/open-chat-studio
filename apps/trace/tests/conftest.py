@@ -1,19 +1,20 @@
 import pytest
 from django.test import Client
 
-from apps.utils.factories.team import MembershipFactory, TeamFactory, get_test_user_groups
+from apps.teams.backends import get_team_owner_groups
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
 @pytest.fixture()
 def user():
-    return UserFactory()
+    return UserFactory.create()
 
 
 @pytest.fixture()
 def team(user):
-    team = TeamFactory()
-    MembershipFactory(team=team, user=user, groups=get_test_user_groups)
+    team = TeamFactory.create()
+    MembershipFactory.create(team=team, user=user, groups=get_team_owner_groups)
     return team
 
 

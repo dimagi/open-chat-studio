@@ -22,7 +22,10 @@ from apps.utils.deletion import get_related_m2m_objects
     ],
 )
 def test_get_related_objects(source, exclude, expected):
-    from apps.utils.tests.models import Bot, Tool
+    from apps.utils.tests.models import (  # noqa: PLC0415 - lazy: test models require setup_test_app() to run first; moving to module level would import before app tables are created
+        Bot,
+        Tool,
+    )
 
     if source:
         source_model = Bot if source and source[0][0] == "b" else Tool

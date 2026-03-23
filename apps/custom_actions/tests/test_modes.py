@@ -9,7 +9,7 @@ class TestCustomActionModel:
 
     def test_default_health_status(self, team_with_users):
         """Test that new actions have default health status of 'unknown'."""
-        action = CustomActionFactory(team=team_with_users)
+        action = CustomActionFactory.create(team=team_with_users)
         assert action.health_status == "unknown"
         assert action.last_health_check is None
 
@@ -29,7 +29,7 @@ class TestCustomActionModel:
             },
         }
 
-        action = CustomActionFactory(
+        action = CustomActionFactory.create(
             team=team_with_users, api_schema=schema_with_health, server_url="https://api.example.com"
         )
 
@@ -58,14 +58,16 @@ class TestCustomActionModel:
                 },
             }
 
-            action = CustomActionFactory(team=team_with_users, api_schema=schema, server_url="https://api.example.com")
+            action = CustomActionFactory.create(
+                team=team_with_users, api_schema=schema, server_url="https://api.example.com"
+            )
 
             detected = action.detect_health_endpoint_from_spec()
             assert detected == expected_url
 
     def test_detect_health_endpoint_no_match(self, team_with_users):
         """Test that None is returned when no health endpoint is found."""
-        action = CustomActionFactory(team=team_with_users)
+        action = CustomActionFactory.create(team=team_with_users)
 
         detected = action.detect_health_endpoint_from_spec()
         assert detected is None
@@ -89,5 +91,7 @@ class TestCustomActionModel:
     )
     def test_health_endpoint_property(self, team_with_users, server_url, healthcheck_path, expected):
         """Test that health_endpoint property correctly combines server URL and healthcheck path."""
-        action = CustomActionFactory(team=team_with_users, server_url=server_url, healthcheck_path=healthcheck_path)
+        action = CustomActionFactory.create(
+            team=team_with_users, server_url=server_url, healthcheck_path=healthcheck_path
+        )
         assert action.health_endpoint == expected

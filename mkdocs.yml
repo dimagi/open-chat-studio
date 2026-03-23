@@ -82,11 +82,20 @@ nav:
       - WAF Management: developer_guides/waf_management.md
       - Dynamic Filters: developer_guides/dynamic_filters.md
       - Slack Channel Integration: developer_guides/slack_channel_integration.md
+      - Meta Cloud API Integration: developer_guides/meta_cloud_api_integration.md
       - Index Managers: developer_guides/index_managers.md
       - Notifications: developer_guides/notifications.md
     - Testing:
       - Integration Testing: developer_guides/integration_testing.md
       - developer_guides/twilio_testing.md
+      - Help Agent Evals: developer_guides/help_agent_evals.md
+  - Self-Hosting:
+    - Overview: hosting/index.md
+    - Configuration: hosting/configuration.md
+    - Docker Compose: hosting/docker.md
+    - Heroku: hosting/heroku.md
+    - AWS Fargate: hosting/aws.md
+    - Kamal: hosting/kamal.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md

@@ -1,7 +1,6 @@
 import json
 import logging
 import unicodedata
-from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
@@ -15,17 +14,12 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import TagCategories
-from apps.chat.conversation import COMPRESSION_MARKER
-from apps.chat.models import ChatMessage
-from apps.experiments.models import ExperimentSession
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
 )
 from apps.pipelines.models import (
-    PipelineChatHistory,
     PipelineChatHistoryModes,
     PipelineChatHistoryTypes,
-    PipelineChatMessages,
 )
 from apps.pipelines.nodes.base import (
     PipelineState,
@@ -39,12 +33,12 @@ from apps.pipelines.nodes.history_middleware import (
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
-from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.langchain import dict_to_json_schema
 
 if TYPE_CHECKING:
@@ -53,22 +47,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.pipelines.nodes")
 
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
-
-
-@lru_cache
-def get_llm_provider_model(llm_provider_model_id: int):
-    try:
-        return LlmProviderModel.objects.get(id=llm_provider_model_id)
-    except LlmProviderModel.DoesNotExist:
-        raise PipelineNodeBuildError(f"LLM provider model with id {llm_provider_model_id} does not exist") from None
-
-
-@lru_cache
-def get_llm_provider(llm_provider_id: int):
-    try:
-        return LlmProvider.objects.get(id=llm_provider_id)
-    except LlmProvider.DoesNotExist:
-        return None
 
 
 class OutputMessageTagMixin(BaseModel):
@@ -99,7 +77,12 @@ class LLMResponseMixin(BaseModel):
     @classmethod
     def ensure_default_parameters(cls, data) -> Self:
         if llm_provider_model_id := data.get("llm_provider_model_id"):
-            model = get_llm_provider_model(llm_provider_model_id)
+            try:
+                model = ORMRepository().get_llm_provider_model(llm_provider_model_id)
+            except RepositoryLookupError:
+                raise PipelineNodeBuildError(
+                    f"LLM provider model with id {llm_provider_model_id} does not exist"
+                ) from None
             params_cls = LLM_MODEL_PARAMETERS.get(model.name, BasicParameters)
             # Handle None explicitly by treating it as empty dict
             param_value = data.get("llm_model_parameters") or {}
@@ -112,8 +95,8 @@ class LLMResponseMixin(BaseModel):
     def validate_llm_model(self):
         # Ensure model is not deprecated
         try:
-            model = get_llm_provider_model(self.llm_provider_model_id)
-        except PipelineNodeBuildError as e:
+            model = ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
+        except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",
                 str(e),
@@ -133,18 +116,15 @@ class LLMResponseMixin(BaseModel):
         return self
 
     def get_llm_service(self) -> LlmService:
-        from apps.service_providers.models import LlmProvider
-
         try:
-            provider = LlmProvider.objects.get(id=self.llm_provider_id)
-            return provider.get_llm_service()
-        except LlmProvider.DoesNotExist:
+            return self.repo.get_llm_service(self.llm_provider_id)
+        except RepositoryLookupError:
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
             raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
 
     def get_chat_model(self):
-        model_name = get_llm_provider_model(self.llm_provider_model_id).name
+        model_name = self.repo.get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
@@ -210,7 +190,7 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, session: ExperimentSession, exclude_message_id: int | None = None) -> list[BaseMessage]:
+    def get_history(self, exclude_message_id: int | None = None) -> list[BaseMessage]:
         """
         Returns the chat history messages for the node based on its history configuration.
 
@@ -222,17 +202,9 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            return session.chat.get_langchain_messages_until_marker(
-                marker=self.get_history_mode(), exclude_message_id=exclude_message_id
-            )
+            return self.repo.get_session_messages(self.get_history_mode(), exclude_message_id=exclude_message_id)
         else:
-            try:
-                history: PipelineChatHistory = session.pipeline_chat_history.get(
-                    type=self.history_type, name=self._get_history_name()
-                )
-            except PipelineChatHistory.DoesNotExist:
-                return []
-
+            history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
             return history.get_langchain_messages_until_marker(self.get_history_mode())
 
     def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
@@ -242,26 +214,15 @@ class HistoryMixin(LLMResponseMixin):
         `history_mode` so future fetches know where to stop replaying messages. Otherwise, the
         provided `summary` captures the conversation state up to `checkpoint_message_id`.
         """
-        history_mode = self.get_history_mode()
-        if self.use_session_history:
-            message = ChatMessage.objects.get(id=checkpoint_message_id)
-            if compression_marker == COMPRESSION_MARKER:
-                message.metadata.update({"compression_marker": history_mode})
-                message.save(update_fields=["metadata"])
-            else:
-                message.summary = compression_marker
-                message.save(update_fields=["summary"])
+        history_type = "global" if self.use_session_history else "node"
+        self.repo.save_compression_checkpoint(
+            checkpoint_message_id=checkpoint_message_id,
+            history_type=history_type,
+            compression_marker=compression_marker,
+            history_mode=self.get_history_mode(),
+        )
 
-        else:
-            # Use pipeline history
-            updates = {"compression_marker": history_mode}
-            if compression_marker != COMPRESSION_MARKER:
-                updates["summary"] = compression_marker
-            PipelineChatMessages.objects.filter(id=checkpoint_message_id).update(**updates)
-
-    def build_history_middleware(
-        self, session: ExperimentSession, system_message: BaseMessage
-    ) -> BaseNodeHistoryMiddleware | None:
+    def build_history_middleware(self, system_message: BaseMessage) -> BaseNodeHistoryMiddleware | None:
         """Construct the history compression middleware configured for this node."""
         if self.history_is_disabled:
             return None
@@ -269,7 +230,6 @@ class HistoryMixin(LLMResponseMixin):
         history_mode = self.get_history_mode()
 
         compressor_kwargs = {
-            "session": session,
             "node": self,
         }
         if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
@@ -278,7 +238,7 @@ class HistoryMixin(LLMResponseMixin):
         specified_token_limit = (
             self.user_max_token_limit
             if self.user_max_token_limit is not None
-            else get_llm_provider_model(self.llm_provider_model_id).max_token_limit
+            else self.repo.get_llm_provider_model(self.llm_provider_model_id).max_token_limit
         )
 
         # Reserve space for the system message so trigger/keep thresholds reflect usable context
@@ -291,7 +251,7 @@ class HistoryMixin(LLMResponseMixin):
         if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
             return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
 
-    def save_history(self, session: ExperimentSession, human_message: str, ai_message: str):
+    def save_history(self, human_message: str, ai_message: str):
         if self.history_is_disabled:
             return
 
@@ -299,8 +259,8 @@ class HistoryMixin(LLMResponseMixin):
             # Global History is saved outside of the node
             return
 
-        history, _ = session.pipeline_chat_history.get_or_create(type=self.history_type, name=self._get_history_name())
-        message = history.messages.create(human_message=human_message, ai_message=ai_message, node_id=self.node_id)
+        history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
+        message = self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
         return message
 
 
@@ -418,7 +378,7 @@ class ExtractStructuredDataNodeMixin:
         Note:
         Since we don't know the token limit of the LLM, we assume it to be 8192.
         """
-        llm_provider_model = get_llm_provider_model(self.llm_provider_model_id)
+        llm_provider_model = self.repo.get_llm_provider_model(self.llm_provider_model_id)
         model_token_limit = llm_provider_model.max_token_limit
         overlap_percentage = 0.2
         chunk_size_tokens = model_token_limit - prompt_token_count

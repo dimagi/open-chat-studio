@@ -190,12 +190,12 @@ def bolt_context(slack_install):
 
 @pytest.fixture()
 def messaging_provider(team_with_users):
-    return MessagingProviderFactory(type=MessagingProviderType.slack, config={"slack_team_id": SLACK_TEAM_ID})
+    return MessagingProviderFactory.create(type=MessagingProviderType.slack, config={"slack_team_id": SLACK_TEAM_ID})
 
 
 @pytest.fixture()
 def experiment_channel(experiment, messaging_provider):
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory.create(
         experiment=experiment,
         platform=ChannelPlatform.SLACK,
         extra_data={"slack_channel_id": SLACK_CHANNEL_ID},
@@ -205,7 +205,7 @@ def experiment_channel(experiment, messaging_provider):
 
 @pytest.fixture()
 def keyword_channel(experiment, messaging_provider):
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory.create(
         experiment=experiment,
         platform=ChannelPlatform.SLACK,
         extra_data={"slack_channel_id": SLACK_ALL_CHANNELS, "keywords": ["health", "benefits"]},
@@ -215,7 +215,7 @@ def keyword_channel(experiment, messaging_provider):
 
 @pytest.fixture()
 def default_channel(experiment, messaging_provider):
-    return ExperimentChannelFactory(
+    return ExperimentChannelFactory.create(
         experiment=experiment,
         platform=ChannelPlatform.SLACK,
         extra_data={"slack_channel_id": SLACK_ALL_CHANNELS, "is_default": True},

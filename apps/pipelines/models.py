@@ -91,12 +91,12 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
     def llm_response_with_prompt_nodes(self):
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
 
     def assistant_nodes(self):
-        from apps.pipelines.nodes.nodes import AssistantNode
+        from apps.pipelines.nodes.nodes import AssistantNode  # noqa: PLC0415 - circular: nodes.nodes→models
 
         return self.get_queryset().filter(type=AssistantNode.__name__)
 
@@ -208,8 +208,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
-        from apps.pipelines.graph import PipelineGraph
-        from apps.pipelines.nodes import nodes as pipeline_nodes
+        from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415 - circular: graph.py imports models
+        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         errors = defaultdict(dict)
         nodes = self.node_set.all()
@@ -283,9 +283,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             pipeline_version.data = data
         pipeline_version.save()
         for node in self.node_set.all():
-            node_version = node.create_new_version(is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id))
-            node_version.pipeline = pipeline_version
-            node_version.save(update_fields=["pipeline"])
+            node.create_new_version(
+                is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id), pipeline=pipeline_version
+            )
 
         return pipeline_version
 
@@ -318,7 +318,10 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return self.experiment_set.filter(is_archived=False)
 
     def get_static_trigger_experiment_ids(self) -> models.QuerySet:
-        from apps.events.models import EventAction, EventActionType
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models→pipelines.models
+            EventAction,
+            EventActionType,
+        )
 
         return (
             EventAction.objects.filter(
@@ -375,20 +378,27 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def name(self):
         return self.params.get("name", None)
 
-    def create_new_version(self, is_copy=False, new_flow_id=None):  # ty: ignore[invalid-method-override]
+    def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
         and update the `assistant_id` in the node params to the new assistant version id.
+
+        Args:
+            pipeline: If provided, the new version will be assigned to this pipeline before saving,
+                avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
-        from apps.assistants.models import OpenAiAssistant
-        from apps.documents.models import Collection
-        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
+        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
+        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
+        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: nodes.nodes→models
+            AssistantNode,
+            LLMResponseWithPrompt,
+        )
 
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
             new_version.flow_id = new_flow_id
-            if new_version.type not in ("StartNode", "EndNode") and new_version.params["name"] == old_flow_id:
+            if new_version.type not in ("StartNode", "EndNode") and new_version.params.get("name") == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
         if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
@@ -403,6 +413,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             _set_versioned_param_value(new_version, "collection_id", Collection)
             _set_versioned_param_list_values(new_version, "collection_index_ids", Collection)
 
+        if pipeline is not None:
+            new_version.pipeline = pipeline
         new_version.save()
         if self.params.get("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
@@ -411,7 +423,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         if self.type == LLMResponseWithPrompt.__name__:
             custom_action_infos = []
@@ -434,10 +446,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self._archive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.assistants.models import OpenAiAssistant
-        from apps.documents.models import Collection
-        from apps.experiments.models import VersionFieldDisplayFormatters
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
+        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
+        from apps.experiments.models import (  # noqa: PLC0415 - circular: experiments.models→models
+            VersionFieldDisplayFormatters,
+        )
+        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         node_name = self.params.get("name", self.type)
         if node_name == self.flow_id:
@@ -500,9 +514,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         Archive related params that were also versioned along with this node
         """
-        from apps.assistants.models import OpenAiAssistant
-        from apps.documents.models import Collection
-        from apps.pipelines.nodes import nodes
+        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
+        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
+        from apps.pipelines.nodes import nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         model_param_specs = {
             nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
@@ -624,7 +638,7 @@ class PipelineChatMessages(BaseModel):
         The `SystemMessage` represents the conversation summary and will only be
         included if it exists.
         """
-        langchain_messages = [
+        langchain_messages: list[BaseMessage] = [
             AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
             HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
         ]

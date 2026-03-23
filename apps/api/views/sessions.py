@@ -1,5 +1,6 @@
 import textwrap
 
+from django.contrib.contenttypes.models import ContentType
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
 from rest_framework import filters, mixins, serializers, status
@@ -7,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from apps.annotations.models import Tag, TagCategories
+from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.events.models import StaticTriggerType
@@ -268,10 +269,6 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                 session.chat.add_tag(tag, request.team, added_by=request.user)
         elif request.method == "DELETE":
             # Remove tags (only user tags, not system tags)
-            from django.contrib.contenttypes.models import ContentType
-
-            from apps.annotations.models import CustomTaggedItem
-
             tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team, is_system_tag=False)
 
             # Remove tagged items explicitly to avoid any potential issues with taggit's remove()

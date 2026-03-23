@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
+import dictdiffer
 import pytest
 import time_machine
 from django.db import transaction
@@ -45,7 +46,7 @@ from apps.utils.pytest import django_db_with_data
 
 @pytest.fixture()
 def experiment_session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 class TestSyntheticVoice:
@@ -77,20 +78,22 @@ class TestSyntheticVoice:
             SyntheticVoice.OpenAIVoiceEngine,
         }
         # Let's setup two providers belonging to different teams
-        team1 = TeamFactory()
-        team2 = TeamFactory()
+        team1 = TeamFactory.create()
+        team2 = TeamFactory.create()
 
         # Create synthetic voices with providers from different teams. They should be exclusive to their teams
-        voice1 = SyntheticVoiceFactory(
-            voice_provider=VoiceProviderFactory(team=team1), service=SyntheticVoice.OpenAIVoiceEngine
+        voice1 = SyntheticVoiceFactory.create(
+            voice_provider=VoiceProviderFactory.create(team=team1), service=SyntheticVoice.OpenAIVoiceEngine
         )
-        voice2 = SyntheticVoiceFactory(
-            voice_provider=VoiceProviderFactory(team=team2), service=SyntheticVoice.OpenAIVoiceEngine
+        voice2 = SyntheticVoiceFactory.create(
+            voice_provider=VoiceProviderFactory.create(team=team2), service=SyntheticVoice.OpenAIVoiceEngine
         )
 
         # If a voice form another team's service outisde of TEAM_SCOPED_SERVICES happens to have a provider, we
         # should not match on that
-        voice3 = SyntheticVoiceFactory(voice_provider=VoiceProviderFactory(team=team2), service=SyntheticVoice.AWS)
+        voice3 = SyntheticVoiceFactory.create(
+            voice_provider=VoiceProviderFactory.create(team=team2), service=SyntheticVoice.AWS
+        )
 
         # Assert exclusivity
         voices_queryset = SyntheticVoice.get_for_team(team1)
@@ -115,7 +118,7 @@ class TestSyntheticVoice:
 class TestExperimentSession:
     def _construct_event_action(self, time_period: TimePeriod, experiment_id: int, frequency=1, repetitions=1) -> tuple:
         params = self._get_params(experiment_id, time_period, frequency, repetitions)
-        return EventActionFactory(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
+        return EventActionFactory.create(params=params, action_type=EventActionType.SCHEDULETRIGGER), params
 
     def _get_params(self, experiment_id: int, time_period: TimePeriod = TimePeriod.DAYS, frequency=1, repetitions=1):
         return {
@@ -129,17 +132,17 @@ class TestExperimentSession:
 
     @travel("2024-01-01", tick=False)
     def test_get_participant_scheduled_messages_custom_params(self):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         experiment = session.experiment
         event_action, params = self._construct_event_action(time_period=TimePeriod.DAYS, experiment_id=experiment.id)
         participant = session.participant
-        message1 = ScheduledMessageFactory(
+        message1 = ScheduledMessageFactory.create(
             experiment=experiment,
             team=session.team,
             participant=participant,
             action=event_action,
         )
-        message2 = ScheduledMessageFactory(
+        message2 = ScheduledMessageFactory.create(
             experiment=experiment,
             team=session.team,
             participant=participant,
@@ -193,11 +196,11 @@ class TestExperimentSession:
         ],
     )
     def test_get_schedules_for_experiment_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         experiment = session.experiment
         participant = session.participant
 
-        ScheduledMessageFactory(
+        ScheduledMessageFactory.create(
             experiment=experiment,
             team=session.team,
             participant=participant,
@@ -271,11 +274,11 @@ class TestExperimentSession:
         ],
     )
     def test_get_schedules_for_experiment_as_string(self, time_period, repetitions, total_triggers, expected):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         experiment = session.experiment
         participant = session.participant
 
-        message = ScheduledMessageFactory(
+        message = ScheduledMessageFactory.create(
             experiment=experiment,
             team=session.team,
             participant=participant,
@@ -297,9 +300,9 @@ class TestExperimentSession:
     @patch.object(ExperimentSession, "ad_hoc_bot_message")
     def test_scheduled_message_experiment(self, mock_ad_hoc, use_custom_experiment):
         """ScheduledMessages should use the experiment specified in the linked action's params"""
-        custom_experiment = ExperimentFactory() if use_custom_experiment else None
+        custom_experiment = ExperimentFactory.create() if use_custom_experiment else None
         mock_ad_hoc.return_value = {}
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         event_action_kwargs = {"time_period": TimePeriod.DAYS, "experiment_id": session.experiment.id}
         if custom_experiment:
             event_action_kwargs["experiment_id"] = custom_experiment.id
@@ -340,8 +343,8 @@ class TestExperimentSession:
         assert scheduled_message._should_mark_complete() == expected
 
     def test_get_participant_data_name(self):
-        participant = ParticipantFactory()
-        session = ExperimentSessionFactory(participant=participant, team=participant.team)
+        participant = ParticipantFactory.create()
+        session = ExperimentSessionFactory.create(participant=participant, team=participant.team)
         data = {"first_name": "Jimmy"}
         data_proxy = ParticipantDataProxy({"participant_data": data}, session)
         data = data_proxy.get()
@@ -424,13 +427,13 @@ class TestExperimentSession:
         prompt = "data: {participant_data}" if participant_data_injected else "data"
 
         def _test_pipline(node_type, params):
-            pipeline = PipelineFactory()
-            NodeFactory(pipeline=pipeline, type=node_type, params=params)
-            session = ExperimentSessionFactory(experiment__pipeline=pipeline)
+            pipeline = PipelineFactory.create()
+            NodeFactory.create(pipeline=pipeline, type=node_type, params=params)
+            session = ExperimentSessionFactory.create(experiment__pipeline=pipeline)
             assert session.requires_participant_data() == participant_data_injected
 
         # Case 3 - Pipeline Assistant Node
-        assistant = OpenAiAssistantFactory(instructions=prompt)
+        assistant = OpenAiAssistantFactory.create(instructions=prompt)
         _test_pipline("AssistantNode", params={"assistant_id": assistant.id})
 
         # Case 4 - Pipeline LLMResponseWithPrompt Node
@@ -448,7 +451,7 @@ class TestExperimentSession:
     )
     def test_end_with_commit_parameter(self, commit, should_be_saved):
         """Test end() with different commit values."""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         assert session.ended_at is None
 
         session.end(commit=commit)
@@ -474,7 +477,7 @@ class TestExperimentSession:
     )
     def test_end_with_valid_trigger_types(self, trigger_type, should_enqueue):
         """Test end() with different valid trigger types."""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         with patch("apps.events.tasks.enqueue_static_triggers.delay") as mock_delay:
             session.end(commit=True, trigger_type=trigger_type)
@@ -505,23 +508,67 @@ class TestExperimentSession:
     )
     def test_end_with_invalid_trigger_types_raises_error(self, trigger_type, error_message):
         """Test end() raises ValueError for invalid trigger types."""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         with pytest.raises(ValueError, match=error_message):
             session.end(commit=True, trigger_type=trigger_type)
 
     def test_end_with_commit_false_and_trigger_type_raises_error(self):
         """Test end() raises ValueError when trigger_type is specified but commit is False."""
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
             session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
+
+    def test_latest_trace_returns_none_when_no_traces(self):
+        session = ExperimentSessionFactory.create()
+        assert session.latest_trace is None
+
+    def test_latest_trace_returns_most_recent(self):
+        session = ExperimentSessionFactory.create()
+        Trace.objects.create(session=session, team=session.team, experiment=session.experiment, duration=100)
+        trace2 = Trace.objects.create(session=session, team=session.team, experiment=session.experiment, duration=200)
+        assert session.latest_trace == trace2
+
+    def test_latest_participant_data_falls_back_when_no_trace(self):
+        """Without any trace, latest_participant_data falls back to participant_data_from_experiment."""
+        session = ExperimentSessionFactory.create()
+        # No traces, no participant data object — should return empty dict
+        assert session.latest_participant_data == {}
+
+    def test_latest_participant_data_with_trace_snapshot_only(self):
+        """When the trace has no diff, latest_participant_data returns the snapshot as-is."""
+        session = ExperimentSessionFactory.create()
+        Trace.objects.create(
+            session=session,
+            team=session.team,
+            experiment=session.experiment,
+            duration=100,
+            participant_data={"name": "Alice"},
+            participant_data_diff=None,
+        )
+        assert session.latest_participant_data == {"name": "Alice"}
+
+    def test_latest_participant_data_applies_diff(self):
+        """latest_participant_data applies the diff to the snapshot."""
+        session = ExperimentSessionFactory.create()
+        snapshot = {"name": "Alice"}
+        diff = list(dictdiffer.diff(snapshot, {"name": "Alice", "age": 30}))
+        Trace.objects.create(
+            session=session,
+            team=session.team,
+            experiment=session.experiment,
+            duration=100,
+            participant_data=snapshot,
+            participant_data_diff=diff,
+        )
+        assert session.latest_participant_data == {"name": "Alice", "age": 30}
 
 
 @pytest.mark.django_db()
 class TestSourceMaterialVersioning:
     def test_create_new_source_material_version(self):
-        original = SourceMaterialFactory()
+        original = SourceMaterialFactory.create()
         new_version = original.create_new_version()
         original.refresh_from_db()
         assert original.working_version is None
@@ -532,61 +579,61 @@ class TestSourceMaterialVersioning:
 class TestExperimentModel:
     def test_working_experiment_cannot_be_the_default_version(self):
         with pytest.raises(ValueError, match="A working experiment cannot be a default version"):
-            ExperimentFactory(is_default_version=True, working_version=None)
+            ExperimentFactory.create(is_default_version=True, working_version=None)
 
     def test_single_default_version_per_experiment(self):
-        working_exp = ExperimentFactory()
+        working_exp = ExperimentFactory.create()
         team = working_exp.team
-        ExperimentFactory(is_default_version=True, working_version=working_exp, team=team)
+        ExperimentFactory.create(is_default_version=True, working_version=working_exp, team=team)
         with transaction.atomic(), pytest.raises(IntegrityError, match=r'.*"unique_default_version_per_experiment".*'):
-            ExperimentFactory(is_default_version=True, working_version=working_exp, team=team, version_number=2)
-        ExperimentFactory(is_default_version=False, working_version=working_exp, team=team, version_number=3)
+            ExperimentFactory.create(is_default_version=True, working_version=working_exp, team=team, version_number=2)
+        ExperimentFactory.create(is_default_version=False, working_version=working_exp, team=team, version_number=3)
 
     def test_unique_version_number_per_experiment(self):
-        working_exp = ExperimentFactory()
+        working_exp = ExperimentFactory.create()
         team = working_exp.team
-        ExperimentFactory(working_version=working_exp, team=team, version_number=2)
+        ExperimentFactory.create(working_version=working_exp, team=team, version_number=2)
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
-            ExperimentFactory(working_version=working_exp, team=team, version_number=2)
+            ExperimentFactory.create(working_version=working_exp, team=team, version_number=2)
 
     @pytest.mark.parametrize("assistant_id_populated", [True, False])
     def test_get_assistant_from_pipeline(self, assistant_id_populated):
-        assistant = OpenAiAssistantFactory()
+        assistant = OpenAiAssistantFactory.create()
         assistant_id = assistant.id if assistant_id_populated else None
-        pipeline = PipelineFactory()
-        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant_id})
-        experiment = ExperimentFactory(pipeline=pipeline)
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant_id})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
         expected_assistant_result = assistant if assistant_id_populated else None
         assert experiment.get_assistant() == expected_assistant_result
 
     def _setup_original_experiment(self):
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory.create()
         team = experiment.team
         experiment.consent_form = ConsentForm.get_default(team)
 
         # Setup Safety Layers
         # Setup Source material
-        experiment.source_material = SourceMaterialFactory(team=team, material="material science is interesting")
+        experiment.source_material = SourceMaterialFactory.create(team=team, material="material science is interesting")
         experiment.save()
 
         # Setup Static Trigger
-        StaticTriggerFactory(experiment=experiment)
+        StaticTriggerFactory.create(experiment=experiment)
 
         # Setup Timeout Trigger
-        TimeoutTriggerFactory(experiment=experiment)
+        TimeoutTriggerFactory.create(experiment=experiment)
 
         # Surveys
-        pre_survey = SurveyFactory(team=team)
-        post_survey = SurveyFactory(team=team)
+        pre_survey = SurveyFactory.create(team=team)
+        post_survey = SurveyFactory.create(team=team)
         experiment.pre_survey = pre_survey
         experiment.post_survey = post_survey
 
-        experiment.pipeline = PipelineFactory(team=experiment.team)
+        experiment.pipeline = PipelineFactory.create(team=experiment.team)
         experiment.save()
         return experiment
 
     def test_first_version_is_automatically_the_default(self):
-        experiment = ExperimentFactory()
+        experiment = ExperimentFactory.create()
         new_version = experiment.create_new_version()
         another_version = experiment.create_new_version()
         assert new_version.version_number == 1
@@ -665,14 +712,14 @@ class TestExperimentModel:
         original_related_instance = original_experiment.source_material
 
         # The original related object has not versions, so we expeect a new version to be created
-        experiment_version1 = ExperimentFactory()
+        experiment_version1 = ExperimentFactory.create()
         original_experiment._copy_attr_to_new_version("source_material", experiment_version1)
         assert original_related_instance.versions.count() == 1
         assert experiment_version1.source_material != original_related_instance
         assert experiment_version1.source_material.working_version == original_related_instance
 
         # No change between the original and versioned instances, so we don't want yet another version to be made
-        experiment_version2 = ExperimentFactory()
+        experiment_version2 = ExperimentFactory.create()
         original_experiment._copy_attr_to_new_version("source_material", experiment_version2)
         assert original_related_instance.versions.count() == 1
         # The new instance version should be the same as the previous one
@@ -681,7 +728,7 @@ class TestExperimentModel:
         # Changing the working instance causes a new version to be made
         original_experiment.source_material.material = "Saucy Sauceness"
         original_experiment.source_material.save()
-        experiment_version3 = ExperimentFactory()
+        experiment_version3 = ExperimentFactory.create()
         original_experiment._copy_attr_to_new_version("source_material", experiment_version3)
         assert original_related_instance.versions.count() == 2
         assert experiment_version3.source_material != experiment_version2.source_material
@@ -746,8 +793,8 @@ class TestExperimentModel:
 
     def test_archive_working_experiment(self, experiment):
         """Test that archiving an experiment archives all versions and deletes its scheduled messages"""
-        session = ExperimentSessionFactory(experiment=experiment)
-        event_action = EventActionFactory(
+        session = ExperimentSessionFactory.create(experiment=experiment)
+        event_action = EventActionFactory.create(
             action_type=EventActionType.SCHEDULETRIGGER,
             params={
                 "name": "Test",
@@ -758,7 +805,7 @@ class TestExperimentModel:
                 "experiment_id": experiment.id,
             },
         )
-        ScheduledMessageFactory(
+        ScheduledMessageFactory.create(
             experiment=experiment, team=experiment.team, participant=session.participant, action=event_action
         )
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is True
@@ -778,10 +825,10 @@ class TestExperimentModel:
     @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_with_pipeline(self, delete_openai_assistant_task):
-        assistant = OpenAiAssistantFactory()
-        pipeline = PipelineFactory()
-        NodeFactory(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
-        experiment = ExperimentFactory(pipeline=pipeline)
+        assistant = OpenAiAssistantFactory.create()
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
 
         # For a version, the pipeline should be archived as well as the assistant that it references
         new_version = experiment.create_new_version()
@@ -805,14 +852,16 @@ class TestExperimentModel:
 @pytest.mark.django_db()
 class TestExperimentObjectManager:
     def test_get_default_or_working(self):
-        working_exp = ExperimentFactory(version_number=3)
+        working_exp = ExperimentFactory.create(version_number=3)
         # With no versions, working_exp should be returned
         assert Experiment.objects.get_default_or_working(family_member=working_exp) == working_exp
 
         # With versions, the default version should be returned
         team = working_exp.team
-        exp_v1 = ExperimentFactory(team=team, version_number=2, working_version=working_exp)
-        exp_v2 = ExperimentFactory(team=team, version_number=3, working_version=working_exp, is_default_version=True)
+        exp_v1 = ExperimentFactory.create(team=team, version_number=2, working_version=working_exp)
+        exp_v2 = ExperimentFactory.create(
+            team=team, version_number=3, working_version=working_exp, is_default_version=True
+        )
 
         assert Experiment.objects.get_default_or_working(family_member=working_exp) == exp_v2
         assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
@@ -831,7 +880,7 @@ class TestExperimentObjectManager:
 
     def test_archived_experiments_are_filtered_out(self, team):
         """Default queries should exclude archived experiments"""
-        experiment = ExperimentFactory(team=team)
+        experiment = ExperimentFactory.create(team=team)
         new_version = experiment.create_new_version()
         assert Experiment.objects.filter(team=team).count() == 2
         new_version.is_archived = True
@@ -928,7 +977,7 @@ class TestExperimentTrends:
 
     def test_get_bulk_trend_data_returns_data_for_each_experiment(self, experiment):
         """get_bulk_trend_data returns a mapping of experiment_id -> (successes, errors) for all given IDs."""
-        experiment2 = ExperimentFactory(team=experiment.team)
+        experiment2 = ExperimentFactory.create(team=experiment.team)
         curr_time = timezone.now()
 
         Trace.objects.create(

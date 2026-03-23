@@ -1,14 +1,53 @@
 import contextlib
+from collections import defaultdict
 
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from field_audit import disable_audit
 
+from apps.assistants.models import OpenAiAssistant
 from apps.data_migrations.utils.migrations import (
     is_migration_applied,
     mark_migration_applied,
     run_once,
     update_migration_timestamp,
 )
+from apps.experiments.models import Experiment
+from apps.utils.deletion import get_related_pipelines_queryset
+
+
+def get_affected_teams_data(db_model) -> dict:
+    """Return affected resources per team for a given LlmProviderModel.
+
+    Returns a dict of the form:
+        {team_id: {"chatbots": {name: url}, "pipelines": {name: url}, "assistants": {name: url}}}
+    """
+
+    teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
+
+    related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
+    nodes_by_pipeline = defaultdict(list)
+    pipelines = []
+    for node in related_pipeline_nodes.select_related("pipeline").all():
+        pipelines.append(node.pipeline)
+        nodes_by_pipeline[node.pipeline_id].append(node)
+
+    referenced_experiments = Experiment.objects.filter(pipeline_id__in=list(nodes_by_pipeline)).filter(
+        Q(working_version__isnull=True) | Q(is_default_version=True)
+    )
+    referenced_pipeline_ids = {exp.pipeline_id for exp in referenced_experiments}
+    unreferenced_pipelines = [p for p in pipelines if p.id not in referenced_pipeline_ids]
+
+    referenced_assistants = OpenAiAssistant.objects.filter(llm_provider_model=db_model, working_version__isnull=True)
+
+    for exp in referenced_experiments:
+        teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()
+    for pipeline in unreferenced_pipelines:
+        teams_data[pipeline.team_id]["pipelines"][pipeline.name] = pipeline.get_absolute_url()
+    for assistant in referenced_assistants:
+        teams_data[assistant.team_id]["assistants"][assistant.name] = assistant.get_absolute_url()
+
+    return dict(teams_data)
 
 
 class IdempotentCommand(BaseCommand):

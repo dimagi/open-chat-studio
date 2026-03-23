@@ -7,9 +7,10 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 from functools import cached_property
-from typing import Self
+from typing import Self, cast
 from uuid import uuid4
 
+import dictdiffer
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -36,6 +37,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
@@ -103,6 +105,12 @@ class VersionFieldDisplayFormatters:
     def format_builtin_tools(tools: set) -> str:
         """code_interpreter, file_search -> Code Interpreter, File Search"""
         return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
+
+    @staticmethod
+    def format_custom_action_operation(op) -> str:
+        action = op.custom_action
+        op_details = action.get_operations_by_id().get(op.operation_id)
+        return f"{action.name}: {op_details}"
 
 
 class PromptObjectManager(AuditingManager):
@@ -496,11 +504,16 @@ class AgentTools(models.TextChoices):
     SEARCH_INDEX_BY_ID = "file-search-by-index", gettext("File Search by index ID")
     SET_SESSION_STATE = "set-session-state", gettext("Set Session State")
     GET_SESSION_STATE = "get-session-state", gettext("Get Session State")
+    APPEND_TO_SESSION_STATE = "append-to-session-state", gettext("Append to Session State")
+    INCREMENT_SESSION_STATE_COUNTER = "increment-session-state-counter", gettext("Increment Session State Counter")
     CALCULATOR = "calculator", gettext("Calculator")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
-        return [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE]  # ty: ignore[invalid-return-type]
+        return cast(
+            list[Self],
+            [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE],
+        )
 
     @staticmethod
     def user_tool_choices(include_end_session: bool = True) -> list[tuple]:
@@ -930,7 +943,9 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 self.pipeline.archive()
 
     def delete_experiment_channels(self):
-        from apps.channels.models import ExperimentChannel
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ExperimentChannel,
+        )
 
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
             channel.soft_delete()
@@ -1068,9 +1083,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
         - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
         the instance.
         """
-        from apps.assistants.models import OpenAiAssistant
-        from apps.pipelines.models import Node
-        from apps.pipelines.nodes.nodes import AssistantNode
+        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
+            OpenAiAssistant,
+        )
+        from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models imports experiments.models
+        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
+            AssistantNode,
+        )
 
         if self.pipeline:
             node_name = AssistantNode.__name__
@@ -1143,7 +1162,9 @@ class Participant(BaseTeamModel):
         return self.identifier
 
     def get_platform_display(self):
-        from apps.channels.models import ChannelPlatform
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ChannelPlatform,
+        )
 
         try:
             return ChannelPlatform(self.platform).label
@@ -1217,7 +1238,9 @@ class Participant(BaseTeamModel):
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
         """
-        from apps.events.models import ScheduledMessage
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
+            ScheduledMessage,
+        )
 
         messages = (
             ScheduledMessage.objects.filter(
@@ -1348,8 +1371,6 @@ class ExperimentSessionObjectManager(models.Manager):
         return ExperimentSessionQuerySet(self.model, using=self._db)
 
     def get_table_queryset(self, team, experiment_id=None):
-        from apps.annotations.models import CustomTaggedItem
-
         queryset = self.get_queryset().filter(team=team)
         if experiment_id:
             queryset = queryset.filter(experiment__id=experiment_id)
@@ -1459,7 +1480,9 @@ class ExperimentSession(BaseTeamModel):
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
         one that the experiment session points to. This will happen when the user repurposes the channel to point
         to another experiment."""
-        from apps.channels.models import ChannelPlatform
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ChannelPlatform,
+        )
 
         if self.experiment_channel.platform in ChannelPlatform.team_global_platforms():
             return False
@@ -1493,8 +1516,12 @@ class ExperimentSession(BaseTeamModel):
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
-        from apps.events.models import StaticTriggerType
-        from apps.events.tasks import enqueue_static_triggers
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
+            StaticTriggerType,
+        )
+        from apps.events.tasks import (  # noqa: PLC0415 - circular: events.tasks imports experiments.models
+            enqueue_static_triggers,
+        )
 
         if trigger_type and not commit:
             raise ValueError("Commit must be True when trigger_type is specified")
@@ -1571,8 +1598,10 @@ class ExperimentSession(BaseTeamModel):
         """Sends the `instruction_prompt` along with the chat history to the LLM to formulate an appropriate prompt
         message. The response from the bot will be saved to the chat history.
         """
-        from apps.chat.bots import EventBot
-        from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
+        from apps.chat.bots import EventBot  # noqa: PLC0415 - circular: chat.bots imports experiments.models
+        from apps.service_providers.llm_service.history_managers import (  # noqa: PLC0415 - circular: history_managers imports experiments.models
+            ExperimentHistoryManager,
+        )
 
         experiment = use_experiment or self.experiment
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
@@ -1583,7 +1612,7 @@ class ExperimentSession(BaseTeamModel):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
-        from apps.chat.channels import ChannelBase
+        from apps.chat.channels import ChannelBase  # noqa: PLC0415 - circular: chat.channels imports experiments.models
 
         channel = ChannelBase.from_experiment_session(self)
         channel.send_message_to_user(message)
@@ -1594,6 +1623,26 @@ class ExperimentSession(BaseTeamModel):
             return self.experiment.participantdata_set.get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
             return {}
+
+    @cached_property
+    def latest_trace(self):
+        return self.traces.order_by("-timestamp", "-id").first()
+
+    @cached_property
+    def latest_participant_data(self) -> dict:
+        """Returns the participant data as it exists after the most recent trace in this session.
+
+        If a trace with a diff exists, the diff is applied to the trace's snapshot
+        to reconstruct the final state. Falls back to the experiment-level
+        participant data when no traces exist.
+        """
+        trace = self.latest_trace
+        if trace is None:
+            return self.participant_data_from_experiment
+        snapshot = trace.participant_data or {}
+        if trace.participant_data_diff:
+            return dictdiffer.patch(trace.participant_data_diff, snapshot)
+        return snapshot
 
     @cached_property
     def experiment_version(self) -> Experiment:
@@ -1614,8 +1663,14 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.assistants.models import OpenAiAssistant
-        from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt, RouterNode
+        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
+            OpenAiAssistant,
+        )
+        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
+            AssistantNode,
+            LLMResponseWithPrompt,
+            RouterNode,
+        )
 
         if self.experiment.pipeline:
             assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")

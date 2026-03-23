@@ -50,7 +50,7 @@ def get_evaluator_type_info() -> dict[str, dict[str, str | None]]:
     Returns:
         Dict mapping evaluator class names to their schema info (label, icon)
     """
-    from apps.evaluations import evaluators
+    from apps.evaluations import evaluators  # noqa: PLC0415 - circular: evaluators imports evaluations.utils
 
     evaluator_classes = [
         cls
@@ -80,7 +80,9 @@ def get_evaluators_with_schema(team) -> list[dict]:
     Returns:
         List of dicts containing evaluator info with schema data
     """
-    from apps.evaluations.models import Evaluator
+    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
+        Evaluator,
+    )
 
     evaluator_type_info = get_evaluator_type_info()
 
@@ -212,7 +214,10 @@ def _clean_field_name(field_name):
 
 
 def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:
-    from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
+    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
+        EvaluationMessage,
+        EvaluationMessageContent,
+    )
 
     def _add_additional_context(msg, existing_context):
         if comments := list(msg.comments.all()):

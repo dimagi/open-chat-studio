@@ -46,13 +46,15 @@ class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
-        return {
+        ctx = {
             "active_tab": "annotation_queues",
             "title": "Annotation Queues",
-            "new_object_url": reverse("human_annotations:queue_new", args=[team_slug]),
             "table_url": reverse("human_annotations:queue_table", args=[team_slug]),
             "enable_search": True,
         }
+        if self.request.user.has_perm("human_annotations.add_annotationqueue"):
+            ctx["new_object_url"] = reverse("human_annotations:queue_new", args=[team_slug])
+        return ctx
 
 
 class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
@@ -62,7 +64,7 @@ class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationQueue.objects.filter(team=self.request.team).annotate(
+        return AnnotationQueue.objects.visible_to(self.request.user, self.request.team).annotate(
             _total_items=Count("items"),
             _reviews_done=Sum("items__review_count"),
         )
@@ -128,7 +130,7 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return AnnotationQueue.objects.filter(team=self.request.team).select_related("aggregate")
+        return AnnotationQueue.objects.visible_to(self.request.user, self.request.team).select_related("aggregate")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -156,7 +158,7 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
         return (
             AnnotationItem.objects.filter(
                 queue_id=self.kwargs["pk"],
-                queue__team=self.request.team,
+                queue__in=AnnotationQueue.objects.visible_to(self.request.user, self.request.team),
             )
             .select_related("session", "message", "queue")
             .prefetch_related(
@@ -351,6 +353,39 @@ class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequired
                 "created": created,
             },
         )
+
+
+class RemoveSessionFromQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "human_annotations.delete_annotationitem"
+
+    def get(self, request, team_slug: str, pk: int, item_pk: int):
+        """Return a confirmation modal partial showing what data will be lost."""
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        item = get_object_or_404(
+            AnnotationItem.objects.select_related("session", "queue"),
+            pk=item_pk,
+            queue=queue,
+        )
+        annotations = list(
+            Annotation.objects.filter(item=item, status=AnnotationStatus.SUBMITTED)
+            .select_related("reviewer")
+            .order_by("-created_at")
+        )
+        return render(
+            request,
+            "human_annotations/remove_session_confirm.html",
+            {
+                "queue": queue,
+                "item": item,
+                "annotations": annotations,
+            },
+        )
+
+    def delete(self, request, team_slug: str, pk: int, item_pk: int):
+        item = get_object_or_404(AnnotationItem, pk=item_pk, queue_id=pk, queue__team=request.team)
+        item.delete()
+        messages.success(request, "Session removed from queue.")
+        return HttpResponse()
 
 
 class ManageAssignees(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):

@@ -7,6 +7,7 @@ from . import views
 app_name = "pipelines"
 
 urlpatterns = [
+    path("validate-jinja/", views.validate_jinja, name="validate_jinja"),
     path("data/<int:pk>/", views.pipeline_data, name="pipeline_data"),
     path("<int:pipeline_pk>/message/", views.simple_pipeline_message, name="pipeline_message"),
     path(

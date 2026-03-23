@@ -21,9 +21,11 @@ from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
+from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
+from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineTable
@@ -41,7 +43,7 @@ from ..generics.help import render_help_with_link
 from ..utils.prompt import PromptVars
 
 
-class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class PipelineHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     """View for listing event pipelines."""
 
     permission_required = "pipelines.view_pipeline"
@@ -64,7 +66,7 @@ class PipelineHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         }
 
 
-class PipelineTableView(SingleTableView, PermissionRequiredMixin):
+class PipelineTableView(PermissionRequiredMixin, SingleTableView):
     """Displays a table of event pipelines for the current team."""
 
     permission_required = "pipelines.view_pipeline"
@@ -78,7 +80,7 @@ class PipelineTableView(SingleTableView, PermissionRequiredMixin):
         ).order_by("name")
 
 
-class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class CreatePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.add_pipeline"
     template_name = "pipelines/pipeline_builder.html"
 
@@ -87,7 +89,7 @@ class CreatePipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequired
         return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
 
 
-class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.change_pipeline"
     template_name = "pipelines/pipeline_builder.html"
 
@@ -116,7 +118,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMi
         }
 
 
-class DeletePipeline(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "pipelines.delete_pipeline"
 
     def delete(self, request, team_slug: str, pk: int):
@@ -246,6 +248,7 @@ def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, sy
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
+        OptionsSource.jinja_node: PromptVars.get_jinja_vars(),
         OptionsSource.synthetic_voice_id: sorted(
             [
                 _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
@@ -273,15 +276,15 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
 
 
 def _pipeline_node_schemas():
-    from apps.pipelines.nodes import nodes
+    from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→views
 
     schemas = []
 
     node_classes = [
         cls
-        for _, cls in inspect.getmembers(nodes, inspect.isclass)
-        if issubclass(cls, nodes.PipelineNode | nodes.PipelineRouterNode)
-        and cls not in (nodes.PipelineNode, nodes.PipelineRouterNode)
+        for _, cls in inspect.getmembers(pipeline_nodes, inspect.isclass)
+        if issubclass(cls, pipeline_nodes.PipelineNode | pipeline_nodes.PipelineRouterNode)
+        and cls not in (pipeline_nodes.PipelineNode, pipeline_nodes.PipelineRouterNode)
     ]
     for node_class in node_classes:
         schemas.append(_get_node_schema(node_class))
@@ -290,7 +293,6 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-    from apps.custom_actions.schema_utils import resolve_references
 
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
@@ -312,6 +314,7 @@ def llm_model_parameter_context():
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @login_and_team_required
+@permission_required("pipelines.change_pipeline")
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
@@ -361,3 +364,51 @@ def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
 def get_pipeline_message_response(request, team_slug: str, pipeline_pk: int, task_id: str):
     progress = Progress(AsyncResult(task_id)).get_info()
     return JsonResponse(progress)
+
+
+@login_and_team_required
+@permission_required("pipelines.view_pipeline")
+@require_POST
+def validate_jinja(request, team_slug: str):
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    template = body.get("template")
+    if template is None:
+        return JsonResponse({"error": "Missing 'template' field"}, status=400)
+    if not isinstance(template, str):
+        return JsonResponse({"error": "'template' must be a string"}, status=400)
+
+    if len(template) > 50_000:
+        return JsonResponse({"error": "Template too large (max 50,000 characters)"}, status=400)
+
+    allowed_checks = {"jinja", "html"}
+    checks_raw = body.get("checks", ["jinja", "html"])
+    if not isinstance(checks_raw, list) or not all(isinstance(c, str) for c in checks_raw):
+        return JsonResponse({"error": "'checks' must be a list of strings"}, status=400)
+    checks = set(checks_raw)
+    unknown_checks = checks - allowed_checks
+    if unknown_checks:
+        return JsonResponse({"error": f"Unsupported check(s): {', '.join(sorted(unknown_checks))}"}, status=400)
+    errors = []
+
+    # 1. Jinja syntax validation
+    if "jinja" in checks and template:
+        error = parse_jinja_template(template)
+        if error:
+            errors.append(
+                {
+                    "line": error.lineno or 1,
+                    "column": 0,
+                    "message": error.message,
+                    "severity": "error",
+                }
+            )
+
+    # 2. HTML linting via djlint (only if requested and no Jinja syntax errors)
+    if "html" in checks and not errors and template:
+        errors.extend(djlint_check(template))
+
+    return JsonResponse({"errors": errors})

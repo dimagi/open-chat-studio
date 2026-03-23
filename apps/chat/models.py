@@ -57,7 +57,9 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         """Fetch messages from the database until a marker is found. The marker must be one of the
         PipelineChatHistoryModes values.
         """
-        from apps.pipelines.models import PipelineChatHistoryModes
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+            PipelineChatHistoryModes,
+        )
 
         messages = []
         include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
@@ -152,7 +154,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def make_summary_message(cls, message):
         """A 'summary message' is a special message only ever exists in memory. It is
         not saved to the database. It is used to represent the summary of a chat up to a certain point."""
-        from apps.pipelines.models import PipelineChatHistoryModes
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+            PipelineChatHistoryModes,
+        )
 
         return ChatMessage(
             created_at=message.created_at,
@@ -174,6 +178,19 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return trace_info
 
     @property
+    def participant_data_diff_from_trace(self):
+        """Return participant_data_diff from a prefetched output trace, if any.
+
+        Requires ``prefetched_output_traces_with_diff`` to be set via Prefetch
+        in the queryset. See ``experiment_session_messages_view`` in
+        ``apps/experiments/views/experiment.py``.
+        """
+        traces = getattr(self, "prefetched_output_traces_with_diff", [])
+        if traces:
+            return traces[0].participant_data_diff
+        return None
+
+    @property
     def is_ai_message(self):
         return self.message_type == ChatMessageType.AI
 
@@ -183,7 +200,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_summary(self):
-        from apps.pipelines.models import PipelineChatHistoryModes
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
+            PipelineChatHistoryModes,
+        )
 
         return self.metadata.get("compression_marker") == PipelineChatHistoryModes.SUMMARIZE
 

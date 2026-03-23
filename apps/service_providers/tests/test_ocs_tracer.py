@@ -13,7 +13,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 class TestOCSTracer:
     def test_ending_trace_creates_trace_object(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         # Initially no traces exist
         assert Trace.objects.count() == 0
@@ -42,7 +42,7 @@ class TestOCSTracer:
 
     def test_record_experiment_version(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         with tracer.trace(trace_context=trace_context, session=session):
@@ -60,7 +60,7 @@ class TestOCSTracer:
     def test_trace_error_recording(self, experiment):
         """Test that errors during trace execution are captured in the trace record"""
         tracer = OCSTracer(experiment, experiment.team_id)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         error_message = "Test error message"
@@ -109,7 +109,7 @@ class TestOCSTracerNotifications:
         # Use a published (non-working) version so notification firing is allowed
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -135,7 +135,7 @@ class TestOCSTracerNotifications:
         # Use a published (non-working) version so notification firing is allowed
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         inner_config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
         outer_config = SpanNotificationConfig(permissions=["experiments.view_experiment"])
 
@@ -166,7 +166,7 @@ class TestOCSTracerNotifications:
         # The base experiment fixture is always the working version
         assert experiment.is_working_version
         tracer = self._make_tracer(experiment)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -183,7 +183,7 @@ class TestOCSTracerNotifications:
         # Use a published (non-working) version so the working-version guard doesn't hide the failure
         published = experiment.create_new_version()
         tracer = self._make_tracer(published)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         # No notification_config on span_context
@@ -200,7 +200,7 @@ class TestOCSTracerNotifications:
         # The base experiment fixture is the working version — notification won't fire
         assert experiment.is_working_version
         tracer = self._make_tracer(experiment)
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
@@ -213,3 +213,23 @@ class TestOCSTracerNotifications:
         assert tracer.error_notification_config is None
         assert tracer.error_detected is False
         assert tracer.error_message == ""
+
+
+class TestSetParticipantDataDiff:
+    def test_set_participant_data_diff_stores_diff_on_trace_record(self):
+        experiment = Mock()
+        tracer = OCSTracer(experiment=experiment, team_id=1)
+        tracer.trace_record = Mock()
+
+        diff = [["change", "plan", ["free", "pro"]]]
+        tracer.set_participant_data_diff(diff)
+
+        assert tracer.trace_record.participant_data_diff == diff
+
+    def test_set_participant_data_diff_noop_when_no_trace_record(self):
+        experiment = Mock()
+        tracer = OCSTracer(experiment=experiment, team_id=1)
+        tracer.trace_record = None
+
+        # Should not raise
+        tracer.set_participant_data_diff([["add", "", [["key", "val"]]]])

@@ -1,4 +1,4 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useId, useState, useMemo} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useState, useMemo} from "react";
 import Select from 'react-select';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
@@ -8,7 +8,7 @@ import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
 import {produce} from "immer";
-import {CodeNodeEditor, PromptEditor} from "../components/CodeMirrorEditor";
+import {CodeNodeEditor, JinjaEditor, PromptEditor} from "../components/CodeMirrorEditor";
 import {getInputWidget} from "./GetInputWidget";
 
 
@@ -47,6 +47,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return TextEditorWidget
     case "voice_widget":
         return VoiceWidget
+    case "jinja_template":
+        return JinjaWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -88,7 +90,7 @@ function DefaultWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input w-full"
+        className="input w-full nodrag"
         name={props.name}
         onChange={props.updateParamValue}
         value={props.paramValue}
@@ -120,7 +122,7 @@ function NodeNameWidget(props: WidgetParams) {
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <input
-        className="input w-full"
+        className="input w-full nodrag"
         name={props.name}
         onChange={handleInputChange}
         value={inputValue}
@@ -135,7 +137,7 @@ function NodeNameWidget(props: WidgetParams) {
 function FloatWidget(props: WidgetParams) {
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input w-full"
+      className="input w-full nodrag"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -157,7 +159,7 @@ function RangeWidget(props: WidgetParams) {
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
-      className="input w-full input-sm"
+      className="input w-full input-sm nodrag"
       name={props.name}
       onChange={props.updateParamValue}
       value={props.paramValue}
@@ -213,7 +215,7 @@ function SelectWidget(props: WidgetParams) {
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
+        className="select appearance-none w-full nodrag"
         name={props.name}
         onChange={onUpdate}
         value={props.paramValue}
@@ -375,7 +377,7 @@ export function CodeWidget(props: WidgetParams) {
       <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
         <div className="relative w-full">
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y"
+            className="textarea textarea-bordered resize-none textarea-sm w-full overflow-x-auto overflow-y nodrag"
             readOnly={true}
             rows={3}
             wrap="off"
@@ -506,7 +508,7 @@ function GenerateCodeSection({
       {showGenerate && (
         <div className={"my-2"}>
           <textarea
-            className="textarea textarea-bordered resize-none textarea-sm w-full"
+            className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
             rows={2}
             wrap="off"
             placeholder="Describe what you want the Python Node to do or what issue you are facing"
@@ -580,7 +582,7 @@ export function TextModal(
             {humanName}
           </h4>
           <textarea
-            className="textarea textarea-bordered textarea-lg w-full grow resize-none"
+            className="textarea textarea-bordered textarea-lg w-full grow resize-none nodrag"
             name={name}
             onChange={onChange}
             value={value}
@@ -611,7 +613,7 @@ export function ExpandableTextWidget(props: WidgetParams) {
   return (
     <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
       <textarea
-        className="textarea textarea-bordered resize-none textarea-sm w-full"
+        className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
         rows={3}
         name={props.name}
         onChange={props.updateParamValue}
@@ -924,7 +926,7 @@ export function LlmWidget(props: WidgetParams) {
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
-          className="select appearance-none w-full"
+          className="select appearance-none w-full nodrag"
           name={props.name}
           onChange={updateParamValue}
           value={value}
@@ -1065,7 +1067,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
             <div className="w-64 relative">
               <input
                 type="text"
-                className="input w-full pr-8"
+                className="input w-full pr-8 nodrag"
                 value={displayValue}
                 onChange={handleInputChange}
                 onClick={handleInputClick}
@@ -1147,11 +1149,11 @@ export function HistoryModeWidget(props: WidgetParams) {
 
   return (
     <div className="flex join">
-      <InputField label="History Mode" help_text="">
+      <InputField label="History Mode" help_text={historyModeHelpTexts[historyMode] ?? ""}>
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
-          className="select appearance-none join-item w-full"
+          className="select appearance-none join-item w-full nodrag"
           name="history_mode"
           onChange={(e) => {
             setHistoryMode(e.target.value);
@@ -1166,12 +1168,33 @@ export function HistoryModeWidget(props: WidgetParams) {
             </option>
           ))}
         </select>
-        <small className="text-muted mt-2">{historyModeHelpTexts[historyMode]}</small>
       </InputField>
     </div>
   );
 }
 
+
+function HelpBubble({ helpText }: { helpText: string }) {
+  if (!helpText) return <></>;
+  const parts = helpText.split(/(\{\{[^}]*\}\})/g);
+  const content = parts.map((part, i) =>
+    /^\{\{.*\}\}$/.test(part)
+      ? <span key={i} style={{whiteSpace: "nowrap", overflowWrap: "anywhere"}}>{part}</span>
+      : part
+  );
+  return (
+    <div className="dropdown dropdown-right dropdown-hover">
+      <div role="button" className="btn btn-circle btn-ghost btn-xs text-info" aria-label="Help">
+        <i className="text-xs fa-regular fa-circle-question"></i>
+      </div>
+      <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-80 shadow-sm">
+        <div tabIndex={0} className="card-body font-medium text-wrap normal-case">
+          <p>{content}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
   label: string | ReactNode,
@@ -1181,12 +1204,14 @@ export function InputField({label, help_text, inputError, children}: React.Props
   return (
     <>
       <div className="fieldset w-full capitalize">
-        <label className="label font-bold">{label}</label>
+        <div className="flex items-center gap-1">
+          <label className="label font-bold">{label}</label>
+          <HelpBubble helpText={help_text} />
+        </div>
         {children}
       </div>
-      <div className="flex flex-col">
+      <div>
         <small className="text-red-500">{inputError}</small>
-        <small className="text-muted">{help_text}</small>
       </div>
     </>
   );
@@ -1333,7 +1358,7 @@ export function TextEditorWidget(props: WidgetParams) {
         inputError={props.inputError}
       >
         <div className="relative w-full">
-          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full"
+          <textarea className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
             readOnly={true}
             rows={3}
             value={props.paramValue}
@@ -1403,6 +1428,96 @@ function getAutoCompleteList(list: Array<Option>) {
     return Array.isArray(list) ? list.map((v: Option) => v.value) : []
 }
 
+export function JinjaWidget(props: WidgetParams) {
+  const autocomplete_vars_list: string[] = useMemo(
+    () => getAutoCompleteList(getSelectOptions(props.schema)),
+    [props.schema]
+  );
+  const rows: number = props.schema["ui:rows"] ?? 2;
+  const modalId = useId();
+  const setNode = usePipelineStore((state) => state.setNode);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Single-line fields (rows < 2) skip HTML lint — it's not meaningful for one-liner templates
+  const onValidate = useCallback(
+    (template: string) => apiClient.validateJinja(template, rows < 2 ? ["jinja"] : ["jinja", "html"]),
+    [rows]
+  );
+
+  const onChangeCallback = useCallback((value: string) => {
+    setNode(props.nodeId, produce((draft) => {
+      draft.data.params[props.name] = value;
+    }));
+  }, [props.nodeId, props.name, setNode]);
+
+  const openModal = () => {
+    setIsModalOpen(true);
+    (document.getElementById(modalId) as HTMLDialogElement)?.showModal();
+  };
+
+  const label = (
+    <>
+      {props.label}
+      <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
+        <button type="button" className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+          <i className="fa-solid fa-expand-alt"></i>
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <InputField label={label} help_text={props.helpText} inputError={props.inputError}>
+        {rows < 2 ? (
+          <input
+            className="input input-bordered input-sm w-full nodrag"
+            name={props.name}
+            value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+            onChange={(e) => onChangeCallback(e.target.value)}
+            readOnly={props.readOnly}
+          />
+        ) : (
+          <div className="relative w-full">
+            <textarea
+              className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"
+              readOnly={true}
+              rows={rows}
+              value={props.paramValue}
+              name={props.name}
+            ></textarea>
+            <div className="absolute inset-0 cursor-pointer" onClick={openModal}></div>
+          </div>
+        )}
+      </InputField>
+
+      <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel" onClose={() => setIsModalOpen(false)}>
+        <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
+          <form method="dialog">
+            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+          </form>
+          <div className="grow h-full w-full flex flex-col">
+            <div className="flex items-center gap-1 mb-4">
+              <h4 className="font-bold text-lg capitalize">{props.label}</h4>
+              <HelpBubble helpText={props.helpText} />
+            </div>
+            {isModalOpen && <JinjaEditor
+              value={Array.isArray(props.paramValue) ? props.paramValue.join('') : props.paramValue || ''}
+              onChange={onChangeCallback}
+              readOnly={props.readOnly}
+              autocompleteVars={autocomplete_vars_list}
+              onValidate={onValidate}
+            />}
+          </div>
+          {props.inputError && <div className="text-red-500">{props.inputError}</div>}
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
+    </>
+  );
+}
+
 export function VoiceWidget(props: WidgetParams) {
   const { parameterValues } = getCachedData();
   const setNode = usePipelineStore((state) => state.setNode);
@@ -1428,7 +1543,7 @@ export function VoiceWidget(props: WidgetParams) {
       <select
         // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
         // Should be resolved in future versions of browsers.
-        className="select appearance-none w-full"
+        className="select appearance-none w-full nodrag"
         name={props.name}
         onChange={updateParamValue}
         value={syntheticVoiceId}

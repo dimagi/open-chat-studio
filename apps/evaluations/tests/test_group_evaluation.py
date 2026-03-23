@@ -17,31 +17,32 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory, 
 
 @pytest.fixture()
 def llm_provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def llm_provider_model():
-    return LlmProviderModelFactory(name="gpt-4o")
+    return LlmProviderModelFactory.create(name="gpt-4o")
 
 
 @pytest.mark.django_db()
 def test_group_evaluation_with_multiple_evaluators():
     """Test that evaluation is set up correctly with multiple evaluators"""
-    evaluation_message = EvaluationMessageFactory(
+    evaluation_message = EvaluationMessageFactory.create(
         input={"content": "Test message", "role": "human"},
         output={"content": "Test response", "role": "ai"},
         create_chat_messages=True,
     )
 
     # Create 3 evaluators
-    evaluator1 = EvaluatorFactory(type="LlmEvaluator")
-    evaluator2 = EvaluatorFactory(type="LlmEvaluator")
-    evaluator3 = EvaluatorFactory(type="LlmEvaluator")
+    evaluator1 = EvaluatorFactory.create(type="LlmEvaluator")
+    evaluator2 = EvaluatorFactory.create(type="LlmEvaluator")
+    evaluator3 = EvaluatorFactory.create(type="LlmEvaluator")
 
-    dataset = EvaluationDatasetFactory(messages=[evaluation_message])
+    dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
     evaluation_config = cast(
-        EvaluationConfig, EvaluationConfigFactory(evaluators=[evaluator1, evaluator2, evaluator3], dataset=dataset)
+        EvaluationConfig,
+        EvaluationConfigFactory.create(evaluators=[evaluator1, evaluator2, evaluator3], dataset=dataset),
     )
 
     # Mock the main task
@@ -65,7 +66,7 @@ def test_group_evaluation_with_multiple_evaluators():
 def test_empty_evaluation_config():
     """Test that empty evaluation config is handled correctly"""
     # Create config with no evaluators
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory(evaluators=[]))
+    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[]))
 
     # Mock the main task to see what happens
     with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_task:
@@ -86,7 +87,7 @@ def test_empty_evaluation_config():
 @pytest.mark.django_db()
 def test_chord_completion_callback(team_with_users):
     """Test that the chord completion callback correctly marks evaluation as complete"""
-    evaluation_run = EvaluationRunFactory(team=team_with_users, status=EvaluationRunStatus.PROCESSING)
+    evaluation_run = EvaluationRunFactory.create(team=team_with_users, status=EvaluationRunStatus.PROCESSING)
 
     # Call the completion callback
     mark_evaluation_complete([], evaluation_run.id)
@@ -100,7 +101,7 @@ def test_chord_completion_callback(team_with_users):
 @pytest.mark.django_db()
 def test_chord_completion_callback_already_complete(team_with_users):
     """Test that the callback doesn't change already completed runs"""
-    evaluation_run = EvaluationRunFactory(
+    evaluation_run = EvaluationRunFactory.create(
         team=team_with_users,
         status=EvaluationRunStatus.COMPLETED,  # Already completed
     )

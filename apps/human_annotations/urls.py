@@ -21,6 +21,11 @@ urlpatterns = [
         name="queue_sessions_json",
     ),
     path("queue/<int:pk>/assignees/", queue_views.ManageAssignees.as_view(), name="queue_manage_assignees"),
+    path(
+        "queue/<int:pk>/item/<int:item_pk>/remove/",
+        queue_views.RemoveSessionFromQueue.as_view(),
+        name="queue_remove_item",
+    ),
     path("queue/<int:pk>/export/", queue_views.ExportAnnotations.as_view(), name="queue_export"),
     # Session-side add to queue
     path(

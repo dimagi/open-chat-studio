@@ -33,7 +33,9 @@ class LogAction(EventActionHandlerBase):
 
 class EndConversationAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import StaticTriggerType
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports events.actions
+            StaticTriggerType,
+        )
 
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
         return "Session ended"
@@ -41,7 +43,9 @@ class EndConversationAction(EventActionHandlerBase):
 
 class ScheduleTriggerAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.events.models import ScheduledMessage
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports events.actions
+            ScheduledMessage,
+        )
 
         ScheduledMessage.objects.create(
             experiment=session.experiment, participant=session.participant, team=session.team, action=action
@@ -95,7 +99,9 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import Pipeline
+        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models → events.models → events.actions
+            Pipeline,
+        )
 
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
@@ -132,7 +138,9 @@ class PipelineStartAction(EventActionHandlerBase):
             inputs={"input": input},
             metadata={"action_type": action.action_type, "action_id": action.id, "params": action.params},
         ) as span:
-            from apps.chat.bots import PipelineBot
+            from apps.chat.bots import (  # noqa: PLC0415 - circular: chat.bots → experiments.models → events.models → events.actions
+                PipelineBot,
+            )
 
             bot = PipelineBot(
                 session=session,
@@ -144,6 +152,5 @@ class PipelineStartAction(EventActionHandlerBase):
                 pipeline=pipeline,
                 save_run_to_history=False,
             )
-            # does not support updating participant data or session state
             span.set_outputs({"response": output.content})
         return output.content

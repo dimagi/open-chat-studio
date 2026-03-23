@@ -11,19 +11,22 @@ Before contributing, please make sure you've set up your development environment
 
 ### Provide Feedback
 
-- **Report Bugs / Issues**  
+- **Report Bugs / Issues**
   If you encounter any issues or unexpected behavior in Open Chat Studio or its components, you can [create a new issue](https://github.com/dimagi/open-chat-studio/issues) in the GitHub issue tracker.
 
-- **Propose New Features / Improvements**  
-  If you have a suggestion for improving Open Chat Studio or want to share your ideas, you can open a new [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). If your idea is well-defined, you can also create a [Feature Request Issue](https://github.com/dimagi/open-chat-studio/issues/new?labels=enhancement%2Cfeature&template=feature_request.yml).  
+- **Propose New Features / Improvements**
+  If you have a suggestion for improving Open Chat Studio or want to share your ideas, you can open a new [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). If your idea is well-defined, you can also create a [Feature Request Issue](https://github.com/dimagi/open-chat-studio/issues/new?labels=enhancement%2Cfeature&template=feature_request.yml).
   Provide a detailed description, including use cases, benefits, and potential challenges. Even if your idea is not immediately prioritized, it may still be considered later or taken up by the community.
 
 ### Contribute Code Changes
 
-- **Fix Bugs or Develop New Features**  
+- **Fix Bugs or Develop New Features**
   If you want to help improve Open Chat Studio's codebase, choose an issue from the [GitHub Issue Tracker](https://github.com/dimagi/open-chat-studio/issues) and [create a Pull Request](#3-submit-a-pull-request-pr) addressing it. If you are new, check out the [Good First Issues](https://github.com/orgs/dimagi/projects/3/views/1?filterQuery=label%3A%22good+first+issue%22).
-  
-  Before starting, ensure that the change has not already been implemented. You can build Open Chat Studio using the latest `main` branch and confirm that the modification is still needed. If the feature is complex, discuss it first in the [GitHub Discussions](https://github.com/dimagi/open-chat-studio/discussions).
+
+  Before starting, ensure that the change has not already been implemented. You can build Open Chat Studio using the latest `main` branch and confirm that the modification is still needed.
+
+!!! tip "Discuss before you build"
+    For non-trivial or complex changes, please discuss your design plan before writing code. The GitHub issue is the best place to start — add a comment outlining your approach and get feedback from maintainers. For broader ideas without a dedicated issue, open a [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). Aligning on design early avoids wasted effort and makes reviews much smoother.
 
 ### Improve Documentation
 

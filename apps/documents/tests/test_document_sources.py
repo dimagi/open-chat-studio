@@ -16,7 +16,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
-from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.documents.source_loaders.base import BaseDocumentLoader, SyncResult
 
 
 @pytest.fixture()
@@ -90,7 +90,7 @@ class TestDocumentSourceManager:
         assert files[0].status == FileStatus.PENDING
         file = files[0].file
         assert file.name == "test.md"
-        assert file.content_type == "text/markdown"
+        assert file.content_type == "text/plain"
         assert file.file.read() == b"# Test Document"
         assert "sha" in file.metadata
 
@@ -171,8 +171,6 @@ class TestDocumentSourceManager:
         manager = DocumentSourceManager(document_source)
 
         with patch.object(manager, "_sync_documents") as mock_sync:
-            from apps.documents.source_loaders.base import SyncResult
-
             mock_sync.return_value = SyncResult(success=True, files_added=1)
 
             with patch("apps.documents.document_source_service.create_loader") as mock_create_loader:

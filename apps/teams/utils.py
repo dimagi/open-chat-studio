@@ -5,6 +5,9 @@ from functools import lru_cache
 
 import sentry_sdk
 from django.core.cache import cache
+from django.utils.functional import LazyObject, empty
+
+from apps.teams.models import Team
 
 log = logging.getLogger("ocs.teams")
 _context = ContextVar("team")
@@ -74,7 +77,6 @@ def current_team(team):
 
 def _unwrap_lazy(obj):
     """Unwraps a lazy object if it is one, otherwise returns the object itself."""
-    from django.utils.functional import LazyObject, empty
 
     if isinstance(obj, LazyObject):
         if obj._wrapped is empty:
@@ -93,8 +95,6 @@ def get_slug_for_team(team_id: int):
     cache_key = f"team_slug:{team_id}"
     slug = cache.get(cache_key)
     if slug is None:
-        from apps.teams.models import Team
-
         slug = Team.objects.values_list("slug", flat=True).get(id=team_id)
         # Cache for 24 hours
         cache.set(cache_key, slug, 24 * 3600)

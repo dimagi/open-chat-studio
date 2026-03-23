@@ -13,7 +13,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def team():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.mark.django_db()
@@ -53,7 +53,7 @@ def test_queue_progress_empty(team):
 def test_item_prevents_duplicate_session_in_queue(team):
     user = team.members.first()
     queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user)
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
 
     AnnotationItem.objects.create(
         queue=queue,
@@ -74,7 +74,7 @@ def test_item_prevents_duplicate_session_in_queue(team):
 def test_annotation_prevents_duplicate_reviewer(team):
     user = team.members.first()
     queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user)
-    session = ExperimentSessionFactory(team=team, chat__team=team)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
     item = AnnotationItem.objects.create(
         queue=queue,
         team=team,

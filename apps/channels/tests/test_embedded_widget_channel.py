@@ -88,10 +88,10 @@ class TestEmbeddedWidgetUtils:
 @pytest.mark.django_db()
 class TestEmbeddedWidgetChannelModel:
     def test_channel_usage_check_with_embedded_widget(self):
-        ExperimentChannelFactory(
+        ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "existing_token_123456789012345678"}
         )
-        new_experiment = ExperimentFactory()
+        new_experiment = ExperimentFactory.create()
 
         # Should raise exception for duplicate token usage
         with pytest.raises(ChannelAlreadyUtilizedException):

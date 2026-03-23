@@ -50,7 +50,7 @@ class TracingService:
 
     @classmethod
     def create_for_experiment(cls, experiment) -> Self:
-        from apps.service_providers.tracing.ocs_tracer import OCSTracer
+        from .ocs_tracer import OCSTracer  # noqa: PLC0415 - circular: ocs_tracer→experiments.models→tracing
 
         tracers = []
         if experiment and experiment.id and experiment.team_id:
@@ -271,3 +271,7 @@ class TracingService:
     def set_input_message_id(self, input_message_id: str) -> None:
         for tracer in self._active_tracers:
             tracer.set_input_message_id(input_message_id)
+
+    def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
+        for tracer in self._active_tracers:
+            tracer.set_participant_data_diff(diff)

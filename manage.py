@@ -3,7 +3,6 @@ import os
 import re
 import sys
 
-
 _PORT_ARG_RE = re.compile(r"^\d+$|^[\w.]+:\d+$")
 
 if __name__ == "__main__":

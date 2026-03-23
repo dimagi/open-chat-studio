@@ -9,15 +9,15 @@ from apps.utils.factories.files import FileFactory
 
 @pytest.mark.django_db()
 def test_get_attached_files():
-    assistant = OpenAiAssistantFactory()
-    session = ExperimentSessionFactory()
-    assistant_file1 = FileFactory(external_id="assistant-file-id-1", team=session.chat.team)
-    assistant_file2 = FileFactory(external_id="assistant-file-id-2", team=session.chat.team)
+    assistant = OpenAiAssistantFactory.create()
+    session = ExperimentSessionFactory.create()
+    assistant_file1 = FileFactory.create(external_id="assistant-file-id-1", team=session.chat.team)
+    assistant_file2 = FileFactory.create(external_id="assistant-file-id-2", team=session.chat.team)
     tool_resource = assistant.tool_resources.create(tool_type="code_interpreter")
     tool_resource.files.add(*[assistant_file1, assistant_file2])
 
-    chat_file1 = FileFactory(external_id="chat-file-id-1", team=session.chat.team)
-    chat_file2 = FileFactory(external_id="chat-file-id-2", team=session.chat.team)
+    chat_file1 = FileFactory.create(external_id="chat-file-id-1", team=session.chat.team)
+    chat_file2 = FileFactory.create(external_id="chat-file-id-2", team=session.chat.team)
     chat = session.chat
     attachment = chat.attachments.create(tool_type="code_interpreter")
     attachment.files.add(*[chat_file1, chat_file2])
@@ -37,7 +37,7 @@ def test_get_attached_files():
 @pytest.mark.django_db()
 class TestChatMessage:
     def test_get_processor_bot_tag_name(self):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         human_message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
         ai_message_wo_tag = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
         ai_message_with_tag = ChatMessage.objects.create(
@@ -50,7 +50,7 @@ class TestChatMessage:
         assert ai_message_with_tag.get_processor_bot_tag_name() == "some-bot"
 
     def test_add_version_tag(self):
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
         chat_message1 = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
         chat_message2 = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
         chat_message1.add_version_tag(version_number=1, is_a_version=True)

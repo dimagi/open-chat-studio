@@ -11,8 +11,8 @@ class ContextVarFilter(logging.Filter):
     """Log filter that adds team and request_id from context vars."""
 
     def filter(self, record):
-        from apps.audit.transaction import get_audit_transaction_id
-        from apps.teams.utils import get_current_team
+        from apps.audit.transaction import get_audit_transaction_id  # noqa: PLC0415 - lazy: Django LOGGING startup
+        from apps.teams.utils import get_current_team  # noqa: PLC0415 - lazy: Django LOGGING startup
 
         team = get_current_team()
         record.team = team.slug if team else None

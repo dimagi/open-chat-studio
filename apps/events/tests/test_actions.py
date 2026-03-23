@@ -18,12 +18,12 @@ from apps.utils.pytest import django_db_transactional
 
 @pytest.fixture()
 def session():
-    return ExperimentSessionFactory()
+    return ExperimentSessionFactory.create()
 
 
 @pytest.fixture()
 def pipeline():
-    return PipelineFactory()
+    return PipelineFactory.create()
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)

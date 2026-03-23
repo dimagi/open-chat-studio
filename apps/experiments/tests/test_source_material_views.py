@@ -26,9 +26,9 @@ class TestSourceMaterialTableView:
 
 @pytest.mark.django_db()
 def test_delete(client):
-    team = TeamWithUsersFactory()
+    team = TeamWithUsersFactory.create()
     user = team.members.first()
-    experiment = ExperimentFactory(team=team)
+    experiment = ExperimentFactory.create(team=team)
     client.force_login(user)
     source_material = SourceMaterial.objects.create(
         team=team, owner=user, topic="Testing", description="descripto", material="Meh"

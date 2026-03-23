@@ -41,10 +41,10 @@ class TestDistinctSessionDuplication:
         """
         TEST: Sessions duplicated when filtering by message date range.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
-        session = ExperimentSessionFactory(
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -82,19 +82,19 @@ class TestDistinctSessionDuplication:
         """
         TEST: Experiments duplicated when filtering by platform.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
 
         # Create 2 channels with the same platform for the same experiment
         platform = ChannelPlatform.TELEGRAM
-        channel1 = ExperimentChannelFactory(
+        channel1 = ExperimentChannelFactory.create(
             team=team,
             experiment=experiment,
             platform=platform,
             name="Channel 1",
         )
-        ExperimentChannelFactory(
+        ExperimentChannelFactory.create(
             team=team,
             experiment=experiment,
             platform=platform,
@@ -102,7 +102,7 @@ class TestDistinctSessionDuplication:
         )
 
         # Create session with one of the channels
-        ExperimentSessionFactory(
+        ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -129,18 +129,18 @@ class TestDistinctSessionDuplication:
         """
         TEST: Participants duplicated when filtering by participant_ids.
         """
-        team = TeamFactory()
-        experiment1 = ExperimentFactory(team=team)
-        experiment2 = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
+        team = TeamFactory.create()
+        experiment1 = ExperimentFactory.create(team=team)
+        experiment2 = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
 
         # Create 2 sessions for the same participant
-        ExperimentSessionFactory(
+        ExperimentSessionFactory.create(
             experiment=experiment1,
             participant=participant,
             team=team,
         )
-        ExperimentSessionFactory(
+        ExperimentSessionFactory.create(
             experiment=experiment2,
             participant=participant,
             team=team,
@@ -169,7 +169,7 @@ class TestDistinctAggregationIssues:
 
     def test_session_analytics_no_duplicate_sessions(self):
         DashboardCache.objects.all().delete()
-        session = ExperimentSessionFactory()
+        session = ExperimentSessionFactory.create()
 
         # Create 3 messages at noon to avoid midnight date boundary issues
         now = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
@@ -196,10 +196,10 @@ class TestDistinctAggregationIssues:
         )
 
     def test_bot_performance_accurate_session_count(self):
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
-        session = ExperimentSessionFactory(
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -231,10 +231,10 @@ class TestDistinctAggregationIssues:
         """
         TEST: Message counts duplicated in bot performance data.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
-        session = ExperimentSessionFactory(
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -271,19 +271,19 @@ class TestDistinctComplexFiltering:
         """
         TEST: Sessions duplicated with combined experiment and platform filters.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
 
         # Create channel
-        channel = ExperimentChannelFactory(
+        channel = ExperimentChannelFactory.create(
             team=team,
             experiment=experiment,
             platform=ChannelPlatform.TELEGRAM,
         )
 
         # Create session with the channel
-        session = ExperimentSessionFactory(
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -322,9 +322,9 @@ class TestDistinctComplexFiltering:
         This test creates 3 messages all tagged with the same tag to exercise
         the tag join code path and verify .distinct() properly eliminates duplicates.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
 
         # Create a tag to trigger tag-based filtering
         tag = Tag.objects.create(
@@ -334,7 +334,7 @@ class TestDistinctComplexFiltering:
         )
 
         # Create session with messages
-        session = ExperimentSessionFactory(
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -379,10 +379,10 @@ class TestDistinctQueryOptimization:
         """
         TEST: Verify sessions queryset prevents duplicates from message filtering.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
-        session = ExperimentSessionFactory(
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,
@@ -416,12 +416,12 @@ class TestDistinctQueryOptimization:
         """
         TEST: Verify experiments queryset prevents duplicates from platform filter.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
 
         # Create multiple channels for same experiment
         for _i in range(2):
-            ExperimentChannelFactory(
+            ExperimentChannelFactory.create(
                 team=team,
                 experiment=experiment,
                 platform=ChannelPlatform.TELEGRAM,
@@ -444,17 +444,17 @@ class TestDistinctQueryOptimization:
 @pytest.mark.django_db()
 class TestDistinctChannelPlatformFilter:
     def test_experiments_not_duplicated(self):
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
 
         # Create 2 channels with the same platform
         platform = ChannelPlatform.TELEGRAM
-        ExperimentChannelFactory(
+        ExperimentChannelFactory.create(
             team=team,
             experiment=experiment,
             platform=platform,
         )
-        ExperimentChannelFactory(
+        ExperimentChannelFactory.create(
             team=team,
             experiment=experiment,
             platform=platform,
@@ -485,17 +485,17 @@ class TestDistinctRegressionCases:
 
         The bug manifests as over-counting in aggregations.
         """
-        team = TeamFactory()
+        team = TeamFactory.create()
 
-        participants = [ParticipantFactory(team=team) for _ in range(2)]
-        experiments = [ExperimentFactory(team=team) for _ in range(2)]
+        participants = [ParticipantFactory.create(team=team) for _ in range(2)]
+        experiments = [ExperimentFactory.create(team=team) for _ in range(2)]
 
         # Create 2 sessions per participant-experiment combo
         sessions = []
         for experiment in experiments:
             for participant in participants:
                 for _ in range(2):
-                    session = ExperimentSessionFactory(
+                    session = ExperimentSessionFactory.create(
                         experiment=experiment,
                         participant=participant,
                         team=team,
@@ -540,12 +540,12 @@ class TestDistinctRegressionCases:
         The overview stats should report accurate session counts, but
         without proper distinct(), it may inflate the numbers.
         """
-        team = TeamFactory()
-        experiment = ExperimentFactory(team=team)
-        participant = ParticipantFactory(team=team)
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        participant = ParticipantFactory.create(team=team)
 
         # Create 1 session with 4 messages
-        session = ExperimentSessionFactory(
+        session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=participant,
             team=team,

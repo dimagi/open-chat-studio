@@ -2,6 +2,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from apps.evaluations.aggregation import compute_aggregates_for_run
+from apps.evaluations.models import EvaluationRunAggregate
 from apps.evaluations.tasks import _upload_evaluation_run_results, process_evaluation_results_csv_rows
 from apps.evaluations.views.evaluation_config_views import generate_evaluation_results_column_suggestions
 from apps.utils.factories.evaluations import (
@@ -17,32 +19,32 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 @pytest.fixture()
 def team_with_users():
-    return TeamWithUsersFactory()
+    return TeamWithUsersFactory.create()
 
 
 @pytest.fixture()
 def evaluation_setup(team_with_users, db):
     """Create a complete evaluation setup with evaluators, run, and results"""
     # Create evaluators
-    evaluator1 = EvaluatorFactory(team=team_with_users, name="GPT-4 Evaluator")
-    evaluator2 = EvaluatorFactory(team=team_with_users, name="Claude Evaluator")
+    evaluator1 = EvaluatorFactory.create(team=team_with_users, name="GPT-4 Evaluator")
+    evaluator2 = EvaluatorFactory.create(team=team_with_users, name="Claude Evaluator")
 
     # Create dataset with message
-    message = EvaluationMessageFactory()
-    dataset = EvaluationDatasetFactory(team=team_with_users, messages=[message])
+    message = EvaluationMessageFactory.create()
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[message])
 
     # Create config with evaluators
-    config = EvaluationConfigFactory(team=team_with_users, dataset=dataset)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset)
     config.evaluators.add(evaluator1, evaluator2)
 
     # Create evaluation run
-    run = EvaluationRunFactory(team=team_with_users, config=config)
+    run = EvaluationRunFactory.create(team=team_with_users, config=config)
 
     # Create evaluation results
-    result1 = EvaluationResultFactory(
+    result1 = EvaluationResultFactory.create(
         team=team_with_users, evaluator=evaluator1, message=message, run=run, output={"result": {"existing_score": 8.5}}
     )
-    result2 = EvaluationResultFactory(
+    result2 = EvaluationResultFactory.create(
         team=team_with_users, evaluator=evaluator2, message=message, run=run, output={"result": {"existing_score": 7.0}}
     )
 
@@ -237,8 +239,6 @@ def test_process_csv_no_update_when_value_unchanged(evaluation_setup):
 @pytest.mark.django_db()
 def test_upload_task_recomputes_aggregates(evaluation_setup):
     """Test that uploading CSV results triggers aggregate recalculation"""
-    from apps.evaluations.aggregation import compute_aggregates_for_run
-    from apps.evaluations.models import EvaluationRunAggregate
 
     # Compute initial aggregates
     compute_aggregates_for_run(evaluation_setup["run"])

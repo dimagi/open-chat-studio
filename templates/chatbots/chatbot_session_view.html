@@ -33,9 +33,9 @@
             </a>
           </div>
           {% if perms.experiments.change_experimentsession and not experiment_session.ended_at %}
-            
+
             {% if experiment_session.platform != "web" %}
-              <button type="button" 
+              <button type="button"
                       class="btn btn-sm btn-primary"
                       onclick="document.getElementById('new_session_modal').showModal()">
                 {% translate "New Session" %}
@@ -71,7 +71,7 @@
               </dialog>
             {% endif %}
 
-            <button type="button" 
+            <button type="button"
                     class="btn btn-sm btn-error"
                     onclick="document.getElementById('end_session_modal').showModal()">
               {% translate "End Session" %}
@@ -127,7 +127,16 @@
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
         <div role="tabpanel" class="tab-content pt-3">
           <div class="p-3 border rounded-lg">
-          <pre><code class="text-sm">{{ experiment_session.participant_data_from_experiment|to_json }}</code></pre>
+            {% if experiment_session.latest_trace %}
+              <p class="text-sm text-base-content/60 mb-2">
+                Participant data as of the last message from this session ({{ experiment_session.latest_trace.timestamp }})
+              </p>
+            {% else %}
+              <p class="text-sm text-base-content/60 mb-2">
+                Current participant data (no interactions recorded yet)
+              </p>
+            {% endif %}
+          <pre><code class="text-sm">{{ experiment_session.latest_participant_data|to_json }}</code></pre>
           </div>
         </div>
         <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />

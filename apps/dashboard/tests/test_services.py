@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 
+from ..models import DashboardCache
 from ..services import DashboardService
 
 
@@ -271,7 +272,6 @@ class TestDashboardService:
 
     def test_caching_behavior(self, team, experiment, participant, experiment_session, chat):
         """Test caching behavior in service methods"""
-        from ..models import DashboardCache
 
         service = DashboardService(team)
 

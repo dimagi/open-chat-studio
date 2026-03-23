@@ -85,6 +85,20 @@ export class OcsChat {
   @Prop() buttonShape: 'round' | 'square' = 'square';
 
   /**
+   * Whether to show the launcher button. Set to false to hide the button
+   * and open the chat window programmatically via the `visible` property.
+   */
+  @Prop() showButton: boolean = true;
+
+  /**
+   * The operating mode of the widget.
+   * - 'standard': Default floating window with launcher button.
+   * - 'kiosk': Fills parent container, always visible, no header or launcher button.
+   *   The parent element must establish a containing block (e.g. `position: relative`).
+   */
+  @Prop() mode: 'standard' | 'kiosk' = 'standard';
+
+  /**
    * The text to place in the header.
    */
   @Prop() headerText: '';
@@ -160,6 +174,13 @@ export class OcsChat {
    */
   @Prop({ mutable: true }) pageContext?: Record<string, any>;
 
+  /**
+   * @internal
+   * Optional version number of the chatbot to use. Requires authentication.
+   * This is for internal use only and is not intended for public-facing widgets.
+   */
+  @Prop() versionNumber?: number;
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -218,6 +239,10 @@ export class OcsChat {
       return;
     }
 
+    if (this.isKioskMode()) {
+      this.visible = true;
+    }
+
     await this.initializeTranslations();
 
     // Always try to load existing session if localStorage is available
@@ -242,18 +267,22 @@ export class OcsChat {
     this.chatWindowWidth = varToPixels(windowWidthVar, window.innerWidth, this.chatWindowWidth);
     this.chatWindowFullscreenWidth = varToPixels(fullscreenWidthVar, window.innerWidth, this.chatWindowFullscreenWidth);
     // Initialize button position from computed styles
-    this.initializeButtonPosition();
+    if (this.showButton && !this.isKioskMode()) {
+      this.initializeButtonPosition();
+    }
 
     // Defer state changes to avoid triggering them during componentDidLoad
     setTimeout(() => {
       // Restore visible state after dimensions are read so initializePosition
       // uses the correct CSS-derived chatWindowWidth/chatWindowHeight.
-      if (this.persistentSession && this.isLocalStorageAvailable()) {
+      if (!this.isKioskMode() && this.showButton && this.persistentSession && this.isLocalStorageAvailable()) {
         this.restoreVisibleState();
       }
 
       if (this.visible) {
-        this.initializePosition();
+        if (!this.isKioskMode()) {
+          this.initializePosition();
+        }
       }
 
       // Resume polling for existing session (don't auto-start new sessions)
@@ -398,6 +427,10 @@ export class OcsChat {
         requestBody.participant_name = this.userName;
       }
 
+      if (this.versionNumber != null) {
+        requestBody.version_number = this.versionNumber;
+      }
+
       const data = await this.getChatService().startSession(requestBody);
       this.sessionId = data.session_id;
       this.saveSessionToStorage();
@@ -501,6 +534,9 @@ export class OcsChat {
       }
       if (this.internalPageContext) {
         requestBody.context = this.internalPageContext;
+      }
+      if (this.versionNumber != null) {
+        requestBody.version_number = this.versionNumber;
       }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
@@ -620,6 +656,12 @@ export class OcsChat {
    */
   @Watch('visible')
   async visibilityHandler(visible: boolean) {
+    // Kiosk mode is always visible
+    if (this.isKioskMode() && !visible) {
+      this.visible = true;
+      return;
+    }
+
     this.saveVisibleState(visible);
 
     if (this.isButtonDragging) {
@@ -629,7 +671,9 @@ export class OcsChat {
     }
 
     if (visible) {
-      this.initializePosition();
+      if (!this.isKioskMode()) {
+        this.initializePosition();
+      }
 
       // Resume polling for existing session (don't auto-start new sessions)
       if (this.sessionId) {
@@ -732,6 +776,9 @@ export class OcsChat {
   }
 
   getPositionClasses() {
+    if (this.isKioskMode()) {
+      return 'chat-window-kiosk';
+    }
     if (this.isFullscreen) {
       return 'chat-window-fullscreen';
     }
@@ -750,6 +797,9 @@ export class OcsChat {
   }
 
   getPositionStyles() {
+    if (this.isKioskMode()) {
+      return {};
+    }
     if (this.isFullscreen) {
       const { centeredX } = this.getFullscreenBounds();
       const finalX = centeredX + this.fullscreenPosition.x;
@@ -929,6 +979,7 @@ export class OcsChat {
   };
 
   private handleWindowResize = (): void => {
+    if (this.isKioskMode()) return;
     this.positionInitialized = false;
     this.initializePosition();
 
@@ -1221,6 +1272,9 @@ export class OcsChat {
   }
 
   private renderButton() {
+    if (!this.showButton || this.isKioskMode()) {
+      return null;
+    }
     const buttonText = this.translationManager.get('branding.buttonText', this.buttonText);
     const hasText = !!(buttonText && buttonText.trim());
     const hasCustomIcon = this.iconUrl && this.iconUrl.trim();
@@ -1407,6 +1461,10 @@ export class OcsChat {
     }
   }
 
+  private isKioskMode(): boolean {
+    return this.mode === 'kiosk';
+  }
+
   private isLocalStorageAvailable(): boolean {
     try {
       localStorage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
@@ -1472,52 +1530,54 @@ export class OcsChat {
             class={this.getPositionClasses()}
             style={this.getPositionStyles()}
           >
-            {/* Header */}
-            <div
-              class={`chat-header ${this.isDragging ? 'chat-header-dragging' : 'chat-header-draggable'}`}
-              onMouseDown={this.handleMouseDown}
-              onTouchStart={this.handleTouchStart}
-            >
-              {/* Drag indicator */}
-              <div class="drag-indicator">
-                <div class="drag-dots header-button">
-                  <GripDotsVerticalIcon/>
+            {/* Header — hidden in kiosk mode */}
+            {!this.isKioskMode() && (
+              <div
+                class={`chat-header ${this.isDragging ? 'chat-header-dragging' : 'chat-header-draggable'}`}
+                onMouseDown={this.handleMouseDown}
+                onTouchStart={this.handleTouchStart}
+              >
+                {/* Drag indicator */}
+                <div class="drag-indicator">
+                  <div class="drag-dots header-button">
+                    <GripDotsVerticalIcon/>
+                  </div>
                 </div>
-              </div>
-              <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
-              <div class="header-buttons">
-                {/* New Chat button */}
-                {this.messages.length > 0 && (
+                <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
+                <div class="header-buttons">
+                  {/* New Chat button */}
+                  {this.messages.length > 0 && (
+                    <button
+                      class="header-button"
+                      onClick={() => this.showConfirmationDialog()}
+                      title={this.translationManager.get('window.newChat')}
+                      aria-label={this.translationManager.get('window.newChat')}
+                    >
+                      <PlusWithCircleIcon/>
+                    </button>
+                  )}
+                  {/* Fullscreen toggle button */}
+                  {this.allowFullScreen && <button
+                    class="header-button fullscreen-button"
+                    onClick={() => this.toggleFullscreen()}
+                    title={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
+                    aria-label={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
+                  >
+                    {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
+                  </button>}
+
                   <button
                     class="header-button"
-                    onClick={() => this.showConfirmationDialog()}
-                    title={this.translationManager.get('window.newChat')}
-                    aria-label={this.translationManager.get('window.newChat')}
+                    onClick={() => this.visible = false}
+                    aria-label={this.translationManager.get('window.close')}
                   >
-                    <PlusWithCircleIcon/>
+                    <XMarkIcon/>
                   </button>
-                )}
-                {/* Fullscreen toggle button */}
-                {this.allowFullScreen && <button
-                  class="header-button fullscreen-button"
-                  onClick={() => this.toggleFullscreen()}
-                  title={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
-                  aria-label={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
-                >
-                  {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
-                </button>}
-
-                <button
-                  class="header-button"
-                  onClick={() => this.visible = false}
-                  aria-label={this.translationManager.get('window.close')}
-                >
-                  <XMarkIcon/>
-                </button>
+                </div>
               </div>
-            </div>
+            )}
 
-            {this.showNewChatConfirmation && (
+            {!this.isKioskMode() && this.showNewChatConfirmation && (
               <div class="confirmation-overlay">
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">

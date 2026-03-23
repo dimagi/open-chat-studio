@@ -55,7 +55,7 @@ from apps.web.waf import WafRule, waf_allow
 logger = logging.getLogger("ocs.documents.views")
 
 
-class CollectionHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class CollectionHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "documents.view_collection"
 
@@ -154,7 +154,7 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
     return render(request, "documents/partials/collection_files.html", context)
 
 
-class QueryView(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class QueryView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "documents/collection_query_view.html"
     permission_required = "documents.view_collection"
 
@@ -482,7 +482,7 @@ def download_collection_files(request, team_slug: str, pk: int):
     return render(request, "documents/partials/download_progress.html", context)
 
 
-class CollectionTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     model = Collection
     table_class = CollectionsTable
     template_name = "table/single_table.html"
@@ -519,7 +519,7 @@ class CollectionFormMixin:
         return context
 
 
-class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateView, PermissionRequiredMixin):
+class CreateCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CollectionFormMixin, CreateView):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
@@ -545,7 +545,7 @@ class CreateCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, CreateVie
         return response
 
 
-class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView, PermissionRequiredMixin):
+class EditCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CollectionFormMixin, UpdateView):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
@@ -583,7 +583,7 @@ class EditCollection(LoginAndTeamRequiredMixin, CollectionFormMixin, UpdateView,
         return response
 
 
-class DeleteCollection(LoginAndTeamRequiredMixin, View, PermissionRequiredMixin):
+class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "documents.delete_collection"
 
     def delete(self, request, team_slug: str, pk: int):
@@ -639,7 +639,7 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
 
-class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
+class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
     form_class = CreateCollectionFromAssistantForm
     template_name = "documents/create_from_assistant_form.html"
     permission_required = "documents.add_collection"
@@ -678,7 +678,7 @@ class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, FormView, Permiss
         return HttpResponseRedirect(self.get_success_url())
 
 
-class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, ListView, PermissionRequiredMixin):
+class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, ListView):
     """View to display file chunks for a specific file in a collection with pagination"""
 
     model = FileChunkEmbedding

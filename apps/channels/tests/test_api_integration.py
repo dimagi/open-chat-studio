@@ -16,7 +16,7 @@ from .message_examples import api_messages
 
 @pytest.fixture()
 def experiment(db):
-    return ExperimentFactory(team=TeamWithUsersFactory())
+    return ExperimentFactory.create(team=TeamWithUsersFactory.create())
 
 
 @pytest.mark.django_db()
@@ -56,7 +56,9 @@ def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_s
         identifier=user.email, team=experiment.team, user=user, platform="api"
     )
     channel = ExperimentChannel.objects.get_team_api_channel(experiment.team)
-    session = ExperimentSessionFactory(experiment=experiment, participant=participant, experiment_channel=channel)
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, participant=participant, experiment_channel=channel
+    )
 
     client = ApiTestClient(user, experiment.team)
 
@@ -80,7 +82,7 @@ def test_new_message_to_another_users_session(experiment, client):
     participant, _ = Participant.objects.get_or_create(
         identifier=session_user.email, team=experiment.team, user=session_user, platform="api"
     )
-    session = ExperimentSessionFactory(experiment=experiment, participant=participant)
+    session = ExperimentSessionFactory.create(experiment=experiment, participant=participant)
 
     auth_user = users[0]
     client = ApiTestClient(auth_user, experiment.team)
@@ -130,8 +132,8 @@ def test_create_new_session_and_post_message(mock_response, experiment):
 def test_attachments_returned(mock_response, experiment):
     user = experiment.team.members.first()
 
-    session = ExperimentSessionFactory()
-    file = FileFactory()
+    session = ExperimentSessionFactory.create()
+    file = FileFactory.create()
     mock_chat_message = Mock(spec=ChatMessage, chat=session.chat, content="Fido")
     mock_chat_message.get_attached_files.return_value = [file]
     mock_response.return_value = mock_chat_message

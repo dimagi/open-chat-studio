@@ -4,7 +4,7 @@ from abc import ABC
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, cast
 
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
@@ -19,6 +19,9 @@ from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.context import NodeContext
+
+if TYPE_CHECKING:
+    from apps.pipelines.repository import ORMRepository
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -145,9 +148,13 @@ class PipelineState(dict):
         node_name: str,
         node_id: str,
         output: Any = None,
+        output_metadata: dict[str, Any] | None = None,
         **kwargs,
     ) -> Self:
-        kwargs["outputs"] = {node_name: {"message": output, "node_id": node_id}}
+        node_output = dict(output_metadata) if output_metadata else {}
+        node_output["message"] = output
+        node_output["node_id"] = node_id
+        kwargs["outputs"] = {node_name: node_output}
         kwargs.setdefault("temp_state", {}).update({"outputs": {node_name: output}})
         if output is not None:
             kwargs["messages"] = [output]
@@ -233,6 +240,7 @@ class BasePipelineNode(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _config: RunnableConfig | None = None
+    _repo: "ORMRepository | None" = None
     _incoming_nodes: list[str] | None = None
     _outgoing_nodes: list[str] | None = None
 
@@ -245,7 +253,6 @@ class BasePipelineNode(BaseModel, ABC):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
         """
-        from apps.channels.datamodels import Attachment
 
         if not incoming_nodes:
             # This is the first node in the graph
@@ -254,7 +261,10 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_source"] = None
 
             # init temp state here to avoid having to do it in each place the pipeline is invoked
+            state.setdefault("temp_state", {})
             state["temp_state"]["user_input"] = state["last_node_input"]
+            from apps.channels.datamodels import Attachment  # noqa: PLC0415 - circular: channels.datamodels→events→base
+
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
@@ -282,6 +292,13 @@ class BasePipelineNode(BaseModel, ABC):
                     },
                 )
         return state
+
+    @property
+    def repo(self) -> "ORMRepository":
+        """Access the pipeline repository. Always available during _process()."""
+        if self._repo is None:
+            raise PipelineNodeRunError("ORMRepository not set")
+        return self._repo
 
     @property
     def disabled_tools(self) -> set[str] | None:
@@ -316,6 +333,7 @@ class PipelineNode(BasePipelineNode, ABC):
         self, incoming_nodes: list, outgoing_nodes: list, state: PipelineState, config: RunnableConfig
     ) -> PipelineState | Command:
         self._config = config
+        self._repo = config.get("configurable", {}).get("repo")
         self._incoming_nodes = incoming_nodes
         self._outgoing_nodes = outgoing_nodes
         state = PipelineState(state)
@@ -362,6 +380,7 @@ class PipelineRouterNode(BasePipelineNode):
 
         def router(state: PipelineState, config: RunnableConfig) -> ReturnType:
             self._config = config
+            self._repo = config.get("configurable", {}).get("repo")
 
             state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
@@ -412,6 +431,7 @@ class Widgets(StrEnum):
     key_value_pairs = "key_value_pairs"
     text_editor = "text_editor_widget"
     voice_widget = "voice_widget"
+    jinja_template = "jinja_template"
 
 
 class OptionsSource(StrEnum):
@@ -426,6 +446,7 @@ class OptionsSource(StrEnum):
     built_in_tools_config = "built_in_tools_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
+    jinja_node = "jinja_node"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 
@@ -464,6 +485,9 @@ class UiSchema(BaseModel):
     # when it becomes hidden.
     default_on_show: Any = None
 
+    # Number of rows for textarea-based widgets (e.g. jinja_template). Defaults to 2.
+    rows: int | None = None
+
     def __call__(self, schema: JsonDict):
         if self.widget:
             schema["ui:widget"] = self.widget
@@ -473,6 +497,8 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.rows is not None:
+            schema["ui:rows"] = self.rows
         if self.visible_when is not None:
             if isinstance(self.visible_when, list):
                 schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]

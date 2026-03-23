@@ -65,7 +65,7 @@ class TraceContext:
 
 
 class Tracer(ABC):
-    def __init__(self, type_, config: dict):
+    def __init__(self, type_: str, config: dict):
         self.type = type_
         self.config = config
 
@@ -152,6 +152,10 @@ class Tracer(ABC):
 
     @abstractmethod
     def set_input_message_id(self, input_message_id: str) -> None:
+        pass
+
+    @abstractmethod
+    def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         pass
 
 

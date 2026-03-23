@@ -1,3 +1,5 @@
+import hashlib
+
 from django import forms
 from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
@@ -5,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
 from apps.service_providers.models import LlmProviderModel
+from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
 
 
@@ -253,6 +256,29 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["access_token", "app_secret", "verify_token"]
+
+    business_id = forms.CharField(label=_("WhatsApp Business Account ID"))
+    access_token = forms.CharField(label=_("System User Access Token"))
+    app_secret = forms.CharField(
+        label=_("App Secret"),
+        help_text=_("Used to verify incoming webhook signatures (X-Hub-Signature-256)."),
+    )
+    verify_token = forms.CharField(
+        label=_("Webhook Verify Token"),
+        help_text=_("Token used by Meta to verify the webhook URL. Must match the token configured in your Meta app."),
+    )
+
+    def save(self, instance):
+        instance = super().save(instance)
+        verify_token = self.cleaned_data["verify_token"]
+        instance.extra_data = {
+            "verify_token_hash": hashlib.sha256(verify_token.encode()).hexdigest(),
+        }
+        return instance
+
+
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["api_key"]
 
@@ -287,7 +313,6 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     slack_installation_id = forms.CharField(widget=forms.HiddenInput())
 
     def get_slack_installation(self):
-        from apps.slack.models import SlackInstallation
 
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()

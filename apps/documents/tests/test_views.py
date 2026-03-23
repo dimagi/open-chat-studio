@@ -22,16 +22,20 @@ from apps.utils.factories.team import TeamWithUsersFactory
 class TestEditCollection:
     @pytest.fixture()
     def collection(self):
-        team = TeamWithUsersFactory()
-        return CollectionFactory(
-            name="Tester", team=team, is_index=True, is_remote_index=True, llm_provider=LlmProviderFactory(team=team)
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(
+            name="Tester",
+            team=team,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=LlmProviderFactory.create(team=team),
         )
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @mock.patch("apps.documents.tasks.migrate_vector_stores.delay")
     @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
     def test_update_collection_with_llm_provider_change(self, create_remote_index, migrate_mock, collection, client):
-        new_llm_provider = LlmProviderFactory(team=collection.team)
+        new_llm_provider = LlmProviderFactory.create(team=collection.team)
         new_vector_store_id = "new-store-123"
         create_remote_index.return_value = new_vector_store_id
 
@@ -87,18 +91,18 @@ class TestEditCollection:
 @pytest.mark.django_db()
 class TestDeleteCollection:
     def setup_collection(self, is_index: bool) -> Collection:
-        team = TeamWithUsersFactory()
-        file = FileFactory(team=team, external_id="remote-file-123")
-        collection = CollectionFactory(
+        team = TeamWithUsersFactory.create()
+        file = FileFactory.create(team=team, external_id="remote-file-123")
+        collection = CollectionFactory.create(
             name="Tester",
             team=team,
             is_index=is_index,
             is_remote_index=is_index,
-            llm_provider=LlmProviderFactory(team=team),
+            llm_provider=LlmProviderFactory.create(team=team),
             openai_vector_store_id="store-123",
         )
         collection.files.add(file)
-        return collection  # ty: ignore[invalid-return-type]
+        return collection
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])
@@ -110,12 +114,12 @@ class TestDeleteCollection:
         1. The collection is being used in a pipeline
         2. The collection is being used by a pipeline version, which is being used by some published experiment
         """
-        experiment.pipeline = PipelineFactory()
+        experiment.pipeline = PipelineFactory.create()
         experiment.save()
 
         collection = self.setup_collection(is_index=is_index)
         client.force_login(collection.team.members.first())
-        node = NodeFactory(
+        node = NodeFactory.create(
             pipeline=experiment.pipeline, type="LlmNode", params={"collection_index_ids": [collection.id]}
         )
         experiment.create_new_version()
@@ -152,12 +156,12 @@ class TestDeleteCollection:
 class TestDeleteCollectionFile:
     @pytest.fixture()
     def team_with_user(self):
-        return TeamWithUsersFactory()
+        return TeamWithUsersFactory.create()
 
     def test_delete_file_from_non_indexed_collection(self, team_with_user, client):
         """Test deleting a file from a non-indexed collection when file is not used elsewhere."""
-        collection = CollectionFactory(team=team_with_user, is_index=False)
-        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        collection = CollectionFactory.create(team=team_with_user, is_index=False)
+        file = FileFactory.create(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
 
         client.force_login(team_with_user.members.first())
@@ -178,15 +182,15 @@ class TestDeleteCollectionFile:
         self, is_remote_index, team_with_user, client, remote_index_manager_mock, local_index_manager_mock
     ):
         """Test deleting a file from an indexed collection when file is not used by an assistant."""
-        llm_provider = LlmProviderFactory(team=team_with_user)
-        collection = CollectionFactory(
+        llm_provider = LlmProviderFactory.create(team=team_with_user)
+        collection = CollectionFactory.create(
             team=team_with_user,
             is_index=True,
             is_remote_index=is_remote_index,
             llm_provider=llm_provider,
             openai_vector_store_id="vs-123",
         )
-        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        file = FileFactory.create(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
 
         client.force_login(team_with_user.members.first())
@@ -215,15 +219,15 @@ class TestDeleteCollectionFile:
     ):
         """Test deleting a file from an indexed collection when file is also used by another object."""
         # Setup: Create indexed collection with file
-        llm_provider = LlmProviderFactory(team=team_with_user)
-        collection = CollectionFactory(
+        llm_provider = LlmProviderFactory.create(team=team_with_user)
+        collection = CollectionFactory.create(
             team=team_with_user,
             is_index=True,
             is_remote_index=is_remote_index,
             llm_provider=llm_provider,
             openai_vector_store_id="vs-123",
         )
-        file = FileFactory(team=team_with_user, external_id="file-123", external_source="openai")
+        file = FileFactory.create(team=team_with_user, external_id="file-123", external_source="openai")
         CollectionFile.objects.create(collection=collection, file=file)
 
         # Login user
@@ -260,15 +264,15 @@ class TestDeleteCollectionFile:
 class TestDocumentSourceSyncLogs:
     @pytest.fixture()
     def team_with_user(self):
-        return TeamWithUsersFactory()
+        return TeamWithUsersFactory.create()
 
     @pytest.fixture()
     def collection(self, team_with_user):
-        return CollectionFactory(team=team_with_user, is_index=True)
+        return CollectionFactory.create(team=team_with_user, is_index=True)
 
     @pytest.fixture()
     def document_source(self, collection):
-        return DocumentSourceFactory(collection=collection, source_type="github", auto_sync_enabled=True)
+        return DocumentSourceFactory.create(collection=collection, source_type="github", auto_sync_enabled=True)
 
     def test_view_sync_logs(self, team_with_user, collection, document_source, client):
         """Test viewing sync logs for a document source"""

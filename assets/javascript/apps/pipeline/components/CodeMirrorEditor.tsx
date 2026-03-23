@@ -1,11 +1,13 @@
 import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
 import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import CodeMirror, {EditorState} from "@uiw/react-codemirror";
 import {autocompletion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
 import {python} from "@codemirror/lang-python";
 import {EditorView} from "@codemirror/view";
 import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
+import {jinja} from "@codemirror/lang-jinja";
+import {linter, Diagnostic} from "@codemirror/lint";
 
 const githubDark = githubDarkInit({
   "settings": {
@@ -19,6 +21,12 @@ const githubLight = githubLightInit({
     fontFamily: 'ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
   }
 })
+
+const EDITOR_BASIC_SETUP = {
+  lineNumbers: true,
+  tabSize: 4,
+  indentOnInput: true,
+};
 
 export function CodeMirrorEditor(props: ReactCodeMirrorProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -43,11 +51,7 @@ export function CodeMirrorEditor(props: ReactCodeMirrorProps) {
     height: "100%",
     width: "100%",
     theme: isDarkMode ? githubDark : githubLight,
-    basicSetup: {
-      lineNumbers: true,
-      tabSize: 4,
-      indentOnInput: true,
-    }
+    basicSetup: EDITOR_BASIC_SETUP,
   }
   const p = {...props, ...overrides}
   return <CodeMirror {...p} />;
@@ -251,5 +255,64 @@ export function PromptEditor(
       EditorState.readOnly.of(true),
     ]
   }
+  return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
+}
+
+
+export type ValidateFn = (template: string) => Promise<{errors: Array<{line: number, column: number, message: string, severity: string}>}>;
+
+function jinjaLinter(onValidate: ValidateFn) {
+  return linter(async (view): Promise<Diagnostic[]> => {
+    const doc = view.state.doc.toString();
+    if (!doc.trim()) return [];
+
+    try {
+      const result = await onValidate(doc);
+      return result.errors.map((err) => {
+        const line = Math.min(err.line, view.state.doc.lines);
+        const lineObj = view.state.doc.line(line);
+        const from = lineObj.from + Math.min(err.column, lineObj.length);
+        const to = Math.min(from + 1, lineObj.to);
+        return {
+          from,
+          to,
+          severity: err.severity === "error" ? "error" : "warning",
+          message: err.message,
+        } as Diagnostic;
+      });
+    } catch (e: unknown) {
+      console.warn("Jinja linter request failed:", e);
+      const message =
+        typeof e === "object" && e !== null && "error" in e && typeof (e as {error?: unknown}).error === "string"
+          ? (e as {error: string}).error
+          : "Template validation is temporarily unavailable";
+      return [{from: 0, to: Math.min(1, view.state.doc.length), severity: "warning", message}];
+    }
+  }, {delay: 500});
+}
+
+export function JinjaEditor(
+  {value, onChange, readOnly, autocompleteVars, onValidate}: {
+    value: string;
+    onChange: (value: string) => void;
+    readOnly: boolean;
+    autocompleteVars: string[];
+    onValidate?: ValidateFn;
+  }
+) {
+  const extensions = useMemo(() => {
+    const jinjaVariables = autocompleteVars.map((v) => ({ label: v, type: "variable" }));
+    const exts = [
+      jinja({ variables: jinjaVariables }),
+      EditorView.lineWrapping,
+    ];
+    if (onValidate && !readOnly) {
+      exts.push(jinjaLinter(onValidate));
+    }
+    if (readOnly) {
+      exts.push(EditorView.editable.of(false), EditorState.readOnly.of(true));
+    }
+    return exts;
+  }, [autocompleteVars, onValidate, readOnly]);
   return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
 }

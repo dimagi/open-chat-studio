@@ -34,7 +34,7 @@ from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.forms import ExperimentVersionForm
+from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import async_create_experiment_version
@@ -169,7 +169,7 @@ def chatbots_home(request, team_slug: str):
     return home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
-class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
@@ -246,7 +246,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, SingleTableView, Per
         return queryset
 
 
-class CreateChatbot(LoginAndTeamRequiredMixin, CreateView, PermissionRequiredMixin):
+class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Experiment
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
@@ -330,7 +330,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
 
 
-class EditChatbot(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.change_pipeline"
     template_name = "pipelines/pipeline_builder.html"
 
@@ -378,7 +378,7 @@ def archive_chatbot(request, team_slug: str, pk: int):
     return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
 
 
-class CreateChatbotVersion(LoginAndTeamRequiredMixin, FormView, PermissionRequiredMixin):
+class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
     model = Experiment
     form_class = ExperimentVersionForm
     template_name = "experiments/create_version_form.html"
@@ -501,7 +501,7 @@ def chatbot_version_create_status(
     )
 
 
-class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     """View for rendering chatbot sessions table with filtering support."""
 
     model = ExperimentSession
@@ -661,7 +661,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-    from apps.experiments.forms import ExperimentInvitationForm
 
     form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
     if request.method == "POST":
@@ -676,8 +675,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                from django.db import transaction
-
                 with transaction.atomic():
                     session = WebChannel.start_new_session(
                         chatbot,
@@ -686,8 +683,6 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                         timezone=request.session.get("detected_tz", None),
                     )
                 if post_form.cleaned_data["invite_now"]:
-                    from apps.experiments.email import send_experiment_invitation
-
                     send_experiment_invitation(session)
         else:
             form = post_form
@@ -834,7 +829,7 @@ def home(
     )
 
 
-class AllSessionsHome(LoginAndTeamRequiredMixin, TemplateView, PermissionRequiredMixin):
+class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "experiments.view_experimentsession"
 

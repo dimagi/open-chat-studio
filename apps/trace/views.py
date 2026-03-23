@@ -31,7 +31,7 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequiredMixin):
+class TraceTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
     model = Trace
     table_class = TraceTable
@@ -50,7 +50,7 @@ class TraceTableView(LoginAndTeamRequiredMixin, SingleTableView, PermissionRequi
         return trace_filter.apply(queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
 
-class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
+class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DetailView):
     model = Trace
     template_name = "trace/trace_detail.html"
     permission_required = "trace.view_trace"
@@ -74,7 +74,7 @@ class TraceDetailView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredM
         )
 
 
-class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, DetailView, PermissionRequiredMixin):
+class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DetailView):
     model = Trace
     template_name = "trace/partials/langfuse_spans.html"
     permission_required = "trace.view_trace"

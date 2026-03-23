@@ -12,7 +12,7 @@ from apps.web.views import ADMIN_SLUG
 
 @pytest.fixture()
 def superuser():
-    return UserFactory(is_superuser=True, is_staff=True)
+    return UserFactory.create(is_superuser=True, is_staff=True)
 
 
 @pytest.fixture()
@@ -32,7 +32,7 @@ def test_admin_site_redirects_to_sudo_access(superuser, authed_client):
 
 @pytest.mark.django_db()
 def test_escalation_renders_when_accessing_other_team(superuser, authed_client):
-    other_team = TeamFactory()
+    other_team = TeamFactory.create()
     response = authed_client.get(reverse("web_team:home", args=[other_team.slug]))
     assert response.status_code == 404
     sudo_url = reverse("web:sudo", args=[other_team.slug])
@@ -44,7 +44,7 @@ def test_escalation_does_not_render_when_for_non_superuser(superuser, authed_cli
     superuser.is_superuser = False
     superuser.save()
 
-    other_team = TeamFactory()
+    other_team = TeamFactory.create()
     response = authed_client.get(reverse("web_team:home", args=[other_team.slug]))
     assert response.status_code == 404
     sudo_url = reverse("web:sudo", args=[other_team.slug])

@@ -4,7 +4,7 @@ import logging
 import re
 from functools import cached_property
 from io import BytesIO
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
 from django.db.models import Q
@@ -159,16 +159,19 @@ class LlmService(pydantic.BaseModel):
 class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
+    # Subclasses can override this to enable the OpenAI Responses API.
+    # Generic OpenAI-compatible providers (e.g. Groq, Perplexity) do not support it.
+    _use_responses_api: ClassVar[bool] = False
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_openai.chat_models import ChatOpenAI
+        from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         model_kwargs = self._get_model_kwargs(**kwargs)
         if "temperature" in model_kwargs and llm_model.startswith(("o3", "o4", "gpt-5", "o1")):
             # Remove the temperature parameter for custom reasoning models
             model_kwargs.pop("temperature")
 
-        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=True)
+        model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=self._use_responses_api)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
@@ -193,6 +196,66 @@ class OpenAIGenericService(LlmService):
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
+
+
+class OpenAILlmService(OpenAIGenericService):
+    openai_api_base: str | None = None
+    openai_organization: str | None = None
+    # OpenAI supports the Responses API; enable it for this service
+    _use_responses_api: ClassVar[bool] = True
+
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        return {
+            **super()._get_model_kwargs(**kwargs),
+            "openai_organization": self.openai_organization,
+        }
+
+    def get_raw_client(self) -> OpenAI:
+        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+
+    def get_assistant(self, assistant_id: str, as_agent=False):
+        from apps.service_providers.llm_service.openai_assistant import (  # noqa: PLC0415 - lazy: isolates heavy langchain_classic dep
+            OpenAIAssistantRunnable,
+        )
+
+        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
+
+    def transcribe_audio(self, audio: BytesIO) -> str:
+        transcript = self.get_raw_client().audio.transcriptions.create(
+            model="whisper-1",
+            file=audio,
+        )
+        return transcript.text
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        tools = []
+        for tool_name in built_in_tools:
+            if tool_name == "web-search":
+                tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
+            elif tool_name == "code-execution":
+                tools.append(OpenAIBuiltinTool({"type": "code_interpreter", "container": {"type": "auto"}}))
+            else:
+                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
+        return tools
+
+    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            OpenAIRemoteIndexManager,
+        )
+
+        return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
+
+    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            OpenAILocalIndexManager,
+        )
+
+        return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
+
+    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
+        file_ids_param = NOT_GIVEN if file_ids is None else file_ids
+        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
+        return vector_store.id
 
     def get_cited_file_ids(self, annotation_entries: list[dict]) -> list[str]:
         """Returns the file ids from the annotation entries of type file_citation
@@ -279,65 +342,13 @@ class OpenAIGenericService(LlmService):
         return re.sub(pattern, replacement, text)
 
 
-class OpenAILlmService(OpenAIGenericService):
-    openai_api_base: str | None = None
-    openai_organization: str | None = None
-
-    def _get_model_kwargs(self, **kwargs) -> dict:
-        return {
-            **super()._get_model_kwargs(**kwargs),
-            "openai_organization": self.openai_organization,
-        }
-
-    def get_raw_client(self) -> OpenAI:
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
-
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
-
-    def transcribe_audio(self, audio: BytesIO) -> str:
-        transcript = self.get_raw_client().audio.transcriptions.create(
-            model="whisper-1",
-            file=audio,
-        )
-        return transcript.text
-
-    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
-        tools = []
-        for tool_name in built_in_tools:
-            if tool_name == "web-search":
-                tools.append(OpenAIBuiltinTool({"type": "web_search_preview"}))
-            elif tool_name == "code-execution":
-                tools.append(OpenAIBuiltinTool({"type": "code_interpreter", "container": {"type": "auto"}}))
-            else:
-                raise ValueError(f"Unsupported built-in tool for openai: '{tool_name}'")
-        return tools
-
-    def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
-
-        return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
-
-    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
-
-        return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
-
-    def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
-        file_ids_param = NOT_GIVEN if file_ids is None else file_ids
-        vector_store = self.get_raw_client().vector_stores.create(name=name, file_ids=file_ids_param)
-        return vector_store.id
-
-
 class AzureLlmService(LlmService):
     openai_api_key: str
     openai_api_base: str
     openai_api_version: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_openai.chat_models import AzureChatOpenAI
+        from langchain_openai.chat_models import AzureChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
@@ -359,7 +370,7 @@ class AnthropicLlmService(LlmService):
     anthropic_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_anthropic import ChatAnthropic
+        from langchain_anthropic import ChatAnthropic  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
@@ -413,7 +424,7 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_base: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_openai.chat_models import ChatOpenAI
+        from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatOpenAI(
             model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
@@ -430,7 +441,7 @@ class GoogleLlmService(LlmService):
     google_api_key: str
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
@@ -452,7 +463,9 @@ class GoogleLlmService(LlmService):
         # return tools
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import GoogleLocalIndexManager
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            GoogleLocalIndexManager,
+        )
 
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
 
@@ -463,7 +476,7 @@ class GoogleVertexAILlmService(LlmService):
     api_transport: Literal["grpc", "rest"] = "grpc"
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_google_vertexai import ChatVertexAI
+        from langchain_google_vertexai import ChatVertexAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatVertexAI(
             model=llm_model,
@@ -483,7 +496,7 @@ class GoogleVertexAILlmService(LlmService):
 
     @cached_property
     def credentials(self):
-        from google.oauth2 import service_account
+        from google.oauth2 import service_account  # noqa: PLC0415 - lazy: only needed for Google Vertex AI provider
 
         try:
             return service_account.Credentials.from_service_account_info(self.credentials_json)

@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 import backoff
 import httpx
+import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
@@ -49,11 +50,9 @@ class MessagingService(pydantic.BaseModel):
         """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
 
-    def is_valid_number(self, number: str) -> bool:
-        """Returns False if `number` does not belong to this account. Returns `True` by default so that this
-        doesn't prevent users from adding numbers if we cannot check the account.
-        """
-        return True
+    def resolve_number(self, number: str) -> str | None:
+        """Returns `number` if the number is verified to belong to the account, otherwise return `None`"""
+        return number
 
 
 class TwilioService(MessagingService):
@@ -78,14 +77,14 @@ class TwilioService(MessagingService):
 
     @property
     def client(self) -> "Client":
-        from twilio.rest import Client
+        from twilio.rest import Client  # noqa: PLC0415 - lazy: optional provider dep (twilio SDK)
 
         return Client(self.account_sid, self.auth_token)
 
     @property
     def s3_client(self):
-        import boto3
-        from botocore.client import Config
+        import boto3  # noqa: PLC0415 - TID253: heavy lib, slow startup
+        from botocore.client import Config  # noqa: PLC0415 - lazy: used with boto3
 
         return boto3.client(
             "s3",
@@ -190,21 +189,19 @@ class TwilioService(MessagingService):
         family, sub_type = content_type.split("/", 1)
         if family != "audio":
             raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
-        converted = audio.convert_audio(data, target_format="wav", source_format=sub_type)
-        data.seek(0)
-        return converted
+        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def _get_account_numbers(self) -> list[str]:
         """Returns all numbers associated with this client account"""
-        return [num.phone_number for num in self.client.incoming_phone_numbers.list()]  # ty: ignore[invalid-return-type]
+        return [num.phone_number for num in self.client.incoming_phone_numbers.list() if num.phone_number is not None]
 
-    def is_valid_number(self, number: str) -> bool:
+    def resolve_number(self, number: str) -> str | None:
         if settings.DEBUG:
             # The sandbox number doesn't belong to any account, so this check will always fail. For dev purposes
-            # let's just always return True
-            return True
+            # let's just always return the number
+            return number
 
-        return number in self._get_account_numbers()
+        return number if number in self._get_account_numbers() else None
 
     def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
@@ -225,7 +222,7 @@ class TurnIOService(MessagingService):
 
     @property
     def client(self) -> "TurnClient":
-        from turn import TurnClient
+        from turn import TurnClient  # noqa: PLC0415 - lazy: optional provider dep (Turn SDK)
 
         return TurnClient(token=self.auth_token)
 
@@ -267,7 +264,7 @@ class TurnIOService(MessagingService):
         mime = file.content_type
         size = file.content_size or 0  # in bytes
 
-        if mime is None:
+        if not mime:
             return False
 
         if mime.startswith("image/"):
@@ -335,6 +332,121 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
 
 
+class MetaCloudAPIService(MessagingService):
+    _type: ClassVar[str] = "meta_cloud_api"
+    supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
+    voice_replies_supported: ClassVar[bool] = True
+    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+
+    access_token: str
+    business_id: str
+    app_secret: str = ""
+    verify_token: str = ""
+
+    META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
+    META_API_TIMEOUT: ClassVar[int] = 30
+    WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
+
+    @property
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+    def resolve_number(self, number: str) -> str | None:
+        """Look up the phone number ID for the given E.164 phone number
+        using the WhatsApp Business Account Phone Number Management API."""
+        url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
+        response = httpx.get(
+            url, headers=self._headers, params={"fields": "id,display_phone_number"}, timeout=self.META_API_TIMEOUT
+        )
+        response.raise_for_status()
+        for entry in response.json().get("data", []):
+            display = entry.get("display_phone_number", "")
+            try:
+                parsed = phonenumbers.parse(display)
+                normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            except phonenumbers.NumberParseException:
+                continue
+            if normalized == number:
+                return entry["id"]
+        return None
+
+    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
+        for chunk in chunks:
+            data = {
+                "messaging_product": "whatsapp",
+                "to": to,
+                "type": "text",
+                "text": {"body": chunk},
+            }
+            response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+            response.raise_for_status()
+
+    def send_voice_message(
+        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+    ):
+        voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
+        media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg")
+
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        data = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "audio",
+            "audio": {"id": media_id},
+        }
+        response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+        response.raise_for_status()
+
+    def _upload_media(self, phone_number_id: str, file_bytes: bytes, mime_type: str) -> str:
+        url = f"{self.META_API_BASE_URL}/{phone_number_id}/media"
+        response = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {self.access_token}"},
+            data={"messaging_product": "whatsapp", "type": mime_type},
+            files={"file": ("audio.ogg", BytesIO(file_bytes), mime_type)},
+            timeout=self.META_API_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()["id"]
+
+    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
+        media_url = self._get_media_url(message.media_id)
+        response = httpx.get(
+            media_url,
+            headers=self._headers,
+            follow_redirects=True,
+            timeout=self.META_API_TIMEOUT,
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise AudioConversionError("Unable to fetch message media") from e
+
+        data = BytesIO(response.content)
+        content_type = response.headers["Content-Type"]
+        message.cached_media_data = MediaCache(content_type=content_type, data=data)
+
+        family, sub_type = content_type.split("/", 1)
+        if family != "audio":
+            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+
+        return audio.convert_audio(data, target_format="wav", source_format=sub_type)
+
+    def _get_media_url(self, media_id: str) -> str:
+        url = f"{self.META_API_BASE_URL}/{media_id}"
+        response = httpx.get(url, headers=self._headers, timeout=self.META_API_TIMEOUT)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise AudioConversionError("Unable to resolve media URL") from e
+        return response.json()["url"]
+
+
 class SlackService(MessagingService):
     _type: ClassVar[str] = "slack"
     supported_platforms: ClassVar[list] = [ChannelPlatform.SLACK]
@@ -357,7 +469,7 @@ class SlackService(MessagingService):
     @property
     def client(self) -> "WebClient":
         if not self._client:
-            from apps.slack.client import get_slack_client
+            from apps.slack.client import get_slack_client  # noqa: PLC0415 - lazy: optional slack_sdk/slack_bolt deps
 
             self._client = get_slack_client(self.slack_installation_id)
         return self._client
@@ -376,7 +488,7 @@ class SlackService(MessagingService):
                 return channel
 
     def join_channel(self, channel_id: str):
-        from slack_sdk.errors import SlackApiError
+        from slack_sdk.errors import SlackApiError  # noqa: PLC0415 - lazy: optional provider dep (slack_sdk)
 
         try:
             self.client.conversations_info(channel=channel_id)

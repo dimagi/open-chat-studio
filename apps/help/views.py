@@ -21,8 +21,17 @@ def run_agent(request, team_slug: str, agent_name: str):
 
     try:
         body = json.loads(request.body)
+    except json.JSONDecodeError as e:
+        logger.error("Agent '%s' input error: %s", agent_name, e)
+        return JsonResponse({"error": "Invalid input."}, status=400)
+
+    if not isinstance(body, dict):
+        return JsonResponse({"error": "Invalid input."}, status=400)
+
+    try:
+        body["team_id"] = request.team.id
         agent = agent_cls(input=body)
-    except (json.JSONDecodeError, ValidationError) as e:
+    except ValidationError as e:
         logger.error("Agent '%s' input error: %s", agent_name, e)
         return JsonResponse({"error": "Invalid input."}, status=400)
 

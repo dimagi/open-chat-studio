@@ -7,7 +7,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.agent.tools import get_assistant_tools
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
@@ -107,7 +107,7 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     @transaction.atomic()
     def create_new_version(self):  # ty: ignore[invalid-method-override]
-        from .sync import push_assistant_to_openai
+        from .sync import push_assistant_to_openai  # noqa: PLC0415 - circular: sync.py imports assistants.models
 
         version_number = self.version_number
         self.version_number = version_number + 1
@@ -137,7 +137,9 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         return assistant_version
 
     def archive(self):
-        from apps.assistants.tasks import delete_openai_assistant_task
+        from apps.assistants.tasks import (  # noqa: PLC0415 - circular: tasks.py → sync.py → assistants.models
+            delete_openai_assistant_task,
+        )
 
         if self._is_actively_used:
             return False
@@ -195,7 +197,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.experiments.models import VersionFieldDisplayFormatters
 
         return VersionDetails(
             instance=self,

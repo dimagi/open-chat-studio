@@ -4,6 +4,7 @@ import textwrap
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import dictdiffer
 from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
@@ -12,9 +13,11 @@ from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData, SyntheticVoice
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
 from apps.pipelines.nodes.base import Intents, PipelineState
+from apps.pipelines.nodes.helpers import temporary_session
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -23,7 +26,6 @@ from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
-    from apps.experiments.models import SyntheticVoice
 
 
 def create_conversation(
@@ -100,6 +102,10 @@ class PipelineBot:
             )
         else:
             ai_message = ChatMessage(content=output)
+
+        if self.session is not None:
+            self._persist_pipeline_state(input_state, output)
+
         self._process_intents(output)
         self.synthetic_voice_id = output.get("synthetic_voice_id", None)
         return ai_message
@@ -131,12 +137,14 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.experiments.models import AgentTools
-        from apps.pipelines.graph import PipelineGraph
+        from apps.pipelines.graph import (  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
+            PipelineGraph,
+        )
 
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
+                "repo": ORMRepository(session=self.session),
                 "disabled_tools": AgentTools.reminder_tools() if self.disable_reminder_tools else [],
             },
             run_name_map=graph.node_id_to_name_mapping,
@@ -196,12 +204,20 @@ class PipelineBot:
             flat_tags = [f"{category}:{tag}" if category else tag for tag, category in output_tags]
             self.trace_service.add_output_message_tags_to_trace(flat_tags)
 
+        return ai_message
+
+    def _persist_pipeline_state(self, input_state, output):
+        """Persist pipeline state changes (participant data, session state, tags) to the database."""
+
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
 
         out_pd = output.get("participant_data", None)
         if out_pd is not None and out_pd != input_state.get("participant_data"):
+            if self.trace_service:
+                diff = list(dictdiffer.diff(input_state.get("participant_data", {}), out_pd))
+                self.trace_service.set_participant_data_diff(diff)
             self.participant_data.data = out_pd
             self.participant_data.save(update_fields=["data"])
             self.session.participant.update_name_from_data(out_pd)
@@ -210,7 +226,6 @@ class PipelineBot:
         if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
             self.session.save(update_fields=["state"])
-        return ai_message
 
     def _process_intents(self, pipeline_output: dict):
         for intent in pipeline_output.get("intents", []):
@@ -235,8 +250,6 @@ class PipelineBot:
         return chat_message
 
     def get_synthetic_voice(self) -> SyntheticVoice | None:
-        from apps.experiments.models import SyntheticVoice
-
         if self.synthetic_voice_id is None:
             return None
         return SyntheticVoice.objects.filter(
@@ -271,14 +284,16 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import PipelineGraph
-        from apps.pipelines.nodes.helpers import temporary_session
+        from apps.pipelines.graph import (  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
+            PipelineGraph,
+        )
 
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             state = PipelineState(messages=[input], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
-            output = runner.invoke(runnable, state)
+            output = runner.invoke(runnable, state, config)
             output = PipelineState(**output).json_safe()
         return output
 
@@ -379,7 +394,8 @@ class EventBot:
 
     @property
     def system_prompt(self):
-        context = PromptTemplateContext(self.session, None).get_context(["participant_data", "current_datetime"])
+        repo = ORMRepository(session=self.session)
+        context = PromptTemplateContext(self.session, repo=repo).get_context(["participant_data", "current_datetime"])
         context["conversation_history"] = self.get_conversation_history()
         return self.SYSTEM_PROMPT.format(**context)
 

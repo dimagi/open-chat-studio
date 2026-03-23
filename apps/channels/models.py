@@ -1,5 +1,5 @@
 import uuid
-from typing import Self
+from typing import Self, cast
 
 from django.conf import settings
 from django.db import models
@@ -41,7 +41,9 @@ class ChannelPlatform(models.TextChoices):
     @classmethod
     def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
         """Returns a dictionary of available platforms for this team. Available platforms will have a `True` value"""
-        from apps.service_providers.models import MessagingProvider
+        from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
+            MessagingProvider,
+        )
 
         all_platforms = cls.as_list(exclude=[cls.API, cls.WEB, cls.EVALUATIONS])
         platform_availability = {platform: False for platform in all_platforms}
@@ -66,15 +68,15 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform)
 
-        return platform_availability  # ty: ignore[invalid-return-type]
+        return cast(dict[Self, bool], platform_availability)
 
     def form(self, experiment: Experiment):
-        from apps.channels.forms import ChannelForm
+        from apps.channels.forms import ChannelForm  # noqa: PLC0415 - circular: channels.forms imports channels.models
 
         return ChannelForm(initial={"platform": self}, experiment=experiment)
 
     def extra_form(self, **kwargs):
-        from apps.channels import forms
+        from apps.channels import forms  # noqa: PLC0415 - circular: channels.forms imports channels.models
 
         match self:
             case self.TELEGRAM:
@@ -231,7 +233,9 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def webhook_url(self) -> str:
         """The wehook URL that should be used in external services"""
-        from apps.service_providers.models import MessagingProviderType
+        from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
+            MessagingProviderType,
+        )
 
         if not self.messaging_provider:
             return ""
@@ -241,6 +245,8 @@ class ExperimentChannel(BaseTeamModel):
             uri = reverse("channels:new_twilio_message")
         elif provider_type == MessagingProviderType.turnio:
             uri = reverse("channels:new_turn_message", kwargs={"experiment_id": self.experiment.public_id})
+        elif provider_type == MessagingProviderType.meta_cloud_api:
+            uri = reverse("channels:new_meta_cloud_api_message")
         elif provider_type == MessagingProviderType.sureadhere:
             uri = reverse(
                 "channels:new_sureadhere_message",

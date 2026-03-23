@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.documents.readers import Document
+from apps.files.models import File
 
 logger = logging.getLogger("ocs.channels")
 
@@ -34,6 +36,9 @@ class Attachment(BaseModel):
     """Setting this to True will cause the Assistant Node to send the attachment
     as a file attachment with the message."""
 
+    send_to_llm: bool = True
+    """Setting this to False will prevent the attachment from being sent to the LLM node."""
+
     @classmethod
     def from_file(cls, file, type: AttachmentType, session_id: int):
         return cls(
@@ -51,7 +56,6 @@ class Attachment(BaseModel):
 
     @cached_property
     def _file(self):
-        from apps.files.models import File
 
         try:
             return File.objects.get(id=self.file_id)
@@ -61,7 +65,6 @@ class Attachment(BaseModel):
 
     @cached_property
     def document(self):
-        from apps.documents.readers import Document
 
         return Document.from_file(self._file)
 
@@ -177,6 +180,8 @@ class TurnWhatsappMessage(BaseMessage):
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
+        if value == "audio":
+            return MESSAGE_TYPES.VOICE
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
 
@@ -195,6 +200,10 @@ class TurnWhatsappMessage(BaseMessage):
             media_id=message.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
         )
+
+
+# Meta Cloud API uses the same WhatsApp Business API message format as Turn.io
+MetaCloudAPIMessage = TurnWhatsappMessage
 
 
 class FacebookMessage(BaseMessage):

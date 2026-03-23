@@ -21,12 +21,12 @@ from apps.utils.langchain import build_fake_llm_service
 
 @pytest.fixture()
 def llm_provider():
-    return LlmProviderFactory()
+    return LlmProviderFactory.create()
 
 
 @pytest.fixture()
 def llm_provider_model():
-    return LlmProviderModelFactory(name="gpt-4o")
+    return LlmProviderModelFactory.create(name="gpt-4o")
 
 
 @pytest.mark.django_db()
@@ -50,12 +50,12 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
     message_1 = "Hello, I'm upbeat and friendly"
     message_2 = "Hello, I'm sad and downtrodden"
 
-    evaluation_message_1 = EvaluationMessageFactory(
+    evaluation_message_1 = EvaluationMessageFactory.create(
         input={"content": message_1, "role": "human"},
         output={"content": "Hello! I'm glad to hear that.", "role": "ai"},
         create_chat_messages=True,
     )
-    evaluation_message_2 = EvaluationMessageFactory(
+    evaluation_message_2 = EvaluationMessageFactory.create(
         input={"content": message_2, "role": "human"},
         output={"content": "I'm sorry to hear that.", "role": "ai"},
         create_chat_messages=True,
@@ -67,9 +67,9 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
         prompt=prompt + " {input.content}",
         output_schema={"sentiment": {"type": "string", "description": "the sentiment of the conversation"}},
     )
-    evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
-    dataset = EvaluationDatasetFactory(messages=[evaluation_message_1, evaluation_message_2])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory(evaluators=[evaluator], dataset=dataset))
+    evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
+    dataset = EvaluationDatasetFactory.create(messages=[evaluation_message_1, evaluation_message_2])
+    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
@@ -122,7 +122,7 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
         "{context.current_datetime}. Input: {input.content}"
     )
 
-    evaluation_message_1 = EvaluationMessageFactory(
+    evaluation_message_1 = EvaluationMessageFactory.create(
         input={"content": "Hello, I need help", "role": "human"},
         output={"content": "Sure, I can help you", "role": "ai"},
         context={
@@ -135,7 +135,7 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
     )
 
     # This message is missing the 'user_name' context variable
-    evaluation_message_2 = EvaluationMessageFactory(
+    evaluation_message_2 = EvaluationMessageFactory.create(
         input={"content": "Help me please", "role": "human"},
         output={"content": "Of course, I'll help", "role": "ai"},
         context={
@@ -153,9 +153,9 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
         prompt=prompt,
         output_schema={"evaluation": {"type": "string", "description": "the evaluation result"}},
     )
-    evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
-    dataset = EvaluationDatasetFactory(messages=[evaluation_message_1, evaluation_message_2])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory(evaluators=[evaluator], dataset=dataset))
+    evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
+    dataset = EvaluationDatasetFactory.create(messages=[evaluation_message_1, evaluation_message_2])
+    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
@@ -199,7 +199,7 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
     prompt = "Evaluate the AI response to: {input.content}. Response: {output.content}"
 
     # Create an evaluation message with no AI output (failed to generate)
-    evaluation_message = EvaluationMessageFactory(
+    evaluation_message = EvaluationMessageFactory.create(
         input={"content": "Hello, I need help", "role": "human"},
         output={},  # No AI response
         expected_output_chat_message=None,
@@ -212,9 +212,9 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
         prompt=prompt,
         output_schema={"assessment": {"type": "string", "description": "the assessment result"}},
     )
-    evaluator = EvaluatorFactory(params=llm_evaluator.model_dump(), type="LlmEvaluator")
-    dataset = EvaluationDatasetFactory(messages=[evaluation_message])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory(evaluators=[evaluator], dataset=dataset))
+    evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
+    dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
+    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 

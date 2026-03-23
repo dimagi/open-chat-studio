@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from io import BytesIO
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 from django.conf import settings
@@ -8,12 +9,13 @@ from django.core import validators
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import TextChoices
+from jinja2 import StrictUndefined, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
+from jinja2.sandbox import SecurityError as JinjaSandboxSecurityError
 from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
-from langchain_openai.chat_models.base import OpenAIRefusalError
 from langgraph.constants import END
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator, model_validator
@@ -21,11 +23,12 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
+from RestrictedPython.PrintCollector import PrintCollector
 
 from apps.annotations.models import TagCategories
 from apps.assistants.models import OpenAiAssistant
-from apps.documents.models import Collection
 from apps.experiments.models import BuiltInTools, ExperimentSession
+from apps.files.models import FilePurpose
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
@@ -33,6 +36,7 @@ from apps.pipelines.exceptions import (
     PipelineNodeRunError,
     WaitForNextInput,
 )
+from apps.pipelines.jinja_utils import parse_jinja_template
 from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
@@ -50,10 +54,14 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import AssistantPipelineHistoryManager
-from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy, PromptTemplateContext
+from apps.service_providers.llm_service.prompt_context import (
+    PipelineParticipantDataProxy,
+    PromptTemplateContext,
+)
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
     AgentAssistantChat,
@@ -71,7 +79,6 @@ from .mixins import (
     OutputMessageTagMixin,
     RouterMixin,
     StructuredDataSchemaValidatorMixin,
-    get_llm_provider,
 )
 
 if TYPE_CHECKING:
@@ -92,6 +99,77 @@ def main(input: str, **kwargs) -> str:
 """
 
 
+def format_jinja_error(exc: Exception, field_name: str, context: dict | None = None) -> str:
+    """Format a Jinja2 exception into a structured, actionable error message.
+
+    Args:
+        exc: The Jinja2 exception that was raised.
+        field_name: The Pydantic field name where the error occurred.
+        context: The Jinja template context dict, if available. Used to list
+            available variables for UndefinedError.
+    """
+    if isinstance(exc, UndefinedError):
+        msg = f'Jinja2 UndefinedError in field "{field_name}": {exc}'
+        if context:
+            var_names = ", ".join(context.keys())
+            msg += f"\nAvailable variables: {var_names}"
+        return msg
+
+    if isinstance(exc, TemplateSyntaxError):
+        line_info = f" (line {exc.lineno})" if exc.lineno is not None else ""
+        return f'Jinja2 TemplateSyntaxError in field "{field_name}": {exc.message}{line_info}'
+
+    if isinstance(exc, JinjaSandboxSecurityError):
+        return f'Jinja2 SecurityError in field "{field_name}": {exc}'
+
+    return f'Jinja2 error in field "{field_name}": {type(exc).__name__}: {exc}'
+
+
+def _validate_jinja_syntax(value: Any) -> Any:
+    """Pydantic validator that checks Jinja2 template syntax at save time."""
+    if value is None or not isinstance(value, str) or value == "":
+        return value
+    error = parse_jinja_template(value)
+    if error:
+        line_info = f" (line {error.lineno})" if error.lineno is not None else ""
+        raise PydanticCustomError(
+            "invalid_jinja_syntax",
+            f"Invalid Jinja2 syntax: {error.message}{line_info}",
+        ) from None
+    return value
+
+
+def _build_jinja_context(context: "NodeContext", repo: "ORMRepository") -> dict:
+    """Build the Jinja2 template context dict shared by RenderTemplate and SendEmail."""
+    content = {
+        "input": context.input,
+        "node_inputs": context.inputs,
+        "temp_state": context.state.temp,
+        "session_state": context.state.session_state,
+        "input_message_id": context.input_message_id,
+        "input_message_url": context.input_message_url,
+    }
+    session = context.session
+    if session:
+        participant = repo.participant
+        if participant:
+            content.update(
+                {
+                    "participant_details": {
+                        "identifier": getattr(participant, "identifier", None),
+                        "platform": getattr(participant, "platform", None),
+                    },
+                    "participant_schedules": repo.get_participant_schedules(
+                        as_dict=True,
+                        include_inactive=True,
+                    )
+                    or [],
+                }
+            )
+        content["participant_data"] = context.state.participant_data
+    return content
+
+
 class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     """Renders a Jinja template"""
 
@@ -104,45 +182,25 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     )
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
-        json_schema_extra=UiSchema(widget=Widgets.expandable_text),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
     )
 
+    @field_validator("template_string", mode="before")
+    @classmethod
+    def validate_jinja_syntax(cls, value):
+        return _validate_jinja_syntax(value)
+
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        env = SandboxedEnvironment()
+        env = SandboxedEnvironment(undefined=StrictUndefined)
+        jinja_context = _build_jinja_context(context, self.repo)
         try:
-            content = {
-                "input": context.input,
-                "node_inputs": context.inputs,
-                "temp_state": context.state.temp,
-                "session_state": context.state.session_state,
-                "input_message_id": context.input_message_id,
-                "input_message_url": context.input_message_url,
-            }
-
-            session = context.session
-            if session:
-                participant = getattr(session, "participant", None)
-                if participant:
-                    content.update(
-                        {
-                            "participant_details": {
-                                "identifier": getattr(participant, "identifier", None),
-                                "platform": getattr(participant, "platform", None),
-                            },
-                            "participant_schedules": participant.get_schedules_for_experiment(
-                                session.experiment,
-                                as_dict=True,
-                                include_inactive=True,
-                            )
-                            or [],
-                        }
-                    )
-                content["participant_data"] = context.state.participant_data
-
             template = env.from_string(self.template_string)
-            output = template.render(content)
         except Exception as e:
-            raise PipelineNodeRunError(f"Error rendering template: {e}") from e
+            raise PipelineNodeRunError(format_jinja_error(e, "template_string")) from e
+        try:
+            output = template.render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(format_jinja_error(e, "template_string", context=jinja_context)) from e
 
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
@@ -287,7 +345,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         }
         # Only require collection_index_summaries variable if multiple indexes are selected
         if len(self.collection_index_ids) > 1:
-            context["collection_index_summaries"] = self.collection_index_ids
+            context["collection_index_summaries"] = [str(i) for i in self.collection_index_ids]
 
         try:
             known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
@@ -340,7 +398,8 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             return value
 
         # Bulk fetch all collections to avoid N+1 queries
-        collections = Collection.objects.in_bulk(value)
+        repo = ORMRepository()
+        collections = repo.get_collections_in_bulk(value)
 
         # Check for non-existent collections
         missing_ids = set(value) - set(collections.keys())
@@ -384,7 +443,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
                 )
 
             # Check if provider has a limit on number of vector stores
-            llm_provider = get_llm_provider(llm_provider_id)
+            try:
+                llm_provider = repo.get_llm_provider(llm_provider_id)
+            except RepositoryLookupError:
+                llm_provider = None
             if llm_provider:
                 max_vector_stores = llm_provider.type_enum.max_vector_stores
                 if max_vector_stores and len(collections) > max_vector_stores:
@@ -423,12 +485,36 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         )
     )
 
-    recipient_list: str = Field(description="A comma-separated list of email addresses")
-    subject: str
+    recipient_list: str = Field(
+        description="A comma-separated list of email addresses. Supports Jinja2 templates.",
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
+    )
+    subject: str = Field(
+        description="Email subject. Supports Jinja2 templates.",
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
+    )
+    body: str = Field(
+        default="",
+        description="Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
+    )
+
+    @field_validator("subject", "body", mode="before")
+    @classmethod
+    def validate_jinja_syntax(cls, value):
+        return _validate_jinja_syntax(value)
 
     @field_validator("recipient_list", mode="before")
+    @classmethod
     def recipient_list_has_valid_emails(cls, value):
-        value = value or ""
+        if value is None:
+            value = ""
+        if not isinstance(value, str):
+            return value
+        # Check Jinja syntax first — if it's invalid, don't try email validation
+        value = _validate_jinja_syntax(value)
+        if any(token in value for token in ("{{", "{%", "{#")):
+            return value  # Jinja2 template — validate at runtime after rendering
         for email in [email.strip() for email in value.split(",")]:
             try:
                 validate_email(email)
@@ -437,9 +523,39 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         return value
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        send_email_from_pipeline.delay(
-            recipient_list=self.recipient_list.split(","), subject=self.subject, message=context.input
-        )
+        env = SandboxedEnvironment(undefined=StrictUndefined)
+        env.filters["split"] = lambda value, sep=",": str(value).split(sep)
+        jinja_context = _build_jinja_context(context, self.repo)
+
+        try:
+            subject = env.from_string(self.subject).render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(format_jinja_error(e, "subject", context=jinja_context)) from e
+
+        # Strip newlines to prevent email header injection
+        subject = subject.replace("\r", "").replace("\n", " ")
+
+        try:
+            rendered_recipients = env.from_string(self.recipient_list).render(jinja_context)
+        except Exception as e:
+            raise PipelineNodeRunError(format_jinja_error(e, "recipient_list", context=jinja_context)) from e
+
+        recipients = [r.strip() for r in rendered_recipients.split(",") if r.strip()]
+        for email in recipients:
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise PipelineNodeRunError(f"Invalid email address after rendering: {email!r}") from None
+
+        if self.body:
+            try:
+                message = env.from_string(self.body).render(jinja_context)
+            except Exception as e:
+                raise PipelineNodeRunError(format_jinja_error(e, "body", context=jinja_context)) from e
+        else:
+            message = context.input
+
+        send_email_from_pipeline.delay(recipient_list=recipients, subject=subject, message=message)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
@@ -553,7 +669,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "session_state": context.state.session_state,
         }
         participant_data = context.state.participant_data or {}
-        template_context = PromptTemplateContext(session, extra=extra_prompt_context, participant_data=participant_data)
+        template_context = PromptTemplateContext(
+            session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
+        )
         system_message = get_system_message(
             prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
             prompt_context=template_context,
@@ -561,7 +679,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         # Build the agent
         middleware = []
-        if history_middleware := self.build_history_middleware(session=session, system_message=system_message):
+        if history_middleware := self.build_history_middleware(system_message=system_message):
             middleware.append(history_middleware)
 
         agent = create_agent(
@@ -570,6 +688,8 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             middleware=middleware,
             response_format=self._create_router_schema(),
         )
+
+        from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: PLC0415 - TID253: heavy lib
 
         is_default_keyword = False
         try:
@@ -591,7 +711,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             is_default_keyword = True
 
         if session:
-            self.save_history(session, node_input, keyword)
+            self.save_history(node_input, keyword)
         return keyword, is_default_keyword
 
 
@@ -620,7 +740,9 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     route_key: str = Field(..., description="The key in the data to use for routing")
 
     def _process_conditional(self, context: "NodeContext"):
-        from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
+        from apps.service_providers.llm_service.prompt_context import (  # noqa: PLC0415 - lazy: avoids startup load
+            SafeAccessWrapper,
+        )
 
         match self.data_source:
             case self.DataSource.participant_data:
@@ -751,8 +873,8 @@ class AssistantNode(PipelineNode, OutputMessageTagMixin):
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         try:
-            assistant = OpenAiAssistant.objects.get(id=self.assistant_id)
-        except OpenAiAssistant.DoesNotExist:
+            assistant = self.repo.get_assistant(self.assistant_id)
+        except RepositoryLookupError:
             raise PipelineNodeBuildError(f"Assistant {self.assistant_id} does not exist") from None
 
         session = context.session
@@ -818,9 +940,10 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState | Command:
         output_state = PipelineState()
+        print_collectors: list[PrintCollector] = []
         try:
             result = self.compile_and_execute_code(
-                additional_globals=self._get_custom_functions(state, context, output_state),
+                additional_globals=self._get_custom_functions(state, context, output_state, print_collectors),
                 input=context.input,
                 node_inputs=context.inputs,
             )
@@ -832,21 +955,36 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             message = get_code_error_message("<inline_code>", self.code)
             raise CodeNodeRunError(message) from exc
 
+        output_metadata = {
+            "console_output": "".join(collector() for collector in print_collectors)
+        }
+
         if isinstance(result, Command):
             return result
         return Command(
             goto=self._outgoing_nodes,
             update=PipelineState.from_node_output(
-                node_name=self.name, node_id=self.node_id, output=str(result), **output_state
+                node_name=self.name,
+                node_id=self.node_id,
+                output=str(result),
+                output_metadata=output_metadata or None,
+                **output_state,
             ),
         )
 
-    def _get_custom_functions(self, state: PipelineState, context: "NodeContext", output_state: PipelineState) -> dict:
+    def _get_custom_functions(
+        self,
+        state: PipelineState,
+        context: "NodeContext",
+        output_state: PipelineState,
+        print_collectors: list[PrintCollector],
+    ) -> dict:
         """
         Args:
             state: The input state. Do not modify this state.
             context: The NodeContext for read access.
             output_state: An empty state dict to which state modifications should be made.
+            print_collectors: A list that collects PrintCollector instances created during execution.
         """
         pipeline_state = PipelineState.clone(state)
 
@@ -856,14 +994,18 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["session_state"] = pipeline_state.get("session_state") or {}
 
         # use 'output_state' so that we capture any updates
-        participant_data_proxy = ParticipantDataProxy(output_state, context.session)
+        participant_data_proxy = PipelineParticipantDataProxy(output_state, context.session, repo=self.repo)
 
         # add this node into the state so that we can trace the path
         pipeline_state["outputs"] = {**state["outputs"], self.name: {"node_id": self.node_id}}
-        session = context.session
-        team = session.team if session else None
+        team = self.repo.team
 
         http_client = RestrictedHttpClient(team=team)
+
+        def _print_factory(_getattr_=None):
+            collector = PrintCollector(_getattr_)
+            print_collectors.append(collector)
+            return collector
 
         # We create a PipelineAccessor wrapping a *cloned* state with the current node
         # injected into outputs (line above). The clone also isolates user code mutations
@@ -871,6 +1013,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         # abstraction for CodeNode's sandboxed execution environment.
         pipeline_accessor = PipelineAccessor(pipeline_state)
         return {
+            "_print_": _print_factory,
             "http": http_client,
             "get_participant_data": participant_data_proxy.get,
             "set_participant_data": participant_data_proxy.set,
@@ -904,27 +1047,25 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 content: The file content as bytes
                 content_type: Optional MIME type. Auto-detected from filename if not provided.
             """
-            from io import BytesIO
-
-            from apps.files.models import File, FilePurpose
 
             if not isinstance(content, bytes):
                 raise CodeNodeRunError("'content' must be bytes")
 
-            session = context.session
-            if not session:
+            if not context.session:
                 raise CodeNodeRunError("Cannot attach files without an active session")
 
             file_obj = BytesIO(content)
-            file = File.create(
+            if not self.repo.team:
+                raise CodeNodeRunError("Cannot attach files without a valid session team")
+
+            file = self.repo.create_file(
                 filename=filename,
                 file_obj=file_obj,
-                team_id=session.team_id,
                 content_type=content_type,
                 purpose=FilePurpose.MESSAGE_MEDIA,
             )
 
-            session.chat.attach_files(attachment_type="code_interpreter", files=[file])
+            self.repo.attach_files_to_chat(attachment_type="code_interpreter", files=[file])
 
             metadata = output_state.setdefault("output_message_metadata", {})
             generated_files = metadata.setdefault("generated_files", [])

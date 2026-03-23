@@ -12,6 +12,8 @@ from allauth.mfa.models import Authenticator
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 
+from apps.users.models import CustomUser
+
 
 class Command(BaseCommand):
     help = "Migrate 2FA data from django-otp tables to allauth.mfa"
@@ -91,9 +93,6 @@ class Command(BaseCommand):
 
         migrated_count = 0
         authenticators_to_create = []
-
-        # Import User model
-        from apps.users.models import CustomUser
 
         # De-duplicate to at most one confirmed device per user (choose first)
         devices_by_user_id = {}
