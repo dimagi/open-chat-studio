@@ -84,9 +84,10 @@ class File(BaseTeamModel, VersionsMixin):
         content = file_obj.read() if file_obj else None
 
         if not content_type and content:
-            detected = magic.from_buffer(content[:2048], mime=True)
-            if detected and detected != "application/octet-stream":
-                content_type = detected
+            with contextlib.suppress(Exception):
+                detected = magic.from_buffer(content[:2048], mime=True)
+                if detected and detected != "application/octet-stream":
+                    content_type = detected
 
         content_type = content_type or mimetypes.guess_type(filename)[0]
 
