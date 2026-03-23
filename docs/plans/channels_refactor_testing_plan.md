@@ -58,7 +58,7 @@ Once all new tests pass, we do a cold-turkey switchover: delete old `apps/chat/c
 
 All new tests live under `apps/channels/tests/new_arch/` — sibling to existing test files so pytest finds them without config changes.
 
-```
+```text
 apps/channels/tests/new_arch/
     __init__.py
     conftest.py                          # TestNewChannel, TestNewSender, TestNewCallbacks, make_context()

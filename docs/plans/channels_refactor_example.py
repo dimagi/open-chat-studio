@@ -734,10 +734,8 @@ class ResponseFormattingStage(ProcessingStage):
         should_reply_voice = False
         if ctx.capabilities.supports_voice and ctx.experiment.synthetic_voice:
             voice_config = ctx.experiment.voice_response_behaviour
-            if (
-                voice_config == VoiceResponseBehaviours.ALWAYS
-                or voice_config == VoiceResponseBehaviours.RECIPROCAL
-                and user_sent_voice
+            if voice_config == VoiceResponseBehaviours.ALWAYS or (
+                voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice
             ):
                 should_reply_voice = True
 

@@ -47,7 +47,7 @@ class ChannelBase(ABC):
 
     # Class-level defaults (overridden by subclasses)
     voice_replies_supported: ClassVar[bool] = False
-    supported_message_types: ClassVar[list] = []
+    supported_message_types: ClassVar[tuple[str, ...]] = ()
 
     def __init__(
         self,
@@ -76,7 +76,7 @@ class ChannelBase(ABC):
 
                     # Determine the response to return
                     if ctx.early_exit_response is not None:
-                        response = ChatMessage(content=ctx.early_exit_response)
+                        response = ChatMessage(content=ctx.early_exit_response, message_type=ChatMessageType.AI)
                     elif ctx.bot_response:
                         response = ctx.bot_response
                     else:
@@ -162,6 +162,9 @@ class ChannelBase(ABC):
         Runs a mini pipeline: ResponseFormattingStage -> terminal stages.
         Voice/text decision, citation formatting, and file handling all apply.
         """
+        if self.experiment_session is None:
+            raise ValueError("Cannot send ad hoc message without an experiment session")
+
         files = files or []
 
         ctx = MessageProcessingContext(
@@ -174,7 +177,7 @@ class ChannelBase(ABC):
             capabilities=self._get_capabilities(),
             trace_service=self.trace_service,
             participant_identifier=self.experiment_session.participant.identifier,
-            bot_response=ChatMessage(content=bot_message),
+            bot_response=ChatMessage(content=bot_message, message_type=ChatMessageType.AI),
             files_to_send=files,
         )
 

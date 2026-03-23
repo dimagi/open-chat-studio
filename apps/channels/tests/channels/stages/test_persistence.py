@@ -1,5 +1,5 @@
 from io import BytesIO
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -38,11 +38,9 @@ class TestPersistenceStageShould:
             message=msg,
         )
 
-        self.stage(ctx)
-
-        # No ChatMessage should be created (we verify by checking that
-        # the mock session's chat was not accessed for creation)
-        # In mock context this simply returns without error
+        with patch("apps.channels.channels_v2.stages.terminal.ChatMessage.objects") as mock_objects:
+            self.stage(ctx)
+            mock_objects.create.assert_not_called()
 
 
 @pytest.mark.django_db()
