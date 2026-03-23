@@ -468,7 +468,7 @@ class MetaCloudAPIService(MessagingService):
                 },
             }
             response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
-            if response.status_code == 404 or (response.status_code == 400 and "template" in response.text.lower()):
+            if response.status_code == 404:
                 logger.warning(
                     "Template message '%s' not found on Meta's API. Response: %s",
                     self.TEMPLATE_NAME,
