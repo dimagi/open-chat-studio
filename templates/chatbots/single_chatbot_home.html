@@ -237,9 +237,11 @@
       ></open-chat-studio-widget>
       <script>
         function openChatWidget(versionNumber) {
+          const header = versionNumber === 0 ? 'Published Version' : `Working Version (v${versionNumber})`
           const widget = document.getElementById('chatbot-widget');
           widget.versionNumber = versionNumber;
           widget.visible = true;
+          widget.headerText = header;
         }
       </script>
     {% endflag %}
