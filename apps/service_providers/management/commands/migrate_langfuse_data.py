@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -13,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.core.management.base import BaseCommand, CommandError
 from langfuse import Langfuse
+from langfuse.api.core.api_error import ApiError
 from langfuse.api.resources.commons.types import Usage
 from langfuse.api.resources.ingestion.types import (
     CreateEventBody,
@@ -29,6 +31,35 @@ from langfuse.api.resources.ingestion.types import (
 
 from apps.service_providers.models import TraceProvider, TraceProviderType
 from apps.teams.models import Team
+
+DEFAULT_LANGFUSE_HOST = "https://cloud.langfuse.com"
+
+
+@dataclasses.dataclass
+class CheckpointState:
+    migrated_ids: set
+    checkpoint_file: str
+    max_resume_timestamp: str | None = None
+    lock: threading.Lock = dataclasses.field(default_factory=threading.Lock)
+
+    def update(self, trace_id: str, trace_ts: str | None) -> None:
+        """Thread-safe checkpoint update. Only advances resume timestamp forward."""
+        with self.lock:
+            self.migrated_ids.add(trace_id)
+            if trace_ts and (self.max_resume_timestamp is None or trace_ts > self.max_resume_timestamp):
+                self.max_resume_timestamp = trace_ts
+            _save_checkpoint(self.checkpoint_file, self.migrated_ids, resume_from_timestamp=self.max_resume_timestamp)
+
+
+@dataclasses.dataclass
+class RetryConfig:
+    max_retries: int = 4
+    base_sleep: float = 0.5
+
+
+def _is_rate_limited(exc: Exception) -> bool:
+    """Check if an exception represents an HTTP 429 rate limit response."""
+    return isinstance(exc, ApiError) and exc.status_code == 429
 
 
 def _safe_isoformat(dt_obj):
@@ -282,7 +313,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"\nLangfuse TraceProviders for team '{team}':\n")
         for i, provider in enumerate(providers, 1):
-            host = provider.config.get("host", "https://cloud.langfuse.com")
+            host = provider.config.get("host", DEFAULT_LANGFUSE_HOST)
             self.stdout.write(f"  [{i}] {provider.name}  ({host})")
         self.stdout.write("")
 
@@ -302,8 +333,8 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.WARNING("\nWARNING: Migrates full trace data. PRESERVES ORIGINAL TRACE IDs."))
         self.stdout.write(self.style.WARNING("Ensure no ID collisions in the destination project!\n"))
-        self.stdout.write(f"Source:      {source.name}  ({source.config.get('host', 'https://cloud.langfuse.com')})")
-        self.stdout.write(f"Destination: {dest.name}  ({dest.config.get('host', 'https://cloud.langfuse.com')})")
+        self.stdout.write(f"Source:      {source.name}  ({source.config.get('host', DEFAULT_LANGFUSE_HOST)})")
+        self.stdout.write(f"Destination: {dest.name}  ({dest.config.get('host', DEFAULT_LANGFUSE_HOST)})")
         if options["from_timestamp"]:
             self.stdout.write(f"From:        {options['from_timestamp']}")
         if options["to_timestamp"]:
@@ -322,9 +353,11 @@ class Command(BaseCommand):
             dest_config=dest.config,
             from_timestamp_str=options["from_timestamp"],
             to_timestamp_str=options["to_timestamp"],
+            retry_config=RetryConfig(
+                max_retries=options["max_retries"],
+                base_sleep=options["sleep_batch"],
+            ),
             sleep_between_gets=options["sleep_get"],
-            sleep_between_batches=options["sleep_batch"],
-            max_retries=options["max_retries"],
             dry_run=options["dry_run"],
             checkpoint_file=checkpoint_file,
             workers=options["workers"],
@@ -356,44 +389,63 @@ class Command(BaseCommand):
                 pass
             self.stdout.write(f"  Please enter a number between 1 and {len(providers)}.")
 
+    def _init_langfuse_client(self, config: dict, label: str) -> Langfuse:
+        """Initialize and verify a Langfuse client."""
+        try:
+            client = Langfuse(
+                public_key=config["public_key"],
+                secret_key=config["secret_key"],
+                host=config.get("host", DEFAULT_LANGFUSE_HOST),
+            )
+            self.stdout.write(f"{label} client initialized: {config.get('host', DEFAULT_LANGFUSE_HOST)}")
+            client.auth_check()
+            self.stdout.write(f"{label} credentials verified.")
+            return client
+        except Exception as e:
+            raise CommandError(f"Error initializing {label.lower()} Langfuse client: {e}") from e
+
+    def _retry_with_backoff(self, fn, description: str, retry_config: RetryConfig, on_exhausted=None):
+        """Generic retry with exponential backoff on rate limits.
+
+        Returns the result of fn() on success, or on_exhausted if max retries reached.
+        Raises CommandError if on_exhausted is CommandError.
+        """
+        for attempt in range(1, retry_config.max_retries + 1):
+            if attempt > 1:
+                time.sleep(retry_config.base_sleep * (2 ** (attempt - 1)))
+            try:
+                return fn()
+            except Exception as e:
+                self.stdout.write(f"  Error {description} (attempt {attempt}/{retry_config.max_retries}): {e}")
+                if _is_rate_limited(e):
+                    sleep_time = 2**attempt
+                    self.stdout.write(f"    Rate limit hit. Sleeping {sleep_time}s...")
+                    time.sleep(sleep_time)
+                elif attempt >= retry_config.max_retries:
+                    if isinstance(on_exhausted, CommandError):
+                        raise on_exhausted from e
+                    return on_exhausted
+                else:
+                    self.stdout.write("    Transient error, retrying...")
+        return on_exhausted
+
     def _migrate_traces(
         self,
-        source_config,
-        dest_config,
-        from_timestamp_str=None,
-        to_timestamp_str=None,
-        sleep_between_gets=0.7,
-        sleep_between_batches=0.5,
-        max_retries=4,
-        dry_run=False,
-        checkpoint_file=".migration_checkpoint.json",
-        workers=5,
+        source_config: dict,
+        dest_config: dict,
+        from_timestamp_str: str | None = None,
+        to_timestamp_str: str | None = None,
+        retry_config: RetryConfig | None = None,
+        sleep_between_gets: float = 0.7,
+        dry_run: bool = False,
+        checkpoint_file: str = ".migration_checkpoint.json",
+        workers: int = 5,
     ):
-        try:
-            langfuse_source = Langfuse(
-                public_key=source_config["public_key"],
-                secret_key=source_config["secret_key"],
-                host=source_config.get("host", "https://cloud.langfuse.com"),
-            )
-            self.stdout.write(f"Source client initialized: {source_config.get('host', 'https://cloud.langfuse.com')}")
-            langfuse_source.auth_check()
-            self.stdout.write("Source credentials verified.")
-        except Exception as e:
-            raise CommandError(f"Error initializing source Langfuse client: {e}") from e
+        if retry_config is None:
+            retry_config = RetryConfig()
 
-        try:
-            langfuse_destination = Langfuse(
-                public_key=dest_config["public_key"],
-                secret_key=dest_config["secret_key"],
-                host=dest_config.get("host", "https://cloud.langfuse.com"),
-            )
-            self.stdout.write(
-                f"Destination client initialized: {dest_config.get('host', 'https://cloud.langfuse.com')}"
-            )
-            langfuse_destination.auth_check()
-            self.stdout.write("Destination credentials verified.")
-        except Exception as e:
-            raise CommandError(f"Error initializing destination Langfuse client: {e}") from e
+        langfuse_source = self._init_langfuse_client(source_config, "Source")
+        langfuse_destination = self._init_langfuse_client(dest_config, "Destination")
 
         from_timestamp = _parse_datetime(from_timestamp_str)
         to_timestamp = _parse_datetime(to_timestamp_str)
@@ -415,6 +467,12 @@ class Command(BaseCommand):
                 from_timestamp = resume_dt
                 self.stdout.write(f"Resuming from checkpoint timestamp: {resume_from_timestamp}")
 
+        checkpoint = CheckpointState(
+            migrated_ids=migrated_ids,
+            checkpoint_file=checkpoint_file,
+            max_resume_timestamp=resume_from_timestamp,
+        )
+
         if dry_run:
             self.stdout.write(self.style.NOTICE("DRY RUN — no data will be written to the destination.\n"))
 
@@ -425,19 +483,22 @@ class Command(BaseCommand):
         total_failed_fetch = 0
         total_failed_transform = 0
         total_failed_push = 0
-        checkpoint_lock = threading.Lock()
+
+        get_retry_config = RetryConfig(max_retries=retry_config.max_retries, base_sleep=sleep_between_gets)
 
         def _process_single_trace(trace_info):
             """Fetch, transform, and push a single trace. Returns (status, trace_id)."""
             source_trace_id = trace_info.id
-            if source_trace_id in migrated_ids:
+            if source_trace_id in checkpoint.migrated_ids:
                 self.stdout.write(f"    Skipping {source_trace_id} (already in checkpoint).")
                 return "skipped", source_trace_id
 
             self.stdout.write(f"    Processing source trace ID: {source_trace_id}")
 
-            source_trace_full = self._fetch_trace_detail_with_retry(
-                langfuse_source, source_trace_id, sleep_between_gets, max_retries
+            source_trace_full = self._retry_with_backoff(
+                lambda: langfuse_source.api.trace.get(source_trace_id),
+                f"fetching details for {source_trace_id}",
+                get_retry_config,
             )
             if source_trace_full is None:
                 return "failed_fetch", source_trace_id
@@ -452,26 +513,31 @@ class Command(BaseCommand):
                 self.stdout.write(f"      Error transforming trace {source_trace_id}: {e}")
                 return "failed_transform", source_trace_id
 
-            push_ok = self._push_batch_with_retry(
+            push_ok = self._push_batch(
                 langfuse_destination,
                 ingestion_batch,
                 batch_event_map,
                 source_trace_id,
                 source_trace_full,
-                migrated_ids,
-                checkpoint_file,
-                resume_from_timestamp,
-                sleep_between_batches,
-                max_retries,
+                checkpoint,
+                retry_config,
                 dry_run,
-                checkpoint_lock,
             )
             return ("migrated" if push_ok else "failed_push"), source_trace_id
 
         while True:
             self.stdout.write(f"\n--- Processing page {page} ---")
-            trace_list = self._fetch_trace_list_with_retry(
-                langfuse_source, page, limit, from_timestamp, to_timestamp, max_retries
+            trace_list = self._retry_with_backoff(
+                lambda p=page: langfuse_source.api.trace.list(
+                    page=p,
+                    limit=limit,
+                    order_by="timestamp.asc",
+                    from_timestamp=from_timestamp,
+                    to_timestamp=to_timestamp,
+                ),
+                f"fetching trace list page {page}",
+                retry_config,
+                on_exhausted=CommandError(f"Max retries reached fetching page {page}. Stopping."),
             )
 
             if trace_list is None or not trace_list.data:
@@ -516,73 +582,28 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Failed pushing/ingesting with errors: {total_failed_push}"))
         self.stdout.write("-------------------------\n")
 
-    def _fetch_trace_list_with_retry(self, client, page, limit, from_timestamp, to_timestamp, max_retries):
-        """Fetch a page of trace summaries, retrying on rate limits."""
-        for attempt in range(1, max_retries + 1):
-            try:
-                return client.api.trace.list(
-                    page=page,
-                    limit=limit,
-                    order_by="timestamp.asc",
-                    from_timestamp=from_timestamp,
-                    to_timestamp=to_timestamp,
-                )
-            except Exception as e:
-                self.stdout.write(f"  Error fetching trace list page {page} (attempt {attempt}/{max_retries}): {e}")
-                if "429" in str(e):
-                    sleep_time = 2**attempt
-                    self.stdout.write(f"    Rate limit hit. Sleeping {sleep_time}s...")
-                    time.sleep(sleep_time)
-                elif attempt >= max_retries:
-                    raise CommandError(f"Max retries reached fetching page {page}. Stopping.") from e
-                else:
-                    time.sleep(2)
-        return None
-
-    def _fetch_trace_detail_with_retry(self, client, trace_id, sleep_between_gets, max_retries):
-        """Fetch full trace details, retrying on rate limits."""
-        for attempt in range(1, max_retries + 1):
-            if attempt > 1:
-                time.sleep(sleep_between_gets * (2 ** (attempt - 1)))
-            try:
-                return client.api.trace.get(trace_id)
-            except Exception as e:
-                self.stdout.write(f"      Error fetching details for {trace_id} (attempt {attempt}/{max_retries}): {e}")
-                if "429" in str(e):
-                    time.sleep(2**attempt)
-                elif attempt >= max_retries:
-                    self.stdout.write(f"        Max retries reached fetching details for {trace_id}.")
-                    return None
-                else:
-                    self.stdout.write(f"        Transient error for {trace_id}, retrying...")
-        return None
-
-    def _push_batch_with_retry(
+    def _push_batch(
         self,
-        dest_client,
-        ingestion_batch,
-        batch_event_map,
-        trace_id,
+        dest_client: Langfuse,
+        ingestion_batch: list,
+        batch_event_map: dict,
+        trace_id: str,
         source_trace_full,
-        migrated_ids,
-        checkpoint_file,
-        resume_from_timestamp,
-        sleep_between_batches,
-        max_retries,
-        dry_run,
-        checkpoint_lock=None,
+        checkpoint: CheckpointState,
+        retry_config: RetryConfig,
+        dry_run: bool,
     ) -> bool:
         """Push ingestion batch to destination, retrying on rate limits. Returns True on success."""
-        for attempt in range(1, max_retries + 1):
+        for attempt in range(1, retry_config.max_retries + 1):
             if attempt > 1:
-                time.sleep(sleep_between_batches * (2 ** (attempt - 1)))
+                time.sleep(retry_config.base_sleep * (2 ** (attempt - 1)))
             try:
                 if dry_run:
                     self.stdout.write(
                         f"      [DRY RUN] Would ingest {len(ingestion_batch)} events for trace {trace_id}"
                     )
                     trace_ts = _safe_isoformat(getattr(source_trace_full, "timestamp", None))
-                    self._update_checkpoint(migrated_ids, trace_id, checkpoint_file, trace_ts, checkpoint_lock)
+                    checkpoint.update(trace_id, trace_ts)
                     return True
 
                 response = dest_client.api.ingestion.batch(batch=ingestion_batch)
@@ -603,29 +624,21 @@ class Command(BaseCommand):
 
                 self.stdout.write(self.style.SUCCESS(f"      Successfully ingested trace {trace_id}"))
                 trace_ts = _safe_isoformat(getattr(source_trace_full, "timestamp", None))
-                self._update_checkpoint(migrated_ids, trace_id, checkpoint_file, trace_ts, checkpoint_lock)
+                checkpoint.update(trace_id, trace_ts)
                 return True
 
             except Exception as e:
-                self.stdout.write(f"      Error pushing batch for {trace_id} (attempt {attempt}/{max_retries}): {e}")
-                if "429" in str(e):
+                self.stdout.write(
+                    f"      Error pushing batch for {trace_id} (attempt {attempt}/{retry_config.max_retries}): {e}"
+                )
+                if _is_rate_limited(e):
                     sleep_time = 2**attempt
                     self.stdout.write(f"        Rate limit hit. Sleeping {sleep_time}s...")
                     time.sleep(sleep_time)
-                elif attempt >= max_retries:
+                elif attempt >= retry_config.max_retries:
                     self.stdout.write(f"        Max retries reached pushing batch for {trace_id}.")
                     return False
                 else:
                     self.stdout.write(f"        Non-rate-limit error pushing batch for {trace_id}. Failing this trace.")
                     return False
         return False
-
-    def _update_checkpoint(self, migrated_ids, trace_id, checkpoint_file, trace_ts, checkpoint_lock=None):
-        """Thread-safe checkpoint update."""
-        if checkpoint_lock:
-            with checkpoint_lock:
-                migrated_ids.add(trace_id)
-                _save_checkpoint(checkpoint_file, migrated_ids, resume_from_timestamp=trace_ts)
-        else:
-            migrated_ids.add(trace_id)
-            _save_checkpoint(checkpoint_file, migrated_ids, resume_from_timestamp=trace_ts)
