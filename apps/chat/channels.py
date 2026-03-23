@@ -1241,60 +1241,6 @@ class FacebookMessengerChannel(ChannelBase):
         )
 
 
-class ApiChannel(ChannelBase):
-    """Message Handler for the API"""
-
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession | None = None,
-        user=None,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
-        self.user = user
-        if not self.user and not self.experiment_session:
-            raise ChannelException("ApiChannel requires either an existing session or a user")
-
-    @classmethod
-    def start_new_session(
-        cls,
-        working_experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        participant_identifier: str,
-        participant_user=None,
-        session_status: SessionStatus = SessionStatus.ACTIVE,
-        timezone: str | None = None,
-        session_external_id: str | None = None,
-        metadata: dict | None = None,
-        version: int = Experiment.DEFAULT_VERSION_NUMBER,
-    ):
-        session = super().start_new_session(
-            working_experiment,
-            experiment_channel,
-            participant_identifier,
-            participant_user,
-            session_status,
-            timezone,
-            session_external_id,
-            metadata,
-        )
-        if version != Experiment.DEFAULT_VERSION_NUMBER:
-            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
-        return session
-
-    @property
-    def participant_user(self):
-        return super().participant_user or self.user
-
-    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
-        # The bot cannot send messages to this client, since it wouldn't know where to send it to
-        pass
-
-
 class SlackChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
