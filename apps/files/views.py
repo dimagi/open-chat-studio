@@ -43,7 +43,9 @@ class FileView(LoginAndTeamRequiredMixin, View):
             return _not_found()
 
         try:
-            return FileResponse(file.file.open(), as_attachment=True, filename=file.file.name)
+            return FileResponse(
+                file.file.open(), as_attachment=True, filename=file.file.name, content_type=file.content_type or None
+            )
         except FileNotFoundError:
             return _not_found()
 

@@ -836,7 +836,9 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
     )
     try:
         file = resource.file.open()
-        return FileResponse(file, as_attachment=True, filename=resource.file.name)
+        return FileResponse(
+            file, as_attachment=True, filename=resource.file.name, content_type=resource.content_type or None
+        )
     except FileNotFoundError:
         raise Http404() from None
 
