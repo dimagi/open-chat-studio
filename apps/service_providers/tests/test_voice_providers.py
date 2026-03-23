@@ -8,7 +8,7 @@ from django.db import IntegrityError
 from apps.experiments.models import SyntheticVoice
 from apps.files.models import File
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.models import VoiceProvider, VoiceProviderType
+from apps.service_providers.models import VoiceProvider, VoiceProviderType, _map_elevenlabs_gender
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
@@ -359,3 +359,102 @@ def test_elevenlabs_voice_provider_error(config_key):
     assert form.is_valid()
     form.cleaned_data.pop(config_key)
     _test_voice_provider_error(VoiceProviderType.elevenlabs, data=form.cleaned_data)
+
+
+@pytest.mark.django_db()
+def test_elevenlabs_sync_voices(team_with_users):
+    """sync_voices should create SyntheticVoice records from ElevenLabs API response"""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+
+    mock_voice_1 = mock.Mock()
+    mock_voice_1.voice_id = "voice_id_1"
+    mock_voice_1.name = "Rachel"
+    mock_voice_1.labels = {"language": "en", "gender": "female"}
+
+    mock_voice_2 = mock.Mock()
+    mock_voice_2.voice_id = "voice_id_2"
+    mock_voice_2.name = "George"
+    mock_voice_2.labels = {"language": "en", "gender": "male"}
+
+    mock_response = mock.Mock()
+    mock_response.voices = [mock_voice_1, mock_voice_2]
+    mock_response.has_more = False
+
+    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+        mock_client_cls.return_value.voices.search.return_value = mock_response
+        provider.sync_voices()
+
+    voices = provider.syntheticvoice_set.all()
+    assert len(voices) == 2
+    assert voices.filter(name="Rachel", external_id="voice_id_1", gender="female").exists()
+    assert voices.filter(name="George", external_id="voice_id_2", gender="male").exists()
+
+
+@pytest.mark.django_db()
+def test_elevenlabs_sync_voices_updates_and_removes(team_with_users):
+    """sync_voices should update existing voices and remove stale ones not in use"""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    # Pre-existing voice that will be updated
+    SyntheticVoice.objects.create(
+        name="Old Name",
+        external_id="voice_id_1",
+        neural=True,
+        language="en",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.ElevenLabs,
+        voice_provider=provider,
+    )
+    # Pre-existing voice that will be removed (not in API response)
+    stale = SyntheticVoice.objects.create(
+        name="Stale Voice",
+        external_id="voice_id_stale",
+        neural=True,
+        language="en",
+        language_code="en",
+        gender="male",
+        service=SyntheticVoice.ElevenLabs,
+        voice_provider=provider,
+    )
+
+    mock_voice = mock.Mock()
+    mock_voice.voice_id = "voice_id_1"
+    mock_voice.name = "New Name"
+    mock_voice.labels = {"language": "en", "gender": "female"}
+
+    mock_response = mock.Mock()
+    mock_response.voices = [mock_voice]
+    mock_response.has_more = False
+
+    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+        mock_client_cls.return_value.voices.search.return_value = mock_response
+        provider.sync_voices()
+
+    voices = provider.syntheticvoice_set.all()
+    assert len(voices) == 1
+    assert voices.first().name == "New Name"
+    assert not SyntheticVoice.objects.filter(pk=stale.pk).exists()
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected_gender"),
+    [
+        ({"gender": "male"}, "male"),
+        ({"gender": "Female"}, "female"),
+        ({"gender": "non-binary"}, ""),
+        ({}, ""),
+        (None, ""),
+    ],
+)
+def test_elevenlabs_gender_mapping(labels, expected_gender):
+    assert _map_elevenlabs_gender(labels) == expected_gender

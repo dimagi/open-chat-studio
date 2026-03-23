@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,8 @@ from .exceptions import ServiceProviderConfigError
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
     from apps.service_providers.forms import ProviderTypeConfigForm
+
+log = logging.getLogger("ocs.service_providers")
 
 
 class MessagingProviderObjectManager(AuditingManager):
@@ -301,6 +304,15 @@ class VoiceProviderType(models.TextChoices):
         raise ServiceProviderConfigError(self, "No voice service configured")
 
 
+_ELEVENLABS_GENDER_MAP = {"male": "male", "female": "female"}
+
+
+def _map_elevenlabs_gender(labels: dict) -> str:
+    """Map ElevenLabs voice label gender to SyntheticVoice GENDERS choice or empty string."""
+    gender = labels.get("gender", "").lower() if labels else ""
+    return _ELEVENLABS_GENDER_MAP.get(gender, "")
+
+
 @audit_fields(*model_audit_fields.VOICE_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class VoiceProvider(BaseTeamModel, ProviderMixin):
     objects = VoiceProviderObjectManager()
@@ -373,6 +385,54 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 "pk": self.id,
             },
         )
+
+    def sync_voices(self):
+        """Fetch voices from ElevenLabs API and sync SyntheticVoice records for this provider."""
+        if self.type != VoiceProviderType.elevenlabs:
+            return
+
+        from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
+
+        client = ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+
+        all_voices = []
+        response = client.voices.search(page_size=100)
+        all_voices.extend(response.voices)
+        while response.has_more:
+            response = client.voices.search(page_size=100, next_page_token=response.next_page_token)
+            all_voices.extend(response.voices)
+
+        api_voice_ids = set()
+
+        for voice in all_voices:
+            labels = voice.labels if isinstance(voice.labels, dict) else {}
+            gender = _map_elevenlabs_gender(labels)
+            language = labels.get("language", "") if labels else ""
+
+            api_voice_ids.add(voice.voice_id)
+
+            SyntheticVoice.objects.update_or_create(
+                external_id=voice.voice_id,
+                service=SyntheticVoice.ElevenLabs,
+                voice_provider=self,
+                defaults={
+                    "name": voice.name,
+                    "neural": True,
+                    "language": language,
+                    "language_code": language,
+                    "gender": gender,
+                },
+            )
+
+        # Remove voices no longer in API (only if not referenced by experiments)
+        stale_voices = self.syntheticvoice_set.filter(
+            service=SyntheticVoice.ElevenLabs,
+            file__isnull=True,
+        ).exclude(external_id__in=api_voice_ids)
+
+        for voice in stale_voices:
+            if not voice.experiments.exists():
+                voice.delete()
 
     @transaction.atomic()
     def delete(self):  # ty: ignore[invalid-method-override]
