@@ -659,7 +659,6 @@ export class OcsChat {
   @Watch('chatbotId')
   @Watch('versionNumber')
   async chatbotConfigHandler() {
-    this.sessionEpoch += 1;
     await this.clearSession();
   }
 
@@ -1507,6 +1506,7 @@ export class OcsChat {
    * will start when the user sends a message.
    */
   private async clearSession(): Promise<void> {
+    this.sessionEpoch += 1;
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];
