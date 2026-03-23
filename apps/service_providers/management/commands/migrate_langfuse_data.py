@@ -275,6 +275,29 @@ class Command(BaseCommand):
         flt.add_argument("--from-timestamp", metavar="ISO8601", help="Only migrate traces from this timestamp onward")
         flt.add_argument("--to-timestamp", metavar="ISO8601", help="Only migrate traces up to this timestamp")
 
+        creds = parser.add_argument_group("credentials (for running without DB access)")
+        creds.add_argument("--source-public-key", metavar="KEY", help="Source Langfuse public key")
+        creds.add_argument("--source-secret-key", metavar="KEY", help="Source Langfuse secret key")
+        creds.add_argument(
+            "--source-host",
+            metavar="URL",
+            default=None,
+            help=f"Source Langfuse host (default: {DEFAULT_LANGFUSE_HOST})",
+        )
+        creds.add_argument("--dest-public-key", metavar="KEY", help="Destination Langfuse public key")
+        creds.add_argument("--dest-secret-key", metavar="KEY", help="Destination Langfuse secret key")
+        creds.add_argument(
+            "--dest-host",
+            metavar="URL",
+            default=None,
+            help=f"Destination Langfuse host (default: {DEFAULT_LANGFUSE_HOST})",
+        )
+        creds.add_argument(
+            "--print-command",
+            action="store_true",
+            help="Look up credentials from DB and print a runnable command with --source-*/--dest-* args, then exit",
+        )
+
         adv = parser.add_argument_group("advanced")
         adv.add_argument(
             "--sleep-get", type=float, default=0.7, metavar="SEC", help="Seconds to sleep between trace GET requests"
@@ -301,7 +324,76 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         team_slug = options["team_slug"]
+        has_direct_creds = options["source_public_key"] and options["source_secret_key"]
 
+        if has_direct_creds:
+            source_config, dest_config = self._configs_from_cli_args(options)
+        else:
+            source_config, dest_config = self._configs_from_db(team_slug, options)
+            if options["print_command"]:
+                self._print_command(team_slug, source_config, dest_config, options)
+                return
+
+        checkpoint_file = options["checkpoint_file"] or f".migration_checkpoint_{team_slug}.json"
+        if options["reset_checkpoint"] and os.path.exists(checkpoint_file):
+            os.remove(checkpoint_file)
+            self.stdout.write(f"Checkpoint file '{checkpoint_file}' deleted.\n")
+
+        source_host = source_config.get("host", DEFAULT_LANGFUSE_HOST)
+        dest_host = dest_config.get("host", DEFAULT_LANGFUSE_HOST)
+        self.stdout.write(self.style.WARNING("\nWARNING: Migrates full trace data. PRESERVES ORIGINAL TRACE IDs."))
+        self.stdout.write(self.style.WARNING("Ensure no ID collisions in the destination project!\n"))
+        self.stdout.write(f"Source:      {source_host}")
+        self.stdout.write(f"Destination: {dest_host}")
+        if options["from_timestamp"]:
+            self.stdout.write(f"From:        {options['from_timestamp']}")
+        if options["to_timestamp"]:
+            self.stdout.write(f"To:          {options['to_timestamp']}")
+        if options["dry_run"]:
+            self.stdout.write(self.style.NOTICE("Mode:        DRY RUN"))
+        self.stdout.write(f"Checkpoint:  {checkpoint_file}\n")
+
+        confirmation = input("Proceed with trace migration? (yes/no): ").strip().lower()
+        if confirmation != "yes":
+            self.stdout.write("Migration cancelled.")
+            return
+
+        self._migrate_traces(
+            source_config=source_config,
+            dest_config=dest_config,
+            from_timestamp_str=options["from_timestamp"],
+            to_timestamp_str=options["to_timestamp"],
+            retry_config=RetryConfig(
+                max_retries=options["max_retries"],
+                base_sleep=options["sleep_batch"],
+            ),
+            sleep_between_gets=options["sleep_get"],
+            dry_run=options["dry_run"],
+            checkpoint_file=checkpoint_file,
+            workers=options["workers"],
+        )
+
+    def _configs_from_cli_args(self, options: dict) -> tuple[dict, dict]:
+        """Build source/dest configs from direct CLI credential args."""
+        if not options["dest_public_key"] or not options["dest_secret_key"]:
+            raise CommandError(
+                "When using --source-* credentials, --dest-public-key and --dest-secret-key are also required."
+            )
+
+        source_config = {
+            "public_key": options["source_public_key"],
+            "secret_key": options["source_secret_key"],
+            "host": options["source_host"] or DEFAULT_LANGFUSE_HOST,
+        }
+        dest_config = {
+            "public_key": options["dest_public_key"],
+            "secret_key": options["dest_secret_key"],
+            "host": options["dest_host"] or DEFAULT_LANGFUSE_HOST,
+        }
+        return source_config, dest_config
+
+    def _configs_from_db(self, team_slug: str, options: dict) -> tuple[dict, dict]:
+        """Look up source/dest configs from team TraceProviders in the DB."""
         try:
             team = Team.objects.get(slug=team_slug)
         except Team.DoesNotExist as e:
@@ -326,42 +418,36 @@ class Command(BaseCommand):
         if source.id == dest.id:
             raise CommandError("Source and destination must be different TraceProviders.")
 
-        checkpoint_file = options["checkpoint_file"] or f".migration_checkpoint_{team_slug}.json"
-        if options["reset_checkpoint"] and os.path.exists(checkpoint_file):
-            os.remove(checkpoint_file)
-            self.stdout.write(f"Checkpoint file '{checkpoint_file}' deleted.\n")
+        return source.config, dest.config
 
-        self.stdout.write(self.style.WARNING("\nWARNING: Migrates full trace data. PRESERVES ORIGINAL TRACE IDs."))
-        self.stdout.write(self.style.WARNING("Ensure no ID collisions in the destination project!\n"))
-        self.stdout.write(f"Source:      {source.name}  ({source.config.get('host', DEFAULT_LANGFUSE_HOST)})")
-        self.stdout.write(f"Destination: {dest.name}  ({dest.config.get('host', DEFAULT_LANGFUSE_HOST)})")
+    def _print_command(self, team_slug: str, source_config: dict, dest_config: dict, options: dict) -> None:
+        """Print a runnable command with embedded credentials for local execution."""
+        parts = [f"python manage.py migrate_langfuse_data {team_slug}"]
+        parts.append(f"  --source-public-key '{source_config['public_key']}'")
+        parts.append(f"  --source-secret-key '{source_config['secret_key']}'")
+        parts.append(f"  --source-host '{source_config.get('host', DEFAULT_LANGFUSE_HOST)}'")
+        parts.append(f"  --dest-public-key '{dest_config['public_key']}'")
+        parts.append(f"  --dest-secret-key '{dest_config['secret_key']}'")
+        parts.append(f"  --dest-host '{dest_config.get('host', DEFAULT_LANGFUSE_HOST)}'")
+
         if options["from_timestamp"]:
-            self.stdout.write(f"From:        {options['from_timestamp']}")
+            parts.append(f"  --from-timestamp '{options['from_timestamp']}'")
         if options["to_timestamp"]:
-            self.stdout.write(f"To:          {options['to_timestamp']}")
+            parts.append(f"  --to-timestamp '{options['to_timestamp']}'")
+        if options["sleep_get"] != 0.7:
+            parts.append(f"  --sleep-get {options['sleep_get']}")
+        if options["sleep_batch"] != 0.5:
+            parts.append(f"  --sleep-batch {options['sleep_batch']}")
+        if options["max_retries"] != 4:
+            parts.append(f"  --max-retries {options['max_retries']}")
+        if options["workers"] != 5:
+            parts.append(f"  --workers {options['workers']}")
         if options["dry_run"]:
-            self.stdout.write(self.style.NOTICE("Mode:        DRY RUN"))
-        self.stdout.write(f"Checkpoint:  {checkpoint_file}\n")
+            parts.append("  --dry-run")
 
-        confirmation = input("Proceed with trace migration? (yes/no): ").strip().lower()
-        if confirmation != "yes":
-            self.stdout.write("Migration cancelled.")
-            return
-
-        self._migrate_traces(
-            source_config=source.config,
-            dest_config=dest.config,
-            from_timestamp_str=options["from_timestamp"],
-            to_timestamp_str=options["to_timestamp"],
-            retry_config=RetryConfig(
-                max_retries=options["max_retries"],
-                base_sleep=options["sleep_batch"],
-            ),
-            sleep_between_gets=options["sleep_get"],
-            dry_run=options["dry_run"],
-            checkpoint_file=checkpoint_file,
-            workers=options["workers"],
-        )
+        self.stdout.write("\nRunnable command (paste on local machine):\n")
+        self.stdout.write(" \\\n".join(parts))
+        self.stdout.write("")
 
     def _find_provider_by_host(self, providers: list[TraceProvider], host_fragment: str) -> TraceProvider | None:
         """Return the first provider whose host contains host_fragment, or None."""
