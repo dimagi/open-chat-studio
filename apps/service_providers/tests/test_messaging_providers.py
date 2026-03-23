@@ -540,7 +540,7 @@ class TestMetaCloudAPIServiceWindow:
     def test_send_template_message_raises_on_template_not_found(self, mock_post):
         """When Meta returns a 400 with template error, raise ServiceWindowExpiredException."""
         mock_post.return_value = httpx.Response(
-            400,
+            404,
             json={"error": {"message": "template new_bot_message not found", "code": 132001}},
             request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
         )
