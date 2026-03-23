@@ -6,8 +6,10 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.core.management.base import BaseCommand, CommandError
 from langfuse import Langfuse
@@ -258,6 +260,13 @@ class Command(BaseCommand):
         )
         adv.add_argument("--reset-checkpoint", action="store_true", help="Delete checkpoint and start fresh")
         adv.add_argument("--dry-run", action="store_true", help="Fetch and transform but do not push to destination")
+        adv.add_argument(
+            "--workers",
+            type=int,
+            default=5,
+            metavar="N",
+            help="Number of concurrent workers for fetch/push (default: 5)",
+        )
 
     def handle(self, *args, **options):
         team_slug = options["team_slug"]
@@ -318,6 +327,7 @@ class Command(BaseCommand):
             max_retries=options["max_retries"],
             dry_run=options["dry_run"],
             checkpoint_file=checkpoint_file,
+            workers=options["workers"],
         )
 
     def _find_provider_by_host(self, providers: list[TraceProvider], host_fragment: str) -> TraceProvider | None:
@@ -357,8 +367,8 @@ class Command(BaseCommand):
         max_retries=4,
         dry_run=False,
         checkpoint_file=".migration_checkpoint.json",
+        workers=5,
     ):
-
         try:
             langfuse_source = Langfuse(
                 public_key=source_config["public_key"],
@@ -408,13 +418,55 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.NOTICE("DRY RUN — no data will be written to the destination.\n"))
 
-        self.stdout.write("\nFetching and migrating traces...")
+        self.stdout.write(f"\nFetching and migrating traces ({workers} workers)...")
         page = 1
-        limit = 50
+        limit = 100
         total_migrated = 0
         total_failed_fetch = 0
         total_failed_transform = 0
         total_failed_push = 0
+        checkpoint_lock = threading.Lock()
+
+        def _process_single_trace(trace_info):
+            """Fetch, transform, and push a single trace. Returns (status, trace_id)."""
+            source_trace_id = trace_info.id
+            if source_trace_id in migrated_ids:
+                self.stdout.write(f"    Skipping {source_trace_id} (already in checkpoint).")
+                return "skipped", source_trace_id
+
+            self.stdout.write(f"    Processing source trace ID: {source_trace_id}")
+
+            source_trace_full = self._fetch_trace_detail_with_retry(
+                langfuse_source, source_trace_id, sleep_between_gets, max_retries
+            )
+            if source_trace_full is None:
+                return "failed_fetch", source_trace_id
+
+            try:
+                ingestion_batch = _transform_trace_to_ingestion_batch(source_trace_full)
+                if not ingestion_batch:
+                    self.stdout.write(f"      Skipping {source_trace_id}: transformation returned empty batch.")
+                    return "failed_transform", source_trace_id
+                batch_event_map = {event.id: event for event in ingestion_batch}
+            except Exception as e:
+                self.stdout.write(f"      Error transforming trace {source_trace_id}: {e}")
+                return "failed_transform", source_trace_id
+
+            push_ok = self._push_batch_with_retry(
+                langfuse_destination,
+                ingestion_batch,
+                batch_event_map,
+                source_trace_id,
+                source_trace_full,
+                migrated_ids,
+                checkpoint_file,
+                resume_from_timestamp,
+                sleep_between_batches,
+                max_retries,
+                dry_run,
+                checkpoint_lock,
+            )
+            return ("migrated" if push_ok else "failed_push"), source_trace_id
 
         while True:
             self.stdout.write(f"\n--- Processing page {page} ---")
@@ -432,50 +484,20 @@ class Command(BaseCommand):
                 f"{meta.page}/{getattr(meta, 'total_pages', 'N/A')}."
             )
 
-            for trace_info in trace_list.data:
-                source_trace_id = trace_info.id
-                if source_trace_id in migrated_ids:
-                    self.stdout.write(f"    Skipping {source_trace_id} (already in checkpoint).")
-                    continue
-
-                self.stdout.write(f"    Processing source trace ID: {source_trace_id}")
-
-                source_trace_full = self._fetch_trace_detail_with_retry(
-                    langfuse_source, source_trace_id, sleep_between_gets, max_retries
-                )
-                if source_trace_full is None:
-                    total_failed_fetch += 1
-                    continue
-
-                try:
-                    ingestion_batch = _transform_trace_to_ingestion_batch(source_trace_full)
-                    if not ingestion_batch:
-                        self.stdout.write(f"      Skipping {source_trace_id}: transformation returned empty batch.")
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(_process_single_trace, trace_info): trace_info for trace_info in trace_list.data
+                }
+                for future in as_completed(futures):
+                    status, trace_id = future.result()
+                    if status == "migrated":
+                        total_migrated += 1
+                    elif status == "failed_fetch":
+                        total_failed_fetch += 1
+                    elif status == "failed_transform":
                         total_failed_transform += 1
-                        continue
-                    batch_event_map = {event.id: event for event in ingestion_batch}
-                except Exception as e:
-                    self.stdout.write(f"      Error transforming trace {source_trace_id}: {e}")
-                    total_failed_transform += 1
-                    continue
-
-                push_ok = self._push_batch_with_retry(
-                    langfuse_destination,
-                    ingestion_batch,
-                    batch_event_map,
-                    source_trace_id,
-                    source_trace_full,
-                    migrated_ids,
-                    checkpoint_file,
-                    resume_from_timestamp,
-                    sleep_between_batches,
-                    max_retries,
-                    dry_run,
-                )
-                if push_ok:
-                    total_migrated += 1
-                else:
-                    total_failed_push += 1
+                    elif status == "failed_push":
+                        total_failed_push += 1
 
             current_page = getattr(meta, "page", page)
             total_pages = getattr(meta, "total_pages", page)
@@ -520,7 +542,8 @@ class Command(BaseCommand):
     def _fetch_trace_detail_with_retry(self, client, trace_id, sleep_between_gets, max_retries):
         """Fetch full trace details, retrying on rate limits."""
         for attempt in range(1, max_retries + 1):
-            time.sleep(sleep_between_gets * (2 ** (attempt - 1)))
+            if attempt > 1:
+                time.sleep(sleep_between_gets * (2 ** (attempt - 1)))
             try:
                 return client.api.trace.get(trace_id)
             except Exception as e:
@@ -532,7 +555,6 @@ class Command(BaseCommand):
                     return None
                 else:
                     self.stdout.write(f"        Transient error for {trace_id}, retrying...")
-                    time.sleep(2**attempt)
         return None
 
     def _push_batch_with_retry(
@@ -548,18 +570,19 @@ class Command(BaseCommand):
         sleep_between_batches,
         max_retries,
         dry_run,
+        checkpoint_lock=None,
     ) -> bool:
         """Push ingestion batch to destination, retrying on rate limits. Returns True on success."""
         for attempt in range(1, max_retries + 1):
-            time.sleep(sleep_between_batches * (2 ** (attempt - 1)))
+            if attempt > 1:
+                time.sleep(sleep_between_batches * (2 ** (attempt - 1)))
             try:
                 if dry_run:
                     self.stdout.write(
                         f"      [DRY RUN] Would ingest {len(ingestion_batch)} events for trace {trace_id}"
                     )
                     trace_ts = _safe_isoformat(getattr(source_trace_full, "timestamp", None))
-                    migrated_ids.add(trace_id)
-                    _save_checkpoint(checkpoint_file, migrated_ids, resume_from_timestamp=trace_ts)
+                    self._update_checkpoint(migrated_ids, trace_id, checkpoint_file, trace_ts, checkpoint_lock)
                     return True
 
                 response = dest_client.api.ingestion.batch(batch=ingestion_batch)
@@ -580,8 +603,7 @@ class Command(BaseCommand):
 
                 self.stdout.write(self.style.SUCCESS(f"      Successfully ingested trace {trace_id}"))
                 trace_ts = _safe_isoformat(getattr(source_trace_full, "timestamp", None))
-                migrated_ids.add(trace_id)
-                _save_checkpoint(checkpoint_file, migrated_ids, resume_from_timestamp=trace_ts)
+                self._update_checkpoint(migrated_ids, trace_id, checkpoint_file, trace_ts, checkpoint_lock)
                 return True
 
             except Exception as e:
@@ -597,3 +619,13 @@ class Command(BaseCommand):
                     self.stdout.write(f"        Non-rate-limit error pushing batch for {trace_id}. Failing this trace.")
                     return False
         return False
+
+    def _update_checkpoint(self, migrated_ids, trace_id, checkpoint_file, trace_ts, checkpoint_lock=None):
+        """Thread-safe checkpoint update."""
+        if checkpoint_lock:
+            with checkpoint_lock:
+                migrated_ids.add(trace_id)
+                _save_checkpoint(checkpoint_file, migrated_ids, resume_from_timestamp=trace_ts)
+        else:
+            migrated_ids.add(trace_id)
+            _save_checkpoint(checkpoint_file, migrated_ids, resume_from_timestamp=trace_ts)
