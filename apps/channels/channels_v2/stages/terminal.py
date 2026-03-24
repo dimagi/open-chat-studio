@@ -9,6 +9,7 @@ from telebot.apihelper import ApiTelegramException
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
+from apps.channels.channels_v2.stages.core import RESET_COMMAND
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
@@ -169,14 +170,12 @@ class PersistenceStage(ProcessingStage):
             ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
         )
 
-    RESET_COMMAND = "/reset"
-
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
         """Check if the user's inbound message was the /reset command."""
         return (
             ctx.message is not None
             and ctx.message.content_type == MESSAGE_TYPES.TEXT
-            and ctx.message.message_text.lower().strip() == self.RESET_COMMAND
+            and ctx.message.message_text.lower().strip() == RESET_COMMAND
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
