@@ -161,6 +161,18 @@ class TestApiChannelParticipantUser:
         )
         assert channel.participant_user == mock_user
 
+    def test_participant_user_falls_back_to_user_when_session_participant_user_is_none(self):
+        mock_session = MagicMock()
+        mock_session.participant.user = None
+        mock_user = MagicMock(name="explicit_user")
+        channel = ApiChannel(
+            experiment=MagicMock(),
+            experiment_channel=MagicMock(),
+            experiment_session=mock_session,
+            user=mock_user,
+        )
+        assert channel.participant_user == mock_user
+
 
 @pytest.mark.django_db()
 class TestApiChannelStartNewSession:

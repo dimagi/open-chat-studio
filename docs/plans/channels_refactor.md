@@ -2785,7 +2785,7 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why first:** Everything else depends on this. The integration tests validate the pipeline end-to-end using `TestNewChannel` before any real channel is migrated. No old code is removed in this PR.
 
-### PR 1: ApiChannel — [x] DONE
+### PR 1: ApiChannel — [ ] IN PROGRESS
 
 - [x] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
 - [x] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
