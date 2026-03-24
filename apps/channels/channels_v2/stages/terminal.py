@@ -165,7 +165,9 @@ class PersistenceStage(ProcessingStage):
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
+        return ctx.participant_allowed and (
+            ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
+        )
 
     RESET_COMMAND = "/reset"
 

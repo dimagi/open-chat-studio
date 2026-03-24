@@ -300,6 +300,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         self.add_tag(tag, team=self.chat.team, added_by=None)
 
     def rating(self) -> str | None:
+        if not self.pk:
+            return None
         if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
             return rating
 
