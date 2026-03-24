@@ -346,8 +346,8 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 name=file.name,
                 external_id=external_id,
                 neural=True,
-                language="",
-                language_code="",
+                language="Unknown",
+                language_code="Unknown",
                 gender="",
                 service=service,
                 voice_provider=self,
@@ -355,7 +355,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             )
         except IntegrityError:
             message = f"Unable to upload '{file.name}' voice. This voice might already exist"
-            raise ValidationError(message) from None
+            raise DjangoValidationError(message) from None
 
     @transaction.atomic()
     def add_files(self, files):
@@ -377,7 +377,15 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 except ElevenLabsApiError:
                     log.exception("ElevenLabs IVC API error for file '%s'", file.name)
                     raise
-                self._create_voice_from_file(file, service=SyntheticVoice.ElevenLabs, external_id=response.voice_id)
+                try:
+                    self._create_voice_from_file(file, service=SyntheticVoice.ElevenLabs, external_id=response.voice_id)
+                except Exception:
+                    # Clean up remote clone if local DB create fails
+                    try:
+                        client.voices.delete(voice_id=response.voice_id)
+                    except Exception:
+                        log.warning("Failed to clean up remote ElevenLabs voice %s", response.voice_id, exc_info=True)
+                    raise
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
@@ -439,22 +447,29 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         for voice in all_voices:
             labels = voice.labels if isinstance(voice.labels, dict) else {}
             gender = _map_elevenlabs_gender(labels)
-            language = labels.get("language", "")
+            language = labels.get("language", "") or "Unknown"
 
             api_voice_ids.add(voice.voice_id)
 
-            SyntheticVoice.objects.update_or_create(
-                external_id=voice.voice_id,
-                service=SyntheticVoice.ElevenLabs,
-                voice_provider=self,
-                defaults={
-                    "name": voice.name,
-                    "neural": True,
-                    "language": language,
-                    "language_code": language,
-                    "gender": gender,
-                },
-            )
+            try:
+                SyntheticVoice.objects.update_or_create(
+                    external_id=voice.voice_id,
+                    service=SyntheticVoice.ElevenLabs,
+                    voice_provider=self,
+                    defaults={
+                        "name": voice.name,
+                        "neural": True,
+                        "language": language,
+                        "language_code": language,
+                        "gender": gender,
+                    },
+                )
+            except IntegrityError:
+                log.warning(
+                    "Skipping ElevenLabs voice '%s' (%s) due to IntegrityError (possible duplicate metadata)",
+                    voice.name,
+                    voice.voice_id,
+                )
 
         # Remove voices no longer in API (only if not referenced by experiments)
         stale_voices = (

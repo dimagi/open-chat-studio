@@ -120,7 +120,6 @@ class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             ("eleven_multilingual_v2", "Multilingual v2 (default)"),
             ("eleven_v3", "v3 (latest)"),
             ("eleven_flash_v2_5", "Flash v2.5 (low latency)"),
-            ("eleven_turbo_v2_5", "Turbo v2.5"),
         ],
         initial="eleven_multilingual_v2",
     )

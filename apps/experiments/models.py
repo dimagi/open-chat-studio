@@ -434,6 +434,11 @@ class SyntheticVoice(BaseModel):
             ),
         ]
 
+    def clean(self):
+        super().clean()
+        if self.service == self.ElevenLabs and not self.external_id:
+            raise ValidationError({"external_id": "ElevenLabs voices require an external_id."})
+
     def get_gender(self):
         # This is a bit of a hack to display the gender on the admin screen. Directly calling gender doesn't work
         return self.gender
