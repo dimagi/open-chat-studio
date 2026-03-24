@@ -2763,7 +2763,7 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 | 1 | ApiChannel | [x] DONE  |
 | 2 | WebChannel | [x] DONE |
 | 3 | EvaluationChannel | [x] DONE |
-| 4 | TelegramChannel | [ ] Not started |
+| 4 | TelegramChannel | [x] DONE |
 | 5 | WhatsappChannel | [ ] Not started |
 | 6 | SlackChannel | [ ] Not started |
 | 7 | FacebookMessengerChannel | [ ] Not started |
@@ -2809,11 +2809,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why third:** Reduced pipeline like Web, but introduces the first channel-specific stage (`EvalsBotInteractionStage` replacing `BotInteractionStage`). Validates `channel_context` pattern and custom stage injection. No sender/callbacks.
 
-### PR 4: TelegramChannel — [ ] Not started
+### PR 4: TelegramChannel — [x] DONE
 
-- [ ] **Add:** `TelegramChannel` + `TelegramSender` + `TelegramCallbacks` + `concrete/test_telegram_channel.py` + `senders/test_telegram_sender.py` + `callbacks/test_telegram_callbacks.py`
-- [ ] **Remove:** `TelegramChannel` from `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `TelegramChannel` + `TelegramSender` + `TelegramCallbacks` + `concrete/test_telegram_channel.py`
+- [x] **Remove:** `TelegramChannel` from `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
 
 **Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and `SendingErrorHandlerStage` (Telegram 403 consent revocation).
 

@@ -11,15 +11,10 @@ from io import BytesIO
 from typing import TYPE_CHECKING, ClassVar, cast
 
 import emoji
-import httpx
 from django.conf import settings
 from django.db import transaction
-from telebot import TeleBot
-from telebot.apihelper import ApiTelegramException
-from telebot.util import antiflood, smart_split
 
 from apps.annotations.models import TagCategories
-from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import EventBot, get_bot
@@ -320,7 +315,11 @@ class ChannelBase(ABC):
     @staticmethod
     def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
         if platform == "telegram":
-            channel_cls = TelegramChannel
+            from apps.channels.channels_v2.telegram_channel import (  # noqa: PLC0415
+                TelegramChannel as NewTelegramChannel,
+            )
+
+            channel_cls = NewTelegramChannel
         elif platform == "web":
             from apps.channels.channels_v2.web_channel import WebChannel as NewWebChannel  # noqa: PLC0415
 
@@ -990,112 +989,6 @@ class ChannelBase(ABC):
             if version_number not in current_versions:
                 self.experiment_session.experiment_versions = current_versions + [version_number]
                 self.experiment_session.save(update_fields=["experiment_versions"])
-
-
-class TelegramChannel(ChannelBase):
-    voice_replies_supported = True
-    supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
-    supports_multimedia = True
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession | None = None,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
-        self._check_consent(strict=False, default_consent=True)
-        self.telegram_bot = TeleBot(self.experiment_channel.extra_data["bot_token"], threaded=False)
-
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        self._check_consent(strict=False, default_consent=True)
-        try:
-            antiflood(
-                self.telegram_bot.send_voice,
-                self.participant_identifier,
-                voice=synthetic_voice.audio,
-                duration=synthetic_voice.duration,
-            )
-        except ApiTelegramException as e:
-            self._handle_telegram_api_error(e)
-
-    def send_text_to_user(self, text: str):
-        self._check_consent(strict=False, default_consent=True)
-        try:
-            for message_text in smart_split(text):
-                antiflood(self.telegram_bot.send_message, self.participant_identifier, text=message_text)
-        except ApiTelegramException as e:
-            self._handle_telegram_api_error(e)
-
-    def get_message_audio(self) -> BytesIO:
-        file_url = self.telegram_bot.get_file_url(self.message.media_id)
-        response = httpx.get(file_url)
-        response.raise_for_status()
-        ogg_audio = BytesIO(response.content)
-        return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
-
-    def _handle_telegram_api_error(self, e: ApiTelegramException):
-        if e.error_code == 403 and "bot was blocked by the user" in e.description:
-            try:
-                participant_data = self.participant_data
-                participant_data.update_consent(False)
-            except ParticipantData.DoesNotExist:
-                raise ChannelException("Participant data does not exist during consent update") from e
-            except Exception as exc:
-                raise ChannelException(
-                    f"Unable to update consent for participant {self.participant_identifier}"
-                ) from exc
-        else:
-            raise ChannelException(f"Telegram API error occurred: {e.description}") from e
-
-    # Callbacks
-
-    def submit_input_to_llm(self):
-        # Indicate to the user that the bot is busy processing the message
-        self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="typing")
-
-    def transcription_started(self):
-        self.telegram_bot.send_chat_action(chat_id=self.participant_identifier, action="upload_voice")
-
-    def echo_transcript(self, transcript: str):
-        self.telegram_bot.send_message(
-            self.participant_identifier, text=f"I heard: {transcript}", reply_to_message_id=self.message.message_id
-        )
-
-    def _can_send_file(self, file: File) -> bool:
-        mime = file.content_type
-        size = file.content_size or 0  # in bytes
-
-        if mime.startswith("image/"):
-            return size <= 10 * 1024 * 1024  # 10 MB for images
-        elif mime.startswith(("video/", "audio/", "application/")):
-            return size <= 50 * 1024 * 1024  # 50 MB for other supported types
-        else:
-            return False
-
-    def send_file_to_user(self, file: File):
-        chat_id = self.participant_identifier
-        mime = file.content_type
-        file_data = file.file
-
-        main_type = mime.split("/")[0]
-        arg_name = ""
-
-        match main_type:
-            case "image":
-                method = self.telegram_bot.send_photo
-                arg_name = "photo"
-            case "video":
-                method = self.telegram_bot.send_video
-                arg_name = "video"
-            case "audio":
-                method = self.telegram_bot.send_audio
-                arg_name = "audio"
-            case _:
-                method = self.telegram_bot.send_document
-                arg_name = "document"
-
-        antiflood(method, chat_id, **{arg_name: file_data})
 
 
 class WhatsappChannel(ChannelBase):
