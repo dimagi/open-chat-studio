@@ -150,8 +150,10 @@ class File(BaseTeamModel, VersionsMixin):
         return humanize_bytes(self.content_size)
 
     @property
-    def size_mb(self) -> float:
+    def size_mb(self) -> float | None:
         """Returns the size of this file in megabytes"""
+        if self.content_size is None:
+            return None
         return bytes_to_megabytes(self.content_size)
 
     def _get_version_details(self) -> VersionDetails:

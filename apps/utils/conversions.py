@@ -2,7 +2,9 @@ MEGA = 1000000
 KILO = 1000
 
 
-def humanize_bytes(num: int):
+def humanize_bytes(num: int | None):
+    if num is None:
+        return ""
     if num < KILO:
         return f"{num} B"
     if num < MEGA:
