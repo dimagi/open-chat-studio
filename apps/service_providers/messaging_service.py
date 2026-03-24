@@ -238,7 +238,7 @@ class TwilioService(MessagingService):
         self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
-        return file.content_type in supported_mime_types.TWILIO and file.size_mb <= self.max_file_size_mb
+        return file.content_type in supported_mime_types.TWILIO and (file.size_mb or 0) <= self.max_file_size_mb
 
 
 class TurnIOService(MessagingService):
