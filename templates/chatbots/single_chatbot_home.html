@@ -47,16 +47,20 @@
                 </div>
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                   <li>
-                    <form method="post"
-                          action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
-                          class="inline">
-                      {% csrf_token %}
-                      <button type="submit">Unreleased version</button>
-                    </form>
+                    {% flag "flag_chat_widget" %}
+                      <button type="button" onclick="openChatWidget({{ experiment.version_number }})">Unreleased version</button>
+                    {% else %}
+                      <form method="post"
+                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
+                            class="inline">
+                        {% csrf_token %}
+                        <button type="submit">Unreleased version</button>
+                      </form>
+                    {% endflag %}
                   </li>
                   <li>
                     {% flag "flag_chat_widget" %}
-                      <button type="button" onclick="document.getElementById('chatbot-widget').setAttribute('visible', 'true')">Published version</button>
+                      <button type="button" onclick="openChatWidget(0)">Published version</button>
                     {% else %}
                       <form method="post"
                             action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
@@ -222,6 +226,7 @@
     {% flag "flag_chat_widget" %}
       <open-chat-studio-widget
         id="chatbot-widget"
+        show-button="false"
         visible="false"
         chatbot-id="{{ experiment.public_id }}"
         api-base-url="{{ request.scheme }}://{{ request.get_host }}"
@@ -230,5 +235,30 @@
         position="right"
         persistent-session="false"
       ></open-chat-studio-widget>
+      <script>
+        const widgetStyles = {
+          published: {
+            '--header-bg-color': 'oklch(0.982 0.018 155.826)',
+            '--header-bg-hover-color': 'oklch(0.76 0.177 163.223)',
+            '--header-text-color': 'oklch(0.527 0.154 150.069)',
+          },
+          working: {
+            '--header-bg-color': 'oklch(0.987 0.026 102.212)',
+            '--header-bg-hover-color': 'oklch(0.82 0.189 84.429)',
+            '--header-text-color': 'oklch(0.476 0.114 61.907)',
+          },
+        };
+        function openChatWidget(versionNumber) {
+          const widget = document.getElementById('chatbot-widget');
+          widget.versionNumber = versionNumber;
+          widget.visible = true;
+          const isPublished = versionNumber === 0;
+          widget.headerText = isPublished ? 'Published Version' : `Working Version (v${versionNumber})`;
+          const styles = isPublished ? widgetStyles.published : widgetStyles.working;
+          for (const [prop, value] of Object.entries(styles)) {
+            widget.style.setProperty(prop, value);
+          }
+        }
+      </script>
     {% endflag %}
 {% endblock app %}

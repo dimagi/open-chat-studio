@@ -266,9 +266,10 @@ def chat_start_session(request):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        experiment_version = get_object_or_404(
-            Experiment, working_version_id=experiment.id, version_number=version_number
-        )
+        if version_number != Experiment.DEFAULT_VERSION_NUMBER:
+            experiment_version = get_object_or_404(
+                Experiment, working_version_id=experiment.id, version_number=version_number
+            )
 
     team = experiment.team
 
@@ -412,9 +413,12 @@ def chat_send_message(request, session_id):
                 {"error": "You do not have access to this chatbot"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        experiment_version = get_object_or_404(
-            Experiment, working_version_id=session.experiment.id, version_number=version_number
-        )
+        if version_number != Experiment.DEFAULT_VERSION_NUMBER:
+            experiment_version = get_object_or_404(
+                Experiment, working_version_id=session.experiment.id, version_number=version_number
+            )
+        else:
+            experiment_version = session.experiment_version
     else:
         experiment_version = session.experiment_version
 
