@@ -4,6 +4,7 @@ import contextlib
 import logging
 import re
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from io import BytesIO
@@ -30,6 +31,7 @@ from apps.chat.exceptions import (
     ChannelException,
     ChatException,
     ParticipantNotAllowedException,
+    ServiceWindowExpiredException,
     UserReportableError,
     VersionedExperimentSessionsNotAllowedException,
 )
@@ -189,6 +191,11 @@ class ChannelBase(ABC):
     def experiment_session(self, value: ExperimentSession):
         self._experiment_session = value
         self.reset_bot()
+
+    @property
+    def last_activity_at(self) -> datetime | None:
+        """Returns last_activity_at from the session, or None if no session exists."""
+        return self._experiment_session.last_activity_at if self._experiment_session else None
 
     @property
     def message(self) -> BaseMessage:
@@ -562,13 +569,20 @@ class ChannelBase(ABC):
             except AudioSynthesizeException:
                 logger.exception("Error generating voice response")
                 audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
-                self._bot_message_is_voice = False
-                bot_message = f"{bot_message}\n\n{urls_to_append}"
-                self._send_text_to_user_with_notification(bot_message)
+                self._voice_fallback_to_text(bot_message, urls_to_append)
+            except ServiceWindowExpiredException:
+                logger.info("Service window expired, falling back to text message")
+                self._voice_fallback_to_text(bot_message, urls_to_append)
 
         # Finally send the attachments that are supported by the channel
         if supported_files:
             self._send_files_to_user(supported_files)
+
+    def _voice_fallback_to_text(self, bot_message: str, urls_to_append: str):
+        """Fall back to sending the bot message as text when voice delivery fails."""
+        self._bot_message_is_voice = False
+        bot_message = f"{bot_message}\n\n{urls_to_append}"
+        self._send_text_to_user_with_notification(bot_message)
 
     def _format_reference_section(self, text: str, files: list[File]) -> tuple[str, list[File]]:
         """
@@ -1179,7 +1193,11 @@ class WhatsappChannel(ChannelBase):
 
     def send_text_to_user(self, text: str):
         self.messaging_service.send_text_message(
-            message=text, from_=self.from_identifier, to=self.participant_identifier, platform=ChannelPlatform.WHATSAPP
+            message=text,
+            from_=self.from_identifier,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=self.last_activity_at,
         )
 
     def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
@@ -1189,6 +1207,7 @@ class WhatsappChannel(ChannelBase):
             from_=self.from_identifier,
             to=self.participant_identifier,
             platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=self.last_activity_at,
         )
 
     def send_file_to_user(self, file: File):
@@ -1209,7 +1228,11 @@ class SureAdhereChannel(ChannelBase):
         from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
         to_patient = self.participant_identifier
         self.messaging_service.send_text_message(
-            message=text, from_=from_, to=to_patient, platform=ChannelPlatform.SUREADHERE
+            message=text,
+            from_=from_,
+            to=to_patient,
+            platform=ChannelPlatform.SUREADHERE,
+            last_activity_at=self.last_activity_at,
         )
 
     @property
@@ -1221,7 +1244,11 @@ class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
         self.messaging_service.send_text_message(
-            message=text, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+            message=text,
+            from_=from_,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.FACEBOOK,
+            last_activity_at=self.last_activity_at,
         )
 
     @property
@@ -1239,7 +1266,11 @@ class FacebookMessengerChannel(ChannelBase):
         """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
         from_ = self.experiment_channel.extra_data["page_id"]
         self.messaging_service.send_voice_message(
-            synthetic_voice, from_=from_, to=self.participant_identifier, platform=ChannelPlatform.FACEBOOK
+            synthetic_voice,
+            from_=from_,
+            to=self.participant_identifier,
+            platform=ChannelPlatform.FACEBOOK,
+            last_activity_at=self.last_activity_at,
         )
 
 
@@ -1276,6 +1307,7 @@ class SlackChannel(ChannelBase):
             to=channel_id,
             platform=ChannelPlatform.SLACK,
             thread_ts=thread_ts,
+            last_activity_at=self.last_activity_at,
         )
 
     def _ensure_sessions_exists(self):

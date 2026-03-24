@@ -269,6 +269,15 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         label=_("Webhook Verify Token"),
         help_text=_("Token used by Meta to verify the webhook URL. Must match the token configured in your Meta app."),
     )
+    template_language_code = forms.CharField(
+        label=_("Template Language Code"),
+        help_text=_("The language code of the template message e.g. 'en' for English, 'es' for Spanish."),
+        required=False,
+        initial="en",
+    )
+
+    def clean_template_language_code(self):
+        return self.cleaned_data.get("template_language_code") or "en"
 
     def save(self, instance):
         instance = super().save(instance)
@@ -313,7 +322,6 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     slack_installation_id = forms.CharField(widget=forms.HiddenInput())
 
     def get_slack_installation(self):
-
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()
 
