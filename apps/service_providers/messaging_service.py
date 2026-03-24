@@ -233,7 +233,15 @@ class TwilioService(MessagingService):
 
         return number if number in self._get_account_numbers() else None
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+    def send_file_to_user(
+        self,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        file: File,
+        download_link: str,
+        last_activity_at: datetime | None = None,
+    ):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
         self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
@@ -320,7 +328,15 @@ class TurnIOService(MessagingService):
         else:
             return False
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+    def send_file_to_user(
+        self,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        file: File,
+        download_link: str,
+        last_activity_at: datetime | None = None,
+    ):
         mime_type = file.content_type
 
         if mime_type.startswith("image/"):
