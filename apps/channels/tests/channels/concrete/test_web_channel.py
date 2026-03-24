@@ -47,33 +47,17 @@ class TestWebChannelPipeline:
             experiment_session=MagicMock(),
         )
 
-    def test_pipeline_omits_session_resolution_stage(self):
+    @pytest.mark.parametrize(
+        "stage_class",
+        [SessionResolutionStage, ConsentFlowStage, ResponseSendingStage, SendingErrorHandlerStage],
+        ids=["session_resolution", "consent_flow", "response_sending", "sending_error_handler"],
+    )
+    def test_pipeline_omits_stage(self, stage_class):
         channel = self._make_channel()
         pipeline = channel._build_pipeline()
 
         stage_types = [type(s) for s in pipeline.core_stages + pipeline.terminal_stages]
-        assert SessionResolutionStage not in stage_types
-
-    def test_pipeline_omits_consent_flow_stage(self):
-        channel = self._make_channel()
-        pipeline = channel._build_pipeline()
-
-        stage_types = [type(s) for s in pipeline.core_stages + pipeline.terminal_stages]
-        assert ConsentFlowStage not in stage_types
-
-    def test_pipeline_omits_response_sending_stage(self):
-        channel = self._make_channel()
-        pipeline = channel._build_pipeline()
-
-        stage_types = [type(s) for s in pipeline.core_stages + pipeline.terminal_stages]
-        assert ResponseSendingStage not in stage_types
-
-    def test_pipeline_omits_sending_error_handler_stage(self):
-        channel = self._make_channel()
-        pipeline = channel._build_pipeline()
-
-        stage_types = [type(s) for s in pipeline.core_stages + pipeline.terminal_stages]
-        assert SendingErrorHandlerStage not in stage_types
+        assert stage_class not in stage_types
 
     def test_pipeline_includes_persistence_and_activity_tracking(self):
         channel = self._make_channel()
