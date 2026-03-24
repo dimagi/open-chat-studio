@@ -167,13 +167,12 @@ jobs:
           uv sync --locked --dev
       - name: Configure Postgres for performance
         run: |
-          PGPASSWORD=postgres_password psql -h localhost -U postgres -c "
-            ALTER SYSTEM SET fsync = off;
-            ALTER SYSTEM SET synchronous_commit = off;
-            ALTER SYSTEM SET full_page_writes = off;
-            ALTER SYSTEM SET checkpoint_completion_target = 0.9;
-          "
-          PGPASSWORD=postgres_password psql -h localhost -U postgres -c "SELECT pg_reload_conf();"
+          PGPASSWORD=postgres_password psql -h localhost -U postgres \
+            -c "ALTER SYSTEM SET fsync = off;" \
+            -c "ALTER SYSTEM SET synchronous_commit = off;" \
+            -c "ALTER SYSTEM SET full_page_writes = off;" \
+            -c "ALTER SYSTEM SET checkpoint_completion_target = 0.9;" \
+            -c "SELECT pg_reload_conf();"
       - name: Set coverage flags
         id: cov_flags
         run: |
