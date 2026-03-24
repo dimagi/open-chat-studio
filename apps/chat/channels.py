@@ -11,11 +11,9 @@ from io import BytesIO
 from typing import TYPE_CHECKING, ClassVar, cast
 
 import emoji
-from django.conf import settings
 from django.db import transaction
 
 from apps.annotations.models import TagCategories
-from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.bots import EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
@@ -51,7 +49,6 @@ from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
-from apps.slack.utils import parse_session_external_id
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 
@@ -347,9 +344,15 @@ class ChannelBase(ABC):
 
             channel_cls = NewSureAdhereChannel
         elif platform == "slack":
-            channel_cls = SlackChannel
+            from apps.channels.channels_v2.slack_channel import SlackChannel as NewSlackChannel  # noqa: PLC0415
+
+            channel_cls = NewSlackChannel
         elif platform == "commcare_connect":
-            channel_cls = CommCareConnectChannel
+            from apps.channels.channels_v2.commcare_channel import (  # noqa: PLC0415
+                CommCareConnectChannel as NewCommCareChannel,
+            )
+
+            channel_cls = NewCommCareChannel
         # elif platform == "evaluations":
         #  evals channel can't be called this way
         elif platform == "embedded_widget":
@@ -1000,104 +1003,6 @@ class ChannelBase(ABC):
             if version_number not in current_versions:
                 self.experiment_session.experiment_versions = current_versions + [version_number]
                 self.experiment_session.save(update_fields=["experiment_versions"])
-
-
-class SlackChannel(ChannelBase):
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-    supports_multimedia = True
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession,
-        messaging_service=None,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
-        self._messaging_service = messaging_service
-
-    @property
-    def messaging_service(self):
-        if not self._messaging_service:
-            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-        return self._messaging_service
-
-    def send_text_to_user(self, text: str):
-        if not self.message:
-            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
-        else:
-            channel_id = self.message.channel_id
-            thread_ts = self.message.thread_ts
-        self.messaging_service.send_text_message(
-            text,
-            from_="",
-            to=channel_id,
-            platform=ChannelPlatform.SLACK,
-            thread_ts=thread_ts,
-            last_activity_at=self.last_activity_at,
-        )
-
-    def _ensure_sessions_exists(self):
-        if not self.experiment_session:
-            raise ChannelException("WebChannel requires an existing session")
-
-    def _can_send_file(self, file: File) -> bool:
-        mime = file.content_type
-        size = file.content_size or 0
-        # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
-        max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
-        return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
-
-    def send_file_to_user(self, file: File):
-        if not self.message:
-            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
-        else:
-            channel_id = self.message.channel_id
-            thread_ts = self.message.thread_ts
-        self.messaging_service.send_file_message(
-            file=file,
-            to=channel_id,
-            thread_ts=thread_ts,
-        )
-
-
-class CommCareConnectChannel(ChannelBase):
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession | None = None,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
-        self._check_consent(strict=False)
-        self.client = CommCareConnectClient()
-
-    def _ensure_sessions_exists(self):
-        super()._ensure_sessions_exists()
-        self._check_consent()
-
-    def send_text_to_user(self, text: str):
-        self._check_consent()
-        self.client.send_message_to_user(
-            channel_id=self.connect_channel_id, message=text, encryption_key=self.encryption_key
-        )
-
-    @cached_property
-    def connect_channel_id(self) -> str:
-        channel_id = self.participant_data.system_metadata.get("commcare_connect_channel_id")
-        if not channel_id:
-            raise ChannelException(f"channel_id is missing for participant {self.participant_identifier}")
-        return channel_id
-
-    @cached_property
-    def encryption_key(self) -> bytes:
-        if not self.participant_data.encryption_key:
-            self.participant_data.generate_encryption_key()
-        return self.participant_data.get_encryption_key_bytes()
 
 
 def _start_experiment_session(

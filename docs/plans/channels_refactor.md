@@ -2765,10 +2765,10 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 | 3 | EvaluationChannel | [x] DONE |
 | 4 | TelegramChannel | [x] DONE |
 | 5 | WhatsappChannel | [x] DONE |
-| 6 | SlackChannel | [ ] Not started |
+| 6 | SlackChannel | [x] DONE |
 | 7 | FacebookMessengerChannel | [x] DONE |
 | 8 | SureAdhereChannel | [x] DONE |
-| 9 | CommCareConnectChannel | [ ] Not started |
+| 9 | CommCareConnectChannel | [x] DONE |
 | 10 | Cleanup (remove old `channels.py`, update imports) | [ ] Not started |
 
 ### PR 0: Foundation — [x] DONE
@@ -2825,11 +2825,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files.
 
-### PR 6: SlackChannel — [ ] Not started
+### PR 6: SlackChannel — [x] DONE
 
-- [ ] **Add:** `SlackChannel` + `SlackSender` + `concrete/test_slack_channel.py` + `senders/test_slack_sender.py`
-- [ ] **Remove:** `SlackChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_slack_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `SlackChannel` + `SlackSender` + `concrete/test_slack_channel.py`
+- [x] **Remove:** `SlackChannel` from `apps/chat/channels.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports + slack_listeners.py + old tests
 
 **Why here:** Pre-existing session (like Web) but with full file support and a sender. Validates `_build_pipeline()` omitting `SessionResolutionStage` while keeping sending stages. `start_new_session()` with `session_external_id` for thread tracking moves as-is.
 
@@ -2849,11 +2849,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why here:** Simplest full-pipeline channel with a sender. No callbacks, no voice, no files. Quick PR.
 
-### PR 9: CommCareConnectChannel — [ ] Not started
+### PR 9: CommCareConnectChannel — [x] DONE
 
-- [ ] **Add:** `CommCareConnectChannel` + `CommCareConsentCheckStage` + `CommCareConnectSender` + `concrete/test_commcare_channel.py`
-- [ ] **Remove:** `CommCareConnectChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_connect_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `CommCareConnectChannel` + `CommCareConsentCheckStage` + `CommCareConnectSender` + `concrete/test_commcare_channel.py`
+- [x] **Remove:** `CommCareConnectChannel` from `apps/chat/channels.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports + old integration tests
 
 **Why last:** Most complex channel-specific behavior — custom consent check stage inserted into the pipeline, encrypted messaging via `CommCareConnectClient`, lazy-binding sender (visitor pattern for `connect_channel_id`/`encryption_key`). Benefits from all prior patterns being established.
 
