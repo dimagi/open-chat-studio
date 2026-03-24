@@ -766,21 +766,28 @@ class PersistenceStage(ProcessingStage):
 
     Persists regardless of whether sending succeeded — chat history
     serves as an audit trail.
+
+    When a participant is not allowed to chat (ctx.participant_allowed
+    is False), the stage is skipped entirely — no messages, tags, or
+    attachments are persisted. This prevents the "not allowed" early
+    exit response from being recorded as a ChatMessage.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return (
+        return ctx.participant_allowed and (
             ctx.early_exit_response is not None
             or ctx.voice_audio is not None
             or ctx.human_message_tags
         )
+
+    RESET_COMMAND = "/reset"
 
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
         """Check if the user's inbound message was the /reset command."""
         return (
             ctx.message is not None
             and ctx.message.content_type == MESSAGE_TYPES.TEXT
-            and ctx.message.message_text.lower().strip() == SessionResolutionStage.RESET_COMMAND
+            and ctx.message.message_text.lower().strip() == self.RESET_COMMAND
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
@@ -2754,7 +2761,7 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 |---|---|---|
 | 0 | Foundation (pipeline infra, shared stages, base tests) | [x] DONE |
 | 1 | ApiChannel | [x] DONE |
-| 2 | WebChannel | [ ] Not started |
+| 2 | WebChannel | [x] DONE |
 | 3 | EvaluationChannel | [ ] Not started |
 | 4 | TelegramChannel | [ ] Not started |
 | 5 | WhatsappChannel | [ ] Not started |
@@ -2786,11 +2793,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why first real channel:** Simplest pipeline — no voice, no files, no `ResponseSendingStage` or `SendingErrorHandlerStage`. No sender/callbacks to test. Validates the basic pipeline customization (`_build_pipeline()` omitting stages) with minimal risk.
 
-### PR 2: WebChannel — [ ] Not started
+### PR 2: WebChannel — [x] DONE
 
-- [ ] **Add:** `WebChannel` implementation + `concrete/test_web_channel.py`
-- [ ] **Remove:** `WebChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `WebChannel` implementation + `concrete/test_web_channel.py`
+- [x] **Remove:** `WebChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
 
 **Why second:** Also a reduced pipeline (no sending stages, no `SessionResolutionStage`, no `ConsentFlowStage`). Requires pre-existing session — validates that pattern. No sender/callbacks. `start_new_session()` and `check_and_process_seed_message()` are utility methods outside the pipeline, so they move as-is.
 
