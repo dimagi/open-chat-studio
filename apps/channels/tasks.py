@@ -8,7 +8,10 @@ from twilio.request_validator import RequestValidator
 
 from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
+from apps.channels.channels_v2.facebook_channel import FacebookMessengerChannel
+from apps.channels.channels_v2.sureadhere_channel import SureAdhereChannel
 from apps.channels.channels_v2.telegram_channel import TelegramChannel
+from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import (
     BaseMessage,
@@ -19,12 +22,7 @@ from apps.channels.datamodels import (
     TwilioMessage,
 )
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import (
-    CommCareConnectChannel,
-    FacebookMessengerChannel,
-    SureAdhereChannel,
-    WhatsappChannel,
-)
+from apps.chat.channels import CommCareConnectChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.models import MessagingProviderType

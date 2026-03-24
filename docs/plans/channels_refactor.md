@@ -2764,10 +2764,10 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 | 2 | WebChannel | [x] DONE |
 | 3 | EvaluationChannel | [x] DONE |
 | 4 | TelegramChannel | [x] DONE |
-| 5 | WhatsappChannel | [ ] Not started |
+| 5 | WhatsappChannel | [x] DONE |
 | 6 | SlackChannel | [ ] Not started |
-| 7 | FacebookMessengerChannel | [ ] Not started |
-| 8 | SureAdhereChannel | [ ] Not started |
+| 7 | FacebookMessengerChannel | [x] DONE |
+| 8 | SureAdhereChannel | [x] DONE |
 | 9 | CommCareConnectChannel | [ ] Not started |
 | 10 | Cleanup (remove old `channels.py`, update imports) | [ ] Not started |
 
@@ -2817,11 +2817,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and `SendingErrorHandlerStage` (Telegram 403 consent revocation).
 
-### PR 5: WhatsappChannel — [ ] Not started
+### PR 5: WhatsappChannel — [x] DONE
 
-- [ ] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `concrete/test_whatsapp_channel.py` + `senders/test_whatsapp_sender.py` + `callbacks/test_whatsapp_callbacks.py`
-- [ ] **Remove:** `WhatsappChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `concrete/test_whatsapp_channel.py`
+- [x] **Remove:** `WhatsappChannel` from `apps/chat/channels.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports + old integration tests
 
 **Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files.
 
@@ -2833,19 +2833,19 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why here:** Pre-existing session (like Web) but with full file support and a sender. Validates `_build_pipeline()` omitting `SessionResolutionStage` while keeping sending stages. `start_new_session()` with `session_external_id` for thread tracking moves as-is.
 
-### PR 7: FacebookMessengerChannel — [ ] Not started
+### PR 7: FacebookMessengerChannel — [x] DONE
 
-- [ ] **Add:** `FacebookMessengerChannel` + `FacebookSender` + `FacebookCallbacks` + `concrete/test_facebook_channel.py` + `senders/test_facebook_sender.py` + `callbacks/test_facebook_callbacks.py`
-- [ ] **Remove:** `FacebookMessengerChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_facebook_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `FacebookMessengerChannel` + `FacebookSender` + `FacebookCallbacks` + `concrete/test_facebook_channel.py`
+- [x] **Remove:** `FacebookMessengerChannel` from `apps/chat/channels.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports + old integration tests
 
 **Why here:** Standard full pipeline. Validates messaging service delegation for voice support. Straightforward after Telegram and WhatsApp patterns are established.
 
-### PR 8: SureAdhereChannel — [ ] Not started
+### PR 8: SureAdhereChannel — [x] DONE
 
-- [ ] **Add:** `SureAdhereChannel` + `SureAdhereSender` + `concrete/test_sureadhere_channel.py` + `senders/test_sureadhere_sender.py`
-- [ ] **Remove:** `SureAdhereChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_sureadhere_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `SureAdhereChannel` + `SureAdhereSender` + `concrete/test_sureadhere_channel.py`
+- [x] **Remove:** `SureAdhereChannel` from `apps/chat/channels.py`
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
 
 **Why here:** Simplest full-pipeline channel with a sender. No callbacks, no voice, no files. Quick PR.
 

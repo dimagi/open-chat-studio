@@ -56,7 +56,8 @@ class TestTwilio:
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._do_transcription", return_value="Hi")
+    @patch("apps.service_providers.messaging_service.TwilioService.get_message_audio")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -65,7 +66,8 @@ class TestTwilio:
         bot_process_input,
         send_text_message,
         send_voice_message,
-        get_voice_transcript_mock,
+        get_message_audio_mock,
+        do_transcription_mock,
         synthesize_voice_mock,
         incoming_message,
         message_type,
@@ -79,7 +81,7 @@ class TestTwilio:
             experiment = ExperimentFactory.create(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
             bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
-            get_voice_transcript_mock.return_value = "Hi"
+            get_message_audio_mock.return_value = BytesIO(b"audio data")
 
             handle_twilio_message(message_data=incoming_message)
 

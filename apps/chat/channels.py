@@ -48,7 +48,6 @@ from apps.ocs_notifications.notifications import (
 )
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
-from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
@@ -325,16 +324,28 @@ class ChannelBase(ABC):
 
             channel_cls = NewWebChannel
         elif platform == "whatsapp":
-            channel_cls = WhatsappChannel
+            from apps.channels.channels_v2.whatsapp_channel import (  # noqa: PLC0415
+                WhatsappChannel as NewWhatsappChannel,
+            )
+
+            channel_cls = NewWhatsappChannel
         elif platform == "facebook":
-            channel_cls = FacebookMessengerChannel
+            from apps.channels.channels_v2.facebook_channel import (  # noqa: PLC0415
+                FacebookMessengerChannel as NewFacebookChannel,
+            )
+
+            channel_cls = NewFacebookChannel
         elif platform == "api":
             # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
 
             channel_cls = NewApiChannel
         elif platform == "sureadhere":
-            channel_cls = SureAdhereChannel
+            from apps.channels.channels_v2.sureadhere_channel import (  # noqa: PLC0415
+                SureAdhereChannel as NewSureAdhereChannel,
+            )
+
+            channel_cls = NewSureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
@@ -989,117 +1000,6 @@ class ChannelBase(ABC):
             if version_number not in current_versions:
                 self.experiment_session.experiment_versions = current_versions + [version_number]
                 self.experiment_session.save(update_fields=["experiment_versions"])
-
-
-class WhatsappChannel(ChannelBase):
-    @property
-    def voice_replies_supported(self) -> bool:
-        # TODO: Update turn-python library to support this
-        return self.messaging_service.voice_replies_supported
-
-    @property
-    def supports_multimedia(self) -> bool:
-        return self.messaging_service.supports_multimedia
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
-
-    @property
-    def from_identifier(self) -> str:
-        """Returns the phone number ID for Meta Cloud API, or the phone number for other providers."""
-        extra_data = self.experiment_channel.extra_data
-        if self.experiment_channel.messaging_provider.type == MessagingProviderType.meta_cloud_api:
-            phone_number_id = extra_data.get("phone_number_id")
-            if not phone_number_id:
-                raise ValueError("Meta Cloud API channel is missing phone_number_id in extra_data")
-            return phone_number_id
-        return extra_data["number"]
-
-    def echo_transcript(self, transcript: str):
-        self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
-
-    def send_text_to_user(self, text: str):
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=self.from_identifier,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.WHATSAPP,
-            last_activity_at=self.last_activity_at,
-        )
-
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
-        self.messaging_service.send_voice_message(
-            synthetic_voice,
-            from_=self.from_identifier,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.WHATSAPP,
-            last_activity_at=self.last_activity_at,
-        )
-
-    def send_file_to_user(self, file: File):
-        self.messaging_service.send_file_to_user(
-            from_=self.from_identifier,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.WHATSAPP,
-            file=file,
-            download_link=file.download_link(experiment_session_id=self.experiment_session.id),
-        )
-
-    def _can_send_file(self, file: File) -> bool:
-        return self.messaging_service.can_send_file(file)
-
-
-class SureAdhereChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
-        to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=to_patient,
-            platform=ChannelPlatform.SUREADHERE,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
-
-
-class FacebookMessengerChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def voice_replies_supported(self) -> bool:
-        return self.messaging_service.voice_replies_supported
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
-
-    def echo_transcript(self, transcript: str):
-        self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
-
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
-        from_ = self.experiment_channel.extra_data["page_id"]
-        self.messaging_service.send_voice_message(
-            synthetic_voice,
-            from_=from_,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.last_activity_at,
-        )
 
 
 class SlackChannel(ChannelBase):
