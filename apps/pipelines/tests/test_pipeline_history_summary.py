@@ -7,7 +7,6 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.pytest import django_db_with_data
 
 
 @pytest.fixture()
@@ -25,7 +24,7 @@ def pipeline_chat_history(experiment_session):
     return PipelineChatHistoryFactory.create(session=experiment_session)
 
 
-@django_db_with_data()
+@pytest.mark.django_db()
 def test_no_summary_returns_all_messages(experiment_session):
     history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
     message1 = history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
@@ -40,7 +39,7 @@ def test_no_summary_returns_all_messages(experiment_session):
     assert expected_messages == summary_messages
 
 
-@django_db_with_data()
+@pytest.mark.django_db()
 def test_get_messages_returns_until_marker(experiment_session):
     history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
     history.messages.create(ai_message="I am a robot", human_message="hi, please fetch me a coffee")
