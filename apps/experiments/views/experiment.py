@@ -44,9 +44,9 @@ from field_audit.models import AuditAction
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
+from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.events.models import (
     StaticTriggerType,

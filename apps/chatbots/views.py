@@ -20,8 +20,9 @@ from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import ChannelBase, WebChannel
+from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable

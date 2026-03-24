@@ -39,7 +39,7 @@ def test_async_create_experiment_version_fails(create_new_version):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.WebChannel")
+@patch("apps.experiments.tasks.WebChannel")
 def test_get_response_for_webchat_task_merges_context(mock_web_channel):
     """Test that context is stored in session state at remote_context key"""
     session = ExperimentSessionFactory.create(state={})
