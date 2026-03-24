@@ -2760,9 +2760,9 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 | PR | Channel | Status |
 |---|---|---|
 | 0 | Foundation (pipeline infra, shared stages, base tests) | [x] DONE |
-| 1 | ApiChannel | [x] DONE |
+| 1 | ApiChannel | [x] DONE  |
 | 2 | WebChannel | [x] DONE |
-| 3 | EvaluationChannel | [ ] Not started |
+| 3 | EvaluationChannel | [x] DONE |
 | 4 | TelegramChannel | [ ] Not started |
 | 5 | WhatsappChannel | [ ] Not started |
 | 6 | SlackChannel | [ ] Not started |
@@ -2785,7 +2785,7 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why first:** Everything else depends on this. The integration tests validate the pipeline end-to-end using `TestNewChannel` before any real channel is migrated. No old code is removed in this PR.
 
-### PR 1: ApiChannel — [ ] IN PROGRESS
+### PR 1: ApiChannel — [x] DONE
 
 - [x] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
 - [x] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
@@ -2801,11 +2801,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 **Why second:** Also a reduced pipeline (no sending stages, no `SessionResolutionStage`, no `ConsentFlowStage`). Requires pre-existing session — validates that pattern. No sender/callbacks. `start_new_session()` and `check_and_process_seed_message()` are utility methods outside the pipeline, so they move as-is.
 
-### PR 3: EvaluationChannel — [ ] Not started
+### PR 3: EvaluationChannel — [x] DONE
 
-- [ ] **Add:** `EvaluationChannel` + `EvalsBotInteractionStage` + `concrete/test_evaluation_channel.py`
-- [ ] **Remove:** `EvaluationChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Add:** `EvaluationChannel` + `EvalsBotInteractionStage` + `concrete/test_evaluation_channel.py`
+- [x] **Remove:** `EvaluationChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
+- [x] **Update:** `apps/channels/tasks.py` imports
 
 **Why third:** Reduced pipeline like Web, but introduces the first channel-specific stage (`EvalsBotInteractionStage` replacing `BotInteractionStage`). Validates `channel_context` pattern and custom stage injection. No sender/callbacks.
 
