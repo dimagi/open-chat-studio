@@ -133,5 +133,5 @@ class ApiChannel(ChannelBase):
     @property
     def participant_user(self):
         if self.experiment_session:
-            return self.experiment_session.participant.user
+            return self.experiment_session.participant.user or self.user
         return self.user
