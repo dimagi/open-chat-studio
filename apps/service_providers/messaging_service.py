@@ -11,6 +11,7 @@ import phonenumbers
 import pydantic
 import requests
 from django.conf import settings
+from django.utils import timezone
 from telebot.util import smart_split
 
 if TYPE_CHECKING:
@@ -23,6 +24,7 @@ from apps.channels import audio
 from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
 from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
@@ -38,12 +40,31 @@ class MessagingService(pydantic.BaseModel):
     supports_multimedia: ClassVar[bool] = False
     supported_message_types: ClassVar[list] = []
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         raise NotImplementedError
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
     ):
+        raise NotImplementedError
+
+    def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        """Internal method for sending template messages. Called by send_text_message()
+        when the service window is expired. Should not be called directly from channel code."""
         raise NotImplementedError
 
     def get_message_audio(self, message: TwilioMessage | TurnWhatsappMessage):
@@ -139,7 +160,15 @@ class TwilioService(MessagingService):
         message = message_context.fetch()
         return cast(str, message.status)
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         """
         Sends a text message to the user. If the message is too long, it will be split into chunks of
         `MESSAGE_CHARACTER_LIMIT` characters and sent as multiple messages. Sending chunks is done sequentially,
@@ -166,6 +195,7 @@ class TwilioService(MessagingService):
         from_: str,
         to: str,
         platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
         **kwargs,
     ):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
@@ -226,11 +256,25 @@ class TurnIOService(MessagingService):
 
         return TurnClient(token=self.auth_token)
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         self.client.messages.send_text(to, message)
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
     ):
         # OGG must use the opus codec: https://whatsapp.turn.io/docs/api/media#uploading-media
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
@@ -323,7 +367,15 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
         return response.json()["access_token"]
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
         access_token = self.get_access_token()
         send_msg_url = urljoin(self.base_url, "/treatment/external/send-msg")
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {access_token}"}
@@ -337,15 +389,19 @@ class MetaCloudAPIService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
-
     access_token: str
     business_id: str
     app_secret: str = ""
     verify_token: str = ""
+    template_language_code: str = "en"
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
     META_API_TIMEOUT: ClassVar[int] = 30
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
+    SERVICE_WINDOW_HOURS: ClassVar[int] = 24
+    TEMPLATE_NAME: ClassVar[str] = "new_bot_message"
+    # allow 50 characters for the template message without the bot message. 1024 - 100
+    TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 924
 
     @property
     def _headers(self) -> dict:
@@ -373,7 +429,70 @@ class MetaCloudAPIService(MessagingService):
                 return entry["id"]
         return None
 
-    def send_text_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+    def _is_within_service_window(self, last_activity_at: datetime | None) -> bool:
+        """Check if the last user activity is within the WhatsApp 24-hour service window.
+        Returns False if last_activity_at is None (no activity = outside window, require template).
+        """
+        if last_activity_at is None:
+            return False
+        return (timezone.now() - last_activity_at) < timedelta(hours=self.SERVICE_WINDOW_HOURS)
+
+    def _split_template_message(self, message: str) -> list[str]:
+        """Split a message into chunks that fit within the template parameter limit,
+        splitting at word boundaries to avoid cutting words."""
+        return [chunk for chunk in smart_split(message, chars_per_string=self.TEMPLATE_MESSAGE_CHAR_LIMIT) if chunk]
+
+    def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
+        """Send a WhatsApp template message using the TEMPLATE_NAME template.
+
+        Raises ServiceWindowExpiredException if the template is not found on Meta's side,
+        prompting the operator to configure it in their Meta Business account.
+        """
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        chunks = self._split_template_message(message)
+        for chunk in chunks:
+            data = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to,
+                "type": "template",
+                "template": {
+                    "name": self.TEMPLATE_NAME,
+                    "language": {"code": self.template_language_code},
+                    "components": [
+                        {
+                            "type": "body",
+                            "parameters": [{"type": "text", "parameter_name": "bot_message", "text": chunk}],
+                        }
+                    ],
+                },
+            }
+            response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+            if response.status_code == 404:
+                logger.warning(
+                    "Template message '%s' not found on Meta's API. Response: %s",
+                    self.TEMPLATE_NAME,
+                    response.text,
+                )
+                raise ServiceWindowExpiredException(
+                    f"The 24-hour service window has expired and the '{self.TEMPLATE_NAME}' template was not found. "
+                    f"Please configure the '{self.TEMPLATE_NAME}' template in your Meta Business account."
+                )
+            response.raise_for_status()
+
+    def send_text_message(
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
+    ):
+        if not self._is_within_service_window(last_activity_at):
+            logger.info("Service window expired, sending template message instead of text")
+            return self.send_template_message(message=message, from_=from_, to=to, platform=platform)
+
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         chunks = smart_split(message, chars_per_string=self.WHATSAPP_CHARACTER_LIMIT)
         for chunk in chunks:
@@ -387,8 +506,18 @@ class MetaCloudAPIService(MessagingService):
             response.raise_for_status()
 
     def send_voice_message(
-        self, synthetic_voice: SynthesizedAudio, from_: str, to: str, platform: ChannelPlatform, **kwargs
+        self,
+        synthetic_voice: SynthesizedAudio,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        **kwargs,
     ):
+        if not self._is_within_service_window(last_activity_at):
+            logger.info("Service window expired, cannot send voice message via template")
+            raise ServiceWindowExpiredException("Service window expired, voice messages cannot be sent via template")
+
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
         media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg")
 
@@ -458,7 +587,14 @@ class SlackService(MessagingService):
     _client: "WebClient | None" = pydantic.PrivateAttr(default=None)
 
     def send_text_message(
-        self, message: str, from_: str, to: str, platform: ChannelPlatform, thread_ts: str | None = None, **kwargs
+        self,
+        message: str,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        last_activity_at: datetime | None = None,
+        thread_ts: str | None = None,
+        **kwargs,
     ):
         self.client.chat_postMessage(
             channel=to,

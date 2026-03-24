@@ -1,0 +1,3 @@
+# Worktrunk Project Configuration
+[post-create]
+bootstrap = ".claude/hooks/setup-env.sh"

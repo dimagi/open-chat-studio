@@ -197,6 +197,8 @@ class StaticTrigger(BaseModel, VersionsMixin):
 
 
 class TimeoutTrigger(BaseModel, VersionsMixin):
+    CONFIG_FIELDS = frozenset({"delay", "total_num_triggers", "trigger_from_first_message", "action_id"})
+
     action = models.OneToOneField(EventAction, on_delete=models.CASCADE, related_name="timeout_trigger")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, related_name="timeout_triggers")
     delay = models.PositiveIntegerField(
@@ -224,14 +226,37 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
             " in the conversation rather than the most recent."
         ),
     )
+    config_changed_at = models.DateTimeField(
+        help_text="Tracks when trigger config last changed. Prevents retroactive application to old sessions.",
+    )
+
+    def save(self, *args, **kwargs):
+        if not self.config_changed_at:
+            self.config_changed_at = timezone.now()
+        elif self.pk:
+            try:
+                old = TimeoutTrigger.objects.get(pk=self.pk)
+            except TimeoutTrigger.DoesNotExist:
+                pass
+            else:
+                changed = {f for f in self.CONFIG_FIELDS if getattr(old, f) != getattr(self, f)}
+                if changed:
+                    self.config_changed_at = timezone.now()
+        super().save(*args, **kwargs)
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         """Create a duplicate and assign the `new_experiment` to it. Also duplicate all EventActions"""
+        config_changed_at = self.config_changed_at
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
         new_instance.experiment = new_experiment
         new_instance.action = new_instance.action.create_new_version(is_copy=is_copy)
         new_instance.save()
+        # Preserve the original config_changed_at after save (auto_now_add only applies on insert
+        # but we need to ensure the working version's timestamp is carried over)
+        if config_changed_at != new_instance.config_changed_at:
+            TimeoutTrigger.objects.filter(pk=new_instance.pk).update(config_changed_at=config_changed_at)
+            new_instance.config_changed_at = config_changed_at
         return new_instance
 
     @property
@@ -314,7 +339,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
                 )
             )
             .filter(
-                reference_message_created_at__gte=self.updated_at,
+                reference_message_created_at__gte=self.config_changed_at,
                 # reference message received after trigger config was updated
                 last_event_timestamp__lt=time_window_to_ignore,
                 reference_message_created_at__isnull=False,
