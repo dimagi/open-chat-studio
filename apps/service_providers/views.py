@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 
 from django.conf import settings
@@ -33,6 +34,8 @@ from ..generics.views import BaseTypeSelectFormView
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
 from .utils import ServiceProvider, get_service_provider_config_form
+
+log = logging.getLogger("ocs.service_providers")
 
 
 class ServiceProviderMixin:
@@ -173,7 +176,13 @@ class CreateServiceProvider(
             files = file_formset.save(self.request)
             instance.add_files(files)
         if isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value:
-            instance.sync_voices()
+            try:
+                instance.sync_voices()
+            except Exception:
+                log.exception("Failed to sync voices for ElevenLabs provider %s", instance.pk)
+                messages.warning(
+                    self.request, "Provider saved, but voice sync failed. You can retry via the sync button."
+                )
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
@@ -249,6 +258,10 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
 @permission_required("service_providers.change_voiceprovider", raise_exception=True)
 def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     provider = get_object_or_404(VoiceProvider, team=request.team, pk=pk)
-    provider.sync_voices()
-    messages.success(request, "Voices synced successfully.")
+    try:
+        provider.sync_voices()
+        messages.success(request, "Voices synced successfully.")
+    except Exception:
+        log.exception("Failed to sync voices for provider %s", pk)
+        messages.error(request, "Voice sync failed. Please check your API key and try again.")
     return redirect("single_team:manage_team", team_slug=team_slug)

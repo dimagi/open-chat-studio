@@ -396,6 +396,45 @@ def test_elevenlabs_sync_voices(team_with_users):
 
 
 @pytest.mark.django_db()
+def test_elevenlabs_sync_voices_pagination(team_with_users):
+    """sync_voices should follow pagination and collect voices from all pages"""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+
+    mock_voice_page1 = mock.Mock()
+    mock_voice_page1.voice_id = "voice_page1"
+    mock_voice_page1.name = "Page1Voice"
+    mock_voice_page1.labels = {"language": "en", "gender": "female"}
+
+    mock_voice_page2 = mock.Mock()
+    mock_voice_page2.voice_id = "voice_page2"
+    mock_voice_page2.name = "Page2Voice"
+    mock_voice_page2.labels = {"language": "en", "gender": "male"}
+
+    page1_response = mock.Mock()
+    page1_response.voices = [mock_voice_page1]
+    page1_response.has_more = True
+    page1_response.next_page_token = "token_page2"
+
+    page2_response = mock.Mock()
+    page2_response.voices = [mock_voice_page2]
+    page2_response.has_more = False
+
+    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+        mock_client_cls.return_value.voices.search.side_effect = [page1_response, page2_response]
+        provider.sync_voices()
+
+    voices = provider.syntheticvoice_set.all()
+    assert len(voices) == 2
+    assert voices.filter(name="Page1Voice", external_id="voice_page1").exists()
+    assert voices.filter(name="Page2Voice", external_id="voice_page2").exists()
+
+
+@pytest.mark.django_db()
 def test_elevenlabs_sync_voices_updates_and_removes(team_with_users):
     """sync_voices should update existing voices and remove stale ones not in use"""
     provider = VoiceProvider.objects.create(

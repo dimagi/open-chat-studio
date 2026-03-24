@@ -304,13 +304,13 @@ class VoiceProviderType(models.TextChoices):
         raise ServiceProviderConfigError(self, "No voice service configured")
 
 
-_ELEVENLABS_GENDER_MAP = {"male": "male", "female": "female"}
+_ELEVENLABS_KNOWN_GENDERS = {"male", "female"}
 
 
 def _map_elevenlabs_gender(labels: dict) -> str:
     """Map ElevenLabs voice label gender to SyntheticVoice GENDERS choice or empty string."""
-    gender = labels.get("gender", "").lower() if labels else ""
-    return _ELEVENLABS_GENDER_MAP.get(gender, "")
+    gender = (labels.get("gender", "") if labels else "").lower()
+    return gender if gender in _ELEVENLABS_KNOWN_GENDERS else ""
 
 
 @audit_fields(*model_audit_fields.VOICE_PROVIDER_FIELDS, audit_special_queryset_writes=True)
@@ -334,29 +334,38 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
 
+    def _get_elevenlabs_client(self):
+        from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
+
+        return ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+
+    def _create_voice_from_file(self, file, service, external_id=None):
+        """Create a SyntheticVoice record from an uploaded file."""
+        try:
+            SyntheticVoice.objects.create(
+                name=file.name,
+                external_id=external_id,
+                neural=True,
+                language="",
+                language_code="",
+                gender="",
+                service=service,
+                voice_provider=self,
+                file=file,
+            )
+        except IntegrityError:
+            message = f"Unable to upload '{file.name}' voice. This voice might already exist"
+            raise ValidationError(message) from None
+
     @transaction.atomic()
     def add_files(self, files):
         if self.type == VoiceProviderType.openai_voice_engine:
             for file in files:
-                try:
-                    # TODO: Split file extention
-                    SyntheticVoice.objects.create(
-                        name=file.name,
-                        neural=True,
-                        language="",
-                        language_code="",
-                        gender="",
-                        service=SyntheticVoice.OpenAIVoiceEngine,
-                        voice_provider=self,
-                        file=file,
-                    )
-                except IntegrityError:
-                    message = f"Unable to upload '{file.name}' voice. This voice might already exist"
-                    raise ValidationError(message) from None
+                self._create_voice_from_file(file, service=SyntheticVoice.OpenAIVoiceEngine)
         elif self.type == VoiceProviderType.elevenlabs:
-            from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
+            from elevenlabs.core.api_error import ApiError as ElevenLabsApiError  # noqa: PLC0415
 
-            client = ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+            client = self._get_elevenlabs_client()
             for file in files:
                 try:
                     file_content = file.file.read()
@@ -365,23 +374,21 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                         name=file.name,
                         files=[file_content],
                     )
-                    SyntheticVoice.objects.create(
-                        name=file.name,
-                        external_id=response.voice_id,
-                        neural=True,
-                        language="",
-                        language_code="",
-                        gender="",
-                        service=SyntheticVoice.ElevenLabs,
-                        voice_provider=self,
-                        file=file,
-                    )
-                except IntegrityError:
-                    message = f"Unable to upload '{file.name}' voice. This voice might already exist"
-                    raise ValidationError(message) from None
+                except ElevenLabsApiError:
+                    log.exception("ElevenLabs IVC API error for file '%s'", file.name)
+                    raise
+                self._create_voice_from_file(file, service=SyntheticVoice.ElevenLabs, external_id=response.voice_id)
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
+        # Delete cloned voice from ElevenLabs API if applicable
+        if self.type == VoiceProviderType.elevenlabs and synthetic_voice.external_id:
+            from elevenlabs.core.api_error import ApiError as ElevenLabsApiError  # noqa: PLC0415
+
+            try:
+                self._get_elevenlabs_client().voices.delete(voice_id=synthetic_voice.external_id)
+            except ElevenLabsApiError:
+                log.warning("Failed to delete ElevenLabs voice %s from API", synthetic_voice.external_id, exc_info=True)
         synthetic_voice.file.delete()
         synthetic_voice.delete()
 
@@ -412,14 +419,13 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             },
         )
 
+    @transaction.atomic()
     def sync_voices(self):
         """Fetch voices from ElevenLabs API and sync SyntheticVoice records for this provider."""
         if self.type != VoiceProviderType.elevenlabs:
             return
 
-        from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
-
-        client = ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+        client = self._get_elevenlabs_client()
 
         all_voices = []
         response = client.voices.search(page_size=100)
@@ -433,7 +439,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         for voice in all_voices:
             labels = voice.labels if isinstance(voice.labels, dict) else {}
             gender = _map_elevenlabs_gender(labels)
-            language = labels.get("language", "") if labels else ""
+            language = labels.get("language", "")
 
             api_voice_ids.add(voice.voice_id)
 
@@ -451,34 +457,35 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             )
 
         # Remove voices no longer in API (only if not referenced by experiments)
-        stale_voices = self.syntheticvoice_set.filter(
-            service=SyntheticVoice.ElevenLabs,
-            file__isnull=True,
-        ).exclude(external_id__in=api_voice_ids)
-
+        stale_voices = (
+            self.syntheticvoice_set.filter(
+                service=SyntheticVoice.ElevenLabs,
+                file__isnull=True,
+            )
+            .exclude(external_id__in=api_voice_ids)
+            .annotate(experiment_count=models.Count("experiments"))
+            .filter(experiment_count=0)
+        )
         for voice in stale_voices:
-            if not voice.experiments.exists():
-                voice.delete()
+            voice.delete()
 
     @transaction.atomic()
     def delete(self):  # ty: ignore[invalid-method-override]
-        if self.type == VoiceProviderType.openai_voice_engine:
-            files_to_delete = self.get_files()
-            [f.delete() for f in files_to_delete]
-        elif self.type == VoiceProviderType.elevenlabs:
-            from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
+        if self.type == VoiceProviderType.elevenlabs:
+            from elevenlabs.core.api_error import ApiError as ElevenLabsApiError  # noqa: PLC0415
 
-            client = ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+            client = self._get_elevenlabs_client()
             # Delete only IVC-cloned voices from ElevenLabs API
             cloned_voices = self.syntheticvoice_set.filter(file__isnull=False)
             for voice in cloned_voices:
                 try:
                     client.voices.delete(voice_id=voice.external_id)
-                except Exception:
-                    log.warning("Failed to delete ElevenLabs voice %s from API", voice.external_id)
-            # Delete local files
-            files_to_delete = self.get_files()
-            [f.delete() for f in files_to_delete]
+                except ElevenLabsApiError:
+                    log.warning("Failed to delete ElevenLabs voice %s from API", voice.external_id, exc_info=True)
+        # Clean up local files for providers that have them
+        if self.type in (VoiceProviderType.openai_voice_engine, VoiceProviderType.elevenlabs):
+            for f in self.get_files():
+                f.delete()
         return super().delete()
 
 

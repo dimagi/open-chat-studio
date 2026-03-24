@@ -222,6 +222,8 @@ class OpenAISpeechService(SpeechService):
 class ElevenLabsSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.ElevenLabs
     supports_transcription: ClassVar[bool] = True
+    _output_format: ClassVar[str] = "mp3_44100_128"
+    _stt_model: ClassVar[str] = "scribe_v2"
     elevenlabs_api_key: str
     elevenlabs_model: str = "eleven_multilingual_v2"
 
@@ -238,7 +240,7 @@ class ElevenLabsSpeechService(SpeechService):
             voice_id=synthetic_voice.external_id,
             model_id=self.elevenlabs_model,
             text=text,
-            output_format="mp3_44100_128",
+            output_format=self._output_format,
         )
         audio_data = b"".join(audio_iter)
         audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
@@ -248,7 +250,7 @@ class ElevenLabsSpeechService(SpeechService):
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         result = self._client.speech_to_text.convert(
             file=audio,
-            model_id="scribe_v2",
+            model_id=self._stt_model,
         )
         return result.text
 

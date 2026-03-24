@@ -98,17 +98,6 @@ class OpenAIGenericConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 class OpenAIVoiceEngineFileFormset(BaseFileFormSet):
     accepted_file_types = ["mp4", "mp3"]
 
-    def clean(self) -> None:
-        invalid_extentions = set()
-        for _key, in_memory_file in self.files.items():
-            file_extention = in_memory_file.name.split(".")[1]
-            if file_extention not in self.accepted_file_types:
-                invalid_extentions.add(f".{file_extention}")
-        if invalid_extentions:
-            string = ", ".join(invalid_extentions)
-            raise forms.ValidationError(f"File extentions not supported: {string}")
-        return super().clean()
-
 
 class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
     allow_file_upload = True
@@ -117,17 +106,6 @@ class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
 
 class ElevenLabsFileFormset(BaseFileFormSet):
     accepted_file_types = ["mp3", "mp4", "wav"]
-
-    def clean(self) -> None:
-        invalid_extensions = set()
-        for _key, in_memory_file in self.files.items():
-            file_extension = in_memory_file.name.rsplit(".", 1)[-1].lower()
-            if file_extension not in self.accepted_file_types:
-                invalid_extensions.add(f".{file_extension}")
-        if invalid_extensions:
-            string = ", ".join(invalid_extensions)
-            raise forms.ValidationError(f"File extensions not supported: {string}")
-        return super().clean()
 
 
 class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
