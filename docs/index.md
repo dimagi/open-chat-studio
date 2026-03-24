@@ -10,8 +10,8 @@ Welcome to the Open Chat Studio developer documentation. This guide is designed 
 
 Open Chat Studio is a platform for building, deploying, and evaluating AI-powered chat experiences. It provides tools for working with various LLMs (Language Learning Models), creating chatbots, managing conversations, and integrating with different messaging platforms.
 
-- For user facing documentation, please visit [docs.openchatstudio.com](https://docs.openchatstudio.com).
-- For AI generated technical documentation, visit 
+- For user-facing documentation, please visit [docs.openchatstudio.com](https://docs.openchatstudio.com).
+- For AI-generated technical documentation, visit
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## Key Features
