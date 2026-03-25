@@ -500,43 +500,15 @@ def test_elevenlabs_gender_mapping(labels, expected_gender):
 
 
 @pytest.mark.django_db()
-def test_elevenlabs_add_files_ivc(team_with_users):
-    """add_files should upload to ElevenLabs API and create SyntheticVoice with external_id"""
-    provider = VoiceProvider.objects.create(
-        team=team_with_users,
-        name="ElevenLabs Test",
-        type=VoiceProviderType.elevenlabs,
-        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
-    )
-    files = FileFactory.create_batch(2, name=factory.Sequence(lambda n: f"voice_{n}.mp3"))
-
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
-        mock_client_cls.return_value.voices.ivc.create.side_effect = [
-            mock.Mock(voice_id="cloned_id_1"),
-            mock.Mock(voice_id="cloned_id_2"),
-        ]
-        provider.add_files(files)
-
-    voices = provider.syntheticvoice_set.all()
-    assert len(voices) == 2
-    assert voices.filter(external_id="cloned_id_1").exists()
-    assert voices.filter(external_id="cloned_id_2").exists()
-    for voice in voices:
-        assert voice.service == SyntheticVoice.ElevenLabs
-        assert voice.file is not None
-
-
-@pytest.mark.django_db()
 def test_elevenlabs_provider_delete(team_with_users):
-    """Deleting ElevenLabs provider should attempt API cleanup for cloned voices and delete local records"""
+    """Deleting ElevenLabs provider should delete local synced voice records"""
     provider = VoiceProvider.objects.create(
         team=team_with_users,
         name="ElevenLabs Test",
         type=VoiceProviderType.elevenlabs,
         config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
     )
-    # A synced catalog voice (no file)
-    catalog_voice = SyntheticVoice.objects.create(
+    voice = SyntheticVoice.objects.create(
         name="Rachel",
         external_id="voice_id_1",
         neural=True,
@@ -546,26 +518,7 @@ def test_elevenlabs_provider_delete(team_with_users):
         service=SyntheticVoice.ElevenLabs,
         voice_provider=provider,
     )
-    # A cloned voice (has file)
-    cloned_file = FileFactory.create(name="clone.mp3")
-    cloned_voice = SyntheticVoice.objects.create(
-        name="My Clone",
-        external_id="cloned_id_1",
-        neural=True,
-        language="",
-        language_code="",
-        gender="",
-        service=SyntheticVoice.ElevenLabs,
-        voice_provider=provider,
-        file=cloned_file,
-    )
 
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
-        mock_client = mock_client_cls.return_value
-        provider.delete()
-        # Should only attempt to delete the cloned voice from API
-        mock_client.voices.delete.assert_called_once_with(voice_id="cloned_id_1")
+    provider.delete()
 
-    # Both local records should be gone
-    assert not SyntheticVoice.objects.filter(pk=catalog_voice.pk).exists()
-    assert not SyntheticVoice.objects.filter(pk=cloned_voice.pk).exists()
+    assert not SyntheticVoice.objects.filter(pk=voice.pk).exists()

@@ -104,16 +104,18 @@ class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
     file_formset_form = OpenAIVoiceEngineFileFormset
 
 
-class ElevenLabsFileFormset(BaseFileFormSet):
-    accepted_file_types = ["mp3", "mp4", "wav"]
-
-
 class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["elevenlabs_api_key"]
-    allow_file_upload = True
-    file_formset_form = ElevenLabsFileFormset
 
-    elevenlabs_api_key = forms.CharField(label=_("API Key"))
+    elevenlabs_api_key = forms.CharField(
+        label=_("API Key"),
+        help_text=render_help_with_link(
+            "Voices are managed in your ElevenLabs account and synced automatically when the provider is created. "
+            "Use the sync button to pull in new voices.",
+            "https://elevenlabs.io/app/voice-library",
+            link_text="Go to ElevenLabs Voice Library",
+        ),
+    )
     elevenlabs_model = forms.ChoiceField(
         label=_("Model"),
         choices=[
