@@ -234,9 +234,8 @@ class TestWebChannelStartNewSession:
             metadata=metadata,
         )
 
-        call_kwargs = mock_start.call_args
         # metadata should be passed through to _start_experiment_session
-        assert "metadata" in str(call_kwargs)
+        assert mock_start.call_args.kwargs.get("metadata") == metadata
 
 
 class TestWebChannelCheckAndProcessSeedMessage:

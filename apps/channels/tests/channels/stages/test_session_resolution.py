@@ -6,6 +6,7 @@ from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.stages.core import SessionResolutionStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples.base_messages import text_message
+from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -108,6 +109,10 @@ class TestSessionResolutionStage:
         assert ctx2.experiment_session is not None
         assert ctx2.experiment_session.id != first_session.id
 
+        # The old session should have been ended
+        first_session.refresh_from_db()
+        assert first_session.status in STATUSES_FOR_COMPLETE_CHATS
+
     def test_reset_with_no_engagement_still_creates_new_session(self):
         """When /reset is sent but the existing session has no engagement,
         a new session is still created because the reset check happens
@@ -127,8 +132,8 @@ class TestSessionResolutionStage:
 
         # Send /reset - but session has no engagement.
         # The code detects /reset at line 56 BEFORE loading a session.
-        # Since ctx.experiment_session is None at that point, it calls
-        # _handle_reset which creates a new session and raises EarlyExitResponse.
+        # Since ctx.experiment_session is None at that point, it loads and
+        # ends the existing session, then creates a new one.
         reset_msg = text_message(participant_id="no_engage_user", message_text="/reset")
         ctx2 = make_context(
             experiment=experiment,
@@ -145,6 +150,10 @@ class TestSessionResolutionStage:
         # because the reset check happens before session loading.
         assert ctx2.experiment_session is not None
         assert ctx2.experiment_session.id != first_session.id
+
+        # The old session should have been ended
+        first_session.refresh_from_db()
+        assert first_session.status in STATUSES_FOR_COMPLETE_CHATS
 
     def test_reset_no_prior_session_creates_new(self):
         experiment = ExperimentFactory()

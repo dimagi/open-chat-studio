@@ -17,8 +17,10 @@ if TYPE_CHECKING:
     from apps.channels.channels_v2.stages.base import ProcessingStage
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
+    from apps.chat.bots import PipelineBot
     from apps.chat.models import ChatMessage
     from apps.experiments.models import Experiment, ExperimentSession
+    from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio
     from apps.service_providers.tracing import TracingService
 
@@ -59,13 +61,13 @@ class MessageProcessingContext:
 
     human_message: ChatMessage | None = None  # DB record of the user's message
     bot_response: ChatMessage | None = None
-    bot: object | None = None  # Lazy -- created in BotInteractionStage
+    bot: PipelineBot | None = None  # Lazy -- created in BotInteractionStage
 
     formatted_message: str | None = None
     voice_audio: SynthesizedAudio | None = None
     additional_text_message: str | None = None  # URLs/files sent after voice
-    files_to_send: list = field(default_factory=list)
-    unsupported_files: list = field(default_factory=list)
+    files_to_send: list[File] = field(default_factory=list)
+    unsupported_files: list[File] = field(default_factory=list)
 
     # --- Control flow -------------------------------------------------------
     # Set by the pipeline orchestrator when it catches an EarlyExitResponse

@@ -8,7 +8,7 @@ from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
-from apps.chat.bots import EventBot, get_bot
+from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
@@ -26,6 +26,8 @@ from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
 
 logger = logging.getLogger("ocs.channels")
+
+RESET_COMMAND = "/reset"
 
 
 # ---------------------------------------------------------------------------
@@ -61,8 +63,6 @@ class SessionResolutionStage(ProcessingStage):
     stage becomes a no-op (Issue 4).
     """
 
-    RESET_COMMAND = "/reset"
-
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.participant_allowed
 
@@ -94,13 +94,26 @@ class SessionResolutionStage(ProcessingStage):
 
     def _is_reset_request(self, ctx: MessageProcessingContext) -> bool:
         return (
-            ctx.message.content_type == MESSAGE_TYPES.TEXT
-            and ctx.message.message_text.lower().strip() == self.RESET_COMMAND
+            ctx.message.content_type == MESSAGE_TYPES.TEXT and ctx.message.message_text.lower().strip() == RESET_COMMAND
         )
 
     def _handle_reset(self, ctx: MessageProcessingContext) -> None:
         if ctx.experiment_session:
             ctx.experiment_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
+        else:
+            # Load and end the existing session if one exists (common path for
+            # channels that don't pre-set sessions, e.g. API/Telegram)
+            existing = (
+                ExperimentSession.objects.filter(
+                    experiment=ctx.experiment.get_working_version(),
+                    participant__identifier=str(ctx.participant_identifier),
+                )
+                .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+                .order_by("-created_at")
+                .first()
+            )
+            if existing:
+                existing.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
 
         ctx.experiment_session = self._create_session(ctx)
         raise EarlyExitResponse("Conversation reset")
@@ -409,6 +422,38 @@ class BotInteractionStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
+# EvalsBotInteractionStage
+# ---------------------------------------------------------------------------
+
+
+class EvalsBotInteractionStage(ProcessingStage):
+    """Specialized bot interaction for evaluations.
+
+    Uses EvalsBot instead of get_bot(). Reads participant_data from
+    ctx.channel_context (a dict set by EvaluationChannel, not the
+    DB-backed ParticipantData model).
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.user_query is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        participant_data = ctx.channel_context["participant_data"]
+        ctx.bot = EvalsBot(
+            ctx.experiment_session,
+            ctx.experiment,
+            ctx.trace_service,
+            participant_data=participant_data,
+        )
+        ctx.bot_response = ctx.bot.process_input(
+            ctx.user_query,
+            attachments=ctx.message.attachments,
+            human_message=ctx.human_message,
+        )
+        ctx.files_to_send = ctx.bot_response.get_attached_files() or []
+
+
+# ---------------------------------------------------------------------------
 # ResponseFormattingStage
 # ---------------------------------------------------------------------------
 
@@ -427,16 +472,14 @@ class ResponseFormattingStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         message = ctx.bot_response.content
         files = ctx.files_to_send
-        user_sent_voice = ctx.message.content_type == MESSAGE_TYPES.VOICE
+        user_sent_voice = ctx.message is not None and ctx.message.content_type == MESSAGE_TYPES.VOICE
 
         # Determine voice vs text reply
         should_reply_voice = False
         if ctx.capabilities.supports_voice_replies and ctx.experiment.synthetic_voice:
             voice_config = ctx.experiment.voice_response_behaviour
-            if (
-                voice_config == VoiceResponseBehaviours.ALWAYS
-                or voice_config == VoiceResponseBehaviours.RECIPROCAL
-                and user_sent_voice
+            if voice_config == VoiceResponseBehaviours.ALWAYS or (
+                voice_config == VoiceResponseBehaviours.RECIPROCAL and user_sent_voice
             ):
                 should_reply_voice = True
 

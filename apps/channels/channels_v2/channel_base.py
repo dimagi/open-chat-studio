@@ -47,6 +47,7 @@ class ChannelBase(ABC):
 
     # Class-level defaults (overridden by subclasses)
     voice_replies_supported: ClassVar[bool] = False
+    supports_multimedia: ClassVar[bool] = False
     supported_message_types: ClassVar[tuple[str, ...]] = ()
 
     def __init__(
@@ -135,7 +136,7 @@ class ChannelBase(ABC):
         """Default capabilities from ClassVars. Override for runtime capabilities."""
         return ChannelCapabilities(
             supports_voice_replies=self.voice_replies_supported,
-            supports_files=getattr(self, "supports_multimedia", False),
+            supports_files=self.supports_multimedia,
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,
             can_send_file=self._can_send_file,

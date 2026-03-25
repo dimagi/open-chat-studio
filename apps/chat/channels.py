@@ -22,7 +22,7 @@ from apps.annotations.models import TagCategories
 from apps.channels import audio
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.bots import EvalsBot, EventBot, get_bot
+from apps.chat.bots import EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.decorators import notify_on_delivery_failure
 from apps.chat.exceptions import (
@@ -1369,37 +1369,3 @@ def _start_experiment_session(
             enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
         enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
-
-
-class EvaluationChannel(ChannelBase):
-    """Message Handler for Evaluations"""
-
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession,
-        participant_data: dict,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
-        if not self.experiment_session:
-            raise ChannelException("EvaluationChannel requires an existing session")
-        self._participant_data = participant_data
-
-        self.trace_service = TracingService.empty()
-
-    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
-        # The bot cannot send messages to this client, since evaluations are run internally
-        pass
-
-    @property
-    def bot(self):
-        return EvalsBot(
-            self.experiment_session,
-            self.experiment,
-            self.trace_service,
-            participant_data=self._participant_data,
-        )
