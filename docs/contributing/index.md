@@ -28,6 +28,9 @@ Before contributing, please make sure you've set up your development environment
 !!! tip "Discuss before you build"
     For non-trivial or complex changes, please discuss your design plan before writing code. The GitHub issue is the best place to start — add a comment outlining your approach and get feedback from maintainers. For broader ideas without a dedicated issue, open a [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). Aligning on design early avoids wasted effort and makes reviews much smoother.
 
+!!! info "Agentic development workflow"
+    We recommend using an agentic coding tool like Claude Code for development on this project. Our workflow follows a **design-first approach**: produce a design, post it to the GitHub issue for core team review, then implement once approved. See the [AI-Assisted Development](../developer_guides/ai_development.md) guide for the full workflow and setup instructions.
+
 ### Improve Documentation
 
 - **Developer Documentation** needs improvement, and we welcome contributions.
@@ -49,15 +52,6 @@ To contribute, pick a task from the [Good First Issues board](https://github.com
 ### 3. Submit a Pull Request (PR)
 
 Follow our [Pull Request guidelines](./pull_requests.md).
-
-## Agent support
-If you are using an agent other than Claude, consider creating a symbolic link to the CLAUDE.md file, but for your agent. For instance, to create a symlink for Gemini, run
-
-```bash
-ln -s CLAUDE.md GEMINI.md
-```
-
-Be sure add the new "file" to .gitignore.
 
 ## Getting Help
 
