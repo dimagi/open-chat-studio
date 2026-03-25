@@ -1227,7 +1227,6 @@ class WhatsappChannel(ChannelBase):
         try:
             self.messaging_service.send_typing_indicator(
                 from_=self.from_identifier,
-                to=self.participant_identifier,
                 message_id=self.message.whatsapp_message_id,
             )
         except Exception:

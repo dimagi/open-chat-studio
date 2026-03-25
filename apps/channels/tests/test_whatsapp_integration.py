@@ -339,6 +339,5 @@ class TestMetaCloudApi:
 
         send_typing_indicator.assert_called_once_with(
             from_="12345",
-            to="27456897512",
             message_id="wamid.abc123",
         )

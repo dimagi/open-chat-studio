@@ -543,7 +543,7 @@ class MetaCloudAPIService(MessagingService):
         response.raise_for_status()
         return response.json()["id"]
 
-    def send_typing_indicator(self, from_: str, to: str, message_id: str):
+    def send_typing_indicator(self, from_: str, message_id: str):
         """Send a typing indicator to the user.
 
         Marks the incoming message as read and sends a typing indicator in a single API call.
@@ -552,12 +552,9 @@ class MetaCloudAPIService(MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": to,
-            "type": "typing_indicator",
-            "typing_indicator": {"type": "text"},
+            "status": "read",
             "message_id": message_id,
-            "mark_message_as_read": True,
+            "typing_indicator": {"type": "text"},
         }
         response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
         response.raise_for_status()
