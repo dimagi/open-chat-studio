@@ -3,6 +3,7 @@ from io import StringIO
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.urls import reverse
 
 from apps.documents.models import CollectionFile
 from apps.files.models import File
@@ -153,3 +154,54 @@ class TestPopulateSupportedChannelsCommand:
         self._call_command("--collection-id", str(collection.id))
         cf.refresh_from_db()
         assert cf.supported_channels == first_result
+
+
+@pytest.mark.django_db()
+class TestCollectionSendabilityUI:
+    """Tests for the sendability warning banner on the collection home view."""
+
+    def test_banner_shows_when_files_have_unsupported_channels(self, team_with_users, client):
+        """The warning banner appears when a non-indexed collection has files with unsupported channels."""
+        collection = CollectionFactory(team=team_with_users, is_index=False)
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)  # 6MB – exceeds WhatsApp limit
+        cf = CollectionFile.objects.create(file=file, collection=collection)
+        cf.update_supported_channels()
+        cf.save()
+
+        client.force_login(team_with_users.members.first())
+        url = reverse("documents:single_collection_home", args=[team_with_users.slug, collection.pk])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"Some files in this collection cannot be sent directly" in response.content
+
+    def test_banner_hidden_when_all_files_sendable(self, team_with_users, client):
+        """No warning banner when every file is sendable on all channels."""
+        collection = CollectionFactory(team=team_with_users, is_index=False)
+        file = _make_file("image/jpeg", 1 * 1024 * 1024)  # 1MB – fine everywhere
+        cf = CollectionFile.objects.create(file=file, collection=collection)
+        cf.update_supported_channels()
+        cf.save()
+
+        client.force_login(team_with_users.members.first())
+        url = reverse("documents:single_collection_home", args=[team_with_users.slug, collection.pk])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"Some files in this collection cannot be sent directly" not in response.content
+
+    def test_banner_hidden_for_indexed_collection(self, team_with_users, client):
+        """Indexed collections never show the sendability banner, even with large files."""
+        collection = CollectionFactory(team=team_with_users, is_index=True)
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)
+        # Manually set supported_channels to simulate an unsendable file
+        CollectionFile.objects.create(
+            file=file, collection=collection, supported_channels={"whatsapp": {"reason": "too large"}}
+        )
+
+        client.force_login(team_with_users.members.first())
+        url = reverse("documents:single_collection_home", args=[team_with_users.slug, collection.pk])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"Some files in this collection cannot be sent directly" not in response.content
