@@ -183,8 +183,13 @@ class AzureSpeechService(SpeechService):
         raise AudioTranscriptionException(f"Unexpected result: {result}")
 
 
-class OpenAISpeechService(SpeechService):
-    _type: ClassVar[str] = SyntheticVoice.OpenAI
+DEFAULT_TTS_MODEL = "gpt-4o-mini-tts"
+DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
+
+
+class BaseOpenAISpeechService(SpeechService):
+    """Shared base for all OpenAI-based speech services."""
+
     supports_transcription: ClassVar[bool] = True
     openai_api_key: str
     openai_api_base: str | None = None
@@ -192,51 +197,36 @@ class OpenAISpeechService(SpeechService):
 
     @property
     def _client(self) -> "OpenAI":
-        # keep heavy imports inline
         from openai import OpenAI  # noqa: PLC0415 - lazy: optional provider dep (OpenAI speech)
 
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
-    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
-        """
-        Calls OpenAI to convert the text to speech using the synthetic_voice
-        """
-        # keep heavy imports inline
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
-
-        response = self._client.audio.speech.create(model="gpt-4o-mini-tts", voice=synthetic_voice.name, input=text)
-        audio_data = response.read()
-
-        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
-        duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
-        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
-
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         transcript = self._client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
+            model=DEFAULT_TRANSCRIPTION_MODEL,
             file=audio,
         )
         return transcript.text
 
 
-class OpenAIVoiceEngineSpeechService(SpeechService):
-    _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
-    supports_transcription: ClassVar[bool] = True
-    openai_api_key: str
-    openai_api_base: str | None = None
-    openai_organization: str | None = None
-
-    @property
-    def _client(self) -> "OpenAI":
-        from openai import OpenAI  # noqa: PLC0415 - lazy: optional provider dep (OpenAI speech)
-
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+class OpenAISpeechService(BaseOpenAISpeechService):
+    _type: ClassVar[str] = SyntheticVoice.OpenAI
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
-        """
-        Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
-        """
-        # keep heavy imports inline
+        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
+
+        response = self._client.audio.speech.create(model=DEFAULT_TTS_MODEL, voice=synthetic_voice.name, input=text)
+        audio_data = response.read()
+
+        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        duration_seconds = len(audio_segment) / 1000
+        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
+
+
+class OpenAIVoiceEngineSpeechService(BaseOpenAISpeechService):
+    _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
 
         sample_audio = synthetic_voice.file
@@ -246,7 +236,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
 
         files = {"reference_audio": sample_audio.file}
         data = {
-            "model": "gpt-4o-mini-tts",
+            "model": DEFAULT_TTS_MODEL,
             "text": text,
             "speed": "1.0",
             "response_format": "mp3",
@@ -262,9 +252,43 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
             msg = f"Error synthesizing voice with OpenAI Voice Engine. Response status: {response.status_code}."
             raise AudioSynthesizeException(msg)
 
-    def _transcribe_audio(self, audio: IO[bytes]) -> str:
-        transcript = self._client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=audio,
-        )
-        return transcript.text
+
+class OpenAICustomVoiceSpeechService(BaseOpenAISpeechService):
+    """
+    OpenAI Custom Voice TTS service using the stable /v1/audio/speech API.
+    Requires custom voices to be created via the Voice API first.
+    """
+
+    _type: ClassVar[str] = SyntheticVoice.OpenAICustomVoice
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
+
+        voice_id = synthetic_voice.config.get("voice_id") if synthetic_voice.config else None
+        if not voice_id:
+            raise AudioSynthesizeException(
+                f"Custom voice '{synthetic_voice.name}' missing voice_id in config. "
+                "Voice must be created via OpenAI Voice API first."
+            )
+
+        model = synthetic_voice.config.get("model", DEFAULT_TTS_MODEL)
+        instructions = synthetic_voice.config.get("instructions")
+
+        kwargs = {
+            "model": model,
+            "voice": {"id": voice_id},
+            "input": text,
+            "response_format": "mp3",
+        }
+
+        # Instructions parameter is only supported by gpt-4o-mini-tts
+        if instructions and model == DEFAULT_TTS_MODEL:
+            kwargs["instructions"] = instructions
+
+        response = self._client.audio.speech.create(**kwargs)
+        audio_data = response.read()
+
+        audio_segment = AudioSegment.from_file(BytesIO(audio_data), format="mp3")
+        duration_seconds = len(audio_segment) / 1000
+
+        return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")

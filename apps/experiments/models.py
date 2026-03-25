@@ -365,6 +365,17 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         )
 
 
+from typing import NotRequired, TypedDict  # noqa: E402
+
+
+class CustomVoiceConfig(TypedDict):
+    voice_id: str
+    consent_id: str
+    model: str
+    instructions: NotRequired[str]
+    created_at: NotRequired[int]
+
+
 @audit_fields(*model_audit_fields.SYNTHETIC_VOICE_FIELDS, audit_special_queryset_writes=True)
 class SyntheticVoice(BaseModel):
     """
@@ -385,14 +396,16 @@ class SyntheticVoice(BaseModel):
     Azure = "Azure"
     OpenAI = "OpenAI"
     OpenAIVoiceEngine = "OpenAIVoiceEngine"
+    OpenAICustomVoice = "OpenAICustomVoice"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
         ("OpenAI", OpenAI),
         ("OpenAIVoiceEngine", OpenAIVoiceEngine),
+        ("OpenAICustomVoice", OpenAICustomVoice),
     )
-    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, OpenAICustomVoice]
 
     objects = SyntheticVoiceObjectManager()
     name = models.CharField(
@@ -408,12 +421,15 @@ class SyntheticVoice(BaseModel):
         null=False, blank=True, choices=GENDERS, max_length=14, help_text="The gender of this voice"
     )
     service = models.CharField(
-        null=False, blank=False, choices=SERVICES, max_length=17, help_text="The service this voice is from"
+        null=False, blank=False, choices=SERVICES, max_length=20, help_text="The service this voice is from"
     )
     voice_provider = models.ForeignKey(
         "service_providers.VoiceProvider", verbose_name=gettext("Team"), on_delete=models.CASCADE, null=True
     )
     file = models.ForeignKey("files.File", null=True, on_delete=models.SET_NULL)
+    config = models.JSONField(
+        default=dict, blank=True, help_text="Additional configuration for the voice (e.g., OpenAI voice_id)"
+    )
 
     class Meta:
         ordering = ["name"]
@@ -431,6 +447,51 @@ class SyntheticVoice(BaseModel):
         if self.language:
             display_str = f"{self.language}, {display_str}"
         return display_str
+
+    def get_custom_voice_config(self) -> CustomVoiceConfig | None:
+        """Parse config as CustomVoiceConfig for custom voices."""
+        if self.service == self.OpenAICustomVoice and self.config:
+            return CustomVoiceConfig(**self.config)
+        return None
+
+    def get_openai_voice_id(self) -> str | None:
+        """Extract OpenAI voice ID from config for custom voices."""
+        cfg = self.get_custom_voice_config()
+        return cfg["voice_id"] if cfg else None
+
+    def get_openai_consent_id(self) -> str | None:
+        """Extract OpenAI consent ID from config for custom voices."""
+        cfg = self.get_custom_voice_config()
+        return cfg["consent_id"] if cfg else None
+
+    @classmethod
+    def create_custom_voice(
+        cls,
+        name: str,
+        voice_provider,
+        voice_id: str,
+        consent_id: str,
+        model: str = "gpt-4o-mini-tts",
+        created_at: int | None = None,
+    ) -> SyntheticVoice:
+        """Factory method for creating custom voice records with proper config structure."""
+        config: CustomVoiceConfig = {
+            "voice_id": voice_id,
+            "consent_id": consent_id,
+            "model": model,
+        }
+        if created_at is not None:
+            config["created_at"] = created_at
+        return cls.objects.create(
+            name=name,
+            neural=True,
+            language="",
+            language_code="",
+            gender="",
+            service=cls.OpenAICustomVoice,
+            voice_provider=voice_provider,
+            config=config,
+        )
 
     @staticmethod
     def get_for_team(team: Team, exclude_services=None) -> list[SyntheticVoice]:

@@ -1,0 +1,98 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+<div class="prose max-w-none">
+  <h1>{% translate "Create Voice Consent" %}</h1>
+
+  <p class="text-sm opacity-70">
+    {% translate "Provider:" %} {{ provider.name }}
+  </p>
+
+  <div class="alert alert-info mb-6">
+    <i class="fa-solid fa-info-circle mr-2"></i>
+    <div>
+      <h4 class="font-bold">{% translate "Consent Recording Requirements" %}</h4>
+      <p class="text-sm">
+        {% translate "To create a custom voice, you must first upload a consent recording." %}
+        {% translate "The recording must contain ONLY the following phrase in your selected language:" %}
+      </p>
+      <blockquote class="bg-base-200 p-4 my-4 rounded-lg font-medium" id="consent-phrase">
+        {{ consent_phrase }}
+      </blockquote>
+      <p class="text-xs opacity-70">
+        {% translate "Any variation from this exact phrase will cause the upload to fail." %}
+        {% translate "Supported formats: MP3, WAV, OGG, AAC, FLAC, WebM, MP4. Max 10MB." %}
+      </p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="not-prose">
+    {% csrf_token %}
+
+    <div class="form-control w-full max-w-md mb-4">
+      <label class="label" for="consent_name">
+        <span class="label-text">{% translate "Consent Name" %}</span>
+      </label>
+      <input type="text"
+             name="consent_name"
+             id="consent_name"
+             class="input input-bordered w-full"
+             placeholder="e.g., John Doe Consent"
+             required>
+      <label class="label">
+        <span class="label-text-alt">{% translate "A name to identify this consent recording" %}</span>
+      </label>
+    </div>
+
+    <div class="form-control w-full max-w-md mb-4">
+      <label class="label" for="consent_language">
+        <span class="label-text">{% translate "Language" %}</span>
+      </label>
+      <select name="consent_language" id="consent_language" class="select select-bordered w-full">
+        {% for code, name in supported_languages %}
+          <option value="{{ code }}" {% if code == selected_language %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      <label class="label">
+        <span class="label-text-alt">{% translate "The language of the consent phrase you recorded" %}</span>
+      </label>
+    </div>
+
+    <div class="form-control w-full max-w-md mb-6">
+      <label class="label" for="consent_recording">
+        <span class="label-text">{% translate "Consent Recording" %}</span>
+      </label>
+      <input type="file"
+             name="consent_recording"
+             id="consent_recording"
+             accept="audio/*"
+             class="file-input file-input-bordered w-full"
+             required>
+      <label class="label">
+        <span class="label-text-alt">{% translate "Upload your recording of the consent phrase above" %}</span>
+      </label>
+    </div>
+
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-upload mr-1"></i> {% translate "Upload Consent" %}
+      </button>
+      <a href="{% url 'service_providers:custom_voice_list_voices' request.team.slug provider.pk %}"
+         class="btn btn-ghost">
+        {% translate "Cancel" %}
+      </a>
+    </div>
+  </form>
+
+  <div class="mt-8 p-4 bg-base-200 rounded-lg">
+    <h3 class="font-bold mb-2">{% translate "Tips for Recording" %}</h3>
+    <ul class="text-sm list-disc list-inside space-y-1">
+      <li>{% translate "Record in a quiet environment with minimal background noise" %}</li>
+      <li>{% translate "Speak clearly and at a normal pace" %}</li>
+      <li>{% translate "Use the same voice and equipment you'll use for the voice sample" %}</li>
+      <li>{% translate "The consent recording can be reused for multiple voice creations" %}</li>
+    </ul>
+  </div>
+</div>
+{% endblock app %}
