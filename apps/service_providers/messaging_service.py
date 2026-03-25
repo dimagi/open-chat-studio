@@ -556,8 +556,7 @@ class MetaCloudAPIService(MessagingService):
             "message_id": message_id,
             "typing_indicator": {"type": "text"},
         }
-        response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
-        response.raise_for_status()
+        httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         media_url = self._get_media_url(message.media_id)
