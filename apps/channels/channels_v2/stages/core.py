@@ -109,6 +109,7 @@ class SessionResolutionStage(ProcessingStage):
                     participant__identifier=str(ctx.participant_identifier),
                 )
                 .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+                .order_by("-created_at")
                 .first()
             )
             if existing:
@@ -447,6 +448,7 @@ class EvalsBotInteractionStage(ProcessingStage):
         ctx.bot_response = ctx.bot.process_input(
             ctx.user_query,
             attachments=ctx.message.attachments,
+            human_message=ctx.human_message,
         )
         ctx.files_to_send = ctx.bot_response.get_attached_files() or []
 

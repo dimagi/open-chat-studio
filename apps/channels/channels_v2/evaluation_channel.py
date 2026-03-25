@@ -56,7 +56,7 @@ class EvaluationChannel(ChannelBase):
 
     def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
         ctx = super()._create_context(message)
-        ctx.channel_context = {"participant_data": self._participant_data}
+        ctx.channel_context["participant_data"] = self._participant_data
         return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:

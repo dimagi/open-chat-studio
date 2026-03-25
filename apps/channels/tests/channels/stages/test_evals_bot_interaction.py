@@ -94,6 +94,7 @@ class TestEvalsBotInteractionStage:
         mock_bot.process_input.assert_called_once_with(
             "test",
             attachments=message.attachments,
+            human_message=ctx.human_message,
         )
 
     @patch("apps.channels.channels_v2.stages.core.EvalsBot")
