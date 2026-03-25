@@ -1,4 +1,8 @@
+from io import StringIO
+
 import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.documents.models import CollectionFile
 from apps.files.models import File
@@ -66,3 +70,86 @@ class TestUpdateSupportedChannels:
         reason = cf.supported_channels["whatsapp"]["reason"]
         assert isinstance(reason, str)
         assert len(reason) > 0
+
+
+@pytest.mark.django_db()
+class TestPopulateSupportedChannelsCommand:
+    """Tests for the populate_supported_channels management command."""
+
+    def _call_command(self, *args, **kwargs):
+        out = StringIO()
+        call_command("populate_supported_channels", *args, stdout=out, **kwargs)
+        return out.getvalue()
+
+    def test_no_args_raises_error(self):
+        with pytest.raises(CommandError):
+            self._call_command()
+
+    def test_collection_id_processes_media_collection(self):
+        collection = CollectionFactory(is_index=False)
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)
+        cf = CollectionFile.objects.create(file=file, collection=collection)
+        assert cf.supported_channels == {}
+
+        output = self._call_command("--collection-id", str(collection.id))
+
+        cf.refresh_from_db()
+        assert "whatsapp" in cf.supported_channels
+        assert "1 files processed" in output
+
+    def test_collection_id_skips_indexed_collection(self):
+        collection = CollectionFactory(is_index=True)
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)
+        CollectionFile.objects.create(file=file, collection=collection)
+
+        output = self._call_command("--collection-id", str(collection.id))
+        assert "0 files processed" in output
+
+    def test_nonexistent_collection_id_raises_error(self):
+        with pytest.raises(CommandError):
+            self._call_command("--collection-id", "99999")
+
+    def test_team_slug_processes_only_media_collections(self):
+        collection_media = CollectionFactory(is_index=False)
+        collection_index = CollectionFactory(
+            is_index=True,
+            team=collection_media.team,
+            llm_provider=collection_media.llm_provider,
+            embedding_provider_model=collection_media.embedding_provider_model,
+        )
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)
+        cf_media = CollectionFile.objects.create(file=file, collection=collection_media)
+        cf_index = CollectionFile.objects.create(file=file, collection=collection_index)
+
+        team_slug = collection_media.team.slug
+        output = self._call_command("--team", team_slug)
+
+        cf_media.refresh_from_db()
+        cf_index.refresh_from_db()
+        assert "whatsapp" in cf_media.supported_channels
+        assert cf_index.supported_channels == {}
+        assert "1 files processed" in output
+
+    def test_dry_run_does_not_write(self):
+        collection = CollectionFactory(is_index=False)
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)
+        cf = CollectionFile.objects.create(file=file, collection=collection)
+
+        output = self._call_command("--collection-id", str(collection.id), "--dry-run")
+
+        cf.refresh_from_db()
+        assert cf.supported_channels == {}
+        assert "dry run" in output.lower()
+
+    def test_idempotent(self):
+        collection = CollectionFactory(is_index=False)
+        file = _make_file("image/jpeg", 6 * 1024 * 1024)
+        cf = CollectionFile.objects.create(file=file, collection=collection)
+
+        self._call_command("--collection-id", str(collection.id))
+        cf.refresh_from_db()
+        first_result = cf.supported_channels.copy()
+
+        self._call_command("--collection-id", str(collection.id))
+        cf.refresh_from_db()
+        assert cf.supported_channels == first_result
