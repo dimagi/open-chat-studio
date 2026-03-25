@@ -27,7 +27,10 @@ def merge_and_rename(apps, schema_editor):
                 invitation.groups.add(experiment_group)
                 invitation.groups.remove(pipeline_group)
 
-        pipeline_group.delete()
+        # Use raw SQL to avoid Django ORM cascading into the dropped
+        # waffle_flag_groups table (dropped in migration 0008).
+        schema_editor.execute("DELETE FROM auth_group_permissions WHERE group_id = %s", [pipeline_group.id])
+        schema_editor.execute("DELETE FROM auth_group WHERE id = %s", [pipeline_group.id])
 
     if experiment_group:
         experiment_group.name = "Chatbot Admin"
