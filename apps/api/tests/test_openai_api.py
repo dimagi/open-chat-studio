@@ -48,6 +48,7 @@ def api_key(team_with_users):
     return key
 
 
+@pytest.mark.integration
 @django_db_with_data()
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_chat_completion(bot_process_input, experiment, api_key, live_server):

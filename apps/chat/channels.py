@@ -1211,6 +1211,7 @@ class WhatsappChannel(ChannelBase):
             platform=ChannelPlatform.WHATSAPP,
             file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
+            last_activity_at=self.last_activity_at,
         )
 
     def _can_send_file(self, file: File) -> bool:

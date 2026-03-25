@@ -93,9 +93,9 @@ def test_non_timed_out_sessions(session):
 @mock.patch("apps.events.tasks.fire_trigger.run")
 @pytest.mark.django_db()
 def test_timed_out_sessions_fired(mock_fire_trigger, session):
-    """A human chat message was sent more recently than the timeout"""
+    """Published trigger's timed_out_sessions() returns sessions after publishing a new version"""
     with travel("2024-04-02", tick=False) as frozen_time:
-        timeout_trigger = TimeoutTrigger.objects.create(
+        TimeoutTrigger.objects.create(
             experiment=session.experiment,
             action=EventAction.objects.create(action_type=EventActionType.LOG),
             delay=10 * 60,  # 10 Minutes
@@ -115,10 +115,48 @@ def test_timed_out_sessions_fired(mock_fire_trigger, session):
         trigger_version = experiment_version.timeout_triggers.first()
 
         frozen_time.shift(delta=timedelta(minutes=15))
-        timed_out_sessions = timeout_trigger.timed_out_sessions()
+        # Use the published version, not the working version, to match what enqueue_timed_out_events does
+        timed_out_sessions = trigger_version.timed_out_sessions()
         assert len(timed_out_sessions) == 1
         enqueue_timed_out_events()
         mock_fire_trigger.assert_called_with(trigger_version.id, session.id)
+
+
+@pytest.mark.django_db()
+def test_timed_out_sessions_after_publish(session):
+    """Regression: publishing a new experiment version should not prevent the published trigger
+    from finding sessions that timed out before the publish."""
+    with travel("2024-04-02", tick=False) as frozen_time:
+        timeout_trigger = TimeoutTrigger.objects.create(
+            experiment=session.experiment,
+            action=EventAction.objects.create(action_type=EventActionType.LOG),
+            delay=10 * 60,  # 10 minutes
+        )
+
+        chat = Chat.objects.create(team=session.team)
+        ChatMessage.objects.create(
+            chat=chat,
+            content="Hello",
+            message_type=ChatMessageType.HUMAN,
+        )
+        session.chat = chat
+        session.save()
+
+        # Publish a new version — this creates a new trigger row
+        frozen_time.shift(delta=timedelta(minutes=5))
+        experiment_version = session.experiment.create_new_version(make_default=True)
+        trigger_version = experiment_version.timeout_triggers.first()
+
+        # The published trigger's config_changed_at should match the original, not the publish time
+        assert trigger_version.config_changed_at == timeout_trigger.config_changed_at
+
+        # Advance past the delay
+        frozen_time.shift(delta=timedelta(minutes=10))
+
+        # The published trigger should find the session
+        timed_out_sessions = trigger_version.timed_out_sessions()
+        assert len(timed_out_sessions) == 1
+        assert timed_out_sessions[0] == session
 
 
 @pytest.mark.django_db()

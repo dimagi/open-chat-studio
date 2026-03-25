@@ -168,7 +168,7 @@ class TestNewMetaCloudApiMessage:
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.text_message()["entry"][0]["changes"][0]["value"],
+            message_data=meta_cloud_api_messages.text_message_value(),
         )
 
     def test_invalid_signature_returns_200(self, meta_cloud_api_channel):
@@ -217,11 +217,11 @@ class TestNewMetaCloudApiMessage:
                     "id": "BIZ_ID",
                     "changes": [
                         {
-                            "value": meta_cloud_api_messages.text_message("12345")["entry"][0]["changes"][0]["value"],
+                            "value": meta_cloud_api_messages.text_message_value("12345"),
                             "field": "messages",
                         },
                         {
-                            "value": meta_cloud_api_messages.text_message("99999")["entry"][0]["changes"][0]["value"],
+                            "value": meta_cloud_api_messages.text_message_value("99999"),
                             "field": "messages",
                         },
                     ],
@@ -244,13 +244,11 @@ class TestNewMetaCloudApiMessage:
                     "id": "BIZ_ID",
                     "changes": [
                         {
-                            "value": meta_cloud_api_messages.text_message("12345")["entry"][0]["changes"][0]["value"],
+                            "value": meta_cloud_api_messages.text_message_value("12345"),
                             "field": "messages",
                         },
                         {
-                            "value": meta_cloud_api_messages.text_message("unknown_id")["entry"][0]["changes"][0][
-                                "value"
-                            ],
+                            "value": meta_cloud_api_messages.text_message_value("unknown_id"),
                             "field": "messages",
                         },
                     ],
@@ -263,7 +261,7 @@ class TestNewMetaCloudApiMessage:
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.text_message("12345")["entry"][0]["changes"][0]["value"],
+            message_data=meta_cloud_api_messages.text_message_value("12345"),
         )
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
@@ -296,13 +294,11 @@ class TestNewMetaCloudApiMessage:
                     "id": "BIZ_ID",
                     "changes": [
                         {
-                            "value": meta_cloud_api_messages.text_message("attacker_phone_id")["entry"][0]["changes"][
-                                0
-                            ]["value"],
+                            "value": meta_cloud_api_messages.text_message_value("attacker_phone_id"),
                             "field": "messages",
                         },
                         {
-                            "value": meta_cloud_api_messages.text_message("12345")["entry"][0]["changes"][0]["value"],
+                            "value": meta_cloud_api_messages.text_message_value("12345"),
                             "field": "messages",
                         },
                     ],

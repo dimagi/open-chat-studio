@@ -232,17 +232,12 @@ class TestTurnio:
         assert final_message == expected_final_message
 
 
-def _meta_message_data(payload):
-    """Extract the message_data (the 'value' object) from a full Meta webhook payload."""
-    return payload["entry"][0]["changes"][0]["value"]
-
-
 class TestMetaCloudApi:
     @pytest.mark.parametrize(
         ("message", "message_type"),
         [
-            (_meta_message_data(meta_cloud_api_messages.text_message()), "text"),
-            (_meta_message_data(meta_cloud_api_messages.audio_message()), "audio"),
+            (meta_cloud_api_messages.text_message_value(), "text"),
+            (meta_cloud_api_messages.audio_message_value(), "audio"),
         ],
     )
     def test_parse_messages(self, message, message_type):
@@ -261,8 +256,8 @@ class TestMetaCloudApi:
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
         [
-            (_meta_message_data(meta_cloud_api_messages.text_message()), "text"),
-            (_meta_message_data(meta_cloud_api_messages.audio_message()), "audio"),
+            (meta_cloud_api_messages.text_message_value(), "text"),
+            (meta_cloud_api_messages.audio_message_value(), "audio"),
         ],
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
@@ -303,7 +298,7 @@ class TestMetaCloudApi:
     def test_unsupported_message_type_does_nothing(
         self, _handle_unsupported_message, _handle_supported_message, db, meta_cloud_api_whatsapp_channel
     ):
-        incoming_message = _meta_message_data(meta_cloud_api_messages.text_message())
+        incoming_message = meta_cloud_api_messages.text_message_value()
         incoming_message["messages"][0]["type"] = "video"
         incoming_message["messages"][0]["video"] = {}
         handle_meta_cloud_api_message(
@@ -330,7 +325,7 @@ class TestMetaCloudApi:
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
 
-        incoming_message = _meta_message_data(meta_cloud_api_messages.text_message())
+        incoming_message = meta_cloud_api_messages.text_message_value()
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.team.slug,

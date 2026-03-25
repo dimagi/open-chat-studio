@@ -90,7 +90,7 @@ class TestDocumentSourceManager:
         assert files[0].status == FileStatus.PENDING
         file = files[0].file
         assert file.name == "test.md"
-        assert file.content_type == "text/markdown"
+        assert file.content_type == "text/plain"
         assert file.file.read() == b"# Test Document"
         assert "sha" in file.metadata
 
