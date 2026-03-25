@@ -90,10 +90,15 @@ def single_collection_home(request, team_slug: str, pk: int):
     )
     collection_files_count = CollectionFile.objects.filter(collection=collection).count()
     manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
+    has_unsendable_files = (
+        not collection.is_index
+        and CollectionFile.objects.filter(collection=collection).exclude(supported_channels={}).exists()
+    )
     context = {
         "collection": collection,
         "collection_files_count": collection_files_count,
         "manually_uploaded_files_count": manually_uploaded_files_count,
+        "has_unsendable_files": has_unsendable_files,
         "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
