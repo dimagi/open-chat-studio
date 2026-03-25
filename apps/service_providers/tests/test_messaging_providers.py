@@ -14,7 +14,7 @@ from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.service_providers.exceptions import AudioConversionError
-from apps.service_providers.messaging_service import MetaCloudAPIService
+from apps.service_providers.messaging_service import MetaCloudAPIService, TwilioService
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -437,6 +437,36 @@ class TestMetaCloudAPIServiceMedia:
         assert send_data["type"] == expected_media_type
         assert send_data[expected_media_type]["id"] == "media_id_123"
         assert send_data["to"] == "27826419977"
+
+
+class TestTwilioServiceCanSendFile:
+    """Tests for TwilioService.can_send_file after alignment with Meta Cloud API limits."""
+
+    @pytest.mark.parametrize(
+        ("content_type", "content_size", "expected"),
+        [
+            # Basic supported types
+            ("image/jpeg", 1 * 1024 * 1024, True),
+            ("audio/mpeg", 1 * 1024 * 1024, True),
+            ("application/pdf", 1 * 1024 * 1024, True),
+            # WhatsApp image limit is 5MB (not flat 16MB)
+            ("image/jpeg", 6 * 1024 * 1024, False),  # was True with old flat 16MB
+            # MIME types previously rejected by allowlist, now accepted
+            ("image/gif", 1 * 1024 * 1024, True),
+            ("audio/ogg", 1 * 1024 * 1024, True),
+            ("application/zip", 1 * 1024 * 1024, True),
+            # Unsupported types still rejected
+            ("text/plain", 1024, False),
+            (None, 1024, False),
+            ("image/jpeg", None, False),
+        ],
+    )
+    def test_can_send_file(self, content_type, content_size, expected):
+        service = TwilioService(account_sid="test", auth_token="test")
+        file = MagicMock()
+        file.content_type = content_type
+        file.content_size = content_size
+        assert service.can_send_file(file) is expected
 
 
 class TestMetaCloudAPIServiceWindow:
