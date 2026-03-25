@@ -64,7 +64,7 @@ class SessionResolutionStage(ProcessingStage):
     RESET_COMMAND = "/reset"
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.participant_allowed
+        return True
 
     def process(self, ctx: MessageProcessingContext) -> None:
         # Web/Slack channels pre-set the session -- nothing to do

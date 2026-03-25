@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from apps.channels.channels_v2.stages.terminal import ResponseSendingStage
+from apps.channels.channels_v2.stages.terminal import MessageDeliveryFailure, ResponseSendingStage
 from apps.channels.tests.channels.conftest import StubSender, make_context
 
 
@@ -85,7 +85,8 @@ class TestResponseSendingStage:
 
         self.stage(ctx)
 
-        assert ctx.sending_exception is error
+        assert isinstance(ctx.sending_exception, MessageDeliveryFailure)
+        assert ctx.sending_exception.original_exc is error
         assert any("Send failed" in e for e in ctx.processing_errors)
 
     def test_file_send_failure_sends_download_link(self):

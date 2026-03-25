@@ -24,6 +24,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.channels")
 
 
+class MessageDeliveryFailure(Exception):
+    def __init__(
+        self,
+        original_exc: Exception,
+        *,
+        experiment,
+        session,
+        platform_title: str,
+        context: str,
+    ) -> None:
+        super().__init__(str(original_exc))
+        self.original_exc = original_exc
+        self.experiment = experiment
+        self.session = session
+        self.platform_title = platform_title
+        self.context = context
+
+
 # ---------------------------------------------------------------------------
 # ResponseSendingStage
 # ---------------------------------------------------------------------------
@@ -35,10 +53,10 @@ class ResponseSendingStage(ProcessingStage):
     This is the ONLY stage that sends messages to the user.
     Handles both early exit responses and normal bot responses.
 
-    Wrapper methods (_send_text, _send_voice) are decorated with
-    @notify_on_delivery_failure for in-app notifications on failure.
-    The outer try/except catches any exception that propagates past
-    the decorator, sets ctx.sending_exception, and never re-raises.
+    Wrapper methods (_send_text, _send_voice) raise MessageDeliveryFailure
+    so SendingErrorHandlerStage can handle notifications and platform-specific
+    side effects. The outer try/except catches any exception that propagates,
+    sets ctx.sending_exception, and never re-raises.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -83,26 +101,26 @@ class ResponseSendingStage(ProcessingStage):
             ctx.sender.send_text(text, recipient)
         except Exception as e:
             logger.exception(e)
-            message_delivery_failure_notification(
-                ctx.experiment,
+            raise MessageDeliveryFailure(
+                e,
+                experiment=ctx.experiment,
                 session=ctx.experiment_session,
                 platform_title=ctx.experiment_channel.platform_enum.title(),
                 context="text message",
-            )
-            raise
+            ) from e
 
     def _send_voice(self, ctx: MessageProcessingContext, audio: SynthesizedAudio, recipient: str) -> None:
         try:
             ctx.sender.send_voice(audio, recipient)
         except Exception as e:
             logger.exception(e)
-            message_delivery_failure_notification(
-                ctx.experiment,
+            raise MessageDeliveryFailure(
+                e,
+                experiment=ctx.experiment,
                 session=ctx.experiment_session,
                 platform_title=ctx.experiment_channel.platform_enum.title(),
                 context="voice message",
-            )
-            raise
+            ) from e
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +146,15 @@ class SendingErrorHandlerStage(ProcessingStage):
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
         """Handle platform-specific sending exceptions."""
+        if isinstance(exc, MessageDeliveryFailure):
+            message_delivery_failure_notification(
+                exc.experiment,
+                session=exc.session,
+                platform_title=exc.platform_title,
+                context=exc.context,
+            )
+            raise exc
+
         if isinstance(exc, ApiTelegramException):
             if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
                 try:
