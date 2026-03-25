@@ -563,6 +563,21 @@ class MetaCloudAPIService(MessagingService):
         response.raise_for_status()
         return response.json()["id"]
 
+    def send_typing_indicator(self, from_: str, message_id: str):
+        """Send a typing indicator to the user.
+
+        Marks the incoming message as read and sends a typing indicator in a single API call.
+        See https://developers.facebook.com/documentation/business-messaging/whatsapp/typing-indicators/
+        """
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        data = {
+            "messaging_product": "whatsapp",
+            "status": "read",
+            "message_id": message_id,
+            "typing_indicator": {"type": "text"},
+        }
+        httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+
     def can_send_file(self, file: File) -> bool:
         mime = file.content_type
         size = file.content_size
