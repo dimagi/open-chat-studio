@@ -425,8 +425,12 @@ class SyntheticVoice(BaseModel):
 
     class Meta:
         ordering = ["name"]
-        unique_together = ("name", "language_code", "language", "gender", "neural", "service", "voice_provider")
         constraints = [
+            models.UniqueConstraint(
+                fields=["name", "language_code", "language", "gender", "neural", "service", "voice_provider"],
+                condition=Q(external_id__isnull=True),
+                name="unique_voice_metadata_for_legacy_providers",
+            ),
             models.UniqueConstraint(
                 fields=["external_id", "service", "voice_provider"],
                 condition=Q(external_id__isnull=False),

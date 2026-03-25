@@ -421,25 +421,19 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
 
             api_voice_ids.add(voice.voice_id)
 
-            try:
-                SyntheticVoice.objects.update_or_create(
-                    external_id=voice.voice_id,
-                    service=SyntheticVoice.ElevenLabs,
-                    voice_provider=self,
-                    defaults={
-                        "name": voice.name,
-                        "neural": True,
-                        "language": language,
-                        "language_code": language,
-                        "gender": gender,
-                    },
-                )
-            except IntegrityError:
-                log.warning(
-                    "Skipping ElevenLabs voice '%s' (%s) due to IntegrityError (possible duplicate metadata)",
-                    voice.name,
-                    voice.voice_id,
-                )
+            defaults = {
+                "name": voice.name,
+                "neural": True,
+                "language": language,
+                "language_code": language,
+                "gender": gender,
+            }
+            SyntheticVoice.objects.update_or_create(
+                external_id=voice.voice_id,
+                service=SyntheticVoice.ElevenLabs,
+                voice_provider=self,
+                defaults=defaults,
+            )
 
         # Remove voices no longer in API (only if not referenced by experiments)
         stale_voices = (

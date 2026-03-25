@@ -145,7 +145,18 @@ class CreateServiceProvider(
 
     @property
     def extra_context(self):
-        return {"active_tab": "manage-team", "title": self.provider_type.label}
+        context = {"active_tab": "manage-team", "title": self.provider_type.label}
+        obj = self.get_object()
+        if obj and isinstance(obj, VoiceProvider) and obj.type == VoiceProviderType.elevenlabs.value:
+            context["sync_voices_url"] = reverse(
+                "service_providers:sync_voices",
+                kwargs={
+                    "team_slug": self.request.team.slug,
+                    "provider_type": "voice",
+                    "pk": obj.pk,
+                },
+            )
+        return context
 
     @property
     def model(self):
@@ -260,8 +271,9 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     provider = get_object_or_404(VoiceProvider, team=request.team, pk=pk)
     try:
         provider.sync_voices()
-        messages.success(request, "Voices synced successfully.")
+        count = provider.syntheticvoice_set.count()
+        messages.success(request, f"Voices synced successfully. {count} voice(s) available.")
     except Exception:
         log.exception("Failed to sync voices for provider %s", pk)
         messages.error(request, "Voice sync failed. Please check your API key and try again.")
-    return redirect("single_team:manage_team", team_slug=team_slug)
+    return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
