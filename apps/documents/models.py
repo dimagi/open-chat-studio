@@ -11,6 +11,7 @@ from field_audit.models import AuditingManager
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.service_providers.file_limits import CHANNEL_CHECKS
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -85,8 +86,6 @@ class CollectionFile(models.Model):
         Only stores entries for unsupported channels. An empty dict means the file
         is sendable on all channels.
         """
-        from apps.service_providers.file_limits import CHANNEL_CHECKS  # noqa: PLC0415
-
         unsupported = {}
         for channel_name, check_func in CHANNEL_CHECKS.items():
             result = check_func(self.file.content_type or "", self.file.content_size or 0)

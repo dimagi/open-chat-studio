@@ -51,6 +51,7 @@ from apps.ocs_notifications.notifications import (
     audio_transcription_failure_notification,
     file_delivery_failure_notification,
 )
+from apps.service_providers.file_limits import can_send_on_slack, can_send_on_telegram
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.models import MessagingProviderType
@@ -1121,8 +1122,6 @@ class TelegramChannel(ChannelBase):
         )
 
     def _can_send_file(self, file: File) -> bool:
-        from apps.service_providers.file_limits import can_send_on_telegram  # noqa: PLC0415
-
         return can_send_on_telegram(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(self, file: File):
@@ -1357,8 +1356,6 @@ class SlackChannel(ChannelBase):
             raise ChannelException("WebChannel requires an existing session")
 
     def _can_send_file(self, file: File) -> bool:
-        from apps.service_providers.file_limits import can_send_on_slack  # noqa: PLC0415
-
         return can_send_on_slack(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(self, file: File):

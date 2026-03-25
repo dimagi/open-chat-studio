@@ -27,6 +27,7 @@ from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
+from apps.service_providers.file_limits import can_send_on_whatsapp
 from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
@@ -245,8 +246,6 @@ class TwilioService(MessagingService):
         self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
-        from apps.service_providers.file_limits import can_send_on_whatsapp  # noqa: PLC0415
-
         return can_send_on_whatsapp(file.content_type or "", file.content_size or 0).supported
 
 
@@ -314,8 +313,6 @@ class TurnIOService(MessagingService):
         return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def can_send_file(self, file: File) -> bool:
-        from apps.service_providers.file_limits import can_send_on_whatsapp  # noqa: PLC0415
-
         return can_send_on_whatsapp(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(
@@ -554,8 +551,6 @@ class MetaCloudAPIService(MessagingService):
         return response.json()["id"]
 
     def can_send_file(self, file: File) -> bool:
-        from apps.service_providers.file_limits import can_send_on_whatsapp  # noqa: PLC0415
-
         return can_send_on_whatsapp(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(
