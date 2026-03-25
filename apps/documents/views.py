@@ -120,7 +120,9 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         .values_list("count")
     )
     search_query = request.GET.get("search", "").strip()
-    collection_files = CollectionFile.objects.filter(collection=collection, document_source=document_source)
+    collection_files = CollectionFile.objects.filter(
+        collection=collection, document_source=document_source
+    ).select_related("file")
     if search_query:
         collection_files = collection_files.filter(file__name__icontains=search_query)
     collection_files = collection_files.annotate(
@@ -390,12 +392,13 @@ def add_collection_files(request, team_slug: str, pk: int):
                 )
             )
 
-        collection_files = CollectionFile.objects.bulk_create(
-            [
-                CollectionFile(collection=collection, file=file, status=status, metadata=metadata)
-                for file in created_files
-            ]
-        )
+        collection_file_instances = [
+            CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in created_files
+        ]
+        if not collection.is_index:
+            for cf in collection_file_instances:
+                cf.update_supported_channels()
+        collection_files = CollectionFile.objects.bulk_create(collection_file_instances)
 
     if collection.is_index:
         tasks.index_collection_files_task.delay([cf.id for cf in collection_files])
