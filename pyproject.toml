@@ -32,6 +32,7 @@ dependencies = [
     "djangorestframework",
     "djangorestframework-api-key",
     "drf-spectacular",
+    "elevenlabs>=1.0",
     "fbmessenger",
     "ffmpeg", # Audio transcription
     "httpx",

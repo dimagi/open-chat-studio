@@ -33,6 +33,12 @@
         <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
       </form>
       {% block post_form %}
+        {% if sync_voices_url %}
+          <form method="post" action="{{ sync_voices_url }}" class="mt-4">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">Sync Voices from ElevenLabs</button>
+          </form>
+        {% endif %}
       {% endblock post_form %}
     </div>
   </div>

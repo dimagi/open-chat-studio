@@ -56,7 +56,6 @@ class Attachment(BaseModel):
 
     @cached_property
     def _file(self):
-
         try:
             return File.objects.get(id=self.file_id)
         except File.DoesNotExist:
@@ -65,7 +64,6 @@ class Attachment(BaseModel):
 
     @cached_property
     def document(self):
-
         return Document.from_file(self._file)
 
     def read_bytes(self):
@@ -202,8 +200,31 @@ class TurnWhatsappMessage(BaseMessage):
         )
 
 
-# Meta Cloud API uses the same WhatsApp Business API message format as Turn.io
-MetaCloudAPIMessage = TurnWhatsappMessage
+class MetaCloudAPIMessage(TurnWhatsappMessage):
+    """Message from the Meta Cloud API (WhatsApp Business).
+
+    Extends TurnWhatsappMessage with the WhatsApp message ID, which is required
+    for features like typing indicators.
+    """
+
+    whatsapp_message_id: str | None = Field(default=None)
+
+    @staticmethod
+    def parse(message_data: dict) -> "MetaCloudAPIMessage":
+        message = message_data["messages"][0]
+        message_type = message["type"]
+        body = ""
+        if message_type == "text":
+            body = message["text"]["body"]
+
+        return MetaCloudAPIMessage(
+            participant_id=message_data["contacts"][0]["wa_id"],
+            message_text=body,
+            content_type=message_type,
+            media_id=message.get(message_type, {}).get("id", None),
+            content_type_unparsed=message_type,
+            whatsapp_message_id=message.get("id"),
+        )
 
 
 class FacebookMessage(BaseMessage):

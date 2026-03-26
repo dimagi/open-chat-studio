@@ -24,7 +24,6 @@ from apps.pipelines.tests.utils import (
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.pytest import django_db_with_data
 
 
 @pytest.fixture()
@@ -47,7 +46,7 @@ def main(input, **kwargs):
 """
 
 
-# @django_db_with_data()
+# @pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("code", "user_input", "output"),
     [
@@ -164,7 +163,7 @@ def main(input, **kwargs):
     assert node_output.update["participant_data"]["fun_facts"]["personality"] == output  # ty: ignore[not-subscriptable]
 
 
-@django_db_with_data()
+@pytest.mark.django_db()
 def test_participant_data_across_multiple_nodes(pipeline, experiment_session):
     code_set = """
 def main(input, **kwargs):
@@ -189,7 +188,7 @@ def main(input, **kwargs):
     assert node_output["messages"][-1] == "value"
 
 
-@django_db_with_data()
+@pytest.mark.django_db()
 def test_temp_state_across_multiple_nodes(pipeline, experiment_session):
     output = "['fun loving', 'likes puppies']"
     code_set = f"""
@@ -215,7 +214,7 @@ def main(input, **kwargs):
     assert node_output["messages"][-1] == output
 
 
-@django_db_with_data()
+@pytest.mark.django_db()
 def test_temp_state_get_outputs(pipeline, experiment_session):
     # Temp state contains the outputs of the previous nodes
 

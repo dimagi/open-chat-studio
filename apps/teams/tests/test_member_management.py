@@ -6,7 +6,7 @@ from django.urls import reverse
 from apps.api.models import UserAPIKey
 from apps.teams.backends import (
     CHAT_VIEWER_GROUP,
-    EXPERIMENT_ADMIN_GROUP,
+    CHATBOT_ADMIN_GROUP,
     SUPER_ADMIN_GROUP,
     add_user_to_team,
     make_user_team_owner,
@@ -42,7 +42,7 @@ class TeamMemberManagementViewTest(TestCase):
         self.groups = {group.name: group for group in Group.objects.all()}
         self.admin_groups = [self.groups[SUPER_ADMIN_GROUP]]
         self.admin_group_ids = {g.id for g in self.admin_groups}
-        self.member_groups = [self.groups[EXPERIMENT_ADMIN_GROUP], self.groups[CHAT_VIEWER_GROUP]]
+        self.member_groups = [self.groups[CHATBOT_ADMIN_GROUP], self.groups[CHAT_VIEWER_GROUP]]
         self.member_group_ids = {g.id for g in self.member_groups}
 
     def _get_membership_url(self, membership):

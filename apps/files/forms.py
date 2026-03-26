@@ -4,6 +4,20 @@ from apps.files.models import File
 
 
 class BaseFileFormSet(forms.BaseModelFormSet):
+    accepted_file_types: list[str] = []
+
+    def clean(self) -> None:
+        if not self.accepted_file_types:
+            return super().clean()
+        invalid_extensions = set()
+        for _key, in_memory_file in self.files.items():
+            file_extension = in_memory_file.name.rsplit(".", 1)[-1].lower()
+            if file_extension not in self.accepted_file_types:
+                invalid_extensions.add(f".{file_extension}")
+        if invalid_extensions:
+            raise forms.ValidationError(f"File extensions not supported: {', '.join(invalid_extensions)}")
+        return super().clean()
+
     def save(self, request):  # ty: ignore[invalid-method-override]
         files = super().save(commit=False)
         for file in files:

@@ -230,6 +230,7 @@ export class OcsChat {
   private chatWindowFullscreenWidth: number = 1024;
   private positionInitialized: boolean = false;
   private internalPageContext?: Record<string, any>;
+  private sessionEpoch: number = 0;
   @Element() host: HTMLElement;
 
 
@@ -409,6 +410,7 @@ export class OcsChat {
   }
 
   private async startSession(): Promise<void> {
+    const epoch = this.sessionEpoch;
     try {
       this.isLoading = true;
 
@@ -432,11 +434,13 @@ export class OcsChat {
       }
 
       const data = await this.getChatService().startSession(requestBody);
+      if (epoch !== this.sessionEpoch) return;
       this.sessionId = data.session_id;
       this.saveSessionToStorage();
 
       this.startMessagePolling();
     } catch (_error) {
+      if (epoch !== this.sessionEpoch) return;
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
@@ -465,6 +469,7 @@ export class OcsChat {
 
   private async sendMessage(message: string): Promise<void> {
     if (!message.trim()) return;
+    const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
     if (!this.sessionId) {
@@ -540,6 +545,7 @@ export class OcsChat {
       }
 
       const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
+      if (epoch !== this.sessionEpoch) return;
 
       if (data.status === 'error') {
         throw new Error(data.error || 'Failed to send message');
@@ -548,6 +554,7 @@ export class OcsChat {
       this.internalPageContext = undefined;
       this.startTaskPolling(data.task_id);
     } catch (error) {
+      if (epoch !== this.sessionEpoch) return;
       const errorText = error instanceof Error ? error.message : 'Failed to send message';
       this.handleError(errorText);
     }
@@ -647,6 +654,12 @@ export class OcsChat {
   @Watch('pageContext')
   pageContextHandler() {
     this.loadInternalPageContext()
+  }
+
+  @Watch('chatbotId')
+  @Watch('versionNumber')
+  async chatbotConfigHandler() {
+    await this.clearSession();
   }
 
   /**
@@ -1493,6 +1506,7 @@ export class OcsChat {
    * will start when the user sends a message.
    */
   private async clearSession(): Promise<void> {
+    this.sessionEpoch += 1;
     this.clearSessionStorage();
     this.sessionId = undefined;
     this.messages = [];

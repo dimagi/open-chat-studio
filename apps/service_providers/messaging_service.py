@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import IO, TYPE_CHECKING, ClassVar, cast
 from urllib.parse import urljoin
 
 import backoff
@@ -233,12 +233,20 @@ class TwilioService(MessagingService):
 
         return number if number in self._get_account_numbers() else None
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+    def send_file_to_user(
+        self,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        file: File,
+        download_link: str,
+        last_activity_at: datetime | None = None,
+    ):
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
         self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
-        return file.content_type in supported_mime_types.TWILIO and file.size_mb <= self.max_file_size_mb
+        return file.content_type in supported_mime_types.TWILIO and (file.size_mb or 0) <= self.max_file_size_mb
 
 
 class TurnIOService(MessagingService):
@@ -320,7 +328,15 @@ class TurnIOService(MessagingService):
         else:
             return False
 
-    def send_file_to_user(self, from_: str, to: str, platform: ChannelPlatform, file: File, download_link: str):
+    def send_file_to_user(
+        self,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        file: File,
+        download_link: str,
+        last_activity_at: datetime | None = None,
+    ):
         mime_type = file.content_type
 
         if mime_type.startswith("image/"):
@@ -389,6 +405,7 @@ class MetaCloudAPIService(MessagingService):
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
+    supports_multimedia: ClassVar[bool] = True
     access_token: str
     business_id: str
     app_secret: str = ""
@@ -519,7 +536,7 @@ class MetaCloudAPIService(MessagingService):
             raise ServiceWindowExpiredException("Service window expired, voice messages cannot be sent via template")
 
         voice_audio_bytes = synthetic_voice.get_audio_bytes(format="ogg", codec="libopus")
-        media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg")
+        media_id = self._upload_media(from_, voice_audio_bytes, mime_type="audio/ogg", filename="audio.ogg")
 
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
@@ -531,17 +548,87 @@ class MetaCloudAPIService(MessagingService):
         response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
         response.raise_for_status()
 
-    def _upload_media(self, phone_number_id: str, file_bytes: bytes, mime_type: str) -> str:
+    def _upload_media(
+        self, phone_number_id: str, file_data: bytes | IO[bytes], mime_type: str, filename: str = "upload"
+    ) -> str:
         url = f"{self.META_API_BASE_URL}/{phone_number_id}/media"
+        file_obj = BytesIO(file_data) if isinstance(file_data, bytes) else file_data
         response = httpx.post(
             url,
             headers={"Authorization": f"Bearer {self.access_token}"},
             data={"messaging_product": "whatsapp", "type": mime_type},
-            files={"file": ("audio.ogg", BytesIO(file_bytes), mime_type)},
+            files={"file": (filename, file_obj, mime_type)},
             timeout=self.META_API_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()["id"]
+
+    def send_typing_indicator(self, from_: str, message_id: str):
+        """Send a typing indicator to the user.
+
+        Marks the incoming message as read and sends a typing indicator in a single API call.
+        See https://developers.facebook.com/documentation/business-messaging/whatsapp/typing-indicators/
+        """
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        data = {
+            "messaging_product": "whatsapp",
+            "status": "read",
+            "message_id": message_id,
+            "typing_indicator": {"type": "text"},
+        }
+        httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+
+    def can_send_file(self, file: File) -> bool:
+        mime = file.content_type
+        size = file.content_size
+
+        if mime is None or size is None:
+            return False
+
+        if mime.startswith("image/"):
+            return size <= 5 * 1024 * 1024  # 5 MB
+        elif mime.startswith(("video/", "audio/")):
+            return size <= 16 * 1024 * 1024  # 16 MB
+        elif mime.startswith("application/"):
+            return size <= 100 * 1024 * 1024  # 100 MB
+        else:
+            return False
+
+    def send_file_to_user(
+        self,
+        from_: str,
+        to: str,
+        platform: ChannelPlatform,
+        file: File,
+        download_link: str,
+        last_activity_at: datetime | None = None,
+    ):
+        if not self._is_within_service_window(last_activity_at):
+            raise ServiceWindowExpiredException("Service window expired, file messages cannot be sent via template")
+
+        mime_type = file.content_type
+
+        if mime_type.startswith("image/"):
+            media_type = "image"
+        elif mime_type.startswith("video/"):
+            media_type = "video"
+        elif mime_type.startswith("audio/"):
+            media_type = "audio"
+        else:
+            media_type = "document"
+
+        with file.file.open("rb") as file_obj:
+            media_id = self._upload_media(from_, file_obj, mime_type=mime_type, filename=file.name)
+
+        url = f"{self.META_API_BASE_URL}/{from_}/messages"
+        data = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": media_type,
+            media_type: {"id": media_id},
+        }
+        response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
+        response.raise_for_status()
 
     def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         media_url = self._get_media_url(message.media_id)
