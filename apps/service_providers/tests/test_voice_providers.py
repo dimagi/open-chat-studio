@@ -385,7 +385,7 @@ def test_elevenlabs_sync_voices(team_with_users):
     mock_response.voices = [mock_voice_1, mock_voice_2]
     mock_response.has_more = False
 
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+    with mock.patch("apps.service_providers.models.ElevenLabsClient") as mock_client_cls:
         mock_client_cls.return_value.voices.search.return_value = mock_response
         provider.sync_voices()
 
@@ -424,7 +424,7 @@ def test_elevenlabs_sync_voices_pagination(team_with_users):
     page2_response.voices = [mock_voice_page2]
     page2_response.has_more = False
 
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+    with mock.patch("apps.service_providers.models.ElevenLabsClient") as mock_client_cls:
         mock_client_cls.return_value.voices.search.side_effect = [page1_response, page2_response]
         provider.sync_voices()
 
@@ -475,7 +475,7 @@ def test_elevenlabs_sync_voices_updates_and_removes(team_with_users):
     mock_response.voices = [mock_voice]
     mock_response.has_more = False
 
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+    with mock.patch("apps.service_providers.models.ElevenLabsClient") as mock_client_cls:
         mock_client_cls.return_value.voices.search.return_value = mock_response
         provider.sync_voices()
 
