@@ -14,6 +14,7 @@ import emoji
 import httpx
 from django.conf import settings
 from django.db import transaction
+from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
@@ -322,9 +323,7 @@ class ChannelBase(ABC):
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
-            from apps.channels.channels_v2.web_channel import WebChannel as NewWebChannel  # noqa: PLC0415
-
-            channel_cls = NewWebChannel
+            channel_cls = WebChannel
         elif platform == "whatsapp":
             channel_cls = WhatsappChannel
         elif platform == "facebook":
@@ -990,6 +989,73 @@ class ChannelBase(ABC):
             if version_number not in current_versions:
                 self.experiment_session.experiment_versions = current_versions + [version_number]
                 self.experiment_session.save(update_fields=["experiment_versions"])
+
+
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.web_channel.WebChannel
+class WebChannel(ChannelBase):
+    """Message Handler for the UI"""
+
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+    supports_conversational_consent_flow: bool = False
+
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
+        # Bot responses are returned by the task and picked up by a periodic request from the browser.
+        # Ad-hoc bot messages are picked up by a periodic poll from the browser as well
+        pass
+
+    def _ensure_sessions_exists(self):
+        if not self.experiment_session:
+            raise ChannelException("WebChannel requires an existing session")
+
+    @classmethod
+    def start_new_session(  # ty: ignore[invalid-method-override]
+        cls,
+        working_experiment: Experiment,
+        participant_identifier: str,
+        participant_user: CustomUser | None = None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+        version: int = Experiment.DEFAULT_VERSION_NUMBER,
+        metadata: dict | None = None,
+        **kwargs,
+    ):
+        experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
+        session = super().start_new_session(
+            working_experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            metadata=metadata,
+        )
+
+        try:
+            experiment_version = working_experiment.get_version(version)
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
+        except Experiment.DoesNotExist:
+            raise Http404(f"Experiment with version {version} not found") from None
+
+        WebChannel.check_and_process_seed_message(session, experiment_version)
+        return session
+
+    @classmethod
+    def check_and_process_seed_message(cls, session: ExperimentSession, experiment: Experiment):
+        from apps.experiments.tasks import (  # noqa: PLC0415 - circular: experiments.tasks imports chat.channels
+            get_response_for_webchat_task,
+        )
+
+        if seed_message := experiment.seed_message:
+            session.seed_task_id = get_response_for_webchat_task.delay(
+                experiment_session_id=session.id, experiment_id=experiment.id, message_text=seed_message, attachments=[]
+            ).task_id
+            session.save()
+        return session
+
+    def _inform_user_of_error(self, exception):
+        # Web channel's errors are optionally rendered in the UI, so no need to send a message
+        pass
 
 
 class TelegramChannel(ChannelBase):

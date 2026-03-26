@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.channels.channels_v2.web_channel import WebChannel
+from apps.chat.channels import WebChannel
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
