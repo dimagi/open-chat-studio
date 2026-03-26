@@ -98,21 +98,33 @@ class OpenAIGenericConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 class OpenAIVoiceEngineFileFormset(BaseFileFormSet):
     accepted_file_types = ["mp4", "mp3"]
 
-    def clean(self) -> None:
-        invalid_extentions = set()
-        for _key, in_memory_file in self.files.items():
-            file_extention = in_memory_file.name.split(".")[1]
-            if file_extention not in self.accepted_file_types:
-                invalid_extentions.add(f".{file_extention}")
-        if invalid_extentions:
-            string = ", ".join(invalid_extentions)
-            raise forms.ValidationError(f"File extentions not supported: {string}")
-        return super().clean()
-
 
 class OpenAIVoiceEngineConfigForm(OpenAIConfigForm):
     allow_file_upload = True
     file_formset_form = OpenAIVoiceEngineFileFormset
+
+
+class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["elevenlabs_api_key"]
+
+    elevenlabs_api_key = forms.CharField(
+        label=_("API Key"),
+        help_text=render_help_with_link(
+            "Voices are managed in your ElevenLabs account and synced automatically when the provider is created. "
+            "Use the sync button to pull in new voices.",
+            "https://elevenlabs.io/app/voice-library",
+            link_text="Go to ElevenLabs Voice Library",
+        ),
+    )
+    elevenlabs_model = forms.ChoiceField(
+        label=_("Model"),
+        choices=[
+            ("eleven_multilingual_v2", "Multilingual v2 (default)"),
+            ("eleven_v3", "v3 (latest)"),
+            ("eleven_flash_v2_5", "Flash v2.5 (low latency)"),
+        ],
+        initial="eleven_multilingual_v2",
+    )
 
 
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
