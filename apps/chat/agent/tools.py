@@ -337,6 +337,11 @@ class UpdateParticipantDataTool(CustomBaseTool):
     args_schema: type[schemas.UpdateUserDataSchema] = schemas.UpdateUserDataSchema
 
     def action(self, key: str, value: Any, tool_call_id: str):
+        try:
+            json.dumps(value)
+        except (TypeError, ValueError, OverflowError):
+            return "Error: The value is not JSON serializable"
+
         return Command(
             update={
                 "participant_data": {key: value},
