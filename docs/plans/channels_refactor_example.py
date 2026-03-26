@@ -22,7 +22,7 @@ architecture with all review decisions applied:
   - Issue 18: Terminal stage order: ResponseSending → SendingErrorHandler → EarlyExitResponse → ActivityTracking
   - Issue 19: SendingErrorHandlerStage for platform-specific send error side effects
   - Issue 20: ResponseSendingStage resilience (try/except, delivery failure notifications)
-  - Issue 21: ctx.sending_exception (single Exception | None)
+  - Issue 21: ctx.sending_exceptions (list[Exception] — unified list for text/voice/file failures)
   - Issue 22: PersistenceStage persists regardless of sending exceptions
   - Issue 23: Channel-specific pipelines (ApiChannel, CommCareConnectChannel override _build_pipeline)
   - Issue 24: ChannelSender.send_file receives session_id as extra param
@@ -149,39 +149,40 @@ class ChannelSender:
 
 
 # ---------------------------------------------------------------------------
-# 4. Delivery Failure Notification Decorator
+# 4. Sending Failure Exception Types
 # ---------------------------------------------------------------------------
 
 
-def notify_on_delivery_failure(context: str):
-    """Decorator that catches exceptions from send methods, creates a
-    failure notification, then re-raises.
+class MessageDeliveryFailure(Exception):
+    """Raised by ResponseSendingStage._send_text/_send_voice on failure.
 
-    Updated for pipeline stages: reads experiment/session/platform from
-    the ctx parameter (first positional arg after self).
+    Carries the context needed for SendingErrorHandlerStage to send the
+    in-app notification and handle platform-specific side effects.
     """
-    from functools import wraps
 
-    from apps.ocs_notifications.notifications import message_delivery_failure_notification
+    def __init__(self, original_exc: Exception, *, experiment, session, platform_title: str, context: str) -> None:
+        super().__init__(str(original_exc))
+        self.original_exc = original_exc
+        self.experiment = experiment
+        self.session = session
+        self.platform_title = platform_title
+        self.context = context
 
-    def decorator(method):
-        @wraps(method)
-        def wrapper(self, ctx, *args, **kwargs):
-            try:
-                return method(self, ctx, *args, **kwargs)
-            except Exception as e:
-                logger.exception(e)
-                message_delivery_failure_notification(
-                    ctx.experiment,
-                    session=ctx.experiment_session,
-                    platform_title=ctx.experiment_channel.platform_enum.title(),
-                    context=context,
-                )
-                raise
 
-        return wrapper
+class FileDeliveryFailure(Exception):
+    """Raised by ResponseSendingStage for each file that fails to send.
 
-    return decorator
+    Carries the context needed for SendingErrorHandlerStage to send the
+    in-app notification.
+    """
+
+    def __init__(self, original_exc: Exception, *, experiment, session, platform_title: str, file) -> None:
+        super().__init__(str(original_exc))
+        self.original_exc = original_exc
+        self.experiment = experiment
+        self.session = session
+        self.platform_title = platform_title
+        self.file = file
 
 
 # ---------------------------------------------------------------------------
@@ -249,10 +250,11 @@ class MessageProcessingContext:
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
 
-    # --- Sending error ------------------------------------------------------
-    # Set by ResponseSendingStage when a send fails. Read by
-    # SendingErrorHandlerStage for platform-specific side effects.
-    sending_exception: Exception | None = None
+    # --- Sending errors -----------------------------------------------------
+    # Populated by ResponseSendingStage for each send failure (text, voice,
+    # or file). SendingErrorHandlerStage processes each one for notifications
+    # and platform-specific side effects.
+    sending_exceptions: list[Exception] = field(default_factory=list)
 
     # --- Observability ------------------------------------------------------
     processing_errors: list[str] = field(default_factory=list)
@@ -354,11 +356,6 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Check for /reset before loading a session
-        if self._is_reset_request(ctx):
-            self._handle_reset(ctx)
-            return
-
         # Try to load an existing active session (Issue 13: select_related)
         from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
         from apps.experiments.models import ExperimentSession
@@ -374,11 +371,11 @@ class SessionResolutionStage(ProcessingStage):
             .first()
         )
 
-        # Handle /reset on an existing session
-        if ctx.experiment_session and self._is_reset_request(ctx):
-            if ctx.experiment_session.user_already_engaged():
-                self._handle_reset(ctx)
-                return
+        # Check for /reset after loading the session so that _handle_reset
+        # has access to ctx.experiment_session and can properly end it.
+        if self._is_reset_request(ctx):
+            self._handle_reset(ctx)
+            return
 
         # Create a new session if none found
         if not ctx.experiment_session:
@@ -752,12 +749,14 @@ class ResponseFormattingStage(ProcessingStage):
             unsupported_files = list(files)
 
         if should_reply_voice:
+            # Set formatted_message before stripping so the full text is available
+            # as a fallback if voice delivery fails downstream
+            ctx.formatted_message = message
             message, extracted_urls = strip_urls_and_emojis(message)
             urls_to_append = "\n".join(extracted_urls)
             urls_to_append = self._append_attachment_links(urls_to_append, unsupported_files, ctx)
             try:
                 ctx.voice_audio = self._synthesize_voice(ctx, message)
-                ctx.formatted_message = message
                 if urls_to_append:
                     ctx.additional_text_message = urls_to_append
             except AudioSynthesizeException:
@@ -765,7 +764,6 @@ class ResponseFormattingStage(ProcessingStage):
                 logger.exception("Error generating voice response")
                 audio_synthesis_failure_notification(ctx.experiment, session=ctx.experiment_session)
                 ctx.voice_audio = None
-                ctx.formatted_message = f"{message}\n\n{urls_to_append}"
         else:
             message, uncited_files = self._format_reference_section(message, files, ctx)
             unsupported_uncited = [f for f in unsupported_files if f in uncited_files]
@@ -832,18 +830,23 @@ class ResponseSendingStage(ProcessingStage):
     This is the ONLY stage that sends messages to the user.
     Handles both early exit responses and normal bot responses.
 
-    Wrapper methods (_send_text, _send_voice) are decorated with
-    @notify_on_delivery_failure for in-app notifications on failure.
-    The outer try/except catches any exception that propagates past
-    the decorator, sets ctx.sending_exception, and never re-raises.
+    All sending is wrapped in a single outer try/except. On failure,
+    the exception is appended to ctx.sending_exceptions.
+
+    - Text/voice: _send_text/_send_voice raise MessageDeliveryFailure.
+    - Files: each failure is wrapped in FileDeliveryFailure and appended
+      to ctx.sending_exceptions. A download link fallback is sent via
+      _send_text; if that also fails, the MessageDeliveryFailure propagates
+      to the outer catch.
+
+    SendingErrorHandlerStage processes ctx.sending_exceptions for
+    notifications and platform-specific side effects.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.formatted_message is not None or ctx.early_exit_response is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        from apps.ocs_notifications.notifications import file_delivery_failure_notification
-
         try:
             if ctx.early_exit_response:
                 self._send_text(ctx, ctx.early_exit_response, ctx.participant_identifier)
@@ -857,56 +860,101 @@ class ResponseSendingStage(ProcessingStage):
             else:
                 self._send_text(ctx, ctx.formatted_message, ctx.participant_identifier)
 
-            # Send supported file attachments
+            # File attachments — each failure is stored separately so one
+            # file failure doesn't prevent others from sending.
             for file in ctx.files_to_send:
                 try:
                     ctx.sender.send_file(file, ctx.participant_identifier, ctx.experiment_session.id)
                 except Exception as e:
                     logger.exception(e)
-                    platform_title = ctx.experiment_channel.platform_enum.title()
-                    file_delivery_failure_notification(
-                        ctx.experiment,
-                        platform_title=platform_title,
-                        content_type=file.content_type,
-                        session=ctx.experiment_session,
+                    ctx.sending_exceptions.append(
+                        FileDeliveryFailure(
+                            e,
+                            experiment=ctx.experiment,
+                            session=ctx.experiment_session,
+                            platform_title=ctx.experiment_channel.platform_enum.title(),
+                            file=file,
+                        )
                     )
                     download_link = file.download_link(ctx.experiment_session.id)
                     self._send_text(ctx, download_link, ctx.participant_identifier)
         except Exception as e:
-            # Catch-all for send failures — never propagate
-            ctx.sending_exception = e
+            ctx.sending_exceptions.append(e)
             ctx.processing_errors.append(f"Send failed: {e}")
 
-    @notify_on_delivery_failure(context="text message")
     def _send_text(self, ctx: MessageProcessingContext, text: str, recipient: str) -> None:
-        ctx.sender.send_text(text, recipient)
+        try:
+            ctx.sender.send_text(text, recipient)
+        except Exception as e:
+            logger.exception(e)
+            raise MessageDeliveryFailure(
+                e,
+                experiment=ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
+                context="text message",
+            ) from e
 
-    @notify_on_delivery_failure(context="voice message")
     def _send_voice(self, ctx: MessageProcessingContext, audio: SynthesizedAudio, recipient: str) -> None:
-        ctx.sender.send_voice(audio, recipient)
+        try:
+            ctx.sender.send_voice(audio, recipient)
+        except Exception as e:
+            logger.exception(e)
+            raise MessageDeliveryFailure(
+                e,
+                experiment=ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
+                context="voice message",
+            ) from e
 
 
 class SendingErrorHandlerStage(ProcessingStage):
-    """TERMINAL STAGE: Handles platform-specific side effects from send failures.
+    """TERMINAL STAGE: Handles notifications and side effects from send failures.
 
-    Inspects ctx.sending_exception for platform-specific errors that require
-    action beyond logging (e.g., Telegram 403 "bot was blocked" → revoke
-    participant consent).
+    Processes ctx.sending_exceptions (a list of MessageDeliveryFailure and
+    FileDeliveryFailure instances set by ResponseSendingStage).
 
-    Non-actionable exceptions are ignored (already logged by ResponseSendingStage).
+    - MessageDeliveryFailure: sends a failure notification
+    - FileDeliveryFailure: sends a failure notification
+    - ApiTelegramException 403 (bot blocked): revokes participant consent
+    - Unknown exceptions: re-raised so the task fails
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.sending_exception is not None
+        return bool(ctx.sending_exceptions)
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        self._handle_exception(ctx, ctx.sending_exception)
+        for exc in ctx.sending_exceptions:
+            self._handle_exception(ctx, exc)
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
-        """Handle platform-specific sending exceptions."""
+        """Handle a single sending exception."""
         from telebot.apihelper import ApiTelegramException
 
         from apps.experiments.models import ParticipantData
+        from apps.ocs_notifications.notifications import (
+            file_delivery_failure_notification,
+            message_delivery_failure_notification,
+        )
+
+        if isinstance(exc, MessageDeliveryFailure):
+            message_delivery_failure_notification(
+                exc.experiment,
+                session=exc.session,
+                platform_title=exc.platform_title,
+                context=exc.context,
+            )
+            return
+
+        if isinstance(exc, FileDeliveryFailure):
+            file_delivery_failure_notification(
+                exc.experiment,
+                platform_title=exc.platform_title,
+                content_type=exc.file.content_type,
+                session=exc.session,
+            )
+            return
 
         if isinstance(exc, ApiTelegramException):
             if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
@@ -918,7 +966,9 @@ class SendingErrorHandlerStage(ProcessingStage):
                     participant_data.update_consent(False)
                 except ParticipantData.DoesNotExist:
                     ctx.processing_errors.append("Participant data not found during consent revocation")
-        # Other platform-specific exception handling can be added here
+            return
+
+        raise exc  # Unknown exception — propagate to fail the task
 
 
 class PersistenceStage(ProcessingStage):
@@ -1337,8 +1387,8 @@ class TelegramSender(ChannelSender):
     """Sends messages via the Telegram Bot API.
 
     Exceptions (e.g., ApiTelegramException) are NOT caught here — they
-    propagate to ResponseSendingStage which catches them, sets
-    ctx.sending_exception, and lets SendingErrorHandlerStage handle
+    propagate to ResponseSendingStage which wraps them in MessageDeliveryFailure,
+    appends to ctx.sending_exceptions, and lets SendingErrorHandlerStage handle
     platform-specific side effects (e.g., Telegram 403 consent revocation).
     """
 
@@ -2151,7 +2201,7 @@ def example_message_flow():
     #
     #    f. Terminal stages always run (in order):
     #       1. ResponseSending: delivers to user via TelegramSender
-    #          (wraps sends in try/except, sets ctx.sending_exception on failure)
+    #          (wraps sends in try/except, appends to ctx.sending_exceptions on failure)
     #       2. SendingErrorHandler: handles platform-specific send errors
     #          (e.g., Telegram 403 → revoke consent)
     #       3. Persistence: persists early exit responses to chat history

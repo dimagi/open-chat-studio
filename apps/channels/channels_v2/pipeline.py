@@ -73,10 +73,11 @@ class MessageProcessingContext:
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
 
-    # --- Sending error ------------------------------------------------------
-    # Set by ResponseSendingStage when a send fails. Read by
-    # SendingErrorHandlerStage for platform-specific side effects.
-    sending_exception: Exception | None = None
+    # --- Sending errors -----------------------------------------------------
+    # Populated by ResponseSendingStage for each send failure (text, voice,
+    # or file). SendingErrorHandlerStage processes each one for notifications
+    # and platform-specific side effects.
+    sending_exceptions: list[Exception] = field(default_factory=list)
 
     # --- Observability ------------------------------------------------------
     processing_errors: list[str] = field(default_factory=list)
