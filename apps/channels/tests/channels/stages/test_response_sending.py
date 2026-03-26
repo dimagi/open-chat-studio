@@ -117,7 +117,6 @@ class TestResponseSendingStage:
         assert isinstance(exc, FileDeliveryFailure)
         assert exc.original_exc is error
         assert exc.file is file1
-        assert exc.platform_title == "Telegram"
         # Download link sent as fallback
         assert any("https://example.com/download" in text for text, _ in sender.text_messages)
 

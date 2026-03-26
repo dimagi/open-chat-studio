@@ -63,20 +63,26 @@ class TestSendingErrorHandlerStage:
     def test_message_delivery_failure_sends_notification_and_does_not_reraise(self, mock_notify):
         exc = MessageDeliveryFailure(
             RuntimeError("network error"),
-            experiment=MagicMock(),
-            session=MagicMock(),
-            platform_title="Telegram",
             context="text message",
         )
-        ctx = make_context(sending_exceptions=[exc])
+        experiment = MagicMock()
+        session = MagicMock()
+        experiment_channel = MagicMock()
+        experiment_channel.platform_enum.title.return_value = "Telegram"
+        ctx = make_context(
+            sending_exceptions=[exc],
+            experiment=experiment,
+            experiment_session=session,
+            experiment_channel=experiment_channel,
+        )
 
         self.stage(ctx)
 
         mock_notify.assert_called_once_with(
-            exc.experiment,
-            session=exc.session,
-            platform_title=exc.platform_title,
-            context=exc.context,
+            experiment,
+            session=session,
+            platform_title="Telegram",
+            context="text message",
         )
 
     def test_unknown_exception_reraises(self):
@@ -91,21 +97,26 @@ class TestSendingErrorHandlerStage:
     def test_file_exception_sends_notification(self, mock_notify):
         file_obj = MagicMock()
         file_obj.content_type = "image/png"
+        experiment = MagicMock()
         session = MagicMock()
         session.id = 42
+        experiment_channel = MagicMock()
+        experiment_channel.platform_enum.title.return_value = "Telegram"
         exc = FileDeliveryFailure(
             RuntimeError("upload failed"),
-            experiment=MagicMock(),
-            session=session,
-            platform_title="Telegram",
             file=file_obj,
         )
-        ctx = make_context(sending_exceptions=[exc])
+        ctx = make_context(
+            sending_exceptions=[exc],
+            experiment=experiment,
+            experiment_session=session,
+            experiment_channel=experiment_channel,
+        )
 
         self.stage(ctx)
 
         mock_notify.assert_called_once_with(
-            exc.experiment,
+            experiment,
             platform_title="Telegram",
             content_type="image/png",
             session=session,

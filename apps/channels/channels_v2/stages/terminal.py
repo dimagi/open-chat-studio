@@ -29,16 +29,10 @@ class MessageDeliveryFailure(Exception):
         self,
         original_exc: Exception,
         *,
-        experiment,
-        session,
-        platform_title: str,
         context: str,
     ) -> None:
         super().__init__(str(original_exc))
         self.original_exc = original_exc
-        self.experiment = experiment
-        self.session = session
-        self.platform_title = platform_title
         self.context = context
 
 
@@ -47,16 +41,10 @@ class FileDeliveryFailure(Exception):
         self,
         original_exc: Exception,
         *,
-        experiment,
-        session,
-        platform_title: str,
         file,
     ) -> None:
         super().__init__(str(original_exc))
         self.original_exc = original_exc
-        self.experiment = experiment
-        self.session = session
-        self.platform_title = platform_title
         self.file = file
 
 
@@ -114,9 +102,6 @@ class ResponseSendingStage(ProcessingStage):
             logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
-                experiment=ctx.experiment,
-                session=ctx.experiment_session,
-                platform_title=ctx.experiment_channel.platform_enum.title(),
                 context="text message",
             ) from e
 
@@ -127,9 +112,6 @@ class ResponseSendingStage(ProcessingStage):
             logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
-                experiment=ctx.experiment,
-                session=ctx.experiment_session,
-                platform_title=ctx.experiment_channel.platform_enum.title(),
                 context="voice message",
             ) from e
 
@@ -141,9 +123,6 @@ class ResponseSendingStage(ProcessingStage):
             ctx.sending_exceptions.append(
                 FileDeliveryFailure(
                     e,
-                    experiment=ctx.experiment,
-                    session=ctx.experiment_session,
-                    platform_title=ctx.experiment_channel.platform_enum.title(),
                     file=file,
                 )
             )
@@ -175,9 +154,9 @@ class SendingErrorHandlerStage(ProcessingStage):
         if isinstance(exc, MessageDeliveryFailure):
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
-                exc.experiment,
-                session=exc.session,
-                platform_title=exc.platform_title,
+                ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
                 context=exc.context,
             )
             return
@@ -185,10 +164,10 @@ class SendingErrorHandlerStage(ProcessingStage):
         if isinstance(exc, FileDeliveryFailure):
             logger.exception("File delivery failure: %s", exc, exc_info=exc.original_exc)
             file_delivery_failure_notification(
-                exc.experiment,
-                platform_title=exc.platform_title,
+                ctx.experiment,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
                 content_type=exc.file.content_type,
-                session=exc.session,
+                session=ctx.experiment_session,
             )
             return
 
@@ -231,6 +210,14 @@ class PersistenceStage(ProcessingStage):
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
+        if not ctx.experiment_session:
+            return False
+
+        # Skip all persistence for /reset -- matching current behavior
+        # where the reset command is intentionally not recorded.
+        if self._is_reset_command(ctx):
+            return False
+
         return ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
 
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
@@ -244,14 +231,6 @@ class PersistenceStage(ProcessingStage):
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        if not ctx.experiment_session:
-            return
-
-        # Skip all persistence for /reset -- matching current behavior
-        # where the reset command is intentionally not recorded.
-        if self._is_reset_command(ctx):
-            return
-
         # 1. Apply human message tags set by earlier stages
         if ctx.human_message and ctx.human_message_tags:
             for tag_name, tag_category in ctx.human_message_tags:
