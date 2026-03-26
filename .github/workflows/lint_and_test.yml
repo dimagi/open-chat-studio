@@ -134,11 +134,13 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres_password
+          POSTGRES_INITDB_ARGS: "--no-sync"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --tmpfs /var/lib/postgresql/data
         ports:
           - 5432:5432
       redis:
@@ -163,16 +165,32 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
+      - name: Configure Postgres for performance
+        run: |
+          PGPASSWORD=postgres_password psql -h localhost -U postgres \
+            -c "ALTER SYSTEM SET fsync = off;" \
+            -c "ALTER SYSTEM SET synchronous_commit = off;" \
+            -c "ALTER SYSTEM SET full_page_writes = off;" \
+            -c "ALTER SYSTEM SET checkpoint_completion_target = 0.9;" \
+            -c "SELECT pg_reload_conf();"
+      - name: Set coverage flags
+        id: cov_flags
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "flags=--cov --cov-report=xml" >> $GITHUB_OUTPUT
+          else
+            echo "flags=" >> $GITHUB_OUTPUT
+          fi
       - name: Run Tests
         env:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
           PYTHONWARNINGS: default
-        run: uv run pytest -n auto --cov --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+        run: uv run pytest -n auto ${{ steps.cov_flags.outputs.flags }} --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload results to Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

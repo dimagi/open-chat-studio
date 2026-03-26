@@ -10,7 +10,6 @@ from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.pytest import django_db_transactional
 
 
 @pytest.fixture()
@@ -28,7 +27,7 @@ def session(experiment):
     return ExperimentSessionFactory.create(experiment=experiment)
 
 
-@django_db_transactional()
+@pytest.mark.django_db()
 def test_save_trace_metadata(pipeline: Pipeline, session: ExperimentSession):
     trace_service = TracingService([MockTracer()], 1, 1)
     with trace_service.trace("test", session):

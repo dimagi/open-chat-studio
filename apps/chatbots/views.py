@@ -332,7 +332,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
 
 
 class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
-    permission_required = "pipelines.change_pipeline"
+    permission_required = "experiments.change_experiment"
     template_name = "pipelines/pipeline_builder.html"
 
     def get_context_data(self, **kwargs):

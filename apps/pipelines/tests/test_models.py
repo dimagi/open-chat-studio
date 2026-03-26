@@ -30,7 +30,6 @@ from apps.utils.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
 )
-from apps.utils.pytest import django_db_with_data
 
 
 @pytest.mark.django_db()
@@ -253,7 +252,7 @@ class TestPipeline:
         if participant_exists:
             assert Participant.objects.filter(team=team, user=requesting_user).exists()
 
-    @django_db_with_data()
+    @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_simple_invoke_with_pipeline(self, get_llm_service):
         """Test simple invoke with a pipeline that has an LLM node"""

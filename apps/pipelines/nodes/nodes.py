@@ -830,6 +830,11 @@ class ExtractParticipantData(
         if self.key_name:
             output_data = {self.key_name: output_data}
 
+        try:
+            json.dumps(output_data)
+        except (TypeError, ValueError, OverflowError) as e:
+            raise ValueError(f"Extracted participant data is not JSON serializable: {e}") from e
+
         return PipelineState.from_node_output(
             node_name=self.name, node_id=self.node_id, output=context.input, participant_data=output_data
         )
@@ -955,9 +960,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             message = get_code_error_message("<inline_code>", self.code)
             raise CodeNodeRunError(message) from exc
 
-        output_metadata = {
-            "console_output": "".join(collector() for collector in print_collectors)
-        }
+        output_metadata = {"console_output": "".join(collector() for collector in print_collectors)}
 
         if isinstance(result, Command):
             return result

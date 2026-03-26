@@ -246,9 +246,11 @@ class TestMetaCloudApi:
         if message_type == "text":
             assert parsed.message_text == "Hello"
             assert parsed.content_type == MESSAGE_TYPES.TEXT
+            assert parsed.whatsapp_message_id == "wamid.abc123"
         else:
             assert parsed.media_id == "1215194677037265"
             assert parsed.content_type == MESSAGE_TYPES.VOICE
+            assert parsed.whatsapp_message_id == "wamid.abc456"
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize(
@@ -306,3 +308,31 @@ class TestMetaCloudApi:
         )
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
+
+    @pytest.mark.django_db()
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_typing_indicator_sent_on_submit_input_to_llm(
+        self,
+        bot_process_input,
+        send_text_message,
+        send_typing_indicator,
+        meta_cloud_api_whatsapp_channel,
+    ):
+        """Test that a typing indicator is sent when the user message is submitted to the LLM."""
+        experiment = ExperimentFactory.create(conversational_consent_enabled=True)
+        chat = Chat.objects.create(team=experiment.team)
+        bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
+
+        incoming_message = meta_cloud_api_messages.text_message_value()
+        handle_meta_cloud_api_message(
+            channel_id=meta_cloud_api_whatsapp_channel.id,
+            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
+            message_data=incoming_message,
+        )
+
+        send_typing_indicator.assert_called_once_with(
+            from_="12345",
+            message_id="wamid.abc123",
+        )

@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from apps.channels.channels_v2.stages.terminal import ResponseSendingStage
+from apps.channels.channels_v2.stages.terminal import FileDeliveryFailure, MessageDeliveryFailure, ResponseSendingStage
 from apps.channels.tests.channels.conftest import StubSender, make_context
 
 
@@ -73,7 +73,7 @@ class TestResponseSendingStage:
         assert sender.files_sent[0] == (file1, "user1", 42)
         assert sender.files_sent[1] == (file2, "user1", 42)
 
-    def test_send_failure_sets_sending_exception(self):
+    def test_send_failure_appends_to_sending_exceptions(self):
         sender = MagicMock()
         error = RuntimeError("send failed")
         sender.send_text.side_effect = error
@@ -85,17 +85,18 @@ class TestResponseSendingStage:
 
         self.stage(ctx)
 
-        assert ctx.sending_exception is error
+        assert len(ctx.sending_exceptions) == 1
+        assert isinstance(ctx.sending_exceptions[0], MessageDeliveryFailure)
+        assert ctx.sending_exceptions[0].original_exc is error
         assert any("Send failed" in e for e in ctx.processing_errors)
 
-    def test_file_send_failure_sends_download_link(self):
+    def test_file_send_failure_stores_exception_and_sends_download_link(self):
         sender = StubSender()
-        # Override send_file to fail
         file1 = MagicMock()
         file1.content_type = "image/png"
         file1.download_link.return_value = "https://example.com/download"
-
-        sender.send_file = MagicMock(side_effect=RuntimeError("file send failed"))  # type: ignore[assignment]
+        error = RuntimeError("file send failed")
+        sender.send_file = MagicMock(side_effect=error)  # type: ignore[assignment]
         session = MagicMock()
         session.id = 42
         experiment_channel = MagicMock()
@@ -111,5 +112,31 @@ class TestResponseSendingStage:
 
         self.stage(ctx)
 
-        # The download link should have been sent as text
+        assert len(ctx.sending_exceptions) == 1
+        exc = ctx.sending_exceptions[0]
+        assert isinstance(exc, FileDeliveryFailure)
+        assert exc.original_exc is error
+        assert exc.file is file1
+        # Download link sent as fallback
         assert any("https://example.com/download" in text for text, _ in sender.text_messages)
+
+    def test_text_send_failure_skips_file_sending(self):
+        sender = MagicMock()
+        error = RuntimeError("send failed")
+        sender.send_text.side_effect = error
+        file1 = MagicMock()
+        session = MagicMock()
+        session.id = 42
+        ctx = make_context(
+            sender=sender,
+            formatted_message="Hello",
+            participant_identifier="user1",
+            experiment_session=session,
+            files_to_send=[file1],
+        )
+
+        self.stage(ctx)
+
+        assert len(ctx.sending_exceptions) == 1
+        assert isinstance(ctx.sending_exceptions[0], MessageDeliveryFailure)
+        sender.send_file.assert_not_called()

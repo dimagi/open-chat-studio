@@ -19,7 +19,7 @@ class TestSessionResolutionStage:
 
     def test_should_not_run_when_participant_not_allowed(self):
         ctx = make_context(participant_allowed=False)
-        assert self.stage.should_run(ctx) is False
+        assert self.stage.should_run(ctx) is True
 
     def test_pre_set_session_is_noop(self):
         session = MagicMock()

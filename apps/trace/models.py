@@ -46,6 +46,9 @@ class Trace(models.Model):
         default=dict, blank=True, help_text="Snapshot of session state at the time of the trace"
     )
     experiment_version_number = models.PositiveIntegerField(null=True, blank=True)
+    trace_metadata = SanitizedJSONField(
+        default=dict, blank=True, help_text="Metadata from trace providers (e.g. Langfuse trace_id, trace_url)"
+    )
     error = models.TextField(blank=True, help_text="Error message if the trace failed")
 
     def __str__(self):

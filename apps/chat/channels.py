@@ -1152,10 +1152,27 @@ class WhatsappChannel(ChannelBase):
             platform=ChannelPlatform.WHATSAPP,
             file=file,
             download_link=file.download_link(experiment_session_id=self.experiment_session.id),
+            last_activity_at=self.last_activity_at,
         )
 
     def _can_send_file(self, file: File) -> bool:
         return self.messaging_service.can_send_file(file)
+
+    def submit_input_to_llm(self):
+        """Send a typing indicator to the user when using Meta Cloud API."""
+        from apps.channels.datamodels import (  # noqa: PLC0415 - circular: datamodels imports chat.channels
+            MetaCloudAPIMessage,
+        )
+
+        if not isinstance(self.message, MetaCloudAPIMessage) or not self.message.whatsapp_message_id:
+            return
+        try:
+            self.messaging_service.send_typing_indicator(
+                from_=self.from_identifier,
+                message_id=self.message.whatsapp_message_id,
+            )
+        except Exception:
+            logger.exception("Failed to send typing indicator")
 
 
 class SureAdhereChannel(ChannelBase):
@@ -1207,6 +1224,61 @@ class FacebookMessengerChannel(ChannelBase):
             platform=ChannelPlatform.FACEBOOK,
             last_activity_at=self.last_activity_at,
         )
+
+
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.api_channel.ApiChannel
+class ApiChannel(ChannelBase):
+    """Message Handler for the API"""
+
+    voice_replies_supported = False
+    supported_message_types = [MESSAGE_TYPES.TEXT]
+
+    def __init__(
+        self,
+        experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        experiment_session: ExperimentSession | None = None,
+        user=None,
+    ):
+        super().__init__(experiment, experiment_channel, experiment_session)
+        self.user = user
+        if not self.user and not self.experiment_session:
+            raise ChannelException("ApiChannel requires either an existing session or a user")
+
+    @classmethod
+    def start_new_session(
+        cls,
+        working_experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user=None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+        session_external_id: str | None = None,
+        metadata: dict | None = None,
+        version: int = Experiment.DEFAULT_VERSION_NUMBER,
+    ):
+        session = super().start_new_session(
+            working_experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            session_external_id,
+            metadata,
+        )
+        if version != Experiment.DEFAULT_VERSION_NUMBER:
+            session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version)
+        return session
+
+    @property
+    def participant_user(self):
+        return super().participant_user or self.user
+
+    def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
+        # The bot cannot send messages to this client, since it wouldn't know where to send it to
+        pass
 
 
 class SlackChannel(ChannelBase):

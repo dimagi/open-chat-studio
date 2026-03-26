@@ -366,6 +366,67 @@ describe('ocs-chat', () => {
     });
   });
 
+  describe('Config change session reset', () => {
+    it('should clear session when chatbotId changes', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible="true"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.sessionId = 'session-123';
+      component.messages = [
+        { created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }
+      ];
+
+      // Change chatbotId
+      page.root!.setAttribute('chatbot-id', 'bot-2');
+      await page.waitForChanges();
+
+      expect(component.sessionId).toBeUndefined();
+      expect(component.messages).toEqual([]);
+      expect(component.isTyping).toBe(false);
+      expect(component.currentPollTaskId).toBe('');
+    });
+
+    it('should clear session when versionNumber changes', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible="true" version-number="1"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.sessionId = 'session-123';
+      component.messages = [
+        { created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }
+      ];
+
+      // Change versionNumber
+      page.root!.setAttribute('version-number', '2');
+      await page.waitForChanges();
+
+      expect(component.sessionId).toBeUndefined();
+      expect(component.messages).toEqual([]);
+      expect(component.isTyping).toBe(false);
+      expect(component.currentPollTaskId).toBe('');
+    });
+
+    it('should increment sessionEpoch on config change to guard against stale responses', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible="true"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      const initialEpoch = (component as any).sessionEpoch;
+
+      page.root!.setAttribute('chatbot-id', 'bot-2');
+      await page.waitForChanges();
+
+      expect((component as any).sessionEpoch).toBe(initialEpoch + 1);
+    });
+  });
+
   describe('Combined Welcome Messages and Starter Questions', () => {
     it('should display both welcome messages and starter questions from translations', async () => {
       const page = await newSpecPage({

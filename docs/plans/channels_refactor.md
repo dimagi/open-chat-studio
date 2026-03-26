@@ -122,10 +122,10 @@ class MessageProcessingContext:
     # they raise EarlyExitResponse instead.
     early_exit_response: str | None = None
 
-    # Sending error — set by ResponseSendingStage when a send fails.
-    # SendingErrorHandlerStage reads this to handle platform-specific
-    # side effects (e.g., Telegram 403 consent revocation).
-    sending_exception: Exception | None = None
+    # Sending errors — populated by ResponseSendingStage for each send failure
+    # (text, voice, or file). SendingErrorHandlerStage processes each one for
+    # notifications and platform-specific side effects.
+    sending_exceptions: list[Exception] = field(default_factory=list)
 
     # Error tracking — each stage handles its own errors internally
     # and appends to this list for observability
@@ -153,7 +153,7 @@ class MessageProcessingContext:
 > - **Callbacks/sender/capabilities on context**: Stages are zero-arg constructors. They access channel-specific dependencies via `ctx.callbacks`, `ctx.sender`, and `ctx.capabilities`. This simplifies pipeline construction and makes stages fully reusable.
 > - **No `stage_timings`**: Observability is handled by trace spans in `ProcessingStage.__call__`, not manual timing.
 > - **Error handling per-stage**: Each stage handles its own errors internally. `processing_errors` is an observability list, not a pipeline-level error control mechanism.
-> - **`sending_exception`**: Single field (not a list). `ResponseSendingStage` sets this when a send fails. `SendingErrorHandlerStage` inspects it for platform-specific side effects.
+> - **`sending_exceptions`**: A `list[Exception]` (unified for text, voice, and file failures). `ResponseSendingStage` appends `MessageDeliveryFailure` or `FileDeliveryFailure` for each failure (and sends download link fallback inline for files). `SendingErrorHandlerStage` iterates the list, sends notifications, and re-raises unknown exceptions.
 
 **Design Choice: Immutable vs Mutable**
 
@@ -280,16 +280,12 @@ class SessionResolutionStage(ProcessingStage):
         return ctx.participant_allowed
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        # Handle /reset command — end current session so a new one is created
-        if self._is_reset_command(ctx):
-            self._handle_reset(ctx)
-
         # Check for pre-set session (Web/Slack channels set this at creation)
         if ctx.experiment_session:
             return  # Already have session
 
         # Try to load existing session (with select_related for performance)
-        existing_session = (
+        ctx.experiment_session = (
             ExperimentSession.objects
             .select_related("experiment", "participant")
             .filter(
@@ -300,9 +296,12 @@ class SessionResolutionStage(ProcessingStage):
             .first()
         )
 
-        if existing_session:
-            ctx.experiment_session = existing_session
-        else:
+        # Check for /reset after loading the session so that _handle_reset
+        # has access to ctx.experiment_session and can properly end it.
+        if self._is_reset_command(ctx):
+            self._handle_reset(ctx)
+
+        if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)
 
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
@@ -312,14 +311,6 @@ class SessionResolutionStage(ProcessingStage):
         """End current session and raise early exit with reset confirmation."""
         if ctx.experiment_session:
             ctx.experiment_session.end(reason="reset by user")
-        elif not ctx.experiment_session:
-            # Load existing to end it
-            existing = ExperimentSession.objects.filter(
-                experiment=ctx.experiment.get_working_version(),
-                participant__identifier=ctx.participant_identifier,
-            ).exclude(status__in=STATUSES_FOR_COMPLETE_CHATS).first()
-            if existing:
-                existing.end(reason="reset by user")
 
         raise EarlyExitResponse("Session reset. Send a new message to start over.")
 ```
@@ -572,6 +563,9 @@ class ResponseFormattingStage(ProcessingStage):
         should_reply_voice = self._should_use_voice_reply(ctx)
 
         if should_reply_voice:
+            # Set formatted_message before stripping so the full text is available
+            # as a fallback if voice delivery fails downstream
+            ctx.formatted_message = message
             # Strip URLs and emojis for voice
             message, extracted_urls = strip_urls_and_emojis(message)
             urls_to_append = "\n".join(extracted_urls)
@@ -580,7 +574,6 @@ class ResponseFormattingStage(ProcessingStage):
             )
             try:
                 ctx.voice_audio = self._synthesize_voice(ctx, message)
-                ctx.formatted_message = message
                 if urls_to_append:
                     ctx.additional_text_message = urls_to_append
             except AudioSynthesizeException:
@@ -590,7 +583,6 @@ class ResponseFormattingStage(ProcessingStage):
                     ctx.experiment, session=ctx.experiment_session
                 )
                 ctx.voice_audio = None
-                ctx.formatted_message = f"{message}\n\n{urls_to_append}"
         else:
             # Text reply - format citations
             message, uncited_files = self._format_reference_section(
@@ -620,10 +612,17 @@ class ResponseSendingStage(ProcessingStage):
     This is the ONLY stage that sends messages to the user.
     Handles both normal bot responses and early exit responses.
 
-    Wrapper methods (_send_text, _send_voice) are decorated with
-    @notify_on_delivery_failure for in-app notifications on failure.
-    The outer try/except catches any exception that propagates past
-    the decorator, sets ctx.sending_exception, and never re-raises.
+    All sending is wrapped in a single outer try/except. On failure,
+    the exception is appended to ctx.sending_exceptions.
+
+    - Text/voice: _send_text/_send_voice raise MessageDeliveryFailure.
+    - Files: each failure is wrapped in FileDeliveryFailure and appended
+      to ctx.sending_exceptions. A download link fallback is sent via
+      _send_text; if that also fails, the MessageDeliveryFailure propagates
+      to the outer catch.
+
+    SendingErrorHandlerStage processes ctx.sending_exceptions for
+    notifications and platform-specific side effects.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -643,89 +642,108 @@ class ResponseSendingStage(ProcessingStage):
             else:
                 self._send_text(ctx, ctx.formatted_message, ctx.participant_identifier)
 
-            # Send supported files — each file handles its own error
+            # File attachments — each failure is stored separately so one
+            # file failure doesn't prevent others from sending.
             for file in ctx.files_to_send:
                 try:
                     ctx.sender.send_file(file, ctx.participant_identifier, ctx.experiment_session.id)
                 except Exception as e:
-                    ctx.processing_errors.append(f"Failed to send file: {e}")
-                    link = file.download_link(ctx.experiment_session.id)
-                    self._send_text(ctx, link, ctx.participant_identifier)
+                    logger.exception(e)
+                    ctx.sending_exceptions.append(
+                        FileDeliveryFailure(
+                            e,
+                            experiment=ctx.experiment,
+                            session=ctx.experiment_session,
+                            platform_title=ctx.experiment_channel.platform_enum.title(),
+                            file=file,
+                        )
+                    )
+                    download_link = file.download_link(ctx.experiment_session.id)
+                    self._send_text(ctx, download_link, ctx.participant_identifier)
         except Exception as e:
-            ctx.sending_exception = e
+            ctx.sending_exceptions.append(e)
             ctx.processing_errors.append(f"Send failed: {e}")
 
-    @notify_on_delivery_failure(context="text message")
     def _send_text(self, ctx: MessageProcessingContext, text: str, recipient: str) -> None:
-        ctx.sender.send_text(text, recipient)
+        try:
+            ctx.sender.send_text(text, recipient)
+        except Exception as e:
+            logger.exception(e)
+            raise MessageDeliveryFailure(
+                e,
+                experiment=ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
+                context="text message",
+            )
 
-    @notify_on_delivery_failure(context="voice message")
     def _send_voice(self, ctx: MessageProcessingContext, audio, recipient: str) -> None:
-        ctx.sender.send_voice(audio, recipient)
-```
-
-The `@notify_on_delivery_failure` decorator is updated to be context-aware — it reads
-`experiment`, `session`, and `platform_title` from the `ctx` parameter instead of
-`self.experiment` / `self.experiment_channel`:
-
-```py
-def notify_on_delivery_failure(context: str):
-    """Decorator that catches exceptions from send methods, creates a
-    failure notification, then re-raises.
-
-    Updated for pipeline stages: reads experiment/session/platform from
-    the ctx parameter (first positional arg after self).
-    """
-    def decorator(method):
-        @wraps(method)
-        def wrapper(self, ctx, *args, **kwargs):
-            try:
-                return method(self, ctx, *args, **kwargs)
-            except Exception as e:
-                logger.exception(e)
-                message_delivery_failure_notification(
-                    ctx.experiment,
-                    session=ctx.experiment_session,
-                    platform_title=ctx.experiment_channel.platform_enum.title(),
-                    context=context,
-                )
-                raise
-        return wrapper
-    return decorator
+        try:
+            ctx.sender.send_voice(audio, recipient)
+        except Exception as e:
+            logger.exception(e)
+            raise MessageDeliveryFailure(
+                e,
+                experiment=ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
+                context="voice message",
+            )
 ```
 
 **Maps to**: `send_text_to_user()`, `send_voice_to_user()`, `send_file_to_user()` (various lines)
 
 > **Review decisions applied**:
 > - **Single sending stage**: `ResponseSendingStage` is the ONLY stage that sends messages. All other stages set `early_exit_response` and let this stage handle delivery.
-> - **Decorated wrappers**: `_send_text` and `_send_voice` wrap `ctx.sender` calls with `@notify_on_delivery_failure` for in-app notifications. The decorator is updated to read experiment/session/platform from `ctx` instead of `self`.
-> - **Resilient**: Outer try/except catches any exception that propagates past the decorator, sets `ctx.sending_exception`, and never re-raises. This ensures subsequent terminal stages still run.
+> - **Single outer try/except**: All sending (text, voice, files) lives inside one try/except. Any unhandled exception is appended to `ctx.sending_exceptions`.
+> - **Raise, don't store**: `_send_text` and `_send_voice` raise `MessageDeliveryFailure` on failure. The outer try/except catches it and appends to `ctx.sending_exceptions`.
+> - **File failures are independent**: Each file send is in its own inner try/except. Failures are wrapped in `FileDeliveryFailure` and appended to `ctx.sending_exceptions`. A download link fallback is sent via `_send_text`; if that also fails hard, the `MessageDeliveryFailure` propagates to the outer catch.
 > - **`send_file` receives `session_id`**: Extra parameter for download link generation.
 
 #### Stage 11: SendingErrorHandlerStage (Terminal)
 
 ```py
 class SendingErrorHandlerStage(ProcessingStage):
-    """Handles platform-specific side effects from send failures.
+    """Handles notifications and side effects from send failures.
 
     TERMINAL STAGE — runs after ResponseSendingStage.
-    Inspects ctx.sending_exception for platform-specific errors
-    that require action beyond logging (e.g., Telegram 403 "bot
-    was blocked" → revoke participant consent).
+    Processes ctx.sending_exceptions (a list of MessageDeliveryFailure
+    and FileDeliveryFailure instances set by ResponseSendingStage).
 
-    Non-actionable exceptions are ignored (already logged by
-    ResponseSendingStage).
+    - MessageDeliveryFailure: sends a failure notification
+    - FileDeliveryFailure: sends a failure notification
+    - ApiTelegramException 403 (bot blocked): revokes participant consent
+    - Unknown exceptions: re-raised so the task fails
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.sending_exception is not None
+        return bool(ctx.sending_exceptions)
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        self._handle_exception(ctx, ctx.sending_exception)
+        for exc in ctx.sending_exceptions:
+            self._handle_exception(ctx, exc)
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
-        """Handle platform-specific sending exceptions."""
+        """Handle a single sending exception."""
         from telebot.apihelper import ApiTelegramException
+
+        if isinstance(exc, MessageDeliveryFailure):
+            message_delivery_failure_notification(
+                exc.experiment,
+                session=exc.session,
+                platform_title=exc.platform_title,
+                context=exc.context,
+            )
+            return
+
+        if isinstance(exc, FileDeliveryFailure):
+            file_delivery_failure_notification(
+                exc.experiment,
+                platform_title=exc.platform_title,
+                content_type=exc.file.content_type,
+                session=exc.session,
+            )
+            return
 
         if isinstance(exc, ApiTelegramException):
             if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
@@ -739,10 +757,12 @@ class SendingErrorHandlerStage(ProcessingStage):
                     ctx.processing_errors.append(
                         "Participant data not found during consent revocation"
                     )
-        # Other platform-specific exception handling can be added here
+            return
+
+        raise exc  # Unknown exception — propagate to fail the task
 ```
 
-> **Review decision**: Dedicated terminal stage for platform-specific send error side effects. Telegram 403 "bot was blocked" triggers consent revocation. This exception is not re-raised — it's already been logged and notified by `ResponseSendingStage`.
+> **Review decision**: Dedicated terminal stage for notifications and platform-specific send error side effects. `MessageDeliveryFailure` and `FileDeliveryFailure` (set by `ResponseSendingStage`) are handled here rather than inline, keeping `ResponseSendingStage` focused solely on sending. Unknown exceptions re-raise to fail the task.
 
 #### Stage 12: PersistenceStage (Terminal)
 
@@ -840,7 +860,7 @@ class PersistenceStage(ProcessingStage):
 > - Early exit responses are persisted here. The `_add_to_history` logic was moved out of `ConsentFlowStage` so that consent (and all other early-exit stages) only raise `EarlyExitResponse` — they never persist or send messages directly.
 > - **Voice attachment saving**: Tags the bot response as "voice" and saves the synthesized audio as a file attachment. Moved from post-send logic in the old `_handle_supported_message`.
 > - **Persists regardless of sending exceptions**: Even if `ResponseSendingStage` failed to deliver the message, the response is still persisted to chat history for audit purposes.
-> - **Runs after sending**: Placed after `ResponseSendingStage` and `SendingErrorHandlerStage` because the pipeline's catch-all error handler can also produce an `early_exit_response`, and `ResponseSendingStage` may produce a `sending_exception` — both should be settled before persistence.
+> - **Runs after sending**: Placed after `ResponseSendingStage` and `SendingErrorHandlerStage` because the pipeline's catch-all error handler can also produce an `early_exit_response`, and `ResponseSendingStage` may populate `sending_exceptions` — both should be settled before persistence.
 
 #### Stage 13: ActivityTrackingStage (Terminal)
 
@@ -1963,9 +1983,9 @@ Each stage should have tests for these edge cases (where applicable):
 - **ChatMessageCreationStage**: Normal creation, session without chat
 - **BotInteractionStage**: Successful response, bot error, response with files, response without files
 - **ResponseFormattingStage**: Text response, voice response, citations, no citations, unsupported files, voice synthesis failure (fallback to text)
-- **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (fallback to link), no response at all (no-op), send failure sets `ctx.sending_exception`, delivery failure notification created on error
-- **SendingErrorHandlerStage**: Telegram 403 "bot blocked" (revokes consent), non-Telegram exception (no-op), no sending exception (skips)
-- **PersistenceStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exception is set, voice response (tags + saves attachment), voice response without bot_response (no-op)
+- **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (appends `FileDeliveryFailure` to `ctx.sending_exceptions`), text/voice failure appends `MessageDeliveryFailure` and skips file sends, no response at all (no-op)
+- **SendingErrorHandlerStage**: `MessageDeliveryFailure` → notification (no re-raise), `FileDeliveryFailure` → notification + download link fallback, `ApiTelegramException` 403 → consent revoked, `ApiTelegramException` 403 + `ParticipantData.DoesNotExist` → error in processing_errors, unknown exception → re-raised, empty `sending_exceptions` → skips
+- **PersistenceStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exceptions is non-empty, voice response (tags + saves attachment), voice response without bot_response (no-op)
 - **ActivityTrackingStage**: Session update, versioned experiment tracking
 - **Pipeline catch-all**: Unexpected exception generates error message, `ChatException` gets specific prompt, `EventBot` failure falls back to `DEFAULT_ERROR_RESPONSE_TEXT`, terminal stages run, original exception re-raised
 
@@ -2466,8 +2486,8 @@ Order: `ResponseSendingStage` → `SendingErrorHandlerStage` → `PersistenceSta
 
 ```py
 class ResponseSendingStage(ProcessingStage):
-    """TERMINAL STAGE: Sends response to user. Wraps all sends in try/except.
-    On failure: creates delivery failure notification, sets ctx.sending_exception.
+    """TERMINAL STAGE: Sends response to user. Wraps text/voice in try/except.
+    On failure: appends MessageDeliveryFailure/FileDeliveryFailure to ctx.sending_exceptions.
     """
     # ... (see section 4 for full implementation)
 
@@ -2701,9 +2721,9 @@ All decisions below were made during the plan review and are reflected throughou
 | 16 | Code Quality | `SessionActivationStage` for non-consent path | Dedicated stage activates session when consent is disabled. Keeps `ConsentFlowStage.should_run()` side-effect-free. |
 | 17 | Architecture | Pipeline catch-all error handler | Unexpected exceptions from core stages: generate error message via `EventBot` (preserving `ChatException` distinction), fall back to `DEFAULT_ERROR_RESPONSE_TEXT`, set `ctx.early_exit_response`, run terminal stages, then **re-raise**. |
 | 18 | Architecture | Terminal stage order | `ResponseSendingStage` → `SendingErrorHandlerStage` → `PersistenceStage` → `ActivityTrackingStage`. Sending first, then error handling, then persistence, then tracking. |
-| 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles platform-specific send error side effects (e.g., Telegram 403 consent revocation). Reads `ctx.sending_exception`. Non-actionable exceptions are ignored. |
-| 20 | Architecture | `ResponseSendingStage` resilience | `_send_text` and `_send_voice` wrappers decorated with `@notify_on_delivery_failure` (updated to read from `ctx`). Outer try/except catches any propagated exception, sets `ctx.sending_exception`, never re-raises. |
-| 21 | Architecture | `ctx.sending_exception` | Single `Exception | None` field (not a list). Set by `ResponseSendingStage` on send failure. Read by `SendingErrorHandlerStage`. |
+| 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles notifications and platform-specific side effects for all send failures. Iterates `ctx.sending_exceptions`. `MessageDeliveryFailure` → notification. `FileDeliveryFailure` → notification + download link fallback. `ApiTelegramException` 403 → consent revocation. Unknown exceptions re-raised. |
+| 20 | Architecture | `ResponseSendingStage` resilience | `_send_text`/`_send_voice` raise `MessageDeliveryFailure` on failure; outer try/except catches and appends to `ctx.sending_exceptions`. File failures wrap to `FileDeliveryFailure` and append independently. No inline notifications or download links — that's `SendingErrorHandlerStage`'s responsibility. |
+| 21 | Architecture | `ctx.sending_exceptions` | `list[Exception]` — unified list for text/voice (`MessageDeliveryFailure`) and file (`FileDeliveryFailure`) send failures. Set by `ResponseSendingStage`, processed by `SendingErrorHandlerStage`. |
 | 22 | Architecture | Early exit persistence regardless | `PersistenceStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
 | 23 | Architecture | Channel-specific pipelines | `ApiChannel`, `WebChannel`, and `EvaluationChannel` override `_build_pipeline` to omit `ResponseSendingStage`/`SendingErrorHandlerStage`. `WebChannel` also omits `ConsentFlowStage`. `CommCareConnectChannel` adds `CommCareConsentCheckStage` after `SessionResolutionStage`. |
 | 24 | Architecture | `ChannelSender.send_file` signature | `send_file(file, recipient, session_id)` — session_id as extra param since session may not exist when sender is constructed. |
@@ -2753,7 +2773,7 @@ These were noted during review but deferred for later implementation:
 
 ## Incremental Rollout Plan
 
-The rollout happens one channel at a time. Each PR adds the new channel implementation (in `apps/channels/`) along with all its relevant new tests, and simultaneously removes the old channel class from `apps/chat/channels.py` and its old tests. This keeps the codebase in a working state at every merge.
+The rollout happens one channel at a time. Each PR adds the new channel implementation (in `apps/channels/`) along with all its relevant new tests, and updates call sites to use the new implementation. The old channel class and its old tests are **kept in place** but marked with `# TODO: remove after channels refactor` comments. This keeps the codebase in a working state at every merge and allows easy rollback if needed. The old code is cleaned up in the final cleanup PR.
 
 ### Rollout Status
 
@@ -2788,86 +2808,87 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 ### PR 1: ApiChannel — [ ] IN PROGRESS
 
 - [x] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
-- [x] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
-- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Mark for removal:** Add `# TODO: remove after channels refactor` to `ApiChannel` in `apps/chat/channels.py` + old API channel tests
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why first real channel:** Simplest pipeline — no voice, no files, no `ResponseSendingStage` or `SendingErrorHandlerStage`. No sender/callbacks to test. Validates the basic pipeline customization (`_build_pipeline()` omitting stages) with minimal risk.
 
 ### PR 2: WebChannel — [x] DONE
 
-- [x] **Add:** `WebChannel` implementation + `concrete/test_web_channel.py`
-- [x] **Remove:** `WebChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
-- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Add:** `WebChannel` implementation + `concrete/test_web_channel.py`
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `WebChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why second:** Also a reduced pipeline (no sending stages, no `SessionResolutionStage`, no `ConsentFlowStage`). Requires pre-existing session — validates that pattern. No sender/callbacks. `start_new_session()` and `check_and_process_seed_message()` are utility methods outside the pipeline, so they move as-is.
 
 ### PR 3: EvaluationChannel — [ ] Not started
 
 - [ ] **Add:** `EvaluationChannel` + `EvalsBotInteractionStage` + `concrete/test_evaluation_channel.py`
-- [ ] **Remove:** `EvaluationChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `EvaluationChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why third:** Reduced pipeline like Web, but introduces the first channel-specific stage (`EvalsBotInteractionStage` replacing `BotInteractionStage`). Validates `channel_context` pattern and custom stage injection. No sender/callbacks.
 
 ### PR 4: TelegramChannel — [ ] Not started
 
 - [ ] **Add:** `TelegramChannel` + `TelegramSender` + `TelegramCallbacks` + `concrete/test_telegram_channel.py` + `senders/test_telegram_sender.py` + `callbacks/test_telegram_callbacks.py`
-- [ ] **Remove:** `TelegramChannel` from `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `TelegramChannel` in `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and `SendingErrorHandlerStage` (Telegram 403 consent revocation).
 
 ### PR 5: WhatsappChannel — [ ] Not started
 
 - [ ] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `concrete/test_whatsapp_channel.py` + `senders/test_whatsapp_sender.py` + `callbacks/test_whatsapp_callbacks.py`
-- [ ] **Remove:** `WhatsappChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `WhatsappChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files.
 
 ### PR 6: SlackChannel — [ ] Not started
 
 - [ ] **Add:** `SlackChannel` + `SlackSender` + `concrete/test_slack_channel.py` + `senders/test_slack_sender.py`
-- [ ] **Remove:** `SlackChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_slack_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `SlackChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_slack_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** Pre-existing session (like Web) but with full file support and a sender. Validates `_build_pipeline()` omitting `SessionResolutionStage` while keeping sending stages. `start_new_session()` with `session_external_id` for thread tracking moves as-is.
 
 ### PR 7: FacebookMessengerChannel — [ ] Not started
 
 - [ ] **Add:** `FacebookMessengerChannel` + `FacebookSender` + `FacebookCallbacks` + `concrete/test_facebook_channel.py` + `senders/test_facebook_sender.py` + `callbacks/test_facebook_callbacks.py`
-- [ ] **Remove:** `FacebookMessengerChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_facebook_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `FacebookMessengerChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_facebook_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** Standard full pipeline. Validates messaging service delegation for voice support. Straightforward after Telegram and WhatsApp patterns are established.
 
 ### PR 8: SureAdhereChannel — [ ] Not started
 
 - [ ] **Add:** `SureAdhereChannel` + `SureAdhereSender` + `concrete/test_sureadhere_channel.py` + `senders/test_sureadhere_sender.py`
-- [ ] **Remove:** `SureAdhereChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_sureadhere_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `SureAdhereChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_sureadhere_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** Simplest full-pipeline channel with a sender. No callbacks, no voice, no files. Quick PR.
 
 ### PR 9: CommCareConnectChannel — [ ] Not started
 
 - [ ] **Add:** `CommCareConnectChannel` + `CommCareConsentCheckStage` + `CommCareConnectSender` + `concrete/test_commcare_channel.py`
-- [ ] **Remove:** `CommCareConnectChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_connect_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `CommCareConnectChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_connect_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why last:** Most complex channel-specific behavior — custom consent check stage inserted into the pipeline, encrypted messaging via `CommCareConnectClient`, lazy-binding sender (visitor pattern for `connect_channel_id`/`encryption_key`). Benefits from all prior patterns being established.
 
 ### PR 10: Cleanup — [ ] Not started
 
-- [ ] **Remove:** `apps/chat/channels.py` (now empty except for `ChannelBase` utility methods and imports)
-- [ ] **Remove:** old `apps/channels/tests/test_base_channel_behavior.py`
+- [ ] **Remove:** All old channel classes from `apps/chat/channels.py` (everything marked with `# TODO: remove after channels refactor`)
+- [ ] **Remove:** All old channel tests marked with `# TODO: remove after channels refactor`
+- [ ] **Remove:** `apps/channels/tests/test_base_channel_behavior.py`
 - [ ] **Update:** All remaining `from apps.chat.channels import ...` statements across the codebase to import from `apps/channels/`
 - [ ] **Verify:** All new tests pass (`uv run pytest apps/channels/tests/new_arch/ -v`). All existing tests still pass (`uv run pytest -v`).
 
 ### Rollout Rules
 
 1. **One channel per PR.** No bundling channels together.
-2. **Old code removed in the same PR.** The old channel class and its tests are deleted in the same PR that adds the new ones. No period where both implementations coexist for the same channel.
+2. **Old code kept but marked.** The old channel class and its tests are kept in place but marked with `# TODO: remove after channels refactor` comments. Call sites are updated to use the new implementation. Old code is removed in the final cleanup PR (PR 10).
 3. **All new tests pass before merge.** `uv run pytest apps/channels/tests/new_arch/ -v` must be green.
 4. **All existing tests pass before merge.** `uv run pytest apps/channels/tests/ -v` must still be green (remaining old tests for not-yet-migrated channels).
 5. **Update `get_channel_class_for_platform()`** in each PR to point to the new channel class location.
