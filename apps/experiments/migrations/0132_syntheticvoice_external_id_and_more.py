@@ -8,22 +8,56 @@ class Migration(migrations.Migration):
     dependencies = [
         ('experiments', '0131_drop_llm_provider_columns'),
         ('files', '0012_alter_file_purpose'),
-        ('service_providers', '0045_alter_messagingprovider_type'),
+        ('service_providers', '0046_alter_voiceprovider_type'),
     ]
 
     operations = [
         migrations.AddField(
             model_name='syntheticvoice',
             name='external_id',
-            field=models.CharField(blank=True, help_text='Provider-specific voice identifier when it differs from the display name', max_length=128, null=True),
+            field=models.CharField(
+                blank=True,
+                help_text='Provider-specific voice identifier when it differs from the display name',
+                max_length=128,
+                null=True,
+            ),
         ),
         migrations.AlterField(
             model_name='syntheticvoice',
             name='service',
-            field=models.CharField(choices=[('AWS', 'AWS'), ('Azure', 'Azure'), ('OpenAI', 'OpenAI'), ('OpenAIVoiceEngine', 'OpenAIVoiceEngine'), ('ElevenLabs', 'ElevenLabs')], help_text='The service this voice is from', max_length=17),
+            field=models.CharField(
+                choices=[
+                    ('AWS', 'AWS'),
+                    ('Azure', 'Azure'),
+                    ('OpenAI', 'OpenAI'),
+                    ('OpenAIVoiceEngine', 'OpenAIVoiceEngine'),
+                    ('ElevenLabs', 'ElevenLabs'),
+                ],
+                help_text='The service this voice is from',
+                max_length=17,
+            ),
+        ),
+        migrations.AlterUniqueTogether(
+            name='syntheticvoice',
+            unique_together=set(),
         ),
         migrations.AddConstraint(
             model_name='syntheticvoice',
-            constraint=models.UniqueConstraint(condition=models.Q(('external_id__isnull', False)), fields=('external_id', 'service', 'voice_provider'), name='unique_external_id_per_service_provider'),
+            constraint=models.UniqueConstraint(
+                condition=models.Q(('external_id__isnull', True)),
+                fields=(
+                    'name', 'language_code', 'language', 'gender',
+                    'neural', 'service', 'voice_provider',
+                ),
+                name='unique_voice_metadata_for_legacy_providers',
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name='syntheticvoice',
+            constraint=models.UniqueConstraint(
+                condition=models.Q(('external_id__isnull', False)),
+                fields=('external_id', 'service', 'voice_provider'),
+                name='unique_external_id_per_service_provider',
+            ),
         ),
     ]

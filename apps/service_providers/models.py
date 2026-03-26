@@ -10,6 +10,7 @@ from django.utils.functional import classproperty
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
+from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 from pydantic import ValidationError
@@ -335,8 +336,6 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         return self.type_enum.get_speech_service(config)
 
     def _get_elevenlabs_client(self):
-        from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415
-
         return ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
 
     def _create_voice_from_file(self, file, service, external_id=None):
@@ -428,10 +427,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 "language_code": language,
                 "gender": gender,
             }
-            SyntheticVoice.objects.update_or_create(
+            self.syntheticvoice_set.update_or_create(
                 external_id=voice.voice_id,
                 service=SyntheticVoice.ElevenLabs,
-                voice_provider=self,
                 defaults=defaults,
             )
 
