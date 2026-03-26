@@ -8,7 +8,7 @@ The WAF management system consists of three components:
 
 1. **`@waf_allow` decorator** - Marks views that need WAF rule exceptions
 2. **`export_waf_allow_list` command** - Generates WAF rule configurations
-3. **`filter_valid_paths.py` script** - Analyzes WAF/load balancer logs
+3. **`filter_waf_logs.py` script** - Analyzes WAF/load balancer logs
 
 ## WAF Rules
 
@@ -108,4 +108,4 @@ NoUserAgent_HEADER = [
 
 ## Analyzing WAF Logs
 
-Use `scripts/filter_valid_paths.py` to analyze AWS WAF or load balancer logs and identify which blocked requests are legitimate views. You still need to review the matches since many will be valid rule matches ie. requests that we do want to block.
+Use `scripts/filter_waf_logs.py` to analyze AWS WAF or load balancer logs and identify which blocked requests are legitimate views. You still need to review the matches, since many matches will still be legitimate WAF blocks that should remain blocked.
