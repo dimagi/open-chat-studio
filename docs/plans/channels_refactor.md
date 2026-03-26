@@ -2746,7 +2746,7 @@ These were noted during review but deferred for later implementation:
 
 ## Incremental Rollout Plan
 
-The rollout happens one channel at a time. Each PR adds the new channel implementation (in `apps/channels/`) along with all its relevant new tests, and simultaneously removes the old channel class from `apps/chat/channels.py` and its old tests. This keeps the codebase in a working state at every merge.
+The rollout happens one channel at a time. Each PR adds the new channel implementation (in `apps/channels/`) along with all its relevant new tests, and updates call sites to use the new implementation. The old channel class and its old tests are **kept in place** but marked with `# TODO: remove after channels refactor` comments. This keeps the codebase in a working state at every merge and allows easy rollback if needed. The old code is cleaned up in the final cleanup PR.
 
 ### Rollout Status
 
@@ -2781,86 +2781,87 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 ### PR 1: ApiChannel — [ ] IN PROGRESS
 
 - [x] **Add:** `ApiChannel` implementation + `concrete/test_api_channel.py`
-- [x] **Remove:** `ApiChannel` from `apps/chat/channels.py` + old API channel tests
-- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [x] **Mark for removal:** Add `# TODO: remove after channels refactor` to `ApiChannel` in `apps/chat/channels.py` + old API channel tests
+- [x] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why first real channel:** Simplest pipeline — no voice, no files, no `ResponseSendingStage` or `SendingErrorHandlerStage`. No sender/callbacks to test. Validates the basic pipeline customization (`_build_pipeline()` omitting stages) with minimal risk.
 
 ### PR 2: WebChannel — [ ] Not started
 
 - [ ] **Add:** `WebChannel` implementation + `concrete/test_web_channel.py`
-- [ ] **Remove:** `WebChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `WebChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_web_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why second:** Also a reduced pipeline (no sending stages, no `SessionResolutionStage`, no `ConsentFlowStage`). Requires pre-existing session — validates that pattern. No sender/callbacks. `start_new_session()` and `check_and_process_seed_message()` are utility methods outside the pipeline, so they move as-is.
 
 ### PR 3: EvaluationChannel — [ ] Not started
 
 - [ ] **Add:** `EvaluationChannel` + `EvalsBotInteractionStage` + `concrete/test_evaluation_channel.py`
-- [ ] **Remove:** `EvaluationChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `EvaluationChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_evaluation_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why third:** Reduced pipeline like Web, but introduces the first channel-specific stage (`EvalsBotInteractionStage` replacing `BotInteractionStage`). Validates `channel_context` pattern and custom stage injection. No sender/callbacks.
 
 ### PR 4: TelegramChannel — [ ] Not started
 
 - [ ] **Add:** `TelegramChannel` + `TelegramSender` + `TelegramCallbacks` + `concrete/test_telegram_channel.py` + `senders/test_telegram_sender.py` + `callbacks/test_telegram_callbacks.py`
-- [ ] **Remove:** `TelegramChannel` from `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `TelegramChannel` in `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and `SendingErrorHandlerStage` (Telegram 403 consent revocation).
 
 ### PR 5: WhatsappChannel — [ ] Not started
 
 - [ ] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `concrete/test_whatsapp_channel.py` + `senders/test_whatsapp_sender.py` + `callbacks/test_whatsapp_callbacks.py`
-- [ ] **Remove:** `WhatsappChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `WhatsappChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files.
 
 ### PR 6: SlackChannel — [ ] Not started
 
 - [ ] **Add:** `SlackChannel` + `SlackSender` + `concrete/test_slack_channel.py` + `senders/test_slack_sender.py`
-- [ ] **Remove:** `SlackChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_slack_channel.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `SlackChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_slack_channel.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** Pre-existing session (like Web) but with full file support and a sender. Validates `_build_pipeline()` omitting `SessionResolutionStage` while keeping sending stages. `start_new_session()` with `session_external_id` for thread tracking moves as-is.
 
 ### PR 7: FacebookMessengerChannel — [ ] Not started
 
 - [ ] **Add:** `FacebookMessengerChannel` + `FacebookSender` + `FacebookCallbacks` + `concrete/test_facebook_channel.py` + `senders/test_facebook_sender.py` + `callbacks/test_facebook_callbacks.py`
-- [ ] **Remove:** `FacebookMessengerChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_facebook_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `FacebookMessengerChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_facebook_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** Standard full pipeline. Validates messaging service delegation for voice support. Straightforward after Telegram and WhatsApp patterns are established.
 
 ### PR 8: SureAdhereChannel — [ ] Not started
 
 - [ ] **Add:** `SureAdhereChannel` + `SureAdhereSender` + `concrete/test_sureadhere_channel.py` + `senders/test_sureadhere_sender.py`
-- [ ] **Remove:** `SureAdhereChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_sureadhere_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `SureAdhereChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_sureadhere_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why here:** Simplest full-pipeline channel with a sender. No callbacks, no voice, no files. Quick PR.
 
 ### PR 9: CommCareConnectChannel — [ ] Not started
 
 - [ ] **Add:** `CommCareConnectChannel` + `CommCareConsentCheckStage` + `CommCareConnectSender` + `concrete/test_commcare_channel.py`
-- [ ] **Remove:** `CommCareConnectChannel` from `apps/chat/channels.py` + `apps/channels/tests/test_connect_integration.py`
-- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports
+- [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `CommCareConnectChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_connect_integration.py`
+- [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
 **Why last:** Most complex channel-specific behavior — custom consent check stage inserted into the pipeline, encrypted messaging via `CommCareConnectClient`, lazy-binding sender (visitor pattern for `connect_channel_id`/`encryption_key`). Benefits from all prior patterns being established.
 
 ### PR 10: Cleanup — [ ] Not started
 
-- [ ] **Remove:** `apps/chat/channels.py` (now empty except for `ChannelBase` utility methods and imports)
-- [ ] **Remove:** old `apps/channels/tests/test_base_channel_behavior.py`
+- [ ] **Remove:** All old channel classes from `apps/chat/channels.py` (everything marked with `# TODO: remove after channels refactor`)
+- [ ] **Remove:** All old channel tests marked with `# TODO: remove after channels refactor`
+- [ ] **Remove:** `apps/channels/tests/test_base_channel_behavior.py`
 - [ ] **Update:** All remaining `from apps.chat.channels import ...` statements across the codebase to import from `apps/channels/`
 - [ ] **Verify:** All new tests pass (`uv run pytest apps/channels/tests/new_arch/ -v`). All existing tests still pass (`uv run pytest -v`).
 
 ### Rollout Rules
 
 1. **One channel per PR.** No bundling channels together.
-2. **Old code removed in the same PR.** The old channel class and its tests are deleted in the same PR that adds the new ones. No period where both implementations coexist for the same channel.
+2. **Old code kept but marked.** The old channel class and its tests are kept in place but marked with `# TODO: remove after channels refactor` comments. Call sites are updated to use the new implementation. Old code is removed in the final cleanup PR (PR 10).
 3. **All new tests pass before merge.** `uv run pytest apps/channels/tests/new_arch/ -v` must be green.
 4. **All existing tests pass before merge.** `uv run pytest apps/channels/tests/ -v` must still be green (remaining old tests for not-yet-migrated channels).
 5. **Update `get_channel_class_for_platform()`** in each PR to point to the new channel class location.
