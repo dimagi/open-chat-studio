@@ -8,7 +8,7 @@ Open Chat Studio is an open-source project, and you can contribute to its code d
 * Choose an appropriate branch for your work and create your own branch based on it.
 * Give your branches, commits, and Pull Requests meaningful names and descriptions. This helps track changes later. If your changes cover a particular component, indicate it in the PR name as a prefix, for example: `[DOCS] PR name`.
 * Keep your PRs small—each PR should address one issue. Remove all unrelated changes.
-* [Link your Pull Request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue-using-the-pull-request-sidebar) if applicable.
+* [Link your Pull Request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) if applicable.
 * Document your contribution! If your changes impact how users interact with Open Chat Studio, update the relevant documentation. You can do this yourself or collaborate with documentation contributors.
 * For Work In Progress or early test results, use a Draft PR.
 
@@ -21,7 +21,7 @@ Regardless of automated tests, ensure the quality of your changes:
 * Test your changes locally:
   * Double-check your code.
   * Run tests locally to identify and fix potential issues.
-* Before creating a PR, ensure your branch is up to date with the latest state of the branch you are contributing to (e.g. `git fetch upstream && git merge upstream/master`).
+* Before creating a PR, ensure your branch is up to date with the base branch (e.g. `git fetch upstream && git merge upstream/main`).
 
 ## Pull Request Process
 
@@ -37,7 +37,7 @@ Regardless of automated tests, ensure the quality of your changes:
 
 ## Test Policy
 
-* We use `pytest` for unit testing.
+* We use `pytest` for unit testing. Run tests locally with `uv run pytest`.
 * All changes should ideally include tests.
 * Focus on testing business logic and complex functionality.
 * Generally, we don't test Django views unless they contain significant logic.
@@ -57,7 +57,8 @@ We use GitHub issues for most work and have a GitHub project where we prioritize
 
 General questions and discussions can be conducted in the [GitHub Discussions](https://github.com/dimagi/open-chat-studio/discussions) section.
 
-## Need Additional Help? Check These Articles
+## Additional Resources
 
 * [How to create a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
-* [Install Git](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup)
+* [Linking a PR to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue-using-the-pull-request-sidebar)
+* [Git setup guide](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup)
