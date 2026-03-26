@@ -29,7 +29,7 @@ class TestUpdateSupportedChannels:
         collection = CollectionFactory(is_index=False)
         cf = CollectionFile(file=file, collection=collection)
         cf.update_supported_channels()
-        assert cf.supported_channels == {}
+        assert cf.unsupported_channels == {}
 
     def test_large_image_unsupported_on_whatsapp(self):
         """A 6MB image exceeds WhatsApp's 5MB limit but is fine for Telegram (10MB) and Slack (50MB)."""
@@ -37,10 +37,10 @@ class TestUpdateSupportedChannels:
         collection = CollectionFactory(is_index=False)
         cf = CollectionFile(file=file, collection=collection)
         cf.update_supported_channels()
-        assert "whatsapp" in cf.supported_channels
-        assert "telegram" not in cf.supported_channels
-        assert "slack" not in cf.supported_channels
-        assert cf.supported_channels["whatsapp"]["reason"]
+        assert "whatsapp" in cf.unsupported_channels
+        assert "telegram" not in cf.unsupported_channels
+        assert "slack" not in cf.unsupported_channels
+        assert cf.unsupported_channels["whatsapp"]["reason"]
 
     def test_very_large_image_unsupported_on_whatsapp_and_telegram(self):
         """An 11MB image exceeds both WhatsApp (5MB) and Telegram (10MB) limits."""
@@ -48,9 +48,9 @@ class TestUpdateSupportedChannels:
         collection = CollectionFactory(is_index=False)
         cf = CollectionFile(file=file, collection=collection)
         cf.update_supported_channels()
-        assert "whatsapp" in cf.supported_channels
-        assert "telegram" in cf.supported_channels
-        assert "slack" not in cf.supported_channels
+        assert "whatsapp" in cf.unsupported_channels
+        assert "telegram" in cf.unsupported_channels
+        assert "slack" not in cf.unsupported_channels
 
     def test_unsupported_mime_type(self):
         """A text/plain file is unsupported on all channels."""
@@ -58,9 +58,9 @@ class TestUpdateSupportedChannels:
         collection = CollectionFactory(is_index=False)
         cf = CollectionFile(file=file, collection=collection)
         cf.update_supported_channels()
-        assert "whatsapp" in cf.supported_channels
-        assert "telegram" in cf.supported_channels
-        assert "slack" in cf.supported_channels
+        assert "whatsapp" in cf.unsupported_channels
+        assert "telegram" in cf.unsupported_channels
+        assert "slack" in cf.unsupported_channels
 
     def test_reason_format(self):
         """Reason strings should be non-empty for unsupported channels."""
@@ -68,7 +68,7 @@ class TestUpdateSupportedChannels:
         collection = CollectionFactory(is_index=False)
         cf = CollectionFile(file=file, collection=collection)
         cf.update_supported_channels()
-        reason = cf.supported_channels["whatsapp"]["reason"]
+        reason = cf.unsupported_channels["whatsapp"]["reason"]
         assert isinstance(reason, str)
         assert len(reason) > 0
 
@@ -90,12 +90,12 @@ class TestPopulateSupportedChannelsCommand:
         collection = CollectionFactory(is_index=False)
         file = _make_file("image/jpeg", 6 * 1024 * 1024)
         cf = CollectionFile.objects.create(file=file, collection=collection)
-        assert cf.supported_channels == {}
+        assert cf.unsupported_channels == {}
 
         output = self._call_command("--collection-id", str(collection.id))
 
         cf.refresh_from_db()
-        assert "whatsapp" in cf.supported_channels
+        assert "whatsapp" in cf.unsupported_channels
         assert "1 files processed" in output
 
     def test_collection_id_skips_indexed_collection(self):
@@ -127,8 +127,8 @@ class TestPopulateSupportedChannelsCommand:
 
         cf_media.refresh_from_db()
         cf_index.refresh_from_db()
-        assert "whatsapp" in cf_media.supported_channels
-        assert cf_index.supported_channels == {}
+        assert "whatsapp" in cf_media.unsupported_channels
+        assert cf_index.unsupported_channels == {}
         assert "1 files processed" in output
 
     def test_dry_run_does_not_write(self):
@@ -139,7 +139,7 @@ class TestPopulateSupportedChannelsCommand:
         output = self._call_command("--collection-id", str(collection.id), "--dry-run")
 
         cf.refresh_from_db()
-        assert cf.supported_channels == {}
+        assert cf.unsupported_channels == {}
         assert "dry run" in output.lower()
 
     def test_idempotent(self):
@@ -149,11 +149,11 @@ class TestPopulateSupportedChannelsCommand:
 
         self._call_command("--collection-id", str(collection.id))
         cf.refresh_from_db()
-        first_result = cf.supported_channels.copy()
+        first_result = cf.unsupported_channels.copy()
 
         self._call_command("--collection-id", str(collection.id))
         cf.refresh_from_db()
-        assert cf.supported_channels == first_result
+        assert cf.unsupported_channels == first_result
 
 
 @pytest.mark.django_db()
@@ -194,9 +194,9 @@ class TestCollectionSendabilityUI:
         """Indexed collections never show the sendability banner, even with large files."""
         collection = CollectionFactory(team=team_with_users, is_index=True)
         file = _make_file("image/jpeg", 6 * 1024 * 1024)
-        # Manually set supported_channels to simulate an unsendable file
+        # Manually set unsupported_channels to simulate an unsendable file
         CollectionFile.objects.create(
-            file=file, collection=collection, supported_channels={"whatsapp": {"reason": "too large"}}
+            file=file, collection=collection, unsupported_channels={"whatsapp": {"reason": "too large"}}
         )
 
         client.force_login(team_with_users.members.first())

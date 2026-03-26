@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Subquery, Value, When
+from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -88,12 +88,14 @@ def single_collection_home(request, team_slug: str, pk: int):
     document_sources = (
         DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
     )
-    collection_files_count = CollectionFile.objects.filter(collection=collection).count()
-    manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
-    has_unsendable_files = (
-        not collection.is_index
-        and CollectionFile.objects.filter(collection=collection).exclude(supported_channels={}).exists()
+    file_stats = CollectionFile.objects.filter(collection=collection).aggregate(
+        total=Count("id"),
+        manual=Count("id", filter=Q(document_source__isnull=True)),
+        unsendable=Count("id", filter=~Q(unsupported_channels={})),
     )
+    collection_files_count = file_stats["total"]
+    manually_uploaded_files_count = file_stats["manual"]
+    has_unsendable_files = not collection.is_index and file_stats["unsendable"] > 0
     context = {
         "collection": collection,
         "collection_files_count": collection_files_count,

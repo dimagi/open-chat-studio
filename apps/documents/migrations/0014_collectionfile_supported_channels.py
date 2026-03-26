@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='collectionfile',
-            name='supported_channels',
+            name='unsupported_channels',
             field=models.JSONField(blank=True, default=dict, help_text='Channels that cannot send this file directly, with reasons'),
         ),
     ]

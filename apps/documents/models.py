@@ -56,7 +56,7 @@ class CollectionFile(models.Model):
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
     external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
-    supported_channels = models.JSONField(
+    unsupported_channels = models.JSONField(
         default=dict,
         blank=True,
         help_text="Channels that cannot send this file directly, with reasons",
@@ -81,7 +81,7 @@ class CollectionFile(models.Model):
         return FileStatus(self.status)
 
     def update_supported_channels(self):
-        """Compute and set supported_channels from the file's content type and size.
+        """Compute and set unsupported_channels from the file's content type and size.
 
         Only stores entries for unsupported channels. An empty dict means the file
         is sendable on all channels.
@@ -91,7 +91,7 @@ class CollectionFile(models.Model):
             result = check_func(self.file.content_type or "", self.file.content_size or 0)
             if not result.supported:
                 unsupported[channel_name] = {"reason": result.reason}
-        self.supported_channels = unsupported
+        self.unsupported_channels = unsupported
 
 
 @audit_fields(

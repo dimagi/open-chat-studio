@@ -41,10 +41,10 @@
             {% else %}
               <span
                   class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
-              {% if collection_file.supported_channels %}
+              {% if collection_file.unsupported_channels %}
                 <div class="flex items-center gap-1 mt-1">
                   <span class="text-xs text-base-content/60">Not supported on:</span>
-                  {% for channel, info in collection_file.supported_channels.items %}
+                  {% for channel, info in collection_file.unsupported_channels.items %}
                     <div class="tooltip" data-tip="{{ info.reason }}. It will be sent as a link instead.">
                       <span class="badge badge-warning badge-sm capitalize">{{ channel }}</span>
                     </div>

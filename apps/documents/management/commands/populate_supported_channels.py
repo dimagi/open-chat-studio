@@ -4,7 +4,7 @@ from apps.documents.models import Collection, CollectionFile
 
 
 class Command(BaseCommand):
-    help = "Populate supported_channels for files in media (non-indexed) collections."
+    help = "Populate unsupported_channels for files in media (non-indexed) collections."
 
     def add_arguments(self, parser):
         group = parser.add_mutually_exclusive_group()
@@ -35,7 +35,7 @@ class Command(BaseCommand):
             cf.update_supported_channels()
 
         total = len(files_to_process)
-        unsendable_count = sum(1 for cf in files_to_process if cf.supported_channels)
+        unsendable_count = sum(1 for cf in files_to_process if cf.unsupported_channels)
 
         if dry_run:
             self.stdout.write(
@@ -43,6 +43,6 @@ class Command(BaseCommand):
             )
             return
 
-        CollectionFile.objects.bulk_update(files_to_process, ["supported_channels"])
+        CollectionFile.objects.bulk_update(files_to_process, ["unsupported_channels"])
 
         self.stdout.write(self.style.SUCCESS(f"{total} files processed, {unsendable_count} with unsupported channels."))
