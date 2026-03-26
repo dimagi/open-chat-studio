@@ -280,16 +280,12 @@ class SessionResolutionStage(ProcessingStage):
         return ctx.participant_allowed
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        # Handle /reset command — end current session so a new one is created
-        if self._is_reset_command(ctx):
-            self._handle_reset(ctx)
-
         # Check for pre-set session (Web/Slack channels set this at creation)
         if ctx.experiment_session:
             return  # Already have session
 
         # Try to load existing session (with select_related for performance)
-        existing_session = (
+        ctx.experiment_session = (
             ExperimentSession.objects
             .select_related("experiment", "participant")
             .filter(
@@ -300,9 +296,12 @@ class SessionResolutionStage(ProcessingStage):
             .first()
         )
 
-        if existing_session:
-            ctx.experiment_session = existing_session
-        else:
+        # Check for /reset after loading the session so that _handle_reset
+        # has access to ctx.experiment_session and can properly end it.
+        if self._is_reset_command(ctx):
+            self._handle_reset(ctx)
+
+        if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)
 
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
@@ -312,14 +311,6 @@ class SessionResolutionStage(ProcessingStage):
         """End current session and raise early exit with reset confirmation."""
         if ctx.experiment_session:
             ctx.experiment_session.end(reason="reset by user")
-        elif not ctx.experiment_session:
-            # Load existing to end it
-            existing = ExperimentSession.objects.filter(
-                experiment=ctx.experiment.get_working_version(),
-                participant__identifier=ctx.participant_identifier,
-            ).exclude(status__in=STATUSES_FOR_COMPLETE_CHATS).first()
-            if existing:
-                existing.end(reason="reset by user")
 
         raise EarlyExitResponse("Session reset. Send a new message to start over.")
 ```

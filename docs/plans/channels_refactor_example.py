@@ -356,11 +356,6 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Check for /reset before loading a session
-        if self._is_reset_request(ctx):
-            self._handle_reset(ctx)
-            return
-
         # Try to load an existing active session (Issue 13: select_related)
         from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
         from apps.experiments.models import ExperimentSession
@@ -376,11 +371,11 @@ class SessionResolutionStage(ProcessingStage):
             .first()
         )
 
-        # Handle /reset on an existing session
-        if ctx.experiment_session and self._is_reset_request(ctx):
-            if ctx.experiment_session.user_already_engaged():
-                self._handle_reset(ctx)
-                return
+        # Check for /reset after loading the session so that _handle_reset
+        # has access to ctx.experiment_session and can properly end it.
+        if self._is_reset_request(ctx):
+            self._handle_reset(ctx)
+            return
 
         # Create a new session if none found
         if not ctx.experiment_session:

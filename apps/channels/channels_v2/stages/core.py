@@ -71,11 +71,6 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Check for /reset before loading a session
-        if self._is_reset_request(ctx):
-            self._handle_reset(ctx)
-            return
-
         # Try to load an existing active session (Issue 13: select_related)
         ctx.experiment_session = (
             ExperimentSession.objects.filter(
@@ -87,6 +82,12 @@ class SessionResolutionStage(ProcessingStage):
             .order_by("-created_at")
             .first()
         )
+
+        # Check for /reset after loading the session so that _handle_reset
+        # has access to ctx.experiment_session and can properly end it.
+        if self._is_reset_request(ctx):
+            self._handle_reset(ctx)
+            return
 
         # Create a new session if none found
         if not ctx.experiment_session:
