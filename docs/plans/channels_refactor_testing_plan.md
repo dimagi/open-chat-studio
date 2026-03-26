@@ -31,7 +31,7 @@ Once all new tests pass, we do a cold-turkey switchover: delete old `apps/chat/c
 
 **Data / exceptions:**
 - `ChannelCapabilities` — frozen dataclass (voice, files, consent, static_triggers, message types, `can_send_file` callable)
-- `MessageProcessingContext` — mutable dataclass carrying all pipeline state (includes `sending_exception`, `channel_context`)
+- `MessageProcessingContext` — mutable dataclass carrying all pipeline state (includes `sending_exceptions`, `channel_context`)
 - `EarlyExitResponse(Exception)` — raised by core stages to short-circuit
 
 **Protocols:**
@@ -164,7 +164,7 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
                  experiment_session=None, sender=None, callbacks=None,
                  capabilities=None, participant_identifier="test_user_123",
                  participant_allowed=True, user_query=None, bot_response=None,
-                 early_exit_response=None, sending_exception=None,
+                 early_exit_response=None, sending_exceptions=None,
                  channel_context=None, **extra):
     return MessageProcessingContext(
         message=message or text_message(),  # from base_messages
@@ -180,7 +180,7 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
         user_query=user_query,
         bot_response=bot_response,
         early_exit_response=early_exit_response,
-        sending_exception=sending_exception,
+        sending_exceptions=sending_exceptions or [],
         channel_context=channel_context or {},
         **extra,
     )
@@ -233,7 +233,7 @@ def make_context(*, message=None, experiment=None, experiment_channel=None,
 | EarlyExitResponse from any core stage → terminal stages still run | new |
 | Unexpected exception from core stage → terminal stages run, then re-raised | new |
 | `ResponseSendingStage` is the ONLY place *responses* reach the user (callbacks may send indicators/echoes mid-pipeline) | new |
-| Send failure → `ctx.sending_exception` set, `SendingErrorHandlerStage` runs | new |
+| Send failure → `ctx.sending_exceptions` populated, `SendingErrorHandlerStage` runs | new |
 | `NEW_HUMAN_MESSAGE` trigger fires after chat message creation (gated by `supports_static_triggers`) | new |
 | Ad hoc bot message (`send_message_to_user`) → mini pipeline runs formatting + sending | `test_ad_hoc_bot_message` |
 | Ad hoc bot message with voice config → voice/text decision applies | new |
@@ -343,23 +343,24 @@ No DB needed. All stages are `MagicMock` instances.
 - Early exit path → `sender.send_text(early_exit_response)`, no voice/file sends.
 - Normal text path → `sender.send_text(formatted_message)`.
 - Normal voice path → `sender.send_voice()`; `additional_text_message` present → `sender.send_text()` too.
-- Voice send fails → notification + fallback text.
+- Text/voice send fails → `MessageDeliveryFailure` appended to `ctx.sending_exceptions`.
 - Files in `files_to_send` → `sender.send_file(file, recipient, session_id)` per file.
-- File send fails → notification + download link sent via `sender.send_text()`.
-- Outer send failure → `ctx.sending_exception` set, delivery failure notification created, exception NOT propagated.
-- `@notify_on_delivery_failure` decorator on `_send_text` / `_send_voice` wrappers.
+- File send fails → `FileDeliveryFailure` appended to `ctx.sending_exceptions` + download link sent as fallback; other files still attempted.
+- Download link fallback also fails → `MessageDeliveryFailure` propagates to outer catch (fails hard).
 
 ### `SendingErrorHandlerStage` (terminal)
-- `sending_exception is None` → `should_run()` False.
+- Empty `sending_exceptions` → `should_run()` False.
+- `MessageDeliveryFailure` in list → `message_delivery_failure_notification` called, no re-raise.
+- `FileDeliveryFailure` in list → `file_delivery_failure_notification` called.
 - Telegram `ApiTelegramException(403, "bot was blocked")` → participant consent revoked via `ParticipantData.update_consent(False)`.
 - Telegram 403 + `ParticipantData.DoesNotExist` → error appended to `ctx.processing_errors`.
-- Non-Telegram exception → no-op (already logged by ResponseSendingStage).
+- Unknown exception → re-raised (task fails).
 
 ### `PersistenceStage` (terminal) (`@pytest.mark.django_db`)
 - Both `early_exit_response` and `voice_audio` are None → `should_run()` False.
 - `experiment_session is None` → no persistence (early return).
 - Early exit present + session → `ChatMessage(AI, content=early_exit_response)` created.
-- Early exit persists even when `sending_exception` is set (audit trail).
+- Early exit persists even when `sending_exceptions` is non-empty (audit trail).
 - Voice audio present + bot_response → bot_response tagged "voice" + audio saved as File attachment.
 - Voice audio present but bot_response is None → no voice persistence (no-op).
 

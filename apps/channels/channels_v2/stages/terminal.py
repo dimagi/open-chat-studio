@@ -42,6 +42,24 @@ class MessageDeliveryFailure(Exception):
         self.context = context
 
 
+class FileDeliveryFailure(Exception):
+    def __init__(
+        self,
+        original_exc: Exception,
+        *,
+        experiment,
+        session,
+        platform_title: str,
+        file,
+    ) -> None:
+        super().__init__(str(original_exc))
+        self.original_exc = original_exc
+        self.experiment = experiment
+        self.session = session
+        self.platform_title = platform_title
+        self.file = file
+
+
 # ---------------------------------------------------------------------------
 # ResponseSendingStage
 # ---------------------------------------------------------------------------
@@ -53,10 +71,17 @@ class ResponseSendingStage(ProcessingStage):
     This is the ONLY stage that sends messages to the user.
     Handles both early exit responses and normal bot responses.
 
-    Wrapper methods (_send_text, _send_voice) raise MessageDeliveryFailure
-    so SendingErrorHandlerStage can handle notifications and platform-specific
-    side effects. The outer try/except catches any exception that propagates,
-    sets ctx.sending_exception, and never re-raises.
+    All sending is wrapped in a single outer try/except. On failure,
+    the exception is appended to ctx.sending_exceptions.
+
+    - Text/voice: _send_text/_send_voice raise MessageDeliveryFailure.
+    - Files: each failure is wrapped in FileDeliveryFailure and appended
+      to ctx.sending_exceptions. A download link fallback is sent via
+      _send_text; if that also fails, the MessageDeliveryFailure propagates
+      to the outer catch.
+
+    SendingErrorHandlerStage processes ctx.sending_exceptions for
+    notifications and platform-specific side effects.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -76,24 +101,10 @@ class ResponseSendingStage(ProcessingStage):
             else:
                 self._send_text(ctx, ctx.formatted_message, ctx.participant_identifier)
 
-            # Send supported file attachments
             for file in ctx.files_to_send:
-                try:
-                    ctx.sender.send_file(file, ctx.participant_identifier, ctx.experiment_session.id)
-                except Exception as e:
-                    logger.exception(e)
-                    platform_title = ctx.experiment_channel.platform_enum.title()
-                    file_delivery_failure_notification(
-                        ctx.experiment,
-                        platform_title=platform_title,
-                        content_type=file.content_type,
-                        session=ctx.experiment_session,
-                    )
-                    download_link = file.download_link(ctx.experiment_session.id)
-                    self._send_text(ctx, download_link, ctx.participant_identifier)
+                self._send_file(ctx, file, ctx.participant_identifier)
         except Exception as e:
-            # Catch-all for send failures -- never propagate
-            ctx.sending_exception = e
+            ctx.sending_exceptions.append(e)
             ctx.processing_errors.append(f"Send failed: {e}")
 
     def _send_text(self, ctx: MessageProcessingContext, text: str, recipient: str) -> None:
@@ -122,6 +133,23 @@ class ResponseSendingStage(ProcessingStage):
                 context="voice message",
             ) from e
 
+    def _send_file(self, ctx: MessageProcessingContext, file, recipient: str) -> None:
+        try:
+            ctx.sender.send_file(file, recipient, ctx.experiment_session.id)
+        except Exception as e:
+            logger.exception(e)
+            ctx.sending_exceptions.append(
+                FileDeliveryFailure(
+                    e,
+                    experiment=ctx.experiment,
+                    session=ctx.experiment_session,
+                    platform_title=ctx.experiment_channel.platform_enum.title(),
+                    file=file,
+                )
+            )
+            download_link = file.download_link(ctx.experiment_session.id)
+            self._send_text(ctx, download_link, recipient)
+
 
 # ---------------------------------------------------------------------------
 # SendingErrorHandlerStage
@@ -129,31 +157,40 @@ class ResponseSendingStage(ProcessingStage):
 
 
 class SendingErrorHandlerStage(ProcessingStage):
-    """TERMINAL STAGE: Handles platform-specific side effects from send failures.
+    """TERMINAL STAGE: Handles notifications and side effects from send failures.
 
-    Inspects ctx.sending_exception for platform-specific errors that require
-    action beyond logging (e.g., Telegram 403 "bot was blocked" -> revoke
-    participant consent).
+    Processes ctx.sending_exceptions
 
-    Non-actionable exceptions are ignored (already logged by ResponseSendingStage).
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.sending_exception is not None
+        return bool(ctx.sending_exceptions)
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        self._handle_exception(ctx, ctx.sending_exception)
+        for exc in ctx.sending_exceptions:
+            self._handle_exception(ctx, exc)
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
-        """Handle platform-specific sending exceptions."""
+        """Handle a single sending exception."""
         if isinstance(exc, MessageDeliveryFailure):
+            logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
                 exc.experiment,
                 session=exc.session,
                 platform_title=exc.platform_title,
                 context=exc.context,
             )
-            raise exc
+            return
+
+        if isinstance(exc, FileDeliveryFailure):
+            logger.exception("File delivery failure: %s", exc, exc_info=exc.original_exc)
+            file_delivery_failure_notification(
+                exc.experiment,
+                platform_title=exc.platform_title,
+                content_type=exc.file.content_type,
+                session=exc.session,
+            )
+            return
 
         if isinstance(exc, ApiTelegramException):
             if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
@@ -165,7 +202,9 @@ class SendingErrorHandlerStage(ProcessingStage):
                     participant_data.update_consent(False)
                 except ParticipantData.DoesNotExist:
                     ctx.processing_errors.append("Participant data not found during consent revocation")
-        # Other platform-specific exception handling can be added here
+            return
+
+        raise exc  # Unknown exception -- propagate to fail the task
 
 
 # ---------------------------------------------------------------------------
