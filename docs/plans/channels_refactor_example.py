@@ -754,12 +754,14 @@ class ResponseFormattingStage(ProcessingStage):
             unsupported_files = list(files)
 
         if should_reply_voice:
+            # Set formatted_message before stripping so the full text is available
+            # as a fallback if voice delivery fails downstream
+            ctx.formatted_message = message
             message, extracted_urls = strip_urls_and_emojis(message)
             urls_to_append = "\n".join(extracted_urls)
             urls_to_append = self._append_attachment_links(urls_to_append, unsupported_files, ctx)
             try:
                 ctx.voice_audio = self._synthesize_voice(ctx, message)
-                ctx.formatted_message = message
                 if urls_to_append:
                     ctx.additional_text_message = urls_to_append
             except AudioSynthesizeException:
@@ -767,7 +769,6 @@ class ResponseFormattingStage(ProcessingStage):
                 logger.exception("Error generating voice response")
                 audio_synthesis_failure_notification(ctx.experiment, session=ctx.experiment_session)
                 ctx.voice_audio = None
-                ctx.formatted_message = f"{message}\n\n{urls_to_append}"
         else:
             message, uncited_files = self._format_reference_section(message, files, ctx)
             unsupported_uncited = [f for f in unsupported_files if f in uncited_files]

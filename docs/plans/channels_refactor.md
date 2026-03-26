@@ -572,6 +572,9 @@ class ResponseFormattingStage(ProcessingStage):
         should_reply_voice = self._should_use_voice_reply(ctx)
 
         if should_reply_voice:
+            # Set formatted_message before stripping so the full text is available
+            # as a fallback if voice delivery fails downstream
+            ctx.formatted_message = message
             # Strip URLs and emojis for voice
             message, extracted_urls = strip_urls_and_emojis(message)
             urls_to_append = "\n".join(extracted_urls)
@@ -580,7 +583,6 @@ class ResponseFormattingStage(ProcessingStage):
             )
             try:
                 ctx.voice_audio = self._synthesize_voice(ctx, message)
-                ctx.formatted_message = message
                 if urls_to_append:
                     ctx.additional_text_message = urls_to_append
             except AudioSynthesizeException:
@@ -590,7 +592,6 @@ class ResponseFormattingStage(ProcessingStage):
                     ctx.experiment, session=ctx.experiment_session
                 )
                 ctx.voice_audio = None
-                ctx.formatted_message = f"{message}\n\n{urls_to_append}"
         else:
             # Text reply - format citations
             message, uncited_files = self._format_reference_section(
