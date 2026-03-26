@@ -116,11 +116,15 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
         return context
 
     def _get_langfuse_info(self, trace) -> tuple[str | None, str | None]:
-        if not trace.output_message:
-            return None, None
-        for info in trace.output_message.trace_info:
+        # Check trace_metadata first (always populated for new traces)
+        for info in trace.trace_metadata or []:
             if info.get("trace_provider") == "langfuse":
                 return info.get("trace_id"), info.get("trace_url")
+        # Fall back to output_message metadata for older traces
+        if trace.output_message:
+            for info in trace.output_message.trace_info:
+                if info.get("trace_provider") == "langfuse":
+                    return info.get("trace_id"), info.get("trace_url")
         return None, None
 
     def _build_child_map(self, observations) -> dict:

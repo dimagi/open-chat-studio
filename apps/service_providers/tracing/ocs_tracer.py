@@ -199,6 +199,10 @@ class OCSTracer(Tracer):
         if self.trace_record:
             self.trace_record.participant_data_diff = diff
 
+    def set_trace_metadata(self, metadata: list[dict[str, Any]]) -> None:
+        if self.trace_record:
+            self.trace_record.trace_metadata = metadata
+
     def get_trace_metadata(self) -> dict[str, Any]:
         if not self.ready:
             return {}

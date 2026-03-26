@@ -31,6 +31,55 @@ def _make_observation(obs_id, name, level="DEFAULT", parent_id=None):
     )
 
 
+class TestGetLangfuseInfo:
+    """Unit tests for _get_langfuse_info — no DB needed."""
+
+    def _make_trace(self, trace_metadata=None, output_message=None):
+        return SimpleNamespace(trace_metadata=trace_metadata or [], output_message=output_message)
+
+    def test_returns_info_from_trace_metadata(self):
+        view = TraceLangfuseSpansView()
+        trace = self._make_trace(
+            trace_metadata=[
+                {"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}
+            ]
+        )
+        assert view._get_langfuse_info(trace) == (LANGFUSE_TRACE_ID, LANGFUSE_TRACE_URL)
+
+    def test_prefers_trace_metadata_over_output_message(self):
+        view = TraceLangfuseSpansView()
+        output_message = SimpleNamespace(
+            trace_info=[{"trace_provider": "langfuse", "trace_id": "old-id", "trace_url": "old-url"}]
+        )
+        trace = self._make_trace(
+            trace_metadata=[
+                {"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}
+            ],
+            output_message=output_message,
+        )
+        assert view._get_langfuse_info(trace) == (LANGFUSE_TRACE_ID, LANGFUSE_TRACE_URL)
+
+    def test_falls_back_to_output_message(self):
+        view = TraceLangfuseSpansView()
+        output_message = SimpleNamespace(
+            trace_info=[{"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}]
+        )
+        trace = self._make_trace(output_message=output_message)
+        assert view._get_langfuse_info(trace) == (LANGFUSE_TRACE_ID, LANGFUSE_TRACE_URL)
+
+    def test_no_langfuse_info_returns_none(self):
+        view = TraceLangfuseSpansView()
+        trace = self._make_trace(
+            trace_metadata=[{"trace_provider": "ocs", "trace_id": "123"}],
+        )
+        assert view._get_langfuse_info(trace) == (None, None)
+
+    def test_no_metadata_no_message_returns_none(self):
+        view = TraceLangfuseSpansView()
+        trace = self._make_trace()
+        assert view._get_langfuse_info(trace) == (None, None)
+
+
 class TestBuildChildMap:
     """Unit tests for tree-building logic — no DB needed."""
 
@@ -183,14 +232,43 @@ class TestTraceLangfuseSpansView:
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
 
-    def test_no_output_message_returns_not_available(self, anon_client, team, user, trace_provider):
-        """Trace has no output_message: show 'not available' note."""
+    def test_no_output_message_without_trace_metadata_returns_not_available(
+        self, anon_client, team, user, trace_provider
+    ):
+        """Trace has no output_message and no trace_metadata: show 'not available' note."""
         experiment = ExperimentFactory.create(team=team, trace_provider=trace_provider)
         trace = TraceFactory.create(team=team, experiment=experiment, output_message=None)
         anon_client.force_login(user)
         response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
         assert b"langfuse_not_available" in response.content
+
+    def test_trace_metadata_provides_langfuse_info_without_output_message(
+        self, anon_client, team, user, trace_provider
+    ):
+        """Trace with trace_metadata but no output_message: Langfuse info is available."""
+        experiment = ExperimentFactory.create(team=team, trace_provider=trace_provider)
+        trace = TraceFactory.create(
+            team=team,
+            experiment=experiment,
+            output_message=None,
+            trace_metadata=[
+                {"trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL, "trace_provider": "langfuse"}
+            ],
+        )
+        mock_trace_data = MagicMock()
+        mock_trace_data.observations = [_make_observation("obs-1", "Pipeline Run")]
+
+        anon_client.force_login(user)
+        with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
+            mock_api = MagicMock()
+            mock_api.trace.get.return_value = mock_trace_data
+            mock_client_factory.return_value = mock_api
+            response = anon_client.get(self._url(team, trace))
+
+        assert response.status_code == 200
+        mock_api.trace.get.assert_called_once_with(LANGFUSE_TRACE_ID)
+        assert b"Pipeline Run" in response.content
 
     def test_none_trace_id_in_trace_info_returns_not_available(self, anon_client, team, user, trace_provider):
         """trace_info has a Langfuse entry but trace_id is None: show 'not available' note."""

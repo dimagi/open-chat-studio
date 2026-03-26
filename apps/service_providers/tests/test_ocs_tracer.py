@@ -57,6 +57,21 @@ class TestOCSTracer:
             assert tracer.trace_record.experiment_version_number == version.version_number
             assert tracer.trace_record.experiment_id == experiment.id
 
+    def test_trace_metadata_persisted(self, experiment):
+        """Trace metadata set before trace exits is persisted to the DB."""
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create()
+
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        metadata = [
+            {"trace_id": "lf-abc", "trace_url": "https://langfuse.com/traces/lf-abc", "trace_provider": "langfuse"}
+        ]
+        with tracer.trace(trace_context=trace_context, session=session):
+            tracer.set_trace_metadata(metadata)
+
+        trace = Trace.objects.get(trace_id=trace_context.id)
+        assert trace.trace_metadata == metadata
+
     def test_trace_error_recording(self, experiment):
         """Test that errors during trace execution are captured in the trace record"""
         tracer = OCSTracer(experiment, experiment.team_id)
@@ -233,3 +248,25 @@ class TestSetParticipantDataDiff:
 
         # Should not raise
         tracer.set_participant_data_diff([["add", "", [["key", "val"]]]])
+
+
+class TestSetTraceMetadata:
+    def test_set_trace_metadata_stores_on_trace_record(self):
+        experiment = Mock()
+        tracer = OCSTracer(experiment=experiment, team_id=1)
+        tracer.trace_record = Mock()
+
+        metadata = [
+            {"trace_id": "lf-123", "trace_url": "https://langfuse.com/traces/lf-123", "trace_provider": "langfuse"}
+        ]
+        tracer.set_trace_metadata(metadata)
+
+        assert tracer.trace_record.trace_metadata == metadata
+
+    def test_set_trace_metadata_noop_when_no_trace_record(self):
+        experiment = Mock()
+        tracer = OCSTracer(experiment=experiment, team_id=1)
+        tracer.trace_record = None
+
+        # Should not raise
+        tracer.set_trace_metadata([{"trace_id": "lf-123"}])
