@@ -134,6 +134,7 @@ line-ending = "auto"
 
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]
+"docs/plans/*.py" = ["PLC0415"]
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = true
