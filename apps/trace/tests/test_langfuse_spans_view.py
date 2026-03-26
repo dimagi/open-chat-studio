@@ -35,14 +35,16 @@ class TestGetLangfuseInfo:
     """Unit tests for _get_langfuse_info — no DB needed."""
 
     def _make_trace(self, trace_metadata=None, output_message=None):
-        return SimpleNamespace(trace_metadata=trace_metadata or [], output_message=output_message)
+        return SimpleNamespace(trace_metadata=trace_metadata or {}, output_message=output_message)
 
     def test_returns_info_from_trace_metadata(self):
         view = TraceLangfuseSpansView()
         trace = self._make_trace(
-            trace_metadata=[
-                {"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}
-            ]
+            trace_metadata={
+                "trace_info": [
+                    {"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}
+                ]
+            }
         )
         assert view._get_langfuse_info(trace) == (LANGFUSE_TRACE_ID, LANGFUSE_TRACE_URL)
 
@@ -52,9 +54,11 @@ class TestGetLangfuseInfo:
             trace_info=[{"trace_provider": "langfuse", "trace_id": "old-id", "trace_url": "old-url"}]
         )
         trace = self._make_trace(
-            trace_metadata=[
-                {"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}
-            ],
+            trace_metadata={
+                "trace_info": [
+                    {"trace_provider": "langfuse", "trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL}
+                ]
+            },
             output_message=output_message,
         )
         assert view._get_langfuse_info(trace) == (LANGFUSE_TRACE_ID, LANGFUSE_TRACE_URL)
@@ -70,7 +74,7 @@ class TestGetLangfuseInfo:
     def test_no_langfuse_info_returns_none(self):
         view = TraceLangfuseSpansView()
         trace = self._make_trace(
-            trace_metadata=[{"trace_provider": "ocs", "trace_id": "123"}],
+            trace_metadata={"trace_info": [{"trace_provider": "ocs", "trace_id": "123"}]},
         )
         assert view._get_langfuse_info(trace) == (None, None)
 
@@ -252,9 +256,11 @@ class TestTraceLangfuseSpansView:
             team=team,
             experiment=experiment,
             output_message=None,
-            trace_metadata=[
-                {"trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL, "trace_provider": "langfuse"}
-            ],
+            trace_metadata={
+                "trace_info": [
+                    {"trace_id": LANGFUSE_TRACE_ID, "trace_url": LANGFUSE_TRACE_URL, "trace_provider": "langfuse"}
+                ]
+            },
         )
         mock_trace_data = MagicMock()
         mock_trace_data.observations = [_make_observation("obs-1", "Pipeline Run")]

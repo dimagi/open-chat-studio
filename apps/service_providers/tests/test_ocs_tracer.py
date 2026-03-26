@@ -63,9 +63,11 @@ class TestOCSTracer:
         session = ExperimentSessionFactory.create()
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
-        metadata = [
-            {"trace_id": "lf-abc", "trace_url": "https://langfuse.com/traces/lf-abc", "trace_provider": "langfuse"}
-        ]
+        metadata = {
+            "trace_info": [
+                {"trace_id": "lf-abc", "trace_url": "https://langfuse.com/traces/lf-abc", "trace_provider": "langfuse"}
+            ]
+        }
         with tracer.trace(trace_context=trace_context, session=session):
             tracer.set_trace_metadata(metadata)
 
@@ -256,9 +258,11 @@ class TestSetTraceMetadata:
         tracer = OCSTracer(experiment=experiment, team_id=1)
         tracer.trace_record = Mock()
 
-        metadata = [
-            {"trace_id": "lf-123", "trace_url": "https://langfuse.com/traces/lf-123", "trace_provider": "langfuse"}
-        ]
+        metadata = {
+            "trace_info": [
+                {"trace_id": "lf-123", "trace_url": "https://langfuse.com/traces/lf-123", "trace_provider": "langfuse"}
+            ]
+        }
         tracer.set_trace_metadata(metadata)
 
         assert tracer.trace_record.trace_metadata == metadata
@@ -269,4 +273,4 @@ class TestSetTraceMetadata:
         tracer.trace_record = None
 
         # Should not raise
-        tracer.set_trace_metadata([{"trace_id": "lf-123"}])
+        tracer.set_trace_metadata({"trace_info": [{"trace_id": "lf-123"}]})

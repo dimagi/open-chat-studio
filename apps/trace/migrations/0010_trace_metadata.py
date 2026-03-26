@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='trace',
             name='trace_metadata',
-            field=apps.utils.fields.SanitizedJSONField(blank=True, default=list, help_text='Metadata from trace providers (e.g. Langfuse trace_id, trace_url)'),
+            field=apps.utils.fields.SanitizedJSONField(blank=True, default=dict, help_text='Metadata from trace providers (e.g. Langfuse trace_id, trace_url)'),
         ),
     ]

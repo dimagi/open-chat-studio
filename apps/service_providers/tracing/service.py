@@ -249,22 +249,11 @@ class TracingService:
         return [tracer for tracer in self._tracers if tracer.ready]
 
     def _persist_trace_metadata(self) -> None:
-        """Store trace metadata from all active tracers on the OCS trace record."""
-        from .ocs_tracer import OCSTracer  # noqa: PLC0415 - circular: ocs_tracer→experiments.models→tracing
-
-        trace_info = []
-        ocs_tracer = None
-        for tracer in self._active_tracers:
-            if isinstance(tracer, OCSTracer):
-                ocs_tracer = tracer
-            try:
-                if info := tracer.get_trace_metadata():
-                    trace_info.append(info)
-            except Exception:  # noqa: BLE001
-                logger.exception("Error getting trace metadata from %s", tracer.__class__.__name__)
-
-        if ocs_tracer and trace_info:
-            ocs_tracer.set_trace_metadata(trace_info)
+        """Store trace metadata from all active tracers on each tracer's record."""
+        metadata = self.get_trace_metadata()
+        if metadata:
+            for tracer in self._active_tracers:
+                tracer.set_trace_metadata(metadata)
 
     def _reset(self) -> None:
         self.trace_id = None

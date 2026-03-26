@@ -117,7 +117,8 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
 
     def _get_langfuse_info(self, trace) -> tuple[str | None, str | None]:
         # Check trace_metadata first (always populated for new traces)
-        for info in trace.trace_metadata or []:
+        trace_info = (trace.trace_metadata or {}).get("trace_info", [])
+        for info in trace_info:
             if info.get("trace_provider") == "langfuse":
                 return info.get("trace_id"), info.get("trace_url")
         # Fall back to output_message metadata for older traces
