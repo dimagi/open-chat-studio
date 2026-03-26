@@ -12,16 +12,15 @@ from apps.teams.utils import get_current_team
 
 SUPER_ADMIN_GROUP = "Super Admin"
 TEAM_ADMIN_GROUP = "Team Admin"
-EXPERIMENT_ADMIN_GROUP = "Experiment Admin"
+CHATBOT_ADMIN_GROUP = "Chatbot Admin"
 EVENT_ADMIN_GROUP = "Event Admin"
 ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
-PIPELINE_ADMIN_GROUP = "Pipeline Admin"
 EVALUATION_ADMIN_GROUP = "Evaluation Admin"
 ANNOTATION_REVIEWER_GROUP = "Annotation Reviewer"
 
 NORMAL_USER_GROUPS = [
-    EXPERIMENT_ADMIN_GROUP,
+    CHATBOT_ADMIN_GROUP,
     ASSISTANT_ADMIN_GROUP,
     CHAT_VIEWER_GROUP,
     EVENT_ADMIN_GROUP,
@@ -188,11 +187,12 @@ GROUPS = [
         ],
     ),
     GroupDef(
-        EXPERIMENT_ADMIN_GROUP,
+        CHATBOT_ADMIN_GROUP,
         [
             AppPermSetDef("experiments", ALL),
             AppPermSetDef("bot_channels", ALL),
             AppPermSetDef("human_annotations", ALL),
+            AppPermSetDef("pipelines", ALL),
             ModelPermSetDef("annotations", "tag", [VIEW]),
             ModelPermSetDef("annotations", "customtaggeditem", ALL),
             ModelPermSetDef("annotations", "usercomment", ALL),
@@ -218,12 +218,6 @@ GROUPS = [
         EVENT_ADMIN_GROUP,
         [
             AppPermSetDef("events", ALL),
-        ],
-    ),
-    GroupDef(
-        PIPELINE_ADMIN_GROUP,
-        [
-            AppPermSetDef("pipelines", ALL),
         ],
     ),
     GroupDef(

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
 import pytest
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Group, Permission
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.template.response import TemplateResponse
@@ -24,6 +24,8 @@ from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import MembershipFactory
+from apps.utils.factories.user import UserFactory
 
 
 @pytest.mark.django_db()
@@ -505,3 +507,24 @@ def test_last_activity_annotation_shows_most_recent_non_null(team_with_users):
 
     result = view.get_queryset().get(id=experiment.id)
     assert result.last_activity == activity_time
+
+
+@pytest.mark.django_db()
+def test_chatbot_admin_can_access_edit_chatbot(client, team_with_users):
+    """Regression test: users with the Chatbot Admin group must be able to
+    access the EditChatbot view (requires experiments.change_experiment)."""
+
+    team = team_with_users
+    chatbot_admin_group = Group.objects.get(name="Chatbot Admin")
+
+    user = UserFactory.create()
+    membership = MembershipFactory.create(team=team, user=user)
+    membership.groups.add(chatbot_admin_group)
+
+    pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(name="Test Chatbot", owner=user, team=team, pipeline=pipeline)
+
+    client.force_login(user)
+    url = reverse("chatbots:edit", args=[team.slug, experiment.id])
+    response = client.get(url)
+    assert response.status_code == 200
