@@ -40,13 +40,22 @@ class Command(BaseCommand):
                 raise CommandError(f"Team with slug '{team_slug}' does not exist.")
             collections = Collection.objects.filter(team__slug=team_slug, is_index=False)
 
-        files_to_process = list(CollectionFile.objects.filter(collection__in=collections).select_related("file"))
+        queryset = CollectionFile.objects.filter(collection__in=collections).select_related("file")
+        files_to_update = []
+        total = 0
+        unsendable_count = 0
+        batch_size = 500
 
-        for cf in files_to_process:
+        for cf in queryset.iterator(chunk_size=batch_size):
             cf.update_supported_channels()
-
-        total = len(files_to_process)
-        unsendable_count = sum(1 for cf in files_to_process if cf.unsupported_channels)
+            total += 1
+            if cf.unsupported_channels:
+                unsendable_count += 1
+            if not dry_run:
+                files_to_update.append(cf)
+                if len(files_to_update) >= batch_size:
+                    CollectionFile.objects.bulk_update(files_to_update, ["unsupported_channels"])
+                    files_to_update.clear()
 
         if dry_run:
             self.stdout.write(
@@ -54,6 +63,7 @@ class Command(BaseCommand):
             )
             return
 
-        CollectionFile.objects.bulk_update(files_to_process, ["unsupported_channels"])
+        if files_to_update:
+            CollectionFile.objects.bulk_update(files_to_update, ["unsupported_channels"])
 
         self.stdout.write(self.style.SUCCESS(f"{total} files processed, {unsendable_count} with unsupported channels."))

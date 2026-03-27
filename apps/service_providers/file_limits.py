@@ -11,7 +11,8 @@ class SendabilityResult(NamedTuple):
 
 def can_send_on_whatsapp(content_type: str, content_size: int) -> SendabilityResult:
     """Meta Cloud API limits: 5MB images, 16MB audio/video, 100MB documents (application/*)."""
-    if not content_type or not content_size:
+    content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if not content_type or not content_size or content_size <= 0:
         return SendabilityResult(False, "File type or size unknown")
 
     if content_type.startswith("image/"):
@@ -38,7 +39,8 @@ def can_send_on_whatsapp(content_type: str, content_size: int) -> SendabilityRes
 
 def can_send_on_telegram(content_type: str, content_size: int) -> SendabilityResult:
     """Telegram limits: 10MB images, 50MB audio/video/documents."""
-    if not content_type or not content_size:
+    content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if not content_type or not content_size or content_size <= 0:
         return SendabilityResult(False, "File type or size unknown")
 
     if content_type.startswith("image/"):
@@ -61,7 +63,8 @@ def can_send_on_telegram(content_type: str, content_size: int) -> SendabilityRes
 
 def can_send_on_slack(content_type: str, content_size: int) -> SendabilityResult:
     """Slack limit: 50MB for all supported types (image/*, video/*, audio/*, application/*)."""
-    if not content_type or not content_size:
+    content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if not content_type or not content_size or content_size <= 0:
         return SendabilityResult(False, "File type or size unknown")
 
     limit = 50 * MB
