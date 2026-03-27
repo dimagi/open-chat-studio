@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.documents.models import Collection, CollectionFile
+from apps.documents.models import Collection
+from apps.files.models import File
 from apps.teams.models import Team
 
 
@@ -40,21 +41,21 @@ class Command(BaseCommand):
                 raise CommandError(f"Team with slug '{team_slug}' does not exist.")
             collections = Collection.objects.filter(team__slug=team_slug, is_index=False)
 
-        queryset = CollectionFile.objects.filter(collection__in=collections).select_related("file")
+        queryset = File.objects.filter(collections__in=collections).distinct()
         files_to_update = []
         total = 0
         unsendable_count = 0
         batch_size = 500
 
-        for cf in queryset.iterator(chunk_size=batch_size):
-            cf.update_supported_channels()
+        for file in queryset.iterator(chunk_size=batch_size):
+            file.update_supported_channels()
             total += 1
-            if cf.unsupported_channels:
+            if file.unsupported_channels:
                 unsendable_count += 1
             if not dry_run:
-                files_to_update.append(cf)
+                files_to_update.append(file)
                 if len(files_to_update) >= batch_size:
-                    CollectionFile.objects.bulk_update(files_to_update, ["unsupported_channels"])
+                    File.objects.bulk_update(files_to_update, ["unsupported_channels"])
                     files_to_update.clear()
 
         if dry_run:
@@ -64,6 +65,6 @@ class Command(BaseCommand):
             return
 
         if files_to_update:
-            CollectionFile.objects.bulk_update(files_to_update, ["unsupported_channels"])
+            File.objects.bulk_update(files_to_update, ["unsupported_channels"])
 
         self.stdout.write(self.style.SUCCESS(f"{total} files processed, {unsendable_count} with unsupported channels."))

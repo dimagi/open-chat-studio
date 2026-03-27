@@ -11,7 +11,6 @@ from field_audit.models import AuditingManager
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.service_providers.file_limits import FILE_SENDABILITY_CHECKERS
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -56,11 +55,6 @@ class CollectionFile(models.Model):
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
     external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
-    unsupported_channels = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Channels that cannot send this file directly, with reasons",
-    )
 
     objects = CollectionFileManager()
 
@@ -79,19 +73,6 @@ class CollectionFile(models.Model):
     @property
     def status_enum(self):
         return FileStatus(self.status)
-
-    def update_supported_channels(self):
-        """Compute and set unsupported_channels from the file's content type and size.
-
-        Only stores entries for unsupported channels. An empty dict means the file
-        is sendable on all channels.
-        """
-        unsupported = {}
-        for channel_name, check_func in FILE_SENDABILITY_CHECKERS.items():
-            result = check_func(self.file.content_type or "", self.file.content_size or 0)
-            if not result.supported:
-                unsupported[channel_name] = {"reason": result.reason}
-        self.unsupported_channels = unsupported
 
 
 @audit_fields(
@@ -214,12 +195,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         def _version_files(file_queryset, new_object_version, through_defaults: dict | None = None):
             nonlocal file_versions
             _file_versions: dict[int, int] = {}
-            # Map old file IDs to their CollectionFile unsupported_channels
-            old_unsupported = dict(
-                CollectionFile.objects.filter(collection=self, file__in=file_queryset).values_list(
-                    "file_id", "unsupported_channels"
-                )
-            )
             for file in file_queryset.iterator(chunk_size=50):
                 file_version = file.create_new_version(save=False)
                 file_version.external_id = ""
@@ -227,14 +202,6 @@ class Collection(BaseTeamModel, VersionsMixin):
                 file_version.save()
                 _file_versions[file.id] = file_version.id
             new_object_version.files.add(*list(_file_versions.values()), through_defaults=through_defaults)
-            # Propagate unsupported_channels to the new CollectionFile rows
-            for old_file_id, new_file_id in _file_versions.items():
-                unsupported = old_unsupported.get(old_file_id)
-                if unsupported:
-                    CollectionFile.objects.filter(
-                        collection=new_version,
-                        file_id=new_file_id,
-                    ).update(unsupported_channels=unsupported)
             file_versions = file_versions | _file_versions
 
         _version_files(self.files.filter(collectionfile__document_source=None), new_version)

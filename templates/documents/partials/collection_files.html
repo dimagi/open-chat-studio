@@ -41,11 +41,11 @@
             {% else %}
               <span
                   class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
-              {% if collection_file.unsupported_channels %}
+              {% if collection_file.file.unsupported_channels %}
                 <div class="flex items-center gap-1.5 mt-1 bg-warning/10 border border-warning/30 rounded-md px-2 py-1">
                   <i class="fa-solid fa-triangle-exclamation text-warning text-xs"></i>
                   <span class="text-xs font-medium text-warning">Not supported on:</span>
-                  {% for channel, info in collection_file.unsupported_channels.items %}
+                  {% for channel, info in collection_file.file.unsupported_channels.items %}
                     <div class="tooltip" data-tip="{{ info.reason }}. It will be sent as a link instead.">
                       <span class="badge badge-warning badge-sm capitalize"
                             role="img"

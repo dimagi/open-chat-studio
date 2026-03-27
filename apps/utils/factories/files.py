@@ -13,4 +13,3 @@ class FileFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda _: fake.unique.file_name())
     file = factory.django.FileField(filename=factory.Faker("file_name"))
     content_type = "text/plain"
-    content_size = 1024  # default 1KB

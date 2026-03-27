@@ -91,7 +91,7 @@ def single_collection_home(request, team_slug: str, pk: int):
     file_stats = CollectionFile.objects.filter(collection=collection).aggregate(
         total=Count("id"),
         manual=Count("id", filter=Q(document_source__isnull=True)),
-        unsendable=Count("id", filter=~Q(unsupported_channels={})),
+        unsendable=Count("id", filter=~Q(file__unsupported_channels={})),
     )
     collection_files_count = file_stats["total"]
     manually_uploaded_files_count = file_stats["manual"]
@@ -399,12 +399,14 @@ def add_collection_files(request, team_slug: str, pk: int):
                 )
             )
 
+        if not collection.is_index:
+            for file in created_files:
+                file.update_supported_channels()
+            File.objects.bulk_update(created_files, ["unsupported_channels"])
+
         collection_file_instances = [
             CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in created_files
         ]
-        if not collection.is_index:
-            for cf in collection_file_instances:
-                cf.update_supported_channels()
         collection_files = CollectionFile.objects.bulk_create(collection_file_instances)
 
     if collection.is_index:
