@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.documents.models import Collection, CollectionFile
+from apps.teams.models import Team
 
 
 class Command(BaseCommand):
@@ -22,11 +23,21 @@ class Command(BaseCommand):
 
         if collection_id:
             try:
-                Collection.objects.get(id=collection_id)
+                collection = Collection.objects.get(id=collection_id)
             except Collection.DoesNotExist as err:
                 raise CommandError(f"Collection with ID {collection_id} does not exist.") from err
-            collections = Collection.objects.filter(id=collection_id, is_index=False)
+            if collection.is_index:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Collection {collection_id} is an indexed collection — skipping. "
+                        "Only media (non-indexed) collections are processed."
+                    )
+                )
+                return
+            collections = Collection.objects.filter(id=collection_id)
         else:
+            if not Team.objects.filter(slug=team_slug).exists():
+                raise CommandError(f"Team with slug '{team_slug}' does not exist.")
             collections = Collection.objects.filter(team__slug=team_slug, is_index=False)
 
         files_to_process = list(CollectionFile.objects.filter(collection__in=collections).select_related("file"))
