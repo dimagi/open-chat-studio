@@ -1,21 +1,30 @@
 # Feature Flags
 
-Feature flags allow you to toggle features on/off for specific teams without code deployments. For technical details on how flags are created and used in code see the [developer guide](../developer_guides/feature_flags.md).
+Feature flags let you turn features on or off without deploying code. For implementation details, see the [developer guide](../developer_guides/feature_flags.md).
 
-Access to feature flags is managed via a custom page in OCS which is only accessible to users with the 'staff' or 'superuser' permission. Users with those permissions will see a 'Feature Flags' menu item at the bottom of the left side menu.
+## Where feature flags are managed
 
-Feature flags can be activated for:
+There are two places to manage feature flags:
 
-* Everyone (all users)
-* Superusers
-* Specific teams
-* Specific users
+1. **Global Admin > Feature Flags** (`/admin/flags/`)
+   - Intended for platform-wide management of all flags.
+   - The left navigation shows this menu item to staff and superusers.
+   - Access to the page itself is restricted to superusers.
+2. **Team Settings > Manage Feature Flags**
+   - Intended for team-specific flag management.
+   - Only flags marked as team-manageable are shown.
+   - Team members can view this page, but only team admins can save changes.
 
-If any of these matches for a user, they will have access to that feature flag.
+## How a flag becomes active
 
-There are also two special modes:
+A flag is active when one or more configured conditions match. You can activate a flag for:
 
-* [Testing mode](https://waffle.readthedocs.io/en/stable/testing/user.html#testing-user)
-  * This allows activating a flag using a URL parameter 
-* [Rollout mode](https://waffle.readthedocs.io/en/stable/types/flag.html#rollout-mode)
-  * This allows activating a flag for a percentage of users. 
+- Everyone (all users)
+- Superusers
+- Specific teams
+- Specific users
+
+In addition, Django Waffle supports these modes:
+
+- [Testing mode](https://waffle.readthedocs.io/en/stable/testing/user.html#testing-user): activate a flag with a URL parameter.
+- [Rollout mode](https://waffle.readthedocs.io/en/stable/types/flag.html#rollout-mode): activate a flag for a percentage of users.
