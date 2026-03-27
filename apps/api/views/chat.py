@@ -582,7 +582,7 @@ def chat_poll_response(request, session_id):
 
     session_status = "ended" if session.is_complete else "active"
     response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
-    return Response(ChatPollResponse(response_data).data, status=status.HTTP_200_OK)
+    return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
 
 
 def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:

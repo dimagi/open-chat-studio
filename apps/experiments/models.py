@@ -385,18 +385,26 @@ class SyntheticVoice(BaseModel):
     Azure = "Azure"
     OpenAI = "OpenAI"
     OpenAIVoiceEngine = "OpenAIVoiceEngine"
+    ElevenLabs = "ElevenLabs"
 
     SERVICES = (
         ("AWS", AWS),
         ("Azure", Azure),
         ("OpenAI", OpenAI),
         ("OpenAIVoiceEngine", OpenAIVoiceEngine),
+        ("ElevenLabs", ElevenLabs),
     )
-    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine]
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, ElevenLabs]
 
     objects = SyntheticVoiceObjectManager()
     name = models.CharField(
         max_length=128, help_text="The name of the synthetic voice, as per the documentation of the service"
+    )
+    external_id = models.CharField(  # noqa: DJ001 - null needed for conditional UniqueConstraint
+        max_length=128,
+        null=True,
+        blank=True,
+        help_text="Provider-specific voice identifier when it differs from the display name",
     )
     neural = models.BooleanField(default=False, help_text="Indicates whether this voice is a neural voice")
     language = models.CharField(null=False, blank=False, max_length=64, help_text="The language this voice is for")
@@ -417,7 +425,23 @@ class SyntheticVoice(BaseModel):
 
     class Meta:
         ordering = ["name"]
-        unique_together = ("name", "language_code", "language", "gender", "neural", "service", "voice_provider")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "language_code", "language", "gender", "neural", "service", "voice_provider"],
+                condition=Q(external_id__isnull=True),
+                name="unique_voice_metadata_for_legacy_providers",
+            ),
+            models.UniqueConstraint(
+                fields=["external_id", "service", "voice_provider"],
+                condition=Q(external_id__isnull=False),
+                name="unique_external_id_per_service_provider",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.service == self.ElevenLabs and not self.external_id:
+            raise ValidationError({"external_id": "ElevenLabs voices require an external_id."})
 
     def get_gender(self):
         # This is a bit of a hack to display the gender on the admin screen. Directly calling gender doesn't work

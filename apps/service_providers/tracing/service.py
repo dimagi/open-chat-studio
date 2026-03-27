@@ -126,7 +126,12 @@ class TracingService:
                 sentry_sdk.set_context("Traces", self.get_trace_metadata())
 
                 # Yield the context object to user code
-                yield trace_context
+                try:
+                    yield trace_context
+                finally:
+                    # Store trace metadata from all tracers on the OCS trace record
+                    # before the ExitStack unwinds and tracers clean up their state
+                    self._persist_trace_metadata()
         finally:
             self._reset()
 
@@ -242,6 +247,13 @@ class TracingService:
     @property
     def _active_tracers(self) -> list[Tracer]:
         return [tracer for tracer in self._tracers if tracer.ready]
+
+    def _persist_trace_metadata(self) -> None:
+        """Store trace metadata from all active tracers on each tracer's record."""
+        metadata = self.get_trace_metadata()
+        if metadata:
+            for tracer in self._active_tracers:
+                tracer.set_trace_metadata(metadata)
 
     def _reset(self) -> None:
         self.trace_id = None

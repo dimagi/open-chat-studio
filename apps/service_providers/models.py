@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,7 @@ from django.utils.functional import classproperty
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
+from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 from pydantic import ValidationError
@@ -25,6 +27,8 @@ from .exceptions import ServiceProviderConfigError
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
     from apps.service_providers.forms import ProviderTypeConfigForm
+
+log = logging.getLogger("ocs.service_providers")
 
 
 class MessagingProviderObjectManager(AuditingManager):
@@ -262,6 +266,7 @@ class VoiceProviderType(models.TextChoices):
     azure = "azure", _("Azure Text to Speech")
     openai = "openai", _("OpenAI Text to Speech")
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
+    elevenlabs = "elevenlabs", _("ElevenLabs")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -276,6 +281,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.OpenAIConfigForm
             case VoiceProviderType.openai_voice_engine:
                 return forms.OpenAIVoiceEngineConfigForm
+            case VoiceProviderType.elevenlabs:
+                return forms.ElevenLabsVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -291,9 +298,20 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.OpenAISpeechService(**config)
                 case VoiceProviderType.openai_voice_engine:
                     return speech_service.OpenAIVoiceEngineSpeechService(**config)
+                case VoiceProviderType.elevenlabs:
+                    return speech_service.ElevenLabsSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
+
+
+_ELEVENLABS_KNOWN_GENDERS = {"male", "female"}
+
+
+def _map_elevenlabs_gender(labels: dict) -> str:
+    """Map ElevenLabs voice label gender to SyntheticVoice GENDERS choice or empty string."""
+    gender = (labels.get("gender", "") if labels else "").lower()
+    return gender if gender in _ELEVENLABS_KNOWN_GENDERS else ""
 
 
 @audit_fields(*model_audit_fields.VOICE_PROVIDER_FIELDS, audit_special_queryset_writes=True)
@@ -317,25 +335,34 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_speech_service(config)
 
+    def _get_elevenlabs_client(self):
+        return ElevenLabsClient(api_key=self.config["elevenlabs_api_key"])
+
+    def _create_voice_from_file(self, file, service, external_id=None):
+        """Create a SyntheticVoice record from an uploaded file."""
+        try:
+            SyntheticVoice.objects.create(
+                name=file.name,
+                external_id=external_id,
+                neural=True,
+                language="Unknown",
+                language_code="Unknown",
+                gender="",
+                service=service,
+                voice_provider=self,
+                file=file,
+            )
+        except IntegrityError:
+            message = (
+                f"A voice named '{file.name}' already exists for this provider. Please rename the file and try again."
+            )
+            raise DjangoValidationError(message) from None
+
     @transaction.atomic()
     def add_files(self, files):
         if self.type == VoiceProviderType.openai_voice_engine:
             for file in files:
-                try:
-                    # TODO: Split file extention
-                    SyntheticVoice.objects.create(
-                        name=file.name,
-                        neural=True,
-                        language="",
-                        language_code="",
-                        gender="",
-                        service=SyntheticVoice.OpenAIVoiceEngine,
-                        voice_provider=self,
-                        file=file,
-                    )
-                except IntegrityError:
-                    message = f"Unable to upload '{file.name}' voice. This voice might already exist"
-                    raise ValidationError(message) from None
+                self._create_voice_from_file(file, service=SyntheticVoice.OpenAIVoiceEngine)
 
     def remove_file(self, file_id: int):
         synthetic_voice = self.syntheticvoice_set.get(file_id=file_id)
@@ -370,10 +397,58 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         )
 
     @transaction.atomic()
+    def sync_voices(self):
+        """Fetch voices from ElevenLabs API and sync SyntheticVoice records for this provider."""
+        if self.type != VoiceProviderType.elevenlabs:
+            return
+
+        client = self._get_elevenlabs_client()
+
+        all_voices = []
+        response = client.voices.search(page_size=100)
+        all_voices.extend(response.voices)
+        while response.has_more:
+            response = client.voices.search(page_size=100, next_page_token=response.next_page_token)
+            all_voices.extend(response.voices)
+
+        api_voice_ids = set()
+
+        for voice in all_voices:
+            labels = voice.labels if isinstance(voice.labels, dict) else {}
+            gender = _map_elevenlabs_gender(labels)
+            language = labels.get("language", "") or "Unknown"
+
+            api_voice_ids.add(voice.voice_id)
+
+            defaults = {
+                "name": voice.name,
+                "neural": True,
+                "language": language,
+                "language_code": language,
+                "gender": gender,
+            }
+            self.syntheticvoice_set.update_or_create(
+                external_id=voice.voice_id,
+                service=SyntheticVoice.ElevenLabs,
+                defaults=defaults,
+            )
+
+        # Remove voices no longer in API (only if not referenced by experiments)
+        stale_voices = (
+            self.syntheticvoice_set.filter(service=SyntheticVoice.ElevenLabs)
+            .exclude(external_id__in=api_voice_ids)
+            .annotate(experiment_count=models.Count("experiments"))
+            .filter(experiment_count=0)
+        )
+        for voice in stale_voices:
+            voice.delete()
+
+    @transaction.atomic()
     def delete(self):  # ty: ignore[invalid-method-override]
+        # Clean up local files for providers that have them
         if self.type == VoiceProviderType.openai_voice_engine:
-            files_to_delete = self.get_files()
-            [f.delete() for f in files_to_delete]
+            for f in self.get_files():
+                f.delete()
         return super().delete()
 
 

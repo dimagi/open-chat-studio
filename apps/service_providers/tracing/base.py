@@ -158,6 +158,9 @@ class Tracer(ABC):
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         pass
 
+    def set_trace_metadata(self, metadata: dict[str, Any]) -> None:
+        return None
+
 
 @dataclasses.dataclass
 class TraceInfo:

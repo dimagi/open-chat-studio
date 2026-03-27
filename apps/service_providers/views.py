@@ -1,12 +1,14 @@
+import logging
 from collections import defaultdict
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, render, resolve_url
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
@@ -22,6 +24,7 @@ from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProviderModel,
     MessagingProviderType,
+    VoiceProvider,
     VoiceProviderType,
 )
 from apps.utils.deletion import get_related_objects
@@ -31,6 +34,8 @@ from ..generics.views import BaseTypeSelectFormView
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
 from .utils import ServiceProvider, get_service_provider_config_form
+
+log = logging.getLogger("ocs.service_providers")
 
 
 class ServiceProviderMixin:
@@ -140,7 +145,18 @@ class CreateServiceProvider(
 
     @property
     def extra_context(self):
-        return {"active_tab": "manage-team", "title": self.provider_type.label}
+        context = {"active_tab": "manage-team", "title": self.provider_type.label}
+        obj = self.get_object()
+        if obj and isinstance(obj, VoiceProvider) and obj.type == VoiceProviderType.elevenlabs.value:
+            context["sync_voices_url"] = reverse(
+                "service_providers:sync_voices",
+                kwargs={
+                    "team_slug": self.request.team.slug,
+                    "provider_type": "voice",
+                    "pk": obj.pk,
+                },
+            )
+        return context
 
     @property
     def model(self):
@@ -170,6 +186,14 @@ class CreateServiceProvider(
         if file_formset:
             files = file_formset.save(self.request)
             instance.add_files(files)
+        if isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value:
+            try:
+                instance.sync_voices()
+            except Exception:
+                log.exception("Failed to sync voices for ElevenLabs provider %s", instance.pk)
+                messages.warning(
+                    self.request, "Provider saved, but voice sync failed. You can retry via the sync button."
+                )
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
@@ -238,3 +262,18 @@ def delete_llm_provider_model(request, team_slug: str, pk: int):
     except ValidationError as ex:
         return HttpResponseBadRequest(", ".join(ex.messages).encode("utf-8"))
     return HttpResponse()
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_voiceprovider", raise_exception=True)
+def sync_voices(request, team_slug: str, provider_type: str, pk: int):
+    provider = get_object_or_404(VoiceProvider, team=request.team, pk=pk)
+    try:
+        provider.sync_voices()
+        count = provider.syntheticvoice_set.count()
+        messages.success(request, f"Voices synced successfully. {count} voice(s) available.")
+    except Exception:
+        log.exception("Failed to sync voices for provider %s", pk)
+        messages.error(request, "Voice sync failed. Please check your API key and try again.")
+    return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)

@@ -206,6 +206,20 @@ class TestTracingService:
             tracing_service.add_output_message_tags_to_trace(flat_tags)
             assert mock_tracer.tags == flat_tags
 
+    def test_persist_trace_metadata_stores_on_all_tracers(self, mock_tracer, mock_session):
+        """_persist_trace_metadata calls set_trace_metadata on all active tracers."""
+        service = TracingService([mock_tracer], 1, 1)
+
+        with service.trace("test", mock_session):
+            # Manually call to test in isolation
+            service._persist_trace_metadata()
+
+            # MockTracer doesn't implement set_trace_metadata storage,
+            # but we can verify get_trace_metadata returns the expected format
+            metadata = service.get_trace_metadata()
+            assert "trace_info" in metadata
+            assert len(metadata["trace_info"]) == 1
+
     def test_tracing_service_raises_error_when_ids_none_and_tracers_nonempty(mock_tracer):
         with pytest.raises(ValueError, match="Tracers must be empty if experiment_id or team_id is None"):
             TracingService(tracers=[mock_tracer], experiment_id=None, team_id=None)

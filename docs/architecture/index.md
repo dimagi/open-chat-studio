@@ -6,6 +6,9 @@ hide:
 
 This section provides an overview of the Open Chat Studio architecture, explaining the core concepts and components that make up the system.
 
+For AI-generated architecture diagrams based on this GitHub repo, visit
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
+
 ## System Overview
 
 Open Chat Studio is built as a Django web application with a modular design. It consists of several Django apps that handle different aspects of the system.
@@ -20,48 +23,23 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 
 ## Key Concepts
 
-### Experiments
+[Concepts User Documentation](https://docs.openchatstudio.com/concepts/)
 
-Experiments are configurations for AI chat experiences. They include:
-- Prompts and LLM configurations
-- Channel connections
-- Data collection settings
-
-!!! note
-
-    The term 'Experiments' is a legacy term. On the user interface side, they are referred to as 'Chatbots'.
-
-### Channels
-
-Channels are communication interfaces that connect users to the chat system. These include:
-- Web chat
-- Slack
-- WhatsApp
-- Facebook Messenger
-- Custom integrations
-
-### Service Providers
-
-Service providers enable integration with external services:
-- LLM providers (OpenAI, Azure, etc.)
-- Voice providers
-- Authentication providers
-- Messaging providers
-- Tracing providers
-
-### Pipelines
-
-Pipelines allow for the creation of complex workflows with multiple nodes and processing steps.
+- **Experiments/Chatbots** - The term 'Experiments' is a legacy term. On the user interface side, they are referred to as ['Chatbots'](https://docs.openchatstudio.com/concepts/chatbots/). They are configurations for AI chat experiences. They include:
+  - Prompts and LLM configurations
+  - Channel connections
+  - Data collection settings
+- **Channels** - [Channels](https://docs.openchatstudio.com/concepts/channels/) are communication interfaces that connect users to the chat system. These include: Web chat, WhatsApp etc
+- **Service Providers** - Service providers enable integration with external services including LLMs, authentication, messaging, voice, tracing etc.
+- **Pipelines** - [Pipelines](https://docs.openchatstudio.com/concepts/pipelines/) allow for the creation of complex workflows with multiple nodes and processing steps.
 
 ## Project structure
 
-The project is organized into several Django apps, each responsible for a specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests. 
+The project is organized into several Django apps, each responsible for a specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests.
 
-### Django Templates
-Templates as well as static files are centralized in the `templates` and `assets` folders, respectively. Templates specific to an app should be placed in the `templates/{app_name}` directory.
+- **Django Templates** - Templates as well as static files are centralized in the `templates` and `assets` folders, respectively. Templates specific to an app should be placed in the `templates/{app_name}` directory.
 
-### Static Files
-The `assets` folder contains JavaScript, CSS. The `assets/styles` folder contains Tailwind CSS configurations, while the `assets/javascript` folder contains JavaScript modules. These files are processed and bundled using Webpack to create the final static assets served to users. Other static assets like images are placed directly in the `static/` folder.
+- **Static Files** - The `assets` folder contains JavaScript, CSS. The `assets/styles` folder contains Tailwind CSS configurations, while the `assets/javascript` folder contains JavaScript modules. These files are processed and bundled using Webpack to create the final static assets served to users. Other static assets like images are placed directly in the `static/` folder.
 
 ## Cross-Cutting Concerns
 
@@ -93,20 +71,20 @@ The frontend uses a combination of Django templates, Tailwind CSS, and JavaScrip
 - `assets/styles/`: CSS and Tailwind configurations
 - `assets/javascript/`: JavaScript modules
 
-## External services
+## Monitoring & Observability external services
 
-**[Sentry](https://sentry.io/)**
+### [Sentry](https://sentry.io/)
 
-- Purpose: Error reporting and tracking  
+- Purpose: Error reporting and tracking
 - Used for: Identifying and debugging production issues
 
-**[Task Badger](https://taskbadger.net/)**  
-- 
-- Purpose: Celery task monitoring  
+### [Task Badger](https://taskbadger.net/)
+
+- Purpose: Celery task monitoring
 - Used for: Monitoring asynchronous task execution and performance
 
-**[BetterStack](https://betterstack.com/)**
+### [BetterStack](https://betterstack.com/)
 
-- Purpose: Uptime monitoring and status page  
-- Status Page: [status.openchatstudio.com](https://status.openchatstudio.com/)  
+- Purpose: Uptime monitoring and status page
+- Status Page: [status.openchatstudio.com](https://status.openchatstudio.com/)
 - Used for: Monitoring system availability and communicating status to users

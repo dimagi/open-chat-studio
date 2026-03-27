@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
-from apps.teams.backends import EXPERIMENT_ADMIN_GROUP, add_user_to_team
+from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -89,7 +89,7 @@ def test_only_experiments_from_the_scoped_team_is_returned():
     team2 = experiment_team_2.team
 
     user = team1.members.first()
-    add_user_to_team(team2, user, [EXPERIMENT_ADMIN_GROUP])
+    add_user_to_team(team2, user, [CHATBOT_ADMIN_GROUP])
 
     client_team_1 = ApiTestClient(user, team1)
     client_team_2 = ApiTestClient(user, team2)

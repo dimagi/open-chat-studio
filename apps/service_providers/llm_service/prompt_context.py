@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
@@ -188,6 +189,14 @@ class ParticipantDataProxy:
         self._participant_data = pipeline_state.setdefault("participant_data", {})
         self._scheduled_messages = None
 
+    @staticmethod
+    def _ensure_json_serializable(value: Any) -> None:
+        """Raise ValueError if value is not JSON serializable."""
+        try:
+            json.dumps(value)
+        except (TypeError, ValueError, OverflowError) as e:
+            raise ValueError(f"Value is not JSON serializable: {e}") from e
+
     def get(self):
         """Returns the current participant's data as a dictionary."""
         global_data = self.session.participant.global_data
@@ -198,10 +207,12 @@ class ParticipantDataProxy:
         This will only overwrite any matching keys."""
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
+        self._ensure_json_serializable(data)
         self._participant_data.update(data)
 
     def set_key(self, key: str, value: Any):
         """Set a single key in the participant data."""
+        self._ensure_json_serializable(value)
         self._participant_data[key] = value
 
     def append_to_key(self, key: str, value: Any) -> list[Any]:
