@@ -64,8 +64,6 @@ def can_send_on_slack(content_type: str, content_size: int) -> SendabilityResult
     if not content_type or not content_size:
         return SendabilityResult(False, "File type or size unknown")
 
-    # Hardcoded to match settings.MAX_FILE_SIZE_MB (50). Kept as a constant here
-    # rather than importing settings so this module stays pure/testable without Django.
     limit = 50 * MB
     if content_type.startswith(("image/", "video/", "audio/", "application/")):
         if content_size <= limit:
