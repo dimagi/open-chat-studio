@@ -806,8 +806,6 @@ SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_ke
 # Document Management
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
-# NOTE: apps/service_providers/file_limits.py hardcodes this value (50 * MB) to stay pure
-# (no Django imports). Update both locations if this limit changes.
 MAX_FILE_SIZE_MB = 50
 EMBEDDING_VECTOR_SIZE = 1024
 SUPPORTED_FILE_TYPES = {
