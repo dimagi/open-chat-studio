@@ -75,7 +75,7 @@ def can_send_on_slack(content_type: str, content_size: int) -> SendabilityResult
     return SendabilityResult(False, f"Unsupported file type '{content_type}' for Slack")
 
 
-CHANNEL_CHECKS: dict[str, Callable[[str, int], SendabilityResult]] = {
+FILE_SENDABILITY_CHECKERS: dict[str, Callable[[str, int], SendabilityResult]] = {
     "whatsapp": can_send_on_whatsapp,
     "telegram": can_send_on_telegram,
     "slack": can_send_on_slack,

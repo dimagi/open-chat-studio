@@ -1,7 +1,7 @@
 import pytest
 
 from apps.service_providers.file_limits import (
-    CHANNEL_CHECKS,
+    FILE_SENDABILITY_CHECKERS,
     SendabilityResult,
     can_send_on_slack,
     can_send_on_telegram,
@@ -134,12 +134,12 @@ class TestCanSendOnSlack:
 
 
 class TestChannelChecksRegistry:
-    """Tests for the CHANNEL_CHECKS registry."""
+    """Tests for the FILE_SENDABILITY_CHECKERS registry."""
 
     def test_registry_contains_expected_channels(self):
-        assert set(CHANNEL_CHECKS.keys()) == {"whatsapp", "telegram", "slack"}
+        assert set(FILE_SENDABILITY_CHECKERS.keys()) == {"whatsapp", "telegram", "slack"}
 
     def test_registry_values_are_callable(self):
-        for name, func in CHANNEL_CHECKS.items():
+        for name, func in FILE_SENDABILITY_CHECKERS.items():
             result = func("image/jpeg", 1 * MB)
             assert isinstance(result, SendabilityResult), f"{name} checker returned wrong type"
