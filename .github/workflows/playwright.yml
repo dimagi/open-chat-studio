@@ -1,0 +1,79 @@
+name: Playwright Tests
+permissions:
+  contents: read
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_DB: open_chat_studio
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    env:
+      DJANGO_DATABASE_USER: postgres
+      DJANGO_DATABASE_PASSWORD: postgres_password
+      SECRET_KEY: secret-test-key
+      REDIS_URL: redis://localhost:6379
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    - uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+    - name: Install Python dependencies
+      run: |
+        uv venv
+        uv sync --locked --dev
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+    - name: Install Node dependencies
+      run: npm ci
+    - name: Build frontend assets
+      run: npm run build
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+    - name: Run migrations
+      run: uv run python manage.py migrate
+    - name: Seed database
+      run: uv run python manage.py bootstrap_data --email tester@playwright.com --password My0riginalP@ssw0rd! --team-slug agent --team-name Agent --reset
+    - name: Run Playwright tests
+      run: npx playwright test
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30

@@ -141,10 +141,10 @@ def _check_node_version(c: Context):
 
 
 @task
-def ngrok_url(c: Context):
+def ngrok_url(c: Context, port=8000):
     """Start ngrok tunnel for local development and return public URL."""
     #  You need to have ngrok installed on your system
-    c.run("ngrok http 8000", echo=True, asynchronous=True)
+    c.run(f"ngrok http {port}", echo=True, asynchronous=True)
     public_url = None
     tries = 4
     while tries > 0:
@@ -176,16 +176,19 @@ def _get_portless_name(c: Context) -> str:
 
 
 @task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
-def runserver(c: Context, public=False):
+def runserver(c: Context, public=False, port=None):
     """Start Django development server (alias: inv django)."""
     has_portless = c.run("which portless", hide=True, warn=True).ok
-    if has_portless:
+
+    if port:
+        runserver_command = f"python manage.py runserver 0.0.0.0:{port}"
+    elif has_portless:
         portless_name = _get_portless_name(c)
         runserver_command = f"portless {portless_name} uv run manage.py runserver"
     else:
         runserver_command = "python manage.py runserver"
     if public:
-        public_url = ngrok_url(c)
+        public_url = ngrok_url(c, port=port or 8000)
         env_vars = [
             "CSRF_TRUSTED_ORIGINS='https://*.ngrok.io,https://*.ngrok-free.app'",
             f"SITE_URL_ROOT='{public_url}'",

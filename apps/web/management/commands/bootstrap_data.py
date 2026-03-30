@@ -10,11 +10,12 @@ Usage:
     python manage.py bootstrap_data --skip-sample-data  # Only create user/team
 """
 
+import os
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand
 
-from apps.assistants.models import OpenAiAssistant
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.documents.models import Collection
 from apps.experiments.models import Experiment, ExperimentSession, Participant
@@ -23,7 +24,7 @@ from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
-from apps.teams.models import Membership, Team
+from apps.teams.models import Flag, Membership, Team
 
 
 class Command(BaseCommand):
@@ -59,6 +60,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Only create user and team, skip sample data (chatbots, files, etc.)",
         )
+        parser.add_argument(
+            "--reset",
+            action="store_true",
+            help="Delete the existing team and all its data before recreating it.",
+        )
+        parser.add_argument(
+            "--superuser",
+            action="store_true",
+            help="Make the test user a Django superuser.",
+        )
 
     def handle(self, *args, **options):
         email = options["email"]
@@ -66,13 +77,18 @@ class Command(BaseCommand):
         team_slug = options["team_slug"]
         team_name = options["team_name"]
         skip_sample_data = options["skip_sample_data"]
+        reset = options["reset"]
+        superuser = options["superuser"]
 
         self.stdout.write("=" * 50)
         self.stdout.write("Seeding development data...")
         self.stdout.write("=" * 50)
 
+        if reset:
+            self._reset_team(team_slug)
+
         # Create user and team
-        user, team = self._create_user_and_team(email, password, team_slug, team_name)
+        user, team = self._create_user_and_team(email, password, team_slug, team_name, superuser=superuser)
 
         if not skip_sample_data:
             self._seed_sample_data(user, team)
@@ -89,7 +105,16 @@ class Command(BaseCommand):
             self.stdout.write("To add sample data later, run:")
             self.stdout.write(f"  python manage.py bootstrap_data --email {email} --team-slug {team_slug}")
 
-    def _create_user_and_team(self, email: str, password: str, team_slug: str, team_name: str):
+    def _reset_team(self, team_slug: str):
+        """Delete the team and all its associated data (cascades via FK)."""
+        try:
+            team = Team.objects.get(slug=team_slug)
+            team.delete()
+            self.stdout.write(self.style.SUCCESS(f"Deleted team '{team_slug}' and all associated data"))
+        except Team.DoesNotExist:
+            self.stdout.write(self.style.WARNING(f"Team '{team_slug}' does not exist, nothing to reset"))
+
+    def _create_user_and_team(self, email: str, password: str, team_slug: str, team_name: str, superuser: bool = False):
         """Create test user and team with owner permissions."""
         User = get_user_model()
 
@@ -103,12 +128,18 @@ class Command(BaseCommand):
         # Create or update user
         user, created = User.objects.get_or_create(username=email, defaults={"email": email})
         user.set_password(password)
+        if superuser:
+            user.is_superuser = True
+            user.is_staff = True
         user.save()
 
         if created:
             self.stdout.write(self.style.SUCCESS(f"Created user: {email}"))
         else:
             self.stdout.write(self.style.WARNING(f"User already exists: {email} (password updated)"))
+
+        if superuser:
+            self.stdout.write(self.style.SUCCESS(f"User {email} is now a superuser"))
 
         # Create or get team
         team, created = Team.objects.get_or_create(slug=team_slug, defaults={"name": team_name})
@@ -127,6 +158,13 @@ class Command(BaseCommand):
             membership.groups.set(backends.get_team_owner_groups())
             self.stdout.write(self.style.WARNING("User already member of team (updated to owner)"))
 
+        # Enable feature flags for the team
+        for flag_name in ["flag_evaluations", "flag_human_annotations"]:
+            flag, created = Flag.objects.get_or_create(name=flag_name)
+            flag.teams.add(team)
+            flag.flush()
+            self._log_created("feature flag", flag_name, created)
+
         return user, team
 
     def _seed_sample_data(self, user, team):
@@ -135,12 +173,34 @@ class Command(BaseCommand):
         # LLM Provider and Model
         self.stdout.write("")
         self.stdout.write("--- Creating LLM Provider ---")
-        llm_provider, created = LlmProvider.objects.get_or_create(
-            name="OpenAI", team=team, defaults={"type": "openai", "config": {"openai_api_key": "test-key"}}
-        )
-        self._log_created("LLM provider", llm_provider.name, created)
+        if openai_api_key := os.environ.get("OPENAI_API_KEY", None):
+            llm_provider, created = LlmProvider.objects.get_or_create(
+                name="Working OpenAI",
+                team=team,
+                defaults={
+                    "type": "openai",
+                    "config": {"openai_api_key": openai_api_key, "openai_api_base": "", "openai_organization": ""},
+                },
+            )
+            if not created:
+                llm_provider.config = {
+                    "openai_api_key": openai_api_key,
+                    "openai_api_base": "",
+                    "openai_organization": "",
+                }
+                llm_provider.save()
+                self.stdout.write(self.style.SUCCESS("  Updated LLM provider with OPENAI_KEY from environment"))
+            self._log_created("LLM provider", llm_provider.name, created)
 
-        llm_model = get_first_llm_provider_model(llm_provider, team.id)
+        non_working_llm_provider, created = LlmProvider.objects.get_or_create(
+            name="Non-working OpenAI",
+            team=team,
+            defaults={
+                "type": "openai",
+                "config": {"openai_api_key": "sk-123", "openai_api_base": "", "openai_organization": ""},
+            },
+        )
+        llm_model = get_first_llm_provider_model(non_working_llm_provider, team.id)
 
         # Pipelines
         self.stdout.write("")
@@ -155,7 +215,7 @@ class Command(BaseCommand):
         pipelines = []
         for name in pipeline_names:
             pipeline = Pipeline.create_default(
-                team=team, name=name, llm_provider_id=llm_provider.id, llm_provider_model=llm_model
+                team=team, name=name, llm_provider_id=non_working_llm_provider.id, llm_provider_model=llm_model
             )
             self._log_created("pipeline", name, True)
             pipelines.append(pipeline)
@@ -181,29 +241,6 @@ class Command(BaseCommand):
                 },
             )
             self._log_created("experiment", name, created)
-
-        # Assistants
-        self.stdout.write("")
-        self.stdout.write("--- Creating Assistants ---")
-        assistant_names = [
-            "Code Review Assistant",
-            "Documentation Writer",
-            "Bug Triage Assistant",
-        ]
-
-        for i, name in enumerate(assistant_names, 1):
-            assistant, created = OpenAiAssistant.objects.get_or_create(
-                team=team,
-                name=name,
-                defaults={
-                    "assistant_id": f"test_asst_{i}",
-                    "instructions": f"You are a {name.lower()} that helps developers.",
-                    "llm_provider": llm_provider,
-                    "llm_provider_model": llm_model,
-                    "temperature": 0.8,
-                },
-            )
-            self._log_created("assistant", name, created)
 
         # Participants with Sessions
         self.stdout.write("")
