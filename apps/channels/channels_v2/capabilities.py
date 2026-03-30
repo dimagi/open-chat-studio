@@ -17,7 +17,7 @@ class ChannelCapabilities:
     """Describes what a channel can do. Populated at runtime — either from
     static ClassVars (Telegram) or from the messaging service (WhatsApp)."""
 
-    supports_voice: bool = False
+    supports_voice_replies: bool = False
     supports_files: bool = False
     supports_conversational_consent: bool = True
     supports_static_triggers: bool = True

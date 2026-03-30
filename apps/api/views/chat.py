@@ -24,10 +24,10 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
+from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
-from apps.chat.channels import ApiChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response

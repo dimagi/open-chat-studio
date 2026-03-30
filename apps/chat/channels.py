@@ -329,7 +329,10 @@ class ChannelBase(ABC):
         elif platform == "facebook":
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
-            channel_cls = ApiChannel
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
+            from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
+
+            channel_cls = NewApiChannel
         elif platform == "sureadhere":
             channel_cls = SureAdhereChannel
         elif platform == "slack":
@@ -339,10 +342,13 @@ class ChannelBase(ABC):
         # elif platform == "evaluations":
         #  evals channel can't be called this way
         elif platform == "embedded_widget":
-            channel_cls = ApiChannel
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
+            from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
+
+            channel_cls = NewApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
-        return channel_cls
+        return channel_cls  # ty: ignore[invalid-return-type]
 
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> ChannelBase:
@@ -1277,6 +1283,7 @@ class FacebookMessengerChannel(ChannelBase):
         )
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.api_channel.ApiChannel
 class ApiChannel(ChannelBase):
     """Message Handler for the API"""
 

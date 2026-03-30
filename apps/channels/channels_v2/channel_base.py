@@ -134,7 +134,7 @@ class ChannelBase(ABC):
     def _get_capabilities(self) -> ChannelCapabilities:
         """Default capabilities from ClassVars. Override for runtime capabilities."""
         return ChannelCapabilities(
-            supports_voice=self.voice_replies_supported,
+            supports_voice_replies=self.voice_replies_supported,
             supports_files=getattr(self, "supports_multimedia", False),
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,

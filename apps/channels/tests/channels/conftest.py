@@ -75,7 +75,7 @@ class StubChannel(ChannelBase):
 
     def _get_capabilities(self):
         return self._override_capabilities or ChannelCapabilities(
-            supports_voice=True,
+            supports_voice_replies=True,
             supports_files=False,
             supports_conversational_consent=True,
             supports_static_triggers=True,
@@ -109,7 +109,7 @@ def make_trace_service():
 def make_capabilities(**overrides):
     """Create a default ChannelCapabilities, overridable with kwargs."""
     defaults = {
-        "supports_voice": True,
+        "supports_voice_replies": True,
         "supports_files": False,
         "supports_conversational_consent": True,
         "supports_static_triggers": True,

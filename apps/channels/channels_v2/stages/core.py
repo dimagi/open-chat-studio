@@ -112,6 +112,7 @@ class SessionResolutionStage(ProcessingStage):
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
             participant_identifier=ctx.participant_identifier,
+            participant_user=ctx.channel_context.get("participant_user"),
             session_status=SessionStatus.SETUP,
         )
 
@@ -431,7 +432,7 @@ class ResponseFormattingStage(ProcessingStage):
 
         # Determine voice vs text reply
         should_reply_voice = False
-        if ctx.capabilities.supports_voice and ctx.experiment.synthetic_voice:
+        if ctx.capabilities.supports_voice_replies and ctx.experiment.synthetic_voice:
             voice_config = ctx.experiment.voice_response_behaviour
             if (
                 voice_config == VoiceResponseBehaviours.ALWAYS
