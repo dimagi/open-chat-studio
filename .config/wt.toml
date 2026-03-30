@@ -1,3 +1,12 @@
 # Worktrunk Project Configuration
-[post-create]
+[pre-start]
 bootstrap = ".claude/hooks/setup-env.sh"
+database-url = "echo 'DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{ branch | sanitize_db }}' >> .env"
+create-database = "docker exec postgres psql -U postgres -c 'CREATE DATABASE {{ branch | sanitize_db }}'"
+
+[post-start]
+compile-styles = "npm run dev"
+migrate-and-bootstrap = "uv run python manage.py migrate && uv run python manage.py bootstrap_data --email dev@gmail.com --password letmein"
+
+[pre-remove]
+db-remove = "docker exec postgres psql -U postgres -c \"DROP DATABASE IF EXISTS \\\"{{ branch | sanitize_db }}\\\" WITH (FORCE)\""

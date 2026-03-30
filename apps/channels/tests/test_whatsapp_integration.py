@@ -10,6 +10,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -119,6 +120,10 @@ class TestTwilio:
         channel = WhatsappChannel.from_experiment_session(session)
         file1 = FileFactory.create(name="f1", content_type="image/jpeg")
         file2 = FileFactory.create(name="f2", content_type="image/jpeg")
+        # Ensure files have a non-zero content_size so can_send_file() considers them sendable
+        File.objects.filter(pk__in=[file1.pk, file2.pk]).update(content_size=1024)
+        file1.refresh_from_db()
+        file2.refresh_from_db()
 
         channel.send_message_to_user("Hi there", [file1, file2])
         message_call = twilio_client_mock.messages.create.mock_calls[0]
