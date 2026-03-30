@@ -67,8 +67,9 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         if generation_experiment is not None:
             session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
 
+        evaluators = {e.id: e for e in Evaluator.objects.filter(id__in=evaluator_ids)}
         for evaluator_id in evaluator_ids:
-            evaluator = Evaluator.objects.get(id=evaluator_id)
+            evaluator = evaluators[evaluator_id]
             try:
                 result = evaluator.run(message, bot_response or "")
                 EvaluationResult.objects.create(
