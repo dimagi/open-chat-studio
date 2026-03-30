@@ -202,13 +202,12 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
     def get_queryset(self):
         # Validate queue ownership — pk is in the URL for namespacing but not used for filtering.
         get_object_or_404(AnnotationQueue, id=self.kwargs["pk"], team=self.request.team)
-        queryset = _get_base_session_queryset(self.request)
+        queryset = _get_available_sessions_queryset(self.request, self.kwargs["pk"])
         message_count_sq = (
             ChatMessage.objects.filter(chat=OuterRef("chat")).values("chat").annotate(c=Count("id")).values("c")
         )
         return (
             queryset.annotate(message_count=Coalesce(Subquery(message_count_sq), 0))
-            .filter(message_count__gt=0)
             .select_related("team", "participant__user", "chat", "experiment")
             .order_by("-last_activity_at")
         )
