@@ -1,6 +1,7 @@
 import contextlib
 import csv
 import json
+import random
 import re
 import uuid
 
@@ -171,13 +172,22 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
         )
 
 
-def _get_base_session_queryset(request):
+def _get_base_session_queryset(request, filter_params=None):
     """Returns a team-scoped, filtered session queryset with no annotations or related selection."""
     timezone = request.session.get("detected_tz", None)
-    filter_params = FilterParams.from_request(request)
+    if filter_params is None:
+        filter_params = FilterParams.from_request(request)
     queryset = ExperimentSession.objects.filter(team=request.team)
     session_filter = ExperimentSessionFilter()
     return session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
+
+
+def _get_available_sessions_queryset(request, queue_pk, filter_params=None):
+    """Return filtered, team-scoped sessions excluding those already in the queue and with no messages."""
+    queryset = _get_base_session_queryset(request, filter_params=filter_params)
+    queryset = queryset.exclude(id__in=AnnotationItem.objects.filter(queue_id=queue_pk).values("session_id"))
+    queryset = queryset.filter(Exists(ChatMessage.objects.filter(chat=OuterRef("chat"))))
+    return queryset
 
 
 class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
@@ -207,19 +217,16 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
 @login_and_team_required
 @permission_required("human_annotations.add_annotationitem", raise_exception=True)
 def annotation_queue_sessions_json(request, team_slug: str, pk: int):
-    """Returns filtered session external_ids as JSON for the Alpine session selector.
+    """Returns filtered session external_ids and total count as JSON for the Alpine session selector.
 
     pk is validated for queue ownership but not used for filtering — returns all matching
     team sessions excluding those already in the queue.
     """
     # Validate queue ownership
     get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-    queryset = _get_base_session_queryset(request)
-    # Exclude sessions already added to this queue so the count reflects available sessions.
-    queryset = queryset.exclude(id__in=AnnotationItem.objects.filter(queue_id=pk).values("session_id"))
-    queryset = queryset.filter(Exists(ChatMessage.objects.filter(chat=OuterRef("chat"))))
+    queryset = _get_available_sessions_queryset(request, pk)
     session_keys = list(queryset.values_list("external_id", flat=True))
-    return JsonResponse(session_keys, safe=False)
+    return JsonResponse({"ids": session_keys, "total": len(session_keys)})
 
 
 class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -250,20 +257,19 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
 
     def post(self, request, team_slug: str, pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        session_ids_raw = request.POST.get("session_ids", "")
-        # Silently skip non-UUID values to avoid ORM errors from tampered form data.
-        external_ids = []
-        for s in session_ids_raw.split(","):
-            s = s.strip()
-            if s:
-                with contextlib.suppress(ValueError):
-                    external_ids.append(str(uuid.UUID(s)))
+        mode = request.POST.get("mode", "selected")
 
-        if not external_ids:
+        if mode == "all_matching":
+            sessions = self._get_all_matching_sessions(request, pk)
+        elif mode == "sample":
+            sessions = self._get_sampled_sessions(request, pk)
+        else:
+            sessions = self._get_selected_sessions(request)
+
+        if not sessions:
             messages.error(request, "No sessions selected.")
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
-        sessions = list(ExperimentSession.objects.filter(external_id__in=external_ids, team=request.team))
         existing_session_ids = set(
             AnnotationItem.objects.filter(
                 queue=queue,
@@ -289,6 +295,45 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
             msg += f" Skipped {skipped} duplicates."
         messages.success(request, msg)
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+
+    def _get_selected_sessions(self, request):
+        """Parse explicitly selected session IDs from the form."""
+        session_ids_raw = request.POST.get("session_ids", "")
+        external_ids = []
+        for s in session_ids_raw.split(","):
+            s = s.strip()
+            if s:
+                with contextlib.suppress(ValueError):
+                    external_ids.append(str(uuid.UUID(s)))
+        if not external_ids:
+            return []
+        return list(ExperimentSession.objects.filter(external_id__in=external_ids, team=request.team))
+
+    def _get_all_matching_sessions(self, request, queue_pk):
+        """Return all sessions matching the current filters."""
+        filter_params = FilterParams(request.POST)
+        return list(_get_available_sessions_queryset(request, queue_pk, filter_params=filter_params))
+
+    def _get_sampled_sessions(self, request, queue_pk):
+        """Return a random sample of sessions matching the current filters."""
+        try:
+            sample_percent = int(request.POST.get("sample_percent", "20"))
+        except (ValueError, TypeError):
+            sample_percent = 20
+        sample_percent = max(1, min(100, sample_percent))
+
+        filter_params = FilterParams(request.POST)
+        all_ids = list(
+            _get_available_sessions_queryset(request, queue_pk, filter_params=filter_params).values_list(
+                "id", flat=True
+            )
+        )
+        if not all_ids:
+            return []
+
+        sample_count = max(1, round(len(all_ids) * sample_percent / 100))
+        sampled_ids = random.sample(all_ids, min(sample_count, len(all_ids)))
+        return list(ExperimentSession.objects.filter(id__in=sampled_ids))
 
 
 class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
