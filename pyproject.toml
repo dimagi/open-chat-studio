@@ -187,7 +187,7 @@ profile="django"
 format_attribute_template_tags=true
 use_gitignore=true
 indent=2
-ignore="H030,H031,H021,H006,H013,H014,T003,H025"
+ignore="H030,H031,H021,H006,H013,H014,T003"
 
 [tool.ty]
 

@@ -1,6 +1,7 @@
 {% extends "generic/object_form.html" %}
 {% load form_tags i18n %}
 
+{# djlint:off H025 #}
 {% block form %}
   <div x-data="evaluatorForm">
     {{ form.non_field_errors }}
@@ -464,6 +465,7 @@
     <input type="hidden" name="params" x-model="paramsJson">
   </div>
 {% endblock form %}
+{# djlint:on #}
 
 {% block page_js %}
   {{ block.super }}
