@@ -882,3 +882,77 @@ def create_dataset_from_sessions_task(
         message = "An error occurred while cloning messages from sessions"
         _save_dataset_error(dataset, message)
         return {"success": False, "error": message}
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def create_session_mode_dataset_task(self, dataset_id, team_id, session_ids):
+    """
+    Create session-mode evaluation messages from sessions asynchronously.
+
+    Each session becomes one EvaluationMessage with the full conversation as history.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to populate
+        team_id: ID of the team
+        session_ids: List of session external IDs
+    """
+    from apps.evaluations.utils import make_session_evaluation_messages  # noqa: PLC0415
+
+    progress_recorder = ProgressRecorder(self)
+    dataset = None
+
+    try:
+        dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
+    except EvaluationDataset.DoesNotExist:
+        logger.error(f"Dataset {dataset_id} not found for team {team_id}")
+        return {"success": False, "error": "Dataset not found"}
+
+    dataset.status = DatasetCreationStatus.PROCESSING
+    dataset.save(update_fields=["status"])
+
+    try:
+        progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
+
+        with current_team(dataset.team):
+            evaluation_messages = make_session_evaluation_messages(session_ids)
+
+            progress_recorder.set_progress(
+                40, 100, f"Found {len(evaluation_messages)} sessions, checking for duplicates..."
+            )
+
+            # Deduplicate by metadata.session_id
+            existing_session_ids = set()
+            for meta in dataset.messages.values_list("metadata", flat=True):
+                if meta and "session_id" in meta:
+                    existing_session_ids.add(meta["session_id"])
+
+            messages_to_add = [
+                msg for msg in evaluation_messages if msg.metadata.get("session_id") not in existing_session_ids
+            ]
+
+            if not messages_to_add:
+                dataset.status = DatasetCreationStatus.COMPLETED
+                dataset.job_id = ""
+                dataset.save(update_fields=["status", "job_id"])
+                progress_recorder.set_progress(100, 100, "Clone complete - no new sessions to add")
+                return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
+
+            progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new session messages...")
+
+            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
+            dataset.messages.add(*created_messages)
+
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.job_id = ""
+            dataset.save(update_fields=["status", "job_id"])
+
+            progress_recorder.set_progress(100, 100, "Clone complete")
+
+            duplicates_skipped = len(evaluation_messages) - len(messages_to_add)
+            return {"success": True, "created_count": len(created_messages), "duplicates_skipped": duplicates_skipped}
+
+    except Exception as e:
+        logger.exception(f"Error in session-mode clone task for dataset {dataset_id}: {e}")
+        message = "An error occurred while creating session-mode messages"
+        _save_dataset_error(dataset, message)
+        return {"success": False, "error": message}
