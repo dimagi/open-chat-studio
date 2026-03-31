@@ -1,7 +1,6 @@
 import inspect
 import json
 import re
-import uuid
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
@@ -270,7 +269,7 @@ def make_session_evaluation_messages(session_external_ids: list[str]) -> list["E
             participant_data=participant_data,
             session_state=session_state,
             metadata={
-                "session_id": uuid.UUID(session_id) if isinstance(session_id, str) else session_id,
+                "session_id": str(session_id),
                 "experiment_id": str(messages[0].experiment_public_id),
                 "created_mode": "clone",
             },

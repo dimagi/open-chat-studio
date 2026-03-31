@@ -108,7 +108,7 @@ class TestMakeSessionEvaluationMessages:
         assert msg.history[3]["content"] == "I'm doing well!"
         assert msg.participant_data == {"name": "Alice", "visits": 3}
         assert msg.session_state == {"step": 3}
-        assert msg.metadata["session_id"] == session.external_id
+        assert msg.metadata["session_id"] == str(session.external_id)
         assert msg.metadata["experiment_id"] == str(session.experiment.public_id)
         assert msg.metadata["created_mode"] == "clone"
         assert msg.input_chat_message is None
@@ -224,8 +224,8 @@ class TestMakeSessionEvaluationMessages:
 
         assert len(result) == 2
         session_ids = {msg.metadata["session_id"] for msg in result}
-        assert session_1.external_id in session_ids
-        assert session_2.external_id in session_ids
+        assert str(session_1.external_id) in session_ids
+        assert str(session_2.external_id) in session_ids
 
     def test_metadata_structure(self):
         """Verify metadata has session_id, experiment_id, and created_mode."""
@@ -239,9 +239,41 @@ class TestMakeSessionEvaluationMessages:
         result = make_session_evaluation_messages([session.external_id])
 
         metadata = result[0].metadata
-        assert metadata["session_id"] == session.external_id
+        assert metadata["session_id"] == str(session.external_id)
         assert metadata["experiment_id"] == str(session.experiment.public_id)
         assert metadata["created_mode"] == "clone"
+
+
+@pytest.mark.django_db()
+class TestSessionModeDuplicateDetection:
+    def test_duplicate_session_skipped(self):
+        """Re-importing the same session should be skipped via metadata.session_id."""
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        chat = session.chat
+
+        ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+        ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Hi!")
+
+        # First import
+        messages = make_session_evaluation_messages([session.external_id])
+        assert len(messages) == 1
+
+        created = EvaluationMessage.objects.bulk_create(messages)
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session", messages=created)
+
+        # Second import — same session
+        messages_2 = make_session_evaluation_messages([session.external_id])
+        assert len(messages_2) == 1
+
+        # Dedup check (simulating what the task does)
+        existing_session_ids = set()
+        for meta in dataset.messages.values_list("metadata", flat=True):
+            if meta and "session_id" in meta:
+                existing_session_ids.add(meta["session_id"])
+
+        new_messages = [msg for msg in messages_2 if msg.metadata.get("session_id") not in existing_session_ids]
+        assert len(new_messages) == 0
 
 
 @pytest.mark.django_db()
