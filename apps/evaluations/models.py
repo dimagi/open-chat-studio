@@ -52,12 +52,23 @@ class ExperimentVersionSelection(models.TextChoices):
     LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
+class EvaluationMode(models.TextChoices):
+    MESSAGE = "message", "Message"
+    SESSION = "session", "Session"
+
+
 class Evaluator(BaseTeamModel):
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=128)  # The evaluator type, should be one from evaluators.py
     params = SanitizedJSONField(
         default=dict
     )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
+    evaluation_mode = models.CharField(
+        max_length=10,
+        choices=EvaluationMode.choices,
+        default=EvaluationMode.MESSAGE,
+        help_text="Message mode evaluates individual message pairs; Session mode evaluates entire conversations",
+    )
 
     def __str__(self):
         try:
@@ -200,6 +211,12 @@ class EvaluationMessage(BaseModel):
 
 class EvaluationDataset(BaseTeamModel):
     name = models.CharField(max_length=255)
+    evaluation_mode = models.CharField(
+        max_length=10,
+        choices=EvaluationMode.choices,
+        default=EvaluationMode.MESSAGE,
+        help_text="Message mode stores individual message pairs; Session mode stores entire conversations",
+    )
     messages = models.ManyToManyField(EvaluationMessage)
     status = models.CharField(
         max_length=20,
