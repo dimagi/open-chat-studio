@@ -1,6 +1,7 @@
 import inspect
 import json
 import re
+import uuid
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
@@ -211,6 +212,74 @@ def _clean_field_name(field_name):
     field_name = re.sub(r"_+", "_", field_name).strip("_")
 
     return field_name or "context_variable"
+
+
+def make_session_evaluation_messages(session_external_ids: list[str]) -> list["EvaluationMessage"]:
+    """Create one EvaluationMessage per session, with the full conversation as history.
+
+    Unlike make_evaluation_messages_from_sessions (which creates one message per human-AI pair),
+    this creates a single message per session for holistic session evaluation.
+    """
+    from apps.evaluations.models import EvaluationMessage  # noqa: PLC0415
+
+    if not session_external_ids:
+        return []
+
+    all_messages = list(
+        ChatMessage.objects.filter(
+            chat__experiment_session__external_id__in=session_external_ids,
+        )
+        .annotate(
+            session_external_id=F("chat__experiment_session__external_id"),
+            experiment_public_id=F("chat__experiment_session__experiment__public_id"),
+            trace_participant_data=F("input_message_trace__participant_data"),
+            trace_session_state=F("input_message_trace__session_state"),
+        )
+        .order_by("chat__experiment_session__created_at", "created_at")
+    )
+
+    # Group messages by session
+    sessions: dict[str, list] = {}
+    for msg in all_messages:
+        sessions.setdefault(msg.session_external_id, []).append(msg)
+
+    result = []
+    for session_id, messages in sessions.items():
+        history = [
+            {
+                "message_type": msg.message_type,
+                "content": msg.content,
+                "summary": getattr(msg, "summary", None),
+            }
+            for msg in messages
+        ]
+
+        # Get participant_data and session_state from the last AI message's trace
+        participant_data = {}
+        session_state = {}
+        for msg in reversed(messages):
+            if msg.message_type == ChatMessageType.AI:
+                participant_data = msg.trace_participant_data or {}
+                session_state = msg.trace_session_state or {}
+                break
+
+        eval_message = EvaluationMessage(
+            input={},
+            output={},
+            history=history,
+            participant_data=participant_data,
+            session_state=session_state,
+            metadata={
+                "session_id": uuid.UUID(session_id) if isinstance(session_id, str) else session_id,
+                "experiment_id": str(messages[0].experiment_public_id),
+                "created_mode": "clone",
+            },
+            input_chat_message=None,
+            expected_output_chat_message=None,
+        )
+        result.append(eval_message)
+
+    return result
 
 
 def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:
