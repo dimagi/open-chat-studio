@@ -4,6 +4,7 @@
 {% block form %}
   {{ form.non_field_errors }}
   {% render_form_fields form "name" %}
+  {% render_form_fields form "evaluation_mode" %}
 
   <div x-data="datasetModeSelectorBuilder()" x-init="init()">
     {% render_form_fields form "mode" "session_ids" "filtered_session_ids" "messages_json" "column_mapping" "csv_file_id" %}
@@ -11,6 +12,12 @@
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
     </div>
     <div x-show="loaded" x-cloak>
+      <template x-if="evaluationMode === 'session'">
+          <div class="alert alert-info mt-2 mb-2">
+              <i class="fa-solid fa-info-circle"></i>
+              <span>{% translate "Session-mode datasets can only be created by cloning from sessions." %}</span>
+          </div>
+      </template>
     <!-- Clone from sessions mode -->
       <div x-show="mode === 'clone'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
@@ -46,7 +53,7 @@
       </div>
 
     <!-- Manual creation mode -->
-      <div x-show="mode === 'manual'" class="w-full mt-4">
+      <div x-show="mode === 'manual' && evaluationMode !== 'session'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
           <h3 class="text-lg font-semibold mb-4">{% translate "Manually Add Message Pairs" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
@@ -82,7 +89,7 @@
       </div>
 
     <!-- CSV upload mode -->
-      <div x-show="mode === 'csv'" class="w-full mt-4">
+      <div x-show="mode === 'csv' && evaluationMode !== 'session'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
           <h3 class="text-lg font-semibold mb-4">{% translate "Upload CSV File" %}</h3>
           <p class="text-sm text-gray-600 mb-4">
@@ -289,6 +296,7 @@
       return {
         ...baseComponent,
         // Add create-specific properties
+        evaluationMode: 'message',
         messages: [],
         messagesJsonString: '[]',
 
@@ -348,6 +356,22 @@
             const form = document.getElementById('manual-message-form');
             window.SiteJS.editors.initJsonEditors(form);
           });
+
+          // Track evaluation mode
+          const evaluationModeRadios = document.querySelectorAll('input[name="evaluation_mode"]');
+          evaluationModeRadios.forEach(radio => {
+              radio.addEventListener('change', (e) => {
+                  this.evaluationMode = e.target.value;
+                  if (this.evaluationMode === 'session') {
+                      this.mode = 'clone';
+                      // Update the mode radio buttons to reflect the change
+                      const cloneRadio = document.querySelector('input[name="mode"][value="clone"]');
+                      if (cloneRadio) cloneRadio.checked = true;
+                  }
+              });
+          });
+          const checkedRadio = document.querySelector('input[name="evaluation_mode"]:checked');
+          this.evaluationMode = checkedRadio ? checkedRadio.value : 'message';
         },
 
         validateForm(e) {
