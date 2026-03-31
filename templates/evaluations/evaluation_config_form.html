@@ -2,15 +2,59 @@
 {% load form_tags i18n %}
 
 {% block form %}
-  <div x-data="{  runGeneration: {{ form.run_generation.value|yesno:'true,false' }}  }">
+  <div x-data="{
+    runGeneration: {{ form.run_generation.value|yesno:'true,false' }},
+    datasetMode: 'message',
+    isSessionMode() { return this.datasetMode === 'session'; }
+}" x-init="
+    const datasetSelect = document.querySelector('[name=dataset]');
+    if (datasetSelect && datasetSelect.selectedOptions[0]) {
+        datasetMode = datasetSelect.selectedOptions[0].dataset?.evaluationMode || 'message';
+        if (datasetMode === 'session') { runGeneration = false; }
+    }
+">
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
-    {% render_form_fields form "dataset" %}
-    {% render_form_fields form "evaluators" %}
-    {% render_form_fields form "run_generation" %}
 
-    <div class="fieldset w-full" x-show="runGeneration" x-cloak x-collapse>
+    <div class="fieldset w-full">
+        <label class="label font-bold" for="{{ form.dataset.id_for_label }}">
+            <div>{{ form.dataset.label }}</div>
+        </label>
+        <select name="{{ form.dataset.name }}"
+                id="{{ form.dataset.id_for_label }}"
+                class="select w-full"
+                @change="
+                    const opt = $el.selectedOptions[0];
+                    datasetMode = opt?.dataset?.evaluationMode || 'message';
+                    if (datasetMode === 'session') { runGeneration = false; }
+                ">
+            <option value="">---------</option>
+            {% for dataset in form.dataset.field.queryset %}
+                <option value="{{ dataset.pk }}"
+                        data-evaluation-mode="{{ dataset.evaluation_mode }}"
+                        {% if form.dataset.value|stringformat:"s" == dataset.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ dataset }}
+                </option>
+            {% endfor %}
+        </select>
+        {{ form.dataset.errors }}
+    </div>
+
+    {% render_form_fields form "evaluators" %}
+
+    <div x-show="!isSessionMode()">
+        {% render_form_fields form "run_generation" %}
+    </div>
+
+    <template x-if="isSessionMode()">
+        <div class="alert alert-info mb-4">
+            <i class="fa-solid fa-info-circle"></i>
+            <span>{% translate "Generation is not available for session-mode datasets." %}</span>
+        </div>
+    </template>
+
+    <div class="fieldset w-full" x-show="runGeneration && !isSessionMode()" x-cloak x-collapse>
       <label class="label font-bold" for="{{ form.experiment.id_for_label }}">
         <div>
           {{ form.experiment.label }}
@@ -46,7 +90,7 @@
     </div>
 
     {# The version select field starts hidden in the "new" form until the user selects an experiment #}
-    <div x-show="runGeneration" x-cloak x-collapse>
+    <div x-show="runGeneration && !isSessionMode()" x-cloak x-collapse>
       <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
         {% render_form_fields form "experiment_version" %}
       </div>
