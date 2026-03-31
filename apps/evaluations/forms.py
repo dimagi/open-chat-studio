@@ -215,7 +215,7 @@ class EvaluationConfigForm(forms.ModelForm):
 class EvaluatorForm(forms.ModelForm):
     class Meta:
         model = Evaluator
-        fields = ("name", "type", "params")
+        fields = ("name", "type", "params", "evaluation_mode")
         widgets = {
             "type": forms.HiddenInput(),
             "params": forms.HiddenInput(),
@@ -224,6 +224,9 @@ class EvaluatorForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+        self.fields["evaluation_mode"].widget = forms.RadioSelect(
+            choices=EvaluationMode.choices,
+        )
 
     def clean(self):
         cleaned_data = super().clean()

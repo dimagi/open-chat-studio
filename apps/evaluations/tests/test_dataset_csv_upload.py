@@ -123,6 +123,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test CSV Dataset",
             "mode": "csv",
+            "evaluation_mode": "message",
             "csv_file_id": str(csv_file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": False,
@@ -162,6 +163,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test CSV Dataset with History",
             "mode": "csv",
+            "evaluation_mode": "message",
             "csv_file_id": str(csv_file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": True,
@@ -335,6 +337,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Dataset with Empty Rows",
             "mode": "csv",
+            "evaluation_mode": "message",
             "csv_file_id": str(file_instance.id),
             "column_mapping": json.dumps({"input": "input", "output": "output", "context": {"context": "context"}}),
             "populate_history": False,
@@ -376,6 +379,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test CSV Dataset with History Column",
             "mode": "csv",
+            "evaluation_mode": "message",
             "csv_file_id": str(file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": False,
@@ -439,6 +443,7 @@ class TestCSVUploadCreate:
         form_data = {
             "name": "Test Dataset with Participant Data",
             "mode": "csv",
+            "evaluation_mode": "message",
             "csv_file_id": str(file_instance.id),
             "column_mapping": json.dumps(column_mapping),
             "populate_history": False,
