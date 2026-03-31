@@ -14,6 +14,7 @@ from apps.evaluations.models import (
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
+    EvaluationMode,
     Evaluator,
     ExperimentVersionSelection,
 )
@@ -285,9 +286,17 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         required=False,
     )
 
+    evaluation_mode = forms.ChoiceField(
+        choices=EvaluationMode.choices,
+        initial=EvaluationMode.MESSAGE,
+        widget=StyledRadioSelect(),
+        label="Evaluation mode",
+        help_text="Message mode evaluates individual message pairs. Session mode evaluates entire conversations.",
+    )
+
     class Meta:
         model = EvaluationDataset
-        fields = ("name",)
+        fields = ("name", "evaluation_mode")
 
     def __init__(self, team, *args, **kwargs):
         self.filter_params = kwargs.pop("filter_params", None)
@@ -391,6 +400,11 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
+        evaluation_mode = cleaned_data.get("evaluation_mode")
+
+        if evaluation_mode == EvaluationMode.SESSION and mode != "clone":
+            raise forms.ValidationError({"mode": "Session-mode datasets can only be created by cloning from sessions."})
+
         if mode == "clone":
             session_ids, filtered_session_ids = self._clean_clone()
             cleaned_data["session_ids"] = session_ids
@@ -571,7 +585,10 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             return dataset
 
         if mode == "clone":
-            self._save_clone(dataset)
+            if dataset.evaluation_mode == EvaluationMode.SESSION:
+                self._save_session_clone(dataset)
+            else:
+                self._save_clone(dataset)
         elif mode == "csv":
             self._save_csv(dataset)
 
@@ -610,6 +627,26 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
+    def _save_session_clone(self, dataset):
+        """Dispatch async task to create session-mode messages."""
+        from apps.evaluations.tasks import create_session_mode_dataset_task  # noqa: PLC0415
+
+        session_ids = self.cleaned_data.get("session_ids", set())
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
+        all_session_ids = list(session_ids | filtered_session_ids)
+
+        if not all_session_ids:
+            return
+
+        task = create_session_mode_dataset_task.delay(
+            dataset.id,
+            self.team.id,
+            all_session_ids,
+        )
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
 
 def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
     return _clean_json_field(f"{field_name} for pair {pair_index + 1}", field_value)
@@ -627,9 +664,15 @@ def _clean_json_field(field_name: str, field_value: str) -> dict:
 class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
     """Form for editing existing evaluation datasets."""
 
+    class Meta(EvaluationDatasetBaseForm.Meta):
+        fields = ("name",)
+
     def __init__(self, team, *args, **kwargs):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
+        # evaluation_mode is immutable after creation
+        if "evaluation_mode" in self.fields:
+            del self.fields["evaluation_mode"]
 
     def clean_name(self):
         name = self.cleaned_data.get("name")

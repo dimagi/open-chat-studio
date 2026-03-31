@@ -1,8 +1,10 @@
 import pytest
 
 from apps.chat.models import ChatMessageType
+from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationMessage
 from apps.evaluations.utils import make_session_evaluation_messages
+from apps.utils.factories.evaluations import EvaluationDatasetFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -240,3 +242,37 @@ class TestMakeSessionEvaluationMessages:
         assert metadata["session_id"] == session.external_id
         assert metadata["experiment_id"] == str(session.experiment.public_id)
         assert metadata["created_mode"] == "clone"
+
+
+@pytest.mark.django_db()
+class TestDatasetFormEvaluationMode:
+    def test_create_form_includes_evaluation_mode_field(self):
+        team = TeamFactory.create()
+        form = EvaluationDatasetForm(team=team)
+        assert "evaluation_mode" in form.fields
+
+    def test_create_form_session_mode_only_allows_clone(self):
+        """When mode is session, only clone is valid."""
+        team = TeamFactory.create()
+
+        form = EvaluationDatasetForm(
+            team=team,
+            data={
+                "name": "Test Session Dataset",
+                "evaluation_mode": "session",
+                "mode": "manual",
+                "messages_json": (
+                    '[{"human": {"content": "Hi", "role": "human"},'
+                    ' "ai": {"content": "Hello", "role": "ai"}, "context": {}}]'
+                ),
+            },
+        )
+        assert not form.is_valid()
+        assert "mode" in form.errors
+
+    def test_edit_form_excludes_evaluation_mode_field(self):
+        """evaluation_mode is immutable — excluded from edit form."""
+        team = TeamFactory.create()
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
+        form = EvaluationDatasetEditForm(team=team, instance=dataset)
+        assert "evaluation_mode" not in form.fields
