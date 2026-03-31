@@ -117,6 +117,8 @@ class EvaluationMessage(BaseModel):
     metadata = SanitizedJSONField(default=dict)
 
     def __str__(self):
+        if not self.input and not self.output:
+            return "Session evaluation"
         input_role = self.input.get("role", "(human)").title()
         input_content = self.input.get("content", "no content")
         output_role = self.output.get("role", "(ai)").title()
@@ -206,6 +208,8 @@ class EvaluationMessage(BaseModel):
             "context": self.context,
             "history": self.history,
             "metadata": self.metadata,
+            "participant_data": self.participant_data,
+            "session_state": self.session_state,
         }
 
 
