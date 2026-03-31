@@ -20,6 +20,8 @@ class EvaluatorFactory(DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     type = "LLM"
+    name = factory.Sequence(lambda n: f"Test Evaluator {n}")
+    evaluation_mode = "message"
     params = {
         "llm_prompt": "give me the sentiment of the user messages",
         "output_schema": {"sentiment": "the sentiment"},
@@ -60,6 +62,7 @@ class EvaluationDatasetFactory(DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"Test Dataset {n}")
+    evaluation_mode = "message"
 
     @factory.post_generation
     def messages(self, create, extracted, **kwargs):
