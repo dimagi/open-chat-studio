@@ -154,6 +154,19 @@ class EvaluationConfigForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
+        # Validate evaluation_mode compatibility
+        dataset = cleaned_data.get("dataset")
+        evaluators = cleaned_data.get("evaluators")
+        if dataset and evaluators:
+            mismatched = [e for e in evaluators if e.evaluation_mode != dataset.evaluation_mode]
+            if mismatched:
+                names = ", ".join(e.name for e in mismatched)
+                self.add_error(
+                    "evaluators",
+                    f"The following evaluators have a different evaluation mode than the dataset: {names}. "
+                    f"Dataset mode is '{dataset.evaluation_mode}', but these evaluators are not.",
+                )
+
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
@@ -176,6 +189,9 @@ class EvaluationConfigForm(forms.ModelForm):
             elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
                 cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
                 cleaned_data["experiment_version"] = None
+        elif not experiment:
+            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["experiment_version"] = None
         else:
             cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
             try:

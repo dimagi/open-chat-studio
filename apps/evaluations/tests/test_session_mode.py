@@ -1,10 +1,10 @@
 import pytest
 
 from apps.chat.models import ChatMessageType
-from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
+from apps.evaluations.forms import EvaluationConfigForm, EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import EvaluationMessage
 from apps.evaluations.utils import make_session_evaluation_messages
-from apps.utils.factories.evaluations import EvaluationDatasetFactory
+from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -276,3 +276,58 @@ class TestDatasetFormEvaluationMode:
         dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
         form = EvaluationDatasetEditForm(team=team, instance=dataset)
         assert "evaluation_mode" not in form.fields
+
+
+@pytest.mark.django_db()
+class TestEvalConfigFormModeValidation:
+    def test_mismatched_modes_rejected(self):
+        """Dataset evaluation_mode must match all evaluator evaluation_modes."""
+        team = TeamFactory.create()
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
+        evaluator = EvaluatorFactory.create(team=team, evaluation_mode="message")
+
+        form = EvaluationConfigForm(
+            team=team,
+            data={
+                "name": "Test Config",
+                "dataset": dataset.id,
+                "evaluators": [evaluator.id],
+            },
+        )
+        assert not form.is_valid()
+        assert "evaluators" in form.errors
+
+    def test_matching_modes_accepted(self):
+        """Same evaluation_mode on dataset and evaluators is valid."""
+        team = TeamFactory.create()
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
+        evaluator = EvaluatorFactory.create(team=team, evaluation_mode="session")
+
+        form = EvaluationConfigForm(
+            team=team,
+            data={
+                "name": "Test Config",
+                "dataset": dataset.id,
+                "evaluators": [evaluator.id],
+            },
+        )
+        assert form.is_valid(), form.errors
+
+    def test_mismatched_message_evaluator_with_session_dataset(self):
+        """A message evaluator cannot be used with a session dataset."""
+        team = TeamFactory.create()
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
+        session_evaluator = EvaluatorFactory.create(team=team, evaluation_mode="session", name="Session Eval")
+        message_evaluator = EvaluatorFactory.create(team=team, evaluation_mode="message", name="Message Eval")
+
+        form = EvaluationConfigForm(
+            team=team,
+            data={
+                "name": "Test Config",
+                "dataset": dataset.id,
+                "evaluators": [session_evaluator.id, message_evaluator.id],
+            },
+        )
+        assert not form.is_valid()
+        assert "evaluators" in form.errors
+        assert "Message Eval" in form.errors["evaluators"][0]
