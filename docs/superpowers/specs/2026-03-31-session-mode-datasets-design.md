@@ -24,7 +24,7 @@ evaluation_mode = CharField(
 )
 ```
 
-- Immutable after creation (set at dataset creation time). Enforced by excluding the field from the edit form / rendering it read-only.
+- Immutable after creation (set at dataset creation time). Enforced by excluding the field from `EvaluationDatasetEditForm`.
 - Determines how dataset items are created and how the dataset can be used in evaluations.
 
 ### `Evaluator` — new `evaluation_mode` field
@@ -44,15 +44,12 @@ evaluation_mode = CharField(
 
 ### `EvaluationConfig` — validation only, no new fields
 
-- `EvaluationConfigForm.clean()` rejects configurations where the dataset's `evaluation_mode` does not match all attached evaluators' `evaluation_mode`. This is form-level validation only, consistent with existing config validation patterns.
+- Evaluator choices are **pre-filtered** based on the selected dataset's `evaluation_mode` (only evaluators with matching mode are shown).
+- `EvaluationConfigForm.clean()` additionally rejects configurations where the dataset's `evaluation_mode` does not match all attached evaluators' `evaluation_mode` as a backend safety net.
 
 ### `EvaluationMessage` — no new fields
 
 - `as_result_dict()` updated to include `participant_data` and `session_state` in the returned dict (currently omits them).
-
-### Migration — GIN index on `EvaluationMessage.metadata`
-
-- Add a GIN index on the `metadata` JSONB field to support efficient duplicate detection queries (`metadata__session_id__in=...`).
 
 ## Session-Mode Dataset Creation
 
@@ -60,7 +57,7 @@ Only the "clone from sessions" creation method is supported for session-mode dat
 
 ### Implementation
 
-Session-mode creation uses a **new, separate function** `make_session_evaluation_message()` (and corresponding classmethod, e.g. `create_from_sessions_as_session_mode`). This is intentionally not a parameterization of the existing `make_evaluation_messages_from_sessions` — the operations are fundamentally different (pairing messages vs. collecting an entire transcript).
+Session-mode creation uses a **new, separate function** `make_session_evaluation_message()` (and corresponding classmethod, e.g. `create_from_sessions_as_session_mode`). This is intentionally not a parameterization of the existing `make_evaluation_messages_from_sessions` — the operations are fundamentally different (pairing messages vs. collecting an entire transcript). Creation is dispatched as an **async Celery task**, following the same pattern as message-mode clone.
 
 ### For each selected session:
 
@@ -70,8 +67,8 @@ Session-mode creation uses a **new, separate function** `make_session_evaluation
    - `input` = `{}` (empty dict — session-mode does not use input/output)
    - `output` = `{}` (empty dict)
    - `history` = full conversation transcript (all turns)
-   - `participant_data` = snapshot from the last message's trace
-   - `session_state` = snapshot from the last message's trace
+   - `participant_data` = snapshot from the last AI message's trace (empty dict if no AI messages exist)
+   - `session_state` = snapshot from the last AI message's trace (empty dict if no AI messages exist)
    - `metadata` = `{"session_id": <external_id>, "experiment_id": <public_id>, "created_mode": "clone"}`
    - `input_chat_message` = `None` (existing nullable FK, not applicable for session-mode)
    - `expected_output_chat_message` = `None` (existing nullable FK, not applicable for session-mode)
@@ -80,9 +77,9 @@ Session-mode creation uses a **new, separate function** `make_session_evaluation
 
 Session-mode messages have empty `input` and `output` dicts. The following code must handle this gracefully:
 
-- `EvaluationMessage.__str__()`: Guard against empty dicts (e.g., display "Session evaluation" or the first line of history).
-- `as_human_langchain_message()` / `as_ai_langchain_message()`: These do `self.input["content"]` which would `KeyError` on empty dicts. Add guard clauses or document that these methods must not be called for session-mode messages (they're only used in bot generation, which is skipped for session-mode).
-- Evaluator prompt variable rendering: If a session evaluator prompt references `{generated_response}`, substitute an empty string rather than erroring.
+- `EvaluationMessage.__str__()`: Guard against empty dicts — display "Session evaluation" or the first line of history.
+- `as_human_langchain_message()` / `as_ai_langchain_message()`: These do `self.input["content"]` which would `KeyError` on empty dicts. These are only called in bot generation (which is skipped for session-mode), so a code comment documenting this constraint is sufficient — no guard clauses needed.
+- Evaluator prompt variable rendering: Already handled — `SafeAccessWrapper` returns empty string for missing keys, and `PythonEvaluator` already catches `ValidationError` on input/output.
 
 ### Duplicate detection
 
@@ -112,27 +109,28 @@ No changes to the core execution pipeline. The existing flow works as-is:
 
 ### Changes:
 
-- **Skip bot generation** for session-mode eval runs. In `evaluate_single_message_task`, check `dataset.evaluation_mode` via the evaluation run's config and skip the `run_bot_generation()` call when mode is `session`. This is a runtime check — not solely reliant on the UI hiding the generation experiment field.
+- **Bot generation is prevented at the form level** — the eval config form hides/disables the generation experiment section when a session-mode dataset is selected (via Alpine.js/HTMX), so `generation_experiment` will be `None` for session-mode runs. The existing `if generation_experiment is not None` guard in `evaluate_single_message_task` is sufficient; no additional runtime check needed.
 - `EvaluationResult` stores results the same way — `output` contains `message`, `result`, and an empty `generated_response`.
 
 ## UI Changes
 
 ### Dataset creation form
 
-- Add a mode selector (message/session) at the top of the form, before the existing creation method selector (clone/manual/csv).
-- When session mode is selected, only the "clone from sessions" creation method is available (manual and CSV are hidden).
+- Add `evaluation_mode` as a Django form field (message/session) at the top of the form, before the existing creation method selector (clone/manual/csv).
+- When session mode is selected, only the "clone from sessions" creation method is available (manual and CSV are hidden via JS).
 - The rest of the clone flow is unchanged: session selection table, filters, etc.
 
 ### Evaluator creation form
 
 - Add an `evaluation_mode` selector (message/session).
-- Show the appropriate available prompt variables based on evaluation mode.
+- Show the appropriate available prompt variables based on evaluation mode via JS-driven help text swap.
 - For session mode, hide the `{generated_response}`, `{input.content}`, and `{output.content}` variables from the documentation/hints.
 
 ### Eval config form
 
-- Validate dataset `evaluation_mode` matches evaluator `evaluation_mode`. Show a validation error on mismatch.
-- When a session-mode dataset is selected, hide/disable the generation experiment section.
+- Pre-filter evaluator choices based on the selected dataset's `evaluation_mode`.
+- `clean()` validates dataset `evaluation_mode` matches evaluator `evaluation_mode` as a backend safety net.
+- When a session-mode dataset is selected, dynamically hide/disable the generation experiment section via Alpine.js/HTMX.
 
 ### Dataset detail view
 
@@ -154,15 +152,39 @@ No changes required initially. The existing table showing `input`, `output`, `hi
 
 1. **Happy path**: Session with N turns → one `EvaluationMessage` with full history, empty `input`/`output`.
 2. **Single-turn session**: Session with one human-AI pair → still one message.
-3. **Orphaned last message**: Session ending with human message (no AI response) → still creates one message with empty `input`/`output`.
-4. **Empty session**: Session with no messages → no `EvaluationMessage` created.
-5. **Duplicate detection**: Re-importing the same session → skipped via `metadata.session_id`.
-6. **`participant_data` / `session_state` snapshot**: Verify these are captured from the last message's trace.
-7. **Metadata structure**: Verify `session_id` and `experiment_id` are set correctly.
+3. **Orphaned last message**: Session ending with human message (no AI response) → still creates one message with empty `input`/`output` and empty `participant_data`/`session_state`.
+4. **Human-only session**: Session with only human messages (no AI responses) → creates one message with empty `participant_data`/`session_state`.
+5. **Empty session**: Session with no messages → no `EvaluationMessage` created.
+6. **Duplicate detection**: Re-importing the same session → skipped via `metadata.session_id`.
+7. **`participant_data` / `session_state` snapshot**: Verify these are captured from the last AI message's trace.
+8. **Metadata structure**: Verify `session_id` and `experiment_id` are set correctly.
 
-### Bot generation skip test
+### Eval config form validation tests
 
-- Verify `run_bot_generation` is NOT called when dataset `evaluation_mode` is `session` (explicit mock-based test mirroring `test_evaluate_single_message_with_bot_generation`).
+- Verify pre-filtering of evaluators based on dataset `evaluation_mode`.
+- Verify `clean()` rejects mismatched evaluator/dataset `evaluation_mode`.
+
+## Design Decisions
+
+Resolved during design review:
+
+| Decision | Resolution |
+|----------|------------|
+| History format for session-mode | Same as existing: `{message_type, content, summary}` dicts |
+| Session creation function | New `make_session_evaluation_message()`, not parameterizing existing function |
+| `evaluation_mode` immutability | Exclude field from `EvaluationDatasetEditForm` entirely |
+| GIN index on `EvaluationMessage.metadata` | Not needed — expected dataset sizes are small (< 100 items) |
+| Eval config evaluator filtering | Pre-filter evaluators by dataset's `evaluation_mode` + `clean()` safety net |
+| Bot generation skip mechanism | Form-level prevention only (hide generation experiment); existing `if generation_experiment is not None` guard is sufficient |
+| `__str__` for session-mode messages | Show "Session evaluation" or first history line for empty input/output |
+| Langchain methods + empty input/output | Comment documenting constraint; no guard clauses (only called in bot generation path) |
+| `evaluation_mode` on creation form | Django form field |
+| Evaluator prompt variable hints | JS-driven help text swap based on selected mode |
+| `participant_data`/`session_state` source | Last AI message's trace; empty dict if no AI messages |
+| Sessions with only human messages | Still create message with empty `participant_data`/`session_state` |
+| `metadata.created_mode` value | `"clone"` — `evaluation_mode` on dataset is sufficient distinction |
+| Session-mode clone creation | Async Celery task, same pattern as message-mode |
+| Eval config generation experiment visibility | Dynamic hide/show via Alpine.js/HTMX |
 
 ## Out of Scope
 
