@@ -200,7 +200,7 @@ window.annotationQueueSessionSelector = function (options = {}) {
 
       if (this.mode === 'selected' && this.selectedSessionIds.size === 0) {
         e.preventDefault();
-        this.errorMessages = ['Select at least one session above.'];
+        this.errorMessages = ['Select at least one session.'];
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
