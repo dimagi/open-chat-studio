@@ -69,7 +69,11 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
 
         evaluators = {e.id: e for e in Evaluator.objects.filter(id__in=evaluator_ids)}
         for evaluator_id in evaluator_ids:
-            evaluator = evaluators[evaluator_id]
+            try:
+                evaluator = evaluators[evaluator_id]
+            except KeyError:
+                logger.warning(f"Evaluator {evaluator_id} not found, skipping")
+                continue
             try:
                 result = evaluator.run(message, bot_response or "")
                 EvaluationResult.objects.create(
