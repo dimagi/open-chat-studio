@@ -13,7 +13,8 @@
 
 {% block app %}
 <div x-data="annotationQueueSessionSelector({ sessionIdsFetchUrl: '{{ sessions_json_url }}' })"
-     x-init="init()">
+     x-init="init()"
+     data-queue-name="{{ queue.name }}">
 
   <div class="flex flex-col gap-4">
     <h2 class="text-xl font-bold">{% blocktranslate with name=queue.name %}Add Sessions to "{{ name }}"{% endblocktranslate %}</h2>
@@ -33,35 +34,103 @@
       <div>
         {% include "experiments/filters.html" %}
       </div>
-      <div class="flex items-center gap-3 text-sm font-medium">
-        <div x-show="selectedSessionIds.size > 0">
-          <span x-text="selectedSessionIds.size"></span>
-          {% translate "session" %}<span x-show="selectedSessionIds.size !== 1">s</span>
-          {% translate "of" %} <span x-text="allSessionIds.size"></span> {% translate "selected" %}
-          <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
-            {% translate "Clear" %}
+      <div class="text-sm font-medium">
+        <span x-text="totalCount"></span> {% translate "sessions" %}
+      </div>
+    </div>
+
+    <!-- Scope selector bar -->
+    <div class="flex items-center justify-between flex-wrap gap-3 bg-base-200 rounded-lg px-4 py-2">
+      <div class="flex items-center gap-3">
+        <span class="text-sm font-medium">{% translate "Add" %}:</span>
+        <div class="join">
+          <button type="button"
+                  class="join-item btn btn-sm"
+                  :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setMode('selected')">
+            {% translate "Selected only" %}
+          </button>
+          <button type="button"
+                  class="join-item btn btn-sm"
+                  :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setMode('all_matching')">
+            {% translate "All matching filters" %}
+          </button>
+          <button type="button"
+                  class="join-item btn btn-sm"
+                  :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
+                  @click="setMode('sample')">
+            {% translate "Sample" %}
           </button>
         </div>
-        <div x-show="selectedSessionIds.size === 0 && allSessionIds.size > 0">
-          <span x-text="allSessionIds.size"></span>
-          {% translate "session" %}<span x-show="allSessionIds.size !== 1">s</span>
-        </div>
+
+        <!-- Sample controls (visible only in sample mode) -->
+        <template x-if="mode === 'sample'">
+          <div class="flex items-center gap-2">
+            <input type="number"
+                   x-model.number="samplePercent"
+                   @change="clampSamplePercent()"
+                   min="1" max="100"
+                   class="input input-sm input-bordered w-16 text-center">
+            <span class="text-sm">%</span>
+            <input type="range"
+                   x-model.number="samplePercent"
+                   @change="clampSamplePercent()"
+                   min="1" max="100"
+                   class="range range-sm range-primary w-32">
+          </div>
+        </template>
       </div>
+
+      <!-- Live count pill -->
+      <div class="badge" :class="pillClass" x-text="pillText"></div>
+    </div>
+
+    <!-- Hint for selected mode with zero selections -->
+    <div x-show="mode === 'selected' && selectedSessionIds.size === 0" x-cloak
+         class="text-sm text-warning">
+      {% translate "Select at least one session." %}
+    </div>
+
+    <!-- Clear selections (visible in selected mode when selections exist) -->
+    <div x-show="mode === 'selected' && selectedSessionIds.size > 0" x-cloak class="text-sm">
+      <span x-text="selectedSessionIds.size"></span>
+      {% translate "selected" %}
+      <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+        {% translate "Clear" %}
+      </button>
+    </div>
+
+    <!-- Dimming hint for non-selected modes -->
+    <div x-show="mode !== 'selected'" x-cloak class="text-sm text-base-content/60">
+      {% translate "Row selections do not affect this mode." %}
     </div>
 
     <!-- Sessions table (HTMX lazy-loaded) -->
     <div id="sessions-table"
+         :class="{ 'opacity-60': mode !== 'selected' }"
          data-url="{% url 'human_annotations:queue_sessions_table' request.team.slug queue.pk %}">
       {% include "table/table_placeholder.html" %}
     </div>
 
+    <!-- Sample hint -->
+    <div x-show="mode === 'sample'" x-cloak class="text-xs text-base-content/50">
+      {% translate "Sessions are randomly sampled at the time of adding." %}
+    </div>
+
     <!-- Submission form -->
-    <form method="post" @submit="validateAndSubmit($event)">
+    <form method="post" id="add-sessions-form" @submit="handleSubmit($event)">
       {% csrf_token %}
       <input type="hidden" name="session_ids" x-model="sessionIdsString">
+      <input type="hidden" name="mode" :value="mode">
+      <input type="hidden" name="sample_percent" :value="samplePercent">
+      <!-- Pass filter params so server can reconstruct the queryset for all_matching/sample -->
+      <template x-for="param in filterParams" :key="param.name">
+        <input type="hidden" :name="param.name" :value="param.value">
+      </template>
       <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn btn-primary">
-          {% translate "Add to Queue" %}
+        <button type="submit" class="btn btn-primary" :disabled="isSubmitDisabled">
+          <span x-text="buttonLabel">{% translate "Add to Queue" %}</span>
         </button>
         <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
            class="btn btn-ghost">
@@ -69,6 +138,24 @@
         </a>
       </div>
     </form>
+  </div>
+
+  <!-- Confirmation modal -->
+  <div x-show="showConfirmModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+       @keydown.escape.window="cancelConfirm()">
+    <div class="bg-base-100 rounded-lg shadow-xl p-6 max-w-md w-full mx-4" @click.outside="cancelConfirm()">
+      <h3 class="text-lg font-bold mb-2" x-text="confirmTitle"></h3>
+      <p class="text-sm text-base-content/70 mb-4" x-text="confirmMessage"></p>
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn btn-ghost btn-sm" @click="cancelConfirm()">
+          {% translate "Cancel" %}
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" @click="confirmSubmit()">
+          {% translate "Confirm" %}
+        </button>
+      </div>
+    </div>
   </div>
 
 </div>

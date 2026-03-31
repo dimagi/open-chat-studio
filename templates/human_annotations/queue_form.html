@@ -38,12 +38,20 @@
               <label class="label text-sm">
                 <span>{% translate "Field Name" %}</span>
               </label>
-              <input type="text"
-                     x-model="field.name"
-                     placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
-                     class="input input-bordered w-full input-sm"
-                     :disabled="locked"
-                     required>
+              <div class="flex gap-2 items-center">
+                <input type="text"
+                       x-model="field.name"
+                       placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
+                       class="input input-bordered w-full input-sm"
+                       :disabled="locked"
+                       required>
+                <button type="button"
+                        @click="removeField(index)"
+                        x-show="!locked"
+                        class="btn btn-outline btn-xs btn-error">
+                  <i class="fa fa-trash"></i>
+                </button>
+              </div>
             </div>
 
             <div class="mb-2">
@@ -158,12 +166,6 @@
               </label>
             </div>
 
-            <button type="button"
-                    @click="removeField(index)"
-                    x-show="!locked"
-                    class="btn btn-outline btn-sm btn-error mt-2">
-              <i class="fa fa-trash"></i> {% translate "Remove Field" %}
-            </button>
           </div>
         </template>
       </div>
