@@ -11,26 +11,28 @@ For holistic session evaluation ("Was this conversation successful overall?"), t
 
 ## Approach
 
-Extend the existing `EvaluationMessage` model and evaluation pipeline rather than introducing new models. Add mode awareness to datasets and type awareness to evaluators, with validation on the eval config to enforce compatibility.
+Extend the existing `EvaluationMessage` model and evaluation pipeline rather than introducing new models. Add mode awareness to datasets and evaluation-mode awareness to evaluators, with validation on the eval config form to enforce compatibility.
 
 ## Data Model Changes
 
-### `EvaluationDataset` — new `mode` field
+### `EvaluationDataset` — new `evaluation_mode` field
 
 ```python
-mode = CharField(
+evaluation_mode = CharField(
     choices=[("message", "Message"), ("session", "Session")],
     default="message",
 )
 ```
 
-- Immutable after creation (set at dataset creation time).
+- Immutable after creation (set at dataset creation time). Enforced by excluding the field from the edit form / rendering it read-only.
 - Determines how dataset items are created and how the dataset can be used in evaluations.
 
-### `Evaluator` — new `type` field
+### `Evaluator` — new `evaluation_mode` field
+
+> **Note:** The existing `type` field on `Evaluator` stores the evaluator class name (e.g., `"LlmEvaluator"`, `"PythonEvaluator"`). The new field is named `evaluation_mode` to avoid collision.
 
 ```python
-type = CharField(
+evaluation_mode = CharField(
     choices=[("message", "Message"), ("session", "Session")],
     default="message",
 )
@@ -38,30 +40,49 @@ type = CharField(
 
 - Determines which prompt variables are relevant for the evaluator.
 - Message evaluators: `{input.content}`, `{output.content}`, `{context.[param]}`, `{full_history}`, `{generated_response}`
-- Session evaluators: `{input.content}`, `{output.content}`, `{context.[param]}`, `{full_history}` (no `{generated_response}`)
+- Session evaluators: `{full_history}`, `{context.[param]}` (no `{input.content}`, `{output.content}`, or `{generated_response}` — session-mode messages have empty `input`/`output`)
 
 ### `EvaluationConfig` — validation only, no new fields
 
-- `clean()` rejects configurations where the dataset's `mode` does not match all attached evaluators' `type`.
+- `EvaluationConfigForm.clean()` rejects configurations where the dataset's `evaluation_mode` does not match all attached evaluators' `evaluation_mode`. This is form-level validation only, consistent with existing config validation patterns.
+
+### `EvaluationMessage` — no new fields
+
+- `as_result_dict()` updated to include `participant_data` and `session_state` in the returned dict (currently omits them).
+
+### Migration — GIN index on `EvaluationMessage.metadata`
+
+- Add a GIN index on the `metadata` JSONB field to support efficient duplicate detection queries (`metadata__session_id__in=...`).
 
 ## Session-Mode Dataset Creation
 
 Only the "clone from sessions" creation method is supported for session-mode datasets. Manual and CSV creation are out of scope.
 
+### Implementation
+
+Session-mode creation uses a **new, separate function** `make_session_evaluation_message()` (and corresponding classmethod, e.g. `create_from_sessions_as_session_mode`). This is intentionally not a parameterization of the existing `make_evaluation_messages_from_sessions` — the operations are fundamentally different (pairing messages vs. collecting an entire transcript).
+
 ### For each selected session:
 
 1. Query all `ChatMessage` objects in the session, ordered chronologically.
 2. Build the full transcript as the `history` list (all human + AI turns).
-3. Find the last human-AI pair:
-   - If the session ends with a complete pair: `input` = last human message, `output` = last AI response.
-   - If the session ends with an orphaned human message (no AI response): `input` = last human message, `output` = empty.
-4. Create **one** `EvaluationMessage` with:
-   - `input` = last human message content
-   - `output` = last AI response content (or empty)
+3. Create **one** `EvaluationMessage` with:
+   - `input` = `{}` (empty dict — session-mode does not use input/output)
+   - `output` = `{}` (empty dict)
    - `history` = full conversation transcript (all turns)
    - `participant_data` = snapshot from the last message's trace
    - `session_state` = snapshot from the last message's trace
    - `metadata` = `{"session_id": <external_id>, "experiment_id": <public_id>, "created_mode": "clone"}`
+   - `input_chat_message` = `None` (existing nullable FK, not applicable for session-mode)
+   - `expected_output_chat_message` = `None` (existing nullable FK, not applicable for session-mode)
+
+### Empty `input`/`output` considerations
+
+Session-mode messages have empty `input` and `output` dicts. The following code must handle this gracefully:
+
+- `EvaluationMessage.__str__()`: Guard against empty dicts (e.g., display "Session evaluation" or the first line of history).
+- `as_human_langchain_message()` / `as_ai_langchain_message()`: These do `self.input["content"]` which would `KeyError` on empty dicts. Add guard clauses or document that these methods must not be called for session-mode messages (they're only used in bot generation, which is skipped for session-mode).
+- Evaluator prompt variable rendering: If a session evaluator prompt references `{generated_response}`, substitute an empty string rather than erroring.
 
 ### Duplicate detection
 
@@ -71,9 +92,10 @@ Keyed on `metadata.session_id` — skip sessions already imported into the datas
 
 ### Session evaluators
 
-- Available prompt variables: `{input.content}`, `{output.content}`, `{context.[param]}`, `{full_history}`
-- `{generated_response}` is not available (bot generation does not apply to session-mode evals).
-- The evaluator UI shows the appropriate available variables based on the selected type.
+- Available prompt variables: `{full_history}`, `{context.[param]}`
+- `{input.content}`, `{output.content}`, and `{generated_response}` are not available (session-mode messages have empty `input`/`output`, and bot generation does not apply).
+- If a prompt template references an unavailable variable, substitute an empty string at runtime (graceful degradation).
+- The evaluator UI shows the appropriate available variables based on the selected `evaluation_mode`.
 
 ### Message evaluators
 
@@ -90,7 +112,7 @@ No changes to the core execution pipeline. The existing flow works as-is:
 
 ### Changes:
 
-- **Skip bot generation** for session-mode eval runs. Check `dataset.mode` on the eval run and skip the `run_bot_generation()` call when mode is `session`.
+- **Skip bot generation** for session-mode eval runs. In `evaluate_single_message_task`, check `dataset.evaluation_mode` via the evaluation run's config and skip the `run_bot_generation()` call when mode is `session`. This is a runtime check — not solely reliant on the UI hiding the generation experiment field.
 - `EvaluationResult` stores results the same way — `output` contains `message`, `result`, and an empty `generated_response`.
 
 ## UI Changes
@@ -103,18 +125,44 @@ No changes to the core execution pipeline. The existing flow works as-is:
 
 ### Evaluator creation form
 
-- Add a type selector (message/session).
-- Show the appropriate available prompt variables based on type.
-- For session type, hide the `{generated_response}` variable from the documentation/hints.
+- Add an `evaluation_mode` selector (message/session).
+- Show the appropriate available prompt variables based on evaluation mode.
+- For session mode, hide the `{generated_response}`, `{input.content}`, and `{output.content}` variables from the documentation/hints.
 
 ### Eval config form
 
-- Validate dataset mode matches evaluator types. Show a validation error on mismatch.
+- Validate dataset `evaluation_mode` matches evaluator `evaluation_mode`. Show a validation error on mismatch.
 - When a session-mode dataset is selected, hide/disable the generation experiment section.
 
 ### Dataset detail view
 
-No changes required initially. The existing table showing `input`, `output`, `history` columns works for session-mode items.
+No changes required initially. The existing table showing `input`, `output`, `history` columns works for session-mode items (session-mode items will show empty `input`/`output` columns).
+
+## Test Requirements
+
+### Factory updates
+
+- Add `evaluation_mode` field to `EvaluationDatasetFactory` (default: `"message"`).
+- Add `evaluation_mode` field to `EvaluatorFactory` (default: `"message"`).
+
+### Form validation tests (`EvaluationConfigForm.clean()`)
+
+- Test the new `evaluation_mode` mismatch rejection (dataset vs evaluator).
+- Test the existing `clean()` validation logic (version selection) — currently untested.
+
+### Session-mode creation tests
+
+1. **Happy path**: Session with N turns → one `EvaluationMessage` with full history, empty `input`/`output`.
+2. **Single-turn session**: Session with one human-AI pair → still one message.
+3. **Orphaned last message**: Session ending with human message (no AI response) → still creates one message with empty `input`/`output`.
+4. **Empty session**: Session with no messages → no `EvaluationMessage` created.
+5. **Duplicate detection**: Re-importing the same session → skipped via `metadata.session_id`.
+6. **`participant_data` / `session_state` snapshot**: Verify these are captured from the last message's trace.
+7. **Metadata structure**: Verify `session_id` and `experiment_id` are set correctly.
+
+### Bot generation skip test
+
+- Verify `run_bot_generation` is NOT called when dataset `evaluation_mode` is `session` (explicit mock-based test mirroring `test_evaluate_single_message_with_bot_generation`).
 
 ## Out of Scope
 
