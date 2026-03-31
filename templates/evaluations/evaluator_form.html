@@ -6,6 +6,7 @@
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
+    {% render_form_fields form "evaluation_mode" %}
 
     <div class="fieldset w-full">
       <label class="label font-bold" for="id_evaluator_type">
@@ -120,7 +121,9 @@
                 </label>
                 <div class="prompt-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
                      :data-target-field="'#param_' + fieldName"
-                     data-autocomplete-vars='["input.content", "output.content", "context", "full_history", "generated_response"]'
+                     :data-autocomplete-vars="evaluationMode === 'session'
+                         ? '[\"full_history\", \"context\"]'
+                         : '[\"input.content\", \"output.content\", \"context\", \"full_history\", \"generated_response\"]'"
                      style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
                 <textarea :id="'param_' + fieldName"
                           :name="'param_' + fieldName"
@@ -129,6 +132,23 @@
                           :required="isRequired(fieldName)"></textarea>
                 <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
               </div>
+            </template>
+
+            <!-- Mode-specific variable hints -->
+            <template x-if="getWidget(field) === 'text_editor_widget'">
+                <div class="mt-1">
+                    <template x-if="evaluationMode === 'session'">
+                        <p class="text-sm text-gray-500">
+                            {% translate "Available variables:" %} <code>{full_history}</code>, <code>{context.[param]}</code>
+                        </p>
+                    </template>
+                    <template x-if="evaluationMode !== 'session'">
+                        <p class="text-sm text-gray-500">
+                            {% translate "Available variables:" %} <code>{input.content}</code>, <code>{output.content}</code>,
+                            <code>{context.[param]}</code>, <code>{full_history}</code>, <code>{generated_response}</code>
+                        </p>
+                    </template>
+                </div>
             </template>
 
             <!-- Expandable Text Widget -->
@@ -459,12 +479,21 @@
         parameterValues: JSON.parse(document.getElementById("parameter-values").textContent),
         defaultValues: JSON.parse(document.getElementById("default-values").textContent),
         selectedType: '{% if object.type %}{{ object.type|escapejs }}{% else %}{{ form.type.value|default:"" }}{% endif %}',
+        evaluationMode: '{{ form.evaluation_mode.value|default:"message" }}',
         selectedSchema: null,
         params: {},
         keyValuePairs: {},
 
         init() {
           const existingParams = document.getElementById("existing-params") ? JSON.parse(document.getElementById("existing-params").textContent) : null;
+
+          // Watch evaluation_mode changes
+          const evalModeRadios = document.querySelectorAll('input[name="evaluation_mode"]');
+          evalModeRadios.forEach(radio => {
+              radio.addEventListener('change', (e) => {
+                  this.evaluationMode = e.target.value;
+              });
+          });
 
           this.$nextTick(() => {
             this.updateTypeAndSchema();
