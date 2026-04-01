@@ -41,7 +41,14 @@
         {{ form.dataset.errors }}
     </div>
 
-    {% render_form_fields form "evaluators" %}
+    <div x-effect="
+        $el.querySelectorAll('input[data-evaluation-mode]').forEach(input => {
+            const li = input.closest('li') || input.parentElement;
+            li.style.display = input.dataset.evaluationMode === datasetMode ? '' : 'none';
+        })
+    ">
+        {% render_form_fields form "evaluators" %}
+    </div>
 
     <div x-show="!isSessionMode()">
         {% render_form_fields form "run_generation" %}

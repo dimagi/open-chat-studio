@@ -4,7 +4,7 @@ import pytest
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.forms import EvaluationConfigForm, EvaluationDatasetEditForm, EvaluationDatasetForm
-from apps.evaluations.models import EvaluationMessage
+from apps.evaluations.models import EvaluationMessage, EvaluationMode
 from apps.evaluations.utils import make_session_evaluation_messages
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
@@ -419,3 +419,19 @@ class TestEvalConfigFormModeValidation:
         assert not form.is_valid()
         assert "evaluators" in form.errors
         assert "Message Eval" in form.errors["evaluators"][0]
+
+    def test_evaluators_widget_renders_data_evaluation_mode_attributes(self):
+        """Each evaluator checkbox should have data-evaluation-mode for Alpine.js UI filtering."""
+        team = TeamFactory.create()
+        EvaluatorFactory.create(
+            team=team, evaluation_mode=EvaluationMode.MESSAGE, name="Message Eval", type="LlmEvaluator"
+        )
+        EvaluatorFactory.create(
+            team=team, evaluation_mode=EvaluationMode.SESSION, name="Session Eval", type="LlmEvaluator"
+        )
+
+        form = EvaluationConfigForm(team=team)
+        rendered = str(form["evaluators"])
+
+        assert 'data-evaluation-mode="message"' in rendered
+        assert 'data-evaluation-mode="session"' in rendered

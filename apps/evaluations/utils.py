@@ -234,7 +234,7 @@ def make_session_evaluation_messages(session_external_ids: list[str]) -> list["E
             trace_participant_data=F("input_message_trace__participant_data"),
             trace_session_state=F("input_message_trace__session_state"),
         )
-        .order_by("chat__experiment_session__created_at", "created_at")
+        .order_by("created_at")
     )
 
     sessions: dict[str, list] = {}

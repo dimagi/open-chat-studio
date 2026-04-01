@@ -27,6 +27,27 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 
 
+class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
+    """CheckboxSelectMultiple that adds data-evaluation-mode to each option for Alpine.js filtering."""
+
+    def __init__(self, *args, evaluator_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._evaluator_queryset = evaluator_queryset
+        self._mode_by_id = {}
+
+    def optgroups(self, name, value, attrs=None):
+        if self._evaluator_queryset is not None:
+            self._mode_by_id = {str(e.id): e.evaluation_mode for e in self._evaluator_queryset}
+        return super().optgroups(name, value, attrs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        mode = self._mode_by_id.get(str(value), "")
+        if mode:
+            option["attrs"]["data-evaluation-mode"] = mode
+        return option
+
+
 class StyledRadioSelect(RadioSelect):
     def __init__(self, attrs=None, x_model="mode"):
         default_attrs = {"class": "space-y-1"}
@@ -112,7 +133,10 @@ class EvaluationConfigForm(forms.ModelForm):
         self.team = team
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
-        self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
+        evaluator_qs = Evaluator.objects.filter(team=team)
+        # Set widget before queryset so Django's queryset setter propagates choices to the new widget
+        self.fields["evaluators"].widget = EvaluatorCheckboxWidget(evaluator_queryset=evaluator_qs)
+        self.fields["evaluators"].queryset = evaluator_qs
         self.fields["experiment"].queryset = (
             Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
         )
@@ -165,7 +189,7 @@ class EvaluationConfigForm(forms.ModelForm):
                 self.add_error(
                     "evaluators",
                     f"The following evaluators have a different evaluation mode than the dataset: {names}. "
-                    f"Dataset mode is '{dataset.evaluation_mode}', but these evaluators are not.",
+                    f"Dataset mode is '{dataset.evaluation_mode}', but these evaluators are set to a different mode.",
                 )
 
         experiment_version = cleaned_data.get("experiment_version")
