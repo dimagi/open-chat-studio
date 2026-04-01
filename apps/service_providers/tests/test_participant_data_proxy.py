@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -153,3 +154,32 @@ class TestParticipantDataProxy:
         proxy.set_key("text_value", "not a number")
         proxy.increment_key("text_value", 3)
         assert input_state["participant_data"] == {"counter": 7, "float_counter": 4.0, "text_value": 3}
+
+    def test_set_rejects_non_json_serializable_data(self):
+        session = ExperimentSessionFactory.create()
+        proxy = ParticipantDataProxy({}, session)
+
+        with pytest.raises(ValueError, match="not JSON serializable"):
+            proxy.set({"timestamp": datetime.now()})
+
+    def test_set_key_rejects_non_json_serializable_value(self):
+        session = ExperimentSessionFactory.create()
+        proxy = ParticipantDataProxy({}, session)
+
+        with pytest.raises(ValueError, match="not JSON serializable"):
+            proxy.set_key("obj", datetime.now())
+
+    def test_append_to_key_rejects_non_json_serializable_value(self):
+        session = ExperimentSessionFactory.create()
+        proxy = ParticipantDataProxy({}, session)
+
+        with pytest.raises(ValueError, match="not JSON serializable"):
+            proxy.append_to_key("items", datetime.now())
+
+    def test_set_accepts_json_serializable_data(self):
+        session = ExperimentSessionFactory.create()
+        input_state = {}
+        proxy = ParticipantDataProxy(input_state, session)
+
+        proxy.set({"str": "hello", "int": 42, "float": 3.14, "bool": True, "none": None, "list": [1, 2]})
+        assert input_state["participant_data"]["str"] == "hello"

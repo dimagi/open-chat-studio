@@ -18,6 +18,14 @@ class CollectionFactory(factory.django.DjangoModelFactory):
     )
 
 
+class CollectionFileFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "documents.CollectionFile"
+
+    file = factory.SubFactory("apps.utils.factories.files.FileFactory", team=factory.SelfAttribute("..collection.team"))
+    collection = factory.SubFactory(CollectionFactory)
+
+
 class DocumentSourceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "documents.DocumentSource"

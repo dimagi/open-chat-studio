@@ -12,6 +12,7 @@ import pytest
 from django.test import override_settings
 
 from apps.annotations.models import TagCategories
+from apps.channels.channels_v2.channel_base import ChannelBase as NewChannelBase
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     DEFAULT_ERROR_RESPONSE_TEXT,
@@ -546,7 +547,7 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
         system_metadata={"consent": True},
     )
     channel = ChannelBase.from_experiment_session(session)
-    assert type(channel) in ChannelBase.__subclasses__()
+    assert type(channel) in ChannelBase.__subclasses__() or type(channel) in NewChannelBase.__subclasses__()
 
 
 @pytest.mark.django_db()

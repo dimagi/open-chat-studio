@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import AnonymousUser
 from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed, ParseError
@@ -62,7 +64,12 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         """
         # For POST /api/chat/start/ - experiment_id is in request body as chatbot_id
         if hasattr(request, "data") and "chatbot_id" in request.data:
-            return request.data.get("chatbot_id")
+            chatbot_id = request.data.get("chatbot_id")
+            try:
+                uuid.UUID(str(chatbot_id))
+            except (ValueError, AttributeError):
+                raise ParseError("chatbot_id must be a valid UUID")
+            return chatbot_id
 
         if session_id := request.parser_context["kwargs"].get("session_id"):
             if session := get_experiment_session_cached(session_id):

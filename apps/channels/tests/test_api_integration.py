@@ -46,9 +46,8 @@ def test_new_message_creates_a_channel_and_participant(get_llm_response_mock, ex
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.ApiChannel._load_latest_session")
 @patch("apps.chat.bots.PipelineBot.process_input")
-def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_session, experiment, client):
+def test_new_message_with_existing_session(get_llm_response_mock, experiment, client):
     get_llm_response_mock.return_value = ChatMessage(content="Hi user")
 
     user = experiment.team.members.first()
@@ -72,7 +71,6 @@ def test_new_message_with_existing_session(get_llm_response_mock, _load_latest_s
 
     # check that no new sessions were created
     assert not ExperimentSession.objects.exclude(id=session.id).exists()
-    _load_latest_session.assert_not_called()
 
 
 @pytest.mark.django_db()

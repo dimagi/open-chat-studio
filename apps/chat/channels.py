@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 import emoji
 import httpx
-from django.conf import settings
 from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
@@ -52,6 +51,7 @@ from apps.ocs_notifications.notifications import (
     audio_transcription_failure_notification,
     file_delivery_failure_notification,
 )
+from apps.service_providers.file_limits import can_send_on_slack, can_send_on_telegram
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.models import MessagingProviderType
@@ -329,7 +329,10 @@ class ChannelBase(ABC):
         elif platform == "facebook":
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
-            channel_cls = ApiChannel
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
+            from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
+
+            channel_cls = NewApiChannel
         elif platform == "sureadhere":
             channel_cls = SureAdhereChannel
         elif platform == "slack":
@@ -339,10 +342,13 @@ class ChannelBase(ABC):
         # elif platform == "evaluations":
         #  evals channel can't be called this way
         elif platform == "embedded_widget":
-            channel_cls = ApiChannel
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
+            from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
+
+            channel_cls = NewApiChannel
         else:
             raise Exception(f"Unsupported platform type {platform}")
-        return channel_cls
+        return channel_cls  # ty: ignore[invalid-return-type]
 
     @staticmethod
     def from_experiment_session(experiment_session: ExperimentSession) -> ChannelBase:
@@ -1122,15 +1128,7 @@ class TelegramChannel(ChannelBase):
         )
 
     def _can_send_file(self, file: File) -> bool:
-        mime = file.content_type
-        size = file.content_size or 0  # in bytes
-
-        if mime.startswith("image/"):
-            return size <= 10 * 1024 * 1024  # 10 MB for images
-        elif mime.startswith(("video/", "audio/", "application/")):
-            return size <= 50 * 1024 * 1024  # 50 MB for other supported types
-        else:
-            return False
+        return can_send_on_telegram(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(self, file: File):
         chat_id = self.participant_identifier
@@ -1285,6 +1283,7 @@ class FacebookMessengerChannel(ChannelBase):
         )
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.api_channel.ApiChannel
 class ApiChannel(ChannelBase):
     """Message Handler for the API"""
 
@@ -1380,11 +1379,7 @@ class SlackChannel(ChannelBase):
             raise ChannelException("WebChannel requires an existing session")
 
     def _can_send_file(self, file: File) -> bool:
-        mime = file.content_type
-        size = file.content_size or 0
-        # slack allows 1 GB, but keeping it to 50MB as we can only upload file upto 50MB in collections
-        max_size = settings.MAX_FILE_SIZE_MB * 1024 * 1024
-        return mime.startswith(("image/", "video/", "audio/", "application/")) and size <= max_size
+        return can_send_on_slack(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(self, file: File):
         if not self.message:
