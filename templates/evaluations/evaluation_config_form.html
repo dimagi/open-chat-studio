@@ -18,7 +18,9 @@
         filterEvaluators(el) {
           el.querySelectorAll('input[data-evaluation-mode]').forEach(input => {
             const li = input.closest('li') || input.parentElement;
-            li.style.display = input.dataset.evaluationMode === this.datasetMode ? '' : 'none';
+            const visible = input.dataset.evaluationMode === this.datasetMode;
+            li.style.display = visible ? '' : 'none';
+            input.disabled = !visible;
           });
         },
         onExperimentChange() {

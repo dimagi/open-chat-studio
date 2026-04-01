@@ -343,7 +343,9 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         table_view.kwargs = {"dataset_id": dataset_id}
 
         queryset = table_view.get_queryset()
-        table = table_view.table_class(queryset, dataset_id=dataset_id, request=request)
+        table = table_view.table_class(
+            queryset, dataset_id=dataset_id, evaluation_mode=dataset.evaluation_mode, request=request
+        )
 
         return render(request, "table/single_table.html", {"table": table})
 
@@ -413,7 +415,9 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        table = DatasetMessagesTable(data=[message], dataset_id=dataset.id, request=request)
+        table = DatasetMessagesTable(
+            data=[message], dataset_id=dataset.id, evaluation_mode=dataset.evaluation_mode, request=request
+        )
         response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")

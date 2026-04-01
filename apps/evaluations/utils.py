@@ -213,7 +213,7 @@ def _clean_field_name(field_name):
     return field_name or "context_variable"
 
 
-def make_session_evaluation_messages(session_external_ids: list[str]) -> list["EvaluationMessage"]:
+def make_session_evaluation_messages(session_external_ids: list[str], team=None) -> list["EvaluationMessage"]:
     """Create one EvaluationMessage per session, with the full conversation as history.
 
     Unlike make_evaluation_messages_from_sessions (which creates one message per human-AI pair),
@@ -224,10 +224,11 @@ def make_session_evaluation_messages(session_external_ids: list[str]) -> list["E
     if not session_external_ids:
         return []
 
+    filters = {"chat__experiment_session__external_id__in": session_external_ids}
+    if team is not None:
+        filters["chat__experiment_session__team"] = team
     all_messages = list(
-        ChatMessage.objects.filter(
-            chat__experiment_session__external_id__in=session_external_ids,
-        )
+        ChatMessage.objects.filter(**filters)
         .annotate(
             session_external_id=F("chat__experiment_session__external_id"),
             experiment_public_id=F("chat__experiment_session__experiment__public_id"),

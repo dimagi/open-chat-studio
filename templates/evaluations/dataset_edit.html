@@ -216,6 +216,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       // CSV upload functionality
       const uploadForm = document.getElementById('csv-upload-form');
+      if (!uploadForm) return;
       const uploadStatus = document.getElementById('upload-status');
       const uploadAlert = document.getElementById('upload-alert');
       const uploadMessage = document.getElementById('upload-message');

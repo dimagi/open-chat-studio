@@ -10,6 +10,7 @@ from typing import cast
 from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
+from django.db import transaction
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -665,7 +666,6 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
 
 
 def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
-
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
 
@@ -914,33 +914,35 @@ def create_session_mode_dataset_task(self, dataset_id, team_id, session_ids):
         progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
 
         with current_team(dataset.team):
-            evaluation_messages = make_session_evaluation_messages(session_ids)
+            evaluation_messages = make_session_evaluation_messages(session_ids, team=dataset.team)
 
             progress_recorder.set_progress(
                 40, 100, f"Found {len(evaluation_messages)} sessions, checking for duplicates..."
             )
 
-            existing_session_ids = set(
-                dataset.messages.filter(metadata__session_id__isnull=False).values_list(
-                    "metadata__session_id", flat=True
+            with transaction.atomic():
+                # Re-read existing session IDs inside the transaction for consistency
+                existing_session_ids = set(
+                    dataset.messages.select_for_update()
+                    .filter(metadata__session_id__isnull=False)
+                    .values_list("metadata__session_id", flat=True)
                 )
-            )
 
-            messages_to_add = [
-                msg for msg in evaluation_messages if msg.metadata.get("session_id") not in existing_session_ids
-            ]
+                messages_to_add = [
+                    msg for msg in evaluation_messages if msg.metadata.get("session_id") not in existing_session_ids
+                ]
 
-            if not messages_to_add:
-                dataset.status = DatasetCreationStatus.COMPLETED
-                dataset.job_id = ""
-                dataset.save(update_fields=["status", "job_id"])
-                progress_recorder.set_progress(100, 100, "Clone complete - no new sessions to add")
-                return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
+                if not messages_to_add:
+                    dataset.status = DatasetCreationStatus.COMPLETED
+                    dataset.job_id = ""
+                    dataset.save(update_fields=["status", "job_id"])
+                    progress_recorder.set_progress(100, 100, "Clone complete - no new sessions to add")
+                    return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
 
-            progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new session messages...")
+                progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new session messages...")
 
-            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
-            dataset.messages.add(*created_messages)
+                created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
+                dataset.messages.add(*created_messages)
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
