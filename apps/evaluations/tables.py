@@ -243,6 +243,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         template_name="evaluations/session_checkbox.html",
         verbose_name="Filtered",
         orderable=False,
+        attrs={"th": {"class": "col-filtered-only"}, "td": {"class": "col-filtered-only"}},
         extra_context={
             "css_class": "checkbox checkbox-secondary filter-checkbox",
             "js_function": "updateFilteredSessions()",
@@ -353,10 +354,13 @@ class DatasetMessagesTable(tables.Table):
         ]
     )
 
-    def __init__(self, *args, highlight_message_id=None, dataset_id=None, **kwargs):
+    def __init__(self, *args, highlight_message_id=None, dataset_id=None, evaluation_mode=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.highlight_message_id = highlight_message_id
         self.dataset_id = dataset_id
+        if evaluation_mode == "session":
+            self.columns.hide("human_message_content")
+            self.columns.hide("ai_message_content")
 
     class Meta:
         model = EvaluationMessage

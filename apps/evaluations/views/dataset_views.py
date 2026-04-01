@@ -268,14 +268,14 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
-    def get_queryset(self):
-        dataset_id = self.kwargs.get("dataset_id")
-        # Verify the dataset exists and user has access
-        get_object_or_404(EvaluationDataset, id=dataset_id, team=self.request.team)
+    def get_dataset(self):
+        if not hasattr(self, "_dataset"):
+            self._dataset = get_object_or_404(EvaluationDataset, id=self.kwargs["dataset_id"], team=self.request.team)
+        return self._dataset
 
-        return EvaluationMessage.objects.filter(
-            evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
-        ).order_by("id")
+    def get_queryset(self):
+        dataset = self.get_dataset()
+        return EvaluationMessage.objects.filter(evaluationdataset=dataset).order_by("id")
 
     def get_highlight_message_id(self):
         """Extract and validate the message_id query parameter for highlighting."""
@@ -304,12 +304,14 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["highlight_message_id"] = self.get_highlight_message_id()
+        context["evaluation_mode"] = self.get_dataset().evaluation_mode
         return context
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["highlight_message_id"] = self.get_highlight_message_id()
         kwargs["dataset_id"] = self.kwargs["dataset_id"]
+        kwargs["evaluation_mode"] = self.get_dataset().evaluation_mode
         return kwargs
 
 

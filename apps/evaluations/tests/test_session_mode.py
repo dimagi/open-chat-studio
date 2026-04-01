@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 from apps.chat.models import ChatMessageType
@@ -308,6 +310,60 @@ class TestDatasetFormEvaluationMode:
         dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
         form = EvaluationDatasetEditForm(team=team, instance=dataset)
         assert "evaluation_mode" not in form.fields
+
+    def test_edit_form_session_mode_uses_session_clone_task(self):
+        """Editing a session-mode dataset calls _save_session_clone, not _save_clone."""
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
+
+        form = EvaluationDatasetEditForm(
+            team=team,
+            instance=dataset,
+            data={
+                "name": dataset.name,
+                "mode": "clone",
+                "session_ids": str(session.external_id),
+                "filtered_session_ids": "",
+            },
+        )
+        assert form.is_valid(), form.errors
+
+        with (
+            patch.object(form, "_save_session_clone") as mock_session_clone,
+            patch.object(form, "_save_clone") as mock_clone,
+        ):
+            form.save()
+
+        mock_session_clone.assert_called_once()
+        mock_clone.assert_not_called()
+
+    def test_edit_form_message_mode_uses_message_clone_task(self):
+        """Editing a message-mode dataset calls _save_clone, not _save_session_clone."""
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="message")
+
+        form = EvaluationDatasetEditForm(
+            team=team,
+            instance=dataset,
+            data={
+                "name": dataset.name,
+                "mode": "clone",
+                "session_ids": str(session.external_id),
+                "filtered_session_ids": "",
+            },
+        )
+        assert form.is_valid(), form.errors
+
+        with (
+            patch.object(form, "_save_session_clone") as mock_session_clone,
+            patch.object(form, "_save_clone") as mock_clone,
+        ):
+            form.save()
+
+        mock_clone.assert_called_once()
+        mock_session_clone.assert_not_called()
 
 
 @pytest.mark.django_db()

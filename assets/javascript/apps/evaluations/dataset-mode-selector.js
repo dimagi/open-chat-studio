@@ -189,12 +189,23 @@ window.datasetModeSelector = function(options = {}) {
   return {
     loaded: false,
     mode: options.defaultMode || 'clone',
+    evaluationMode: options.evaluationMode || 'message',
     selectedSessionIds: new Set(),
     filteredSessionIds: new Set(),
     allSessionIds: new Set(),
     sessionIdsFetchUrl: options.sessionIdsFetchUrl || '',
     sessionIdsIsLoading: false,
     errorMessages: [],
+
+    updateModeRadioVisibility() {
+      ['manual', 'csv'].forEach(modeValue => {
+        const radioInput = document.querySelector(`input[name="mode"][value="${modeValue}"]`);
+        if (radioInput) {
+          const container = radioInput.closest('li') || radioInput.parentElement;
+          if (container) container.style.display = this.evaluationMode === 'session' ? 'none' : '';
+        }
+      });
+    },
 
     init() {
       // Watch for mode changes using Alpine's $watch
@@ -214,6 +225,8 @@ window.datasetModeSelector = function(options = {}) {
       window.addEventListener('dataset-mode:table-update', () => this.onSessionsTableUpdate());
       window.addEventListener('filter:change', () => this.loadSessionIds());
       window.addEventListener('dataset-mode:session-ids-loaded', () => this.clearAllSelections());
+
+      this.$nextTick(() => this.updateModeRadioVisibility());
 
       this.loaded = true;
     },

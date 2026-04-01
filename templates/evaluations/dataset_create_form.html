@@ -46,7 +46,7 @@
             </div>
           </div>
 
-          <div id="sessions-table" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
+          <div id="sessions-table" :class="{'session-mode-active': evaluationMode === 'session'}" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
             {% include "table/table_placeholder.html" %}
           </div>
         </div>
@@ -368,6 +368,7 @@
                       const cloneRadio = document.querySelector('input[name="mode"][value="clone"]');
                       if (cloneRadio) cloneRadio.checked = true;
                   }
+                  this.updateModeRadioVisibility();
               });
           });
           const checkedRadio = document.querySelector('input[name="evaluation_mode"]:checked');

@@ -1,3 +1,5 @@
+.session-mode-active .col-filtered-only { display: none; }
+
 th.orderable:after {
     content: '';
     float: right;

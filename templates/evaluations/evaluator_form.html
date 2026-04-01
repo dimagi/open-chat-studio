@@ -131,7 +131,7 @@
                           x-model="params[fieldName]"
                           style="display: none;"
                           :required="isRequired(fieldName)"></textarea>
-                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+                <small class="form-text text-muted" x-show="field.description && getWidget(field) !== 'text_editor_widget'" x-text="field.description"></small>
               </div>
             </template>
 

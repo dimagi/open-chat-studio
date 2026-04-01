@@ -28,17 +28,19 @@ from apps.files.models import File
 
 
 class StyledRadioSelect(RadioSelect):
-    def __init__(self, attrs=None):
+    def __init__(self, attrs=None, x_model="mode"):
         default_attrs = {"class": "space-y-1"}
         if attrs:
             default_attrs.update(attrs)
         super().__init__(attrs=default_attrs)
+        self.x_model = x_model
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
 
         option["attrs"]["class"] = "radio radio-primary mr-2"
-        option["attrs"]["x-model"] = "mode"
+        if self.x_model:
+            option["attrs"]["x-model"] = self.x_model
         return option
 
 
@@ -308,7 +310,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
     evaluation_mode = forms.ChoiceField(
         choices=EvaluationMode.choices,
         initial=EvaluationMode.MESSAGE,
-        widget=StyledRadioSelect(),
+        widget=StyledRadioSelect(x_model=None),
         label="Evaluation mode",
         help_text="Message mode evaluates individual message pairs. Session mode evaluates entire conversations.",
     )
@@ -370,6 +372,26 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
             list(filtered_session_ids),
             self.filter_params.to_query() if self.filter_params else None,
             self.timezone,
+        )
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
+    def _save_session_clone(self, dataset):
+        """Dispatch async task to create session-mode messages."""
+        from apps.evaluations.tasks import create_session_mode_dataset_task  # noqa: PLC0415
+
+        session_ids = self.cleaned_data.get("session_ids", set())
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
+        all_session_ids = list(session_ids | filtered_session_ids)
+
+        if not all_session_ids:
+            return
+
+        task = create_session_mode_dataset_task.delay(
+            dataset.id,
+            self.team.id,
+            all_session_ids,
         )
 
         dataset.job_id = task.id
@@ -646,26 +668,6 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
-    def _save_session_clone(self, dataset):
-        """Dispatch async task to create session-mode messages."""
-        from apps.evaluations.tasks import create_session_mode_dataset_task  # noqa: PLC0415
-
-        session_ids = self.cleaned_data.get("session_ids", set())
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
-        all_session_ids = list(session_ids | filtered_session_ids)
-
-        if not all_session_ids:
-            return
-
-        task = create_session_mode_dataset_task.delay(
-            dataset.id,
-            self.team.id,
-            all_session_ids,
-        )
-
-        dataset.job_id = task.id
-        dataset.save(update_fields=["job_id"])
-
 
 def _get_message_pair_value(field_name: str, pair_index: int, field_value: str) -> dict:
     return _clean_json_field(f"{field_name} for pair {pair_index + 1}", field_value)
@@ -689,6 +691,7 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
+        self.fields["mode"].required = False
         # evaluation_mode is immutable after creation
         if "evaluation_mode" in self.fields:
             del self.fields["evaluation_mode"]
@@ -733,6 +736,9 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
             if self.cleaned_data.get("mode") == "clone":
                 dataset.status = DatasetCreationStatus.PENDING
                 dataset.save(update_fields=["status"])
-                self._save_clone(dataset)
+                if dataset.evaluation_mode == EvaluationMode.SESSION:
+                    self._save_session_clone(dataset)
+                else:
+                    self._save_clone(dataset)
 
         return dataset
