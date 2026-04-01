@@ -156,7 +156,6 @@ class EvaluationConfigForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
-        # Validate evaluation_mode compatibility
         dataset = cleaned_data.get("dataset")
         evaluators = cleaned_data.get("evaluators")
         if dataset and evaluators:

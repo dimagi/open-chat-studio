@@ -237,7 +237,6 @@ def make_session_evaluation_messages(session_external_ids: list[str]) -> list["E
         .order_by("chat__experiment_session__created_at", "created_at")
     )
 
-    # Group messages by session
     sessions: dict[str, list] = {}
     for msg in all_messages:
         sessions.setdefault(msg.session_external_id, []).append(msg)
@@ -248,12 +247,11 @@ def make_session_evaluation_messages(session_external_ids: list[str]) -> list["E
             {
                 "message_type": msg.message_type,
                 "content": msg.content,
-                "summary": getattr(msg, "summary", None),
+                "summary": msg.summary,
             }
             for msg in messages
         ]
 
-        # Get participant_data and session_state from the last AI message's trace
         participant_data = {}
         session_state = {}
         for msg in reversed(messages):

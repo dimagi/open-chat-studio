@@ -920,11 +920,11 @@ def create_session_mode_dataset_task(self, dataset_id, team_id, session_ids):
                 40, 100, f"Found {len(evaluation_messages)} sessions, checking for duplicates..."
             )
 
-            # Deduplicate by metadata.session_id
-            existing_session_ids = set()
-            for meta in dataset.messages.values_list("metadata", flat=True):
-                if meta and "session_id" in meta:
-                    existing_session_ids.add(meta["session_id"])
+            existing_session_ids = set(
+                dataset.messages.filter(metadata__session_id__isnull=False).values_list(
+                    "metadata__session_id", flat=True
+                )
+            )
 
             messages_to_add = [
                 msg for msg in evaluation_messages if msg.metadata.get("session_id") not in existing_session_ids

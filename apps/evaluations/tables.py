@@ -366,7 +366,7 @@ class DatasetMessagesTable(tables.Table):
         super().__init__(*args, **kwargs)
         self.highlight_message_id = highlight_message_id
         self.dataset_id = dataset_id
-        if evaluation_mode == "session":
+        if evaluation_mode == EvaluationMode.SESSION:
             self.columns.hide("human_message_content")
             self.columns.hide("ai_message_content")
 
