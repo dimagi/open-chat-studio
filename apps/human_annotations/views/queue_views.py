@@ -543,11 +543,13 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             return self._render_form(request, queue, form)
 
         dataset = form.cleaned_data["dataset"]
-        session_ids = {
-            sid
-            for metadata in dataset.messages.values_list("metadata", flat=True)
-            if (sid := metadata.get("session_id"))
-        }
+        session_ids = set()
+        for metadata in dataset.messages.values_list("metadata", flat=True):
+            if not isinstance(metadata, dict):
+                continue
+            sid = metadata.get("session_id")
+            if sid:
+                session_ids.add(str(sid))
 
         if not session_ids:
             messages.error(request, "No sessions found in dataset metadata.")
