@@ -59,6 +59,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Only create user and team, skip sample data (chatbots, files, etc.)",
         )
+        parser.add_argument(
+            "--superuser",
+            action="store_true",
+            help="Make the test user a superuser (default: False)",
+        )
 
     def handle(self, *args, **options):
         email = options["email"]
@@ -66,13 +71,14 @@ class Command(BaseCommand):
         team_slug = options["team_slug"]
         team_name = options["team_name"]
         skip_sample_data = options["skip_sample_data"]
+        superuser = options["superuser"]
 
         self.stdout.write("=" * 50)
         self.stdout.write("Seeding development data...")
         self.stdout.write("=" * 50)
 
         # Create user and team
-        user, team = self._create_user_and_team(email, password, team_slug, team_name)
+        user, team = self._create_user_and_team(email, password, team_slug, team_name, superuser)
 
         if not skip_sample_data:
             self._seed_sample_data(user, team)
@@ -89,7 +95,7 @@ class Command(BaseCommand):
             self.stdout.write("To add sample data later, run:")
             self.stdout.write(f"  python manage.py bootstrap_data --email {email} --team-slug {team_slug}")
 
-    def _create_user_and_team(self, email: str, password: str, team_slug: str, team_name: str):
+    def _create_user_and_team(self, email: str, password: str, team_slug: str, team_name: str, superuser: bool = False):
         """Create test user and team with owner permissions."""
         User = get_user_model()
 
@@ -103,12 +109,18 @@ class Command(BaseCommand):
         # Create or update user
         user, created = User.objects.get_or_create(username=email, defaults={"email": email})
         user.set_password(password)
+        if superuser:
+            user.is_staff = True
+            user.is_superuser = True
         user.save()
 
         if created:
             self.stdout.write(self.style.SUCCESS(f"Created user: {email}"))
         else:
             self.stdout.write(self.style.WARNING(f"User already exists: {email} (password updated)"))
+
+        if superuser:
+            self.stdout.write(self.style.SUCCESS("  User granted superuser privileges"))
 
         # Create or get team
         team, created = Team.objects.get_or_create(slug=team_slug, defaults={"name": team_name})
