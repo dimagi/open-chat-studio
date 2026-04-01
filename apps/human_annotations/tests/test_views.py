@@ -1251,6 +1251,15 @@ def test_import_from_dataset_post_empty_metadata_redirects_with_error(client, te
 
 
 @pytest.mark.django_db()
+def test_import_from_dataset_post_invalid_form_rerenders(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": ""})
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert response.context["form"].errors
+
+
+@pytest.mark.django_db()
 def test_import_from_dataset_post_all_duplicates_creates_no_new_items(client, team_with_users, queue):
     session1 = ExperimentSessionFactory.create(team=team_with_users)
     session2 = ExperimentSessionFactory.create(team=team_with_users)

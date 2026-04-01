@@ -558,6 +558,7 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "id", flat=True
             )
         )
+        unresolved = len(session_ids) - len(session_pks)
         existing_pks = set(
             AnnotationItem.objects.filter(queue=queue, session_id__in=session_pks).values_list("session_id", flat=True)
         )
@@ -572,10 +573,12 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             if session_pk not in existing_pks
         ]
         created = AnnotationItem.objects.bulk_create(items_to_create, ignore_conflicts=True)
-        skipped = len(session_pks) - len(created)
+        skipped = len(existing_pks)
 
         msg = f"Added {len(created)} sessions."
         if skipped:
             msg += f" Skipped {skipped} already in queue."
+        if unresolved:
+            msg += f" {unresolved} session ID(s) from the dataset could not be matched to existing sessions."
         messages.success(request, msg)
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)

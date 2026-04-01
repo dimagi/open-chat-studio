@@ -1,4 +1,5 @@
 {% extends "web/app/app_base.html" %}
+{% load form_tags %}
 
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -17,30 +18,7 @@
   <form method="post">
     {% csrf_token %}
     <div class="flex flex-col gap-4">
-      <div class="form-control">
-        <label class="label" for="{{ form.dataset.id_for_label }}">
-          <span class="label-text">{{ form.dataset.label }}</span>
-        </label>
-        <select name="{{ form.dataset.html_name }}" id="{{ form.dataset.id_for_label }}"
-                class="select select-bordered w-full">
-          <option value="">---------</option>
-          {% for pk, label in form.dataset.field.choices %}
-            {% if pk %}
-              <option value="{{ pk }}"{% if form.dataset.value == pk|stringformat:"s" %} selected{% endif %}>{{ label }}</option>
-            {% endif %}
-          {% endfor %}
-        </select>
-        {% if form.dataset.help_text %}
-          <label class="label">
-            <span class="label-text-alt text-gray-500">{{ form.dataset.help_text }}</span>
-          </label>
-        {% endif %}
-        {% for error in form.dataset.errors %}
-          <label class="label">
-            <span class="label-text-alt text-error">{{ error }}</span>
-          </label>
-        {% endfor %}
-      </div>
+      {% render_form_fields form %}
 
       <div class="flex gap-2">
         <button type="submit" class="btn btn-primary">Import</button>
