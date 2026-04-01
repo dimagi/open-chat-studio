@@ -17,6 +17,7 @@ from apps.human_annotations.models import (
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.teams.models import Flag
+from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
@@ -1189,3 +1190,78 @@ def test_reviewer_cannot_remove_session(reviewer_client, team_with_users, queue)
     response = reviewer_client.delete(url)
     assert response.status_code == 403
     assert AnnotationItem.objects.filter(pk=item.pk).exists()
+
+
+# ===== Import from Dataset =====
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_get_renders_form(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert "queue" in response.context
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_get_requires_permission(reviewer_client, reviewer_membership, team_with_users, queue):
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_creates_annotation_items(client, team_with_users, queue):
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    msg = EvaluationMessageFactory.create(metadata={"session_id": str(session.external_id)})
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg])
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue, session=session).exists()
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_skips_existing_sessions(client, team_with_users, queue):
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    msg = EvaluationMessageFactory.create(metadata={"session_id": str(session.external_id)})
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg])
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session)
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 1
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_empty_metadata_redirects_with_error(client, team_with_users, queue):
+    msg = EvaluationMessageFactory.create(metadata={})
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg])
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_all_duplicates_creates_no_new_items(client, team_with_users, queue):
+    session1 = ExperimentSessionFactory.create(team=team_with_users)
+    session2 = ExperimentSessionFactory.create(team=team_with_users)
+    msg1 = EvaluationMessageFactory.create(metadata={"session_id": str(session1.external_id)})
+    msg2 = EvaluationMessageFactory.create(metadata={"session_id": str(session2.external_id)})
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg1, msg2])
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session1)
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session2)
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 2

@@ -11,6 +11,7 @@ from apps.evaluations.field_definitions import (
     IntFieldDefinition,
     StringFieldDefinition,
 )
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset
 
 from .models import AnnotationQueue
 
@@ -86,6 +87,20 @@ class AnnotationQueueForm(forms.ModelForm):
         if not (1 <= value <= 10):
             raise ValidationError("Must be between 1 and 10")
         return value
+
+
+class ImportFromDatasetForm(forms.Form):
+    dataset = forms.ModelChoiceField(
+        queryset=EvaluationDataset.objects.none(),
+        label="Dataset",
+        help_text="Select the evaluation dataset to import sessions from.",
+    )
+
+    def __init__(self, *args, team, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["dataset"].queryset = EvaluationDataset.objects.filter(
+            team=team, status=DatasetCreationStatus.COMPLETED
+        ).order_by("name")
 
 
 def build_annotation_form(queue):

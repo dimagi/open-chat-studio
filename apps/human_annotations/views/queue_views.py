@@ -30,7 +30,7 @@ from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
 
-from ..forms import AnnotationQueueForm
+from ..forms import AnnotationQueueForm, ImportFromDatasetForm
 from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus, QueueStatus
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
@@ -520,3 +520,62 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         response = HttpResponse(content, content_type="application/jsonl")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.jsonl"'
         return response
+
+
+class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "human_annotations.add_annotationitem"
+
+    def _render_form(self, request, queue, form):
+        return render(
+            request,
+            "human_annotations/import_from_dataset.html",
+            {"queue": queue, "form": form, "active_tab": "annotation_queues"},
+        )
+
+    def get(self, request, team_slug: str, pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        return self._render_form(request, queue, ImportFromDatasetForm(team=request.team))
+
+    def post(self, request, team_slug: str, pk: int):
+        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
+        form = ImportFromDatasetForm(request.POST, team=request.team)
+        if not form.is_valid():
+            return self._render_form(request, queue, form)
+
+        dataset = form.cleaned_data["dataset"]
+        session_ids = {
+            sid
+            for metadata in dataset.messages.values_list("metadata", flat=True)
+            if (sid := metadata.get("session_id"))
+        }
+
+        if not session_ids:
+            messages.error(request, "No sessions found in dataset metadata.")
+            return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
+
+        session_pks = list(
+            ExperimentSession.objects.filter(external_id__in=session_ids, team=request.team).values_list(
+                "id", flat=True
+            )
+        )
+        existing_pks = set(
+            AnnotationItem.objects.filter(queue=queue, session_id__in=session_pks).values_list("session_id", flat=True)
+        )
+        items_to_create = [
+            AnnotationItem(
+                queue=queue,
+                team=request.team,
+                item_type=AnnotationItemType.SESSION,
+                session_id=session_pk,
+            )
+            for session_pk in session_pks
+            if session_pk not in existing_pks
+        ]
+        created = AnnotationItem.objects.bulk_create(items_to_create, ignore_conflicts=True)
+        skipped = len(session_pks) - len(created)
+
+        msg = f"Added {len(created)} sessions."
+        if skipped:
+            msg += f" Skipped {skipped} already in queue."
+        messages.success(request, msg)
+        return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
