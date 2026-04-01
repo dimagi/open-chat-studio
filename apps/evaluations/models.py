@@ -232,7 +232,8 @@ class EvaluationDataset(BaseTeamModel):
     error_message = models.TextField(blank=True)
 
     def __str__(self):
-        return f"{self.name} ({self.messages.count()} messages)"
+        mode = EvaluationMode(self.evaluation_mode).label
+        return f"{self.name} ({self.messages.count()} {mode}s)"
 
     def get_absolute_url(self):
         return reverse("evaluations:dataset_edit", args=[get_slug_for_team(self.team_id), self.id])
