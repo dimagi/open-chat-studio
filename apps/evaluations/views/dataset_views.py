@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 from datetime import timedelta
+from functools import cached_property
 from io import StringIO
 from itertools import islice
 
@@ -268,13 +269,12 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
-    def get_dataset(self):
-        if not hasattr(self, "_dataset"):
-            self._dataset = get_object_or_404(EvaluationDataset, id=self.kwargs["dataset_id"], team=self.request.team)
-        return self._dataset
+    @cached_property
+    def dataset(self):
+        return get_object_or_404(EvaluationDataset, id=self.kwargs["dataset_id"], team=self.request.team)
 
     def get_queryset(self):
-        dataset = self.get_dataset()
+        dataset = self.dataset
         return EvaluationMessage.objects.filter(evaluationdataset=dataset).order_by("id")
 
     def get_highlight_message_id(self):
@@ -304,14 +304,14 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["highlight_message_id"] = self.get_highlight_message_id()
-        context["evaluation_mode"] = self.get_dataset().evaluation_mode
+        context["evaluation_mode"] = self.dataset.evaluation_mode
         return context
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["highlight_message_id"] = self.get_highlight_message_id()
         kwargs["dataset_id"] = self.kwargs["dataset_id"]
-        kwargs["evaluation_mode"] = self.get_dataset().evaluation_mode
+        kwargs["evaluation_mode"] = self.dataset.evaluation_mode
         return kwargs
 
 

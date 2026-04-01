@@ -2,17 +2,39 @@
 {% load form_tags i18n %}
 
 {% block form %}
-  <div x-data="{
-    runGeneration: {{ form.run_generation.value|yesno:'true,false' }},
-    datasetMode: 'message',
-    isSessionMode() { return this.datasetMode === 'session'; }
-}" x-init="
-    const datasetSelect = document.querySelector('[name=dataset]');
-    if (datasetSelect && datasetSelect.selectedOptions[0]) {
-        datasetMode = datasetSelect.selectedOptions[0].dataset?.evaluationMode || 'message';
-        if (datasetMode === 'session') { runGeneration = false; }
-    }
-">
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('evaluationConfigForm', (runGenerationInitial, showVersionSelectInitial) => ({
+        runGeneration: runGenerationInitial,
+        datasetMode: 'message',
+        showVersionSelect: showVersionSelectInitial,
+        isSessionMode() { return this.datasetMode === 'session'; },
+        onDatasetChange() {
+          const opt = this.$refs.datasetSelect.selectedOptions[0];
+          this.datasetMode = opt?.dataset?.evaluationMode || 'message';
+          if (this.datasetMode === 'session') { this.runGeneration = false; }
+        },
+        // Hide evaluators whose mode doesn't match the selected dataset's evaluation mode
+        filterEvaluators(el) {
+          el.querySelectorAll('input[data-evaluation-mode]').forEach(input => {
+            const li = input.closest('li') || input.parentElement;
+            li.style.display = input.dataset.evaluationMode === this.datasetMode ? '' : 'none';
+          });
+        },
+        onExperimentChange() {
+          // Hide the version select box while HTMX loads the new options
+          this.showVersionSelect = false;
+        },
+        init() {
+          if (this.$refs.datasetSelect && this.$refs.datasetSelect.selectedOptions[0]) {
+            this.datasetMode = this.$refs.datasetSelect.selectedOptions[0].dataset?.evaluationMode || 'message';
+            if (this.datasetMode === 'session') { this.runGeneration = false; }
+          }
+        },
+      }));
+    });
+  </script>
+  <div x-data="evaluationConfigForm({{ form.run_generation.value|yesno:'true,false' }}, {{ form.experiment.value|yesno:'true,false' }})">
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
@@ -24,11 +46,8 @@
         <select name="{{ form.dataset.name }}"
                 id="{{ form.dataset.id_for_label }}"
                 class="select w-full"
-                @change="
-                    const opt = $el.selectedOptions[0];
-                    datasetMode = opt?.dataset?.evaluationMode || 'message';
-                    if (datasetMode === 'session') { runGeneration = false; }
-                ">
+                x-ref="datasetSelect"
+                @change="onDatasetChange()">
             <option value="">---------</option>
             {% for dataset in form.dataset.field.queryset %}
                 <option value="{{ dataset.pk }}"
@@ -41,12 +60,7 @@
         {{ form.dataset.errors }}
     </div>
 
-    <div x-effect="
-        $el.querySelectorAll('input[data-evaluation-mode]').forEach(input => {
-            const li = input.closest('li') || input.parentElement;
-            li.style.display = input.dataset.evaluationMode === datasetMode ? '' : 'none';
-        })
-    ">
+    <div x-effect="filterEvaluators($el)">
         {% render_form_fields form "evaluators" %}
     </div>
 
@@ -81,11 +95,7 @@
               hx-include="[name='{{ form.experiment.name }}']"
               hx-swap="outerHTML show:#version-select-container"
               hx-indicator="#version-loading"
-              onchange="
-                        // hide the version select box whenever a new item is selected
-                        const container = document.getElementById('version-select-container');
-                        container.style.display = 'none';
-                       ">
+              @change="onExperimentChange()">
         {% if form.experiment.empty_label %}
           <option value="">{{ form.experiment.empty_label }}</option>
         {% endif %}
@@ -98,7 +108,7 @@
 
     {# The version select field starts hidden in the "new" form until the user selects an experiment #}
     <div x-show="runGeneration && !isSessionMode()" x-cloak x-collapse>
-      <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
+      <div id="version-select-container" x-show="showVersionSelect">
         {% render_form_fields form "experiment_version" %}
       </div>
     </div>

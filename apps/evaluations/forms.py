@@ -2,6 +2,7 @@ import csv
 import importlib
 import json
 from io import StringIO
+from typing import cast
 
 from django import forms
 from django.forms.widgets import RadioSelect
@@ -125,7 +126,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "base_experiment",
         ]
         widgets = {
-            "evaluators": forms.CheckboxSelectMultiple(),
+            "evaluators": EvaluatorCheckboxWidget(),
         }
 
     def __init__(self, team, *args, **kwargs):
@@ -134,9 +135,8 @@ class EvaluationConfigForm(forms.ModelForm):
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
         evaluator_qs = Evaluator.objects.filter(team=team)
-        # Set widget before queryset so Django's queryset setter propagates choices to the new widget
-        self.fields["evaluators"].widget = EvaluatorCheckboxWidget(evaluator_queryset=evaluator_qs)
         self.fields["evaluators"].queryset = evaluator_qs
+        cast(EvaluatorCheckboxWidget, self.fields["evaluators"].widget)._evaluator_queryset = evaluator_qs
         self.fields["experiment"].queryset = (
             Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
         )
@@ -260,14 +260,12 @@ class EvaluatorForm(forms.ModelForm):
         widgets = {
             "type": forms.HiddenInput(),
             "params": forms.HiddenInput(),
+            "evaluation_mode": forms.RadioSelect(choices=EvaluationMode.choices),
         }
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
-        self.fields["evaluation_mode"].widget = forms.RadioSelect(
-            choices=EvaluationMode.choices,
-        )
 
     def clean(self):
         cleaned_data = super().clean()
@@ -404,6 +402,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         """Dispatch async task to create session-mode messages."""
         from apps.evaluations.tasks import create_session_mode_dataset_task  # noqa: PLC0415
 
+        # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
         session_ids = self.cleaned_data.get("session_ids", set())
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
         all_session_ids = list(session_ids | filtered_session_ids)
