@@ -10,6 +10,8 @@ Usage:
     python manage.py bootstrap_data --skip-sample-data  # Only create user/team
 """
 
+import os
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand
@@ -147,9 +149,12 @@ class Command(BaseCommand):
         # LLM Provider and Model
         self.stdout.write("")
         self.stdout.write("--- Creating LLM Provider ---")
+        openai_api_key = os.environ.get("OPENAI_SECRET_KEY", "test-key")
         llm_provider, created = LlmProvider.objects.get_or_create(
-            name="OpenAI", team=team, defaults={"type": "openai", "config": {"openai_api_key": "test-key"}}
+            name="OpenAI", team=team, defaults={"type": "openai", "config": {"openai_api_key": openai_api_key}}
         )
+        if created and openai_api_key != "test-key":
+            self.stdout.write(self.style.SUCCESS("  Using OPENAI_SECRET_KEY from environment"))
         self._log_created("LLM provider", llm_provider.name, created)
 
         llm_model = get_first_llm_provider_model(llm_provider, team.id)
