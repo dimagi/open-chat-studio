@@ -923,16 +923,14 @@ def create_session_mode_dataset_task(self, dataset_id, team_id, session_ids):
             )
 
             with transaction.atomic():
-                # Re-read existing session IDs inside the transaction for consistency
-                existing_session_ids = set(
+                # Re-read existing session PKs inside the transaction for consistency
+                existing_session_pks = set(
                     dataset.messages.select_for_update()
-                    .filter(metadata__session_id__isnull=False)
-                    .values_list("metadata__session_id", flat=True)
+                    .filter(session__isnull=False)
+                    .values_list("session_id", flat=True)
                 )
 
-                messages_to_add = [
-                    msg for msg in evaluation_messages if msg.metadata.get("session_id") not in existing_session_ids
-                ]
+                messages_to_add = [msg for msg in evaluation_messages if msg.session_id not in existing_session_pks]
 
                 if not messages_to_add:
                     dataset.status = DatasetCreationStatus.COMPLETED

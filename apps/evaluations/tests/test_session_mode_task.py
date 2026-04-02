@@ -34,11 +34,12 @@ def test_create_session_mode_dataset_task_success():
     assert dataset.status == DatasetCreationStatus.COMPLETED
     assert dataset.job_id == ""
 
-    messages = list(dataset.messages.all())
+    messages = list(dataset.messages.select_related("session").all())
     assert len(messages) == 1
     assert messages[0].input == {}
     assert messages[0].output == {}
     assert len(messages[0].history) == 2
+    assert messages[0].session == session
 
 
 @pytest.mark.django_db()
@@ -55,6 +56,7 @@ def test_create_session_mode_dataset_task_all_duplicates():
         input={},
         output={},
         history=[],
+        session=session,
         metadata={"session_id": str(session.external_id), "created_mode": "clone"},
     )
     dataset = EvaluationDataset.objects.create(

@@ -113,6 +113,7 @@ class TestMakeSessionEvaluationMessages:
         assert msg.metadata["session_id"] == str(session.external_id)
         assert msg.metadata["experiment_id"] == str(session.experiment.public_id)
         assert msg.metadata["created_mode"] == "clone"
+        assert msg.session == session
         assert msg.input_chat_message is None
         assert msg.expected_output_chat_message is None
 

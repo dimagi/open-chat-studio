@@ -4,11 +4,11 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('evaluations', '0012_backfill_evaluation_mode'),
+        ('evaluations', '0012_backfill_evaluation_message_session_fk'),
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.AddField(
             model_name='evaluationdataset',
             name='evaluation_mode',
             field=models.CharField(
@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
                 max_length=10,
             ),
         ),
-        migrations.AlterField(
+        migrations.AddField(
             model_name='evaluator',
             name='evaluation_mode',
             field=models.CharField(

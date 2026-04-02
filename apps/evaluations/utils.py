@@ -243,6 +243,8 @@ def make_session_evaluation_messages(session_external_ids: list[str], team=None)
     for msg in all_messages:
         sessions.setdefault(msg.session_external_id, []).append(msg)
 
+    session_map = {str(s.external_id): s for s in ExperimentSession.objects.filter(external_id__in=sessions.keys())}
+
     result = []
     for session_id, messages in sessions.items():
         history = [
@@ -263,6 +265,7 @@ def make_session_evaluation_messages(session_external_ids: list[str], team=None)
                 break
 
         eval_message = EvaluationMessage(
+            session=session_map.get(str(session_id)),
             input={},
             output={},
             history=history,
