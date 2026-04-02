@@ -61,7 +61,7 @@
     "@uiw/codemirror-theme-github": "^4.25.5",
     "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
-    "alpinejs": "^3.14.3",
+    "alpinejs": "^3.15.9",
     "axios": "^1.13.5",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
