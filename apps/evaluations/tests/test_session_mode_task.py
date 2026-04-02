@@ -5,13 +5,13 @@ from django.test import override_settings
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
-from apps.evaluations.tasks import create_session_mode_dataset_task
+from apps.evaluations.tasks import create_dataset_from_sessions_task
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_session_mode_dataset_task_success():
+def test_create_dataset_from_sessions_task_success():
     """Task creates one EvaluationMessage per session and sets status to COMPLETED."""
     session = ExperimentSessionFactory.create()
     team = session.team
@@ -23,7 +23,7 @@ def test_create_session_mode_dataset_task_success():
         team=team, name="Test Session Dataset", evaluation_mode=EvaluationMode.SESSION
     )
 
-    task_result = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id])
+    task_result = create_dataset_from_sessions_task.delay(dataset.id, team.id, [session.external_id])
     result = task_result.get()
 
     assert result["success"] is True
@@ -44,7 +44,7 @@ def test_create_session_mode_dataset_task_success():
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_session_mode_dataset_task_all_duplicates():
+def test_create_dataset_from_sessions_task_all_duplicates():
     """Task returns success with 0 created_count when all sessions are already in the dataset."""
     session = ExperimentSessionFactory.create()
     team = session.team
@@ -64,7 +64,7 @@ def test_create_session_mode_dataset_task_all_duplicates():
     )
     dataset.messages.add(existing_message)
 
-    task_result = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id])
+    task_result = create_dataset_from_sessions_task.delay(dataset.id, team.id, [session.external_id])
     result = task_result.get()
 
     assert result["success"] is True
@@ -79,12 +79,12 @@ def test_create_session_mode_dataset_task_all_duplicates():
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_session_mode_dataset_task_dataset_not_found():
+def test_create_dataset_from_sessions_task_dataset_not_found():
     """Task returns error dict when dataset doesn't exist."""
     session = ExperimentSessionFactory.create()
     team = session.team
 
-    task_result = create_session_mode_dataset_task.delay(99999, team.id, [session.external_id])
+    task_result = create_dataset_from_sessions_task.delay(99999, team.id, [session.external_id])
     result = task_result.get()
 
     assert result["success"] is False
@@ -93,7 +93,7 @@ def test_create_session_mode_dataset_task_dataset_not_found():
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_session_mode_dataset_task_error_path():
+def test_create_dataset_from_sessions_task_error_path():
     """Task handles exceptions by saving FAILED status to dataset."""
     session = ExperimentSessionFactory.create()
     team = session.team
@@ -106,7 +106,7 @@ def test_create_session_mode_dataset_task_error_path():
     )
 
     with patch("apps.evaluations.utils.make_session_evaluation_messages", side_effect=Exception("DB error")):
-        task_result = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id])
+        task_result = create_dataset_from_sessions_task.delay(dataset.id, team.id, [session.external_id])
         result = task_result.get()
 
     assert result["success"] is False

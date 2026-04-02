@@ -20,7 +20,7 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.tasks import (
     create_dataset_from_csv_task,
-    create_dataset_from_sessions_task,
+    create_dataset_from_session_messages_task,
 )
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
@@ -382,7 +382,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
         return session_ids, filtered_session_ids
 
-    def _save_clone(self, dataset):
+    def _save_session_messages_clone(self, dataset):
         """Dispatch async task to clone messages from sessions."""
         session_ids = self.cleaned_data.get("session_ids", [])
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
@@ -390,7 +390,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         if not session_ids and not filtered_session_ids:
             return
 
-        task = create_dataset_from_sessions_task.delay(
+        task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
             list(session_ids),
@@ -402,9 +402,9 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
-    def _save_session_clone(self, dataset):
+    def _save_sessions_clone(self, dataset):
         """Dispatch async task to create session-mode messages."""
-        from apps.evaluations.tasks import create_session_mode_dataset_task  # noqa: PLC0415
+        from apps.evaluations.tasks import create_dataset_from_sessions_task  # noqa: PLC0415
 
         # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
         session_ids = self.cleaned_data.get("session_ids", set())
@@ -414,7 +414,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         if not all_session_ids:
             return
 
-        task = create_session_mode_dataset_task.delay(
+        task = create_dataset_from_sessions_task.delay(
             dataset.id,
             self.team.id,
             all_session_ids,
@@ -653,9 +653,9 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
 
         if mode == "clone":
             if dataset.evaluation_mode == EvaluationMode.SESSION:
-                self._save_session_clone(dataset)
+                self._save_sessions_clone(dataset)
             else:
-                self._save_clone(dataset)
+                self._save_session_messages_clone(dataset)
         elif mode == "csv":
             self._save_csv(dataset)
 
@@ -763,8 +763,8 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                 dataset.status = DatasetCreationStatus.PENDING
                 dataset.save(update_fields=["status"])
                 if dataset.evaluation_mode == EvaluationMode.SESSION:
-                    self._save_session_clone(dataset)
+                    self._save_sessions_clone(dataset)
                 else:
-                    self._save_clone(dataset)
+                    self._save_session_messages_clone(dataset)
 
         return dataset

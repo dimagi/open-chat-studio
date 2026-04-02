@@ -796,7 +796,7 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def create_dataset_from_sessions_task(
+def create_dataset_from_session_messages_task(
     self, dataset_id, team_id, session_ids, filtered_session_ids, filter_query, timezone
 ):
     """
@@ -887,7 +887,7 @@ def create_dataset_from_sessions_task(
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def create_session_mode_dataset_task(self, dataset_id, team_id, session_ids):
+def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
     """
     Create session-mode evaluation messages from sessions asynchronously.
 

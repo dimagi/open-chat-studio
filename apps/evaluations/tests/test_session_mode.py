@@ -6,7 +6,7 @@ from django.test import override_settings
 from apps.chat.models import ChatMessageType
 from apps.evaluations.forms import EvaluationConfigForm, EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
-from apps.evaluations.tasks import create_session_mode_dataset_task
+from apps.evaluations.tasks import create_dataset_from_sessions_task
 from apps.evaluations.utils import make_session_evaluation_messages
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
@@ -266,14 +266,14 @@ class TestSessionModeDuplicateDetection:
 
         # First import via task
         with override_settings(CELERY_TASK_ALWAYS_EAGER=True):
-            result1 = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id]).get()
+            result1 = create_dataset_from_sessions_task.delay(dataset.id, team.id, [session.external_id]).get()
 
         assert result1["created_count"] == 1
         assert result1["duplicates_skipped"] == 0
 
         # Second import of same session — task should detect duplicate via FK
         with override_settings(CELERY_TASK_ALWAYS_EAGER=True):
-            result2 = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id]).get()
+            result2 = create_dataset_from_sessions_task.delay(dataset.id, team.id, [session.external_id]).get()
 
         assert result2["created_count"] == 0
         assert result2["duplicates_skipped"] == 1
@@ -315,7 +315,7 @@ class TestDatasetFormEvaluationMode:
         assert "evaluation_mode" not in form.fields
 
     def test_edit_form_session_mode_uses_session_clone_task(self):
-        """Editing a session-mode dataset calls _save_session_clone, not _save_clone."""
+        """Editing a session-mode dataset calls _save_sessions_clone, not _save_session_messages_clone."""
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
@@ -333,8 +333,8 @@ class TestDatasetFormEvaluationMode:
         assert form.is_valid(), form.errors
 
         with (
-            patch.object(form, "_save_session_clone") as mock_session_clone,
-            patch.object(form, "_save_clone") as mock_clone,
+            patch.object(form, "_save_sessions_clone") as mock_session_clone,
+            patch.object(form, "_save_session_messages_clone") as mock_clone,
         ):
             form.save()
 
@@ -342,7 +342,7 @@ class TestDatasetFormEvaluationMode:
         mock_clone.assert_not_called()
 
     def test_edit_form_message_mode_uses_message_clone_task(self):
-        """Editing a message-mode dataset calls _save_clone, not _save_session_clone."""
+        """Editing a message-mode dataset calls _save_session_messages_clone, not _save_sessions_clone."""
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="message")
@@ -360,8 +360,8 @@ class TestDatasetFormEvaluationMode:
         assert form.is_valid(), form.errors
 
         with (
-            patch.object(form, "_save_session_clone") as mock_session_clone,
-            patch.object(form, "_save_clone") as mock_clone,
+            patch.object(form, "_save_sessions_clone") as mock_session_clone,
+            patch.object(form, "_save_session_messages_clone") as mock_clone,
         ):
             form.save()
 
