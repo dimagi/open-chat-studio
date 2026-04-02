@@ -103,6 +103,10 @@ class EvaluationMessage(BaseModel):
         ChatMessage, on_delete=models.SET_NULL, null=True, blank=True, related_name="ai_evaluation_messages"
     )
     # null when it is generated manually
+    session = models.ForeignKey(
+        ExperimentSession, on_delete=models.SET_NULL, null=True, blank=True, related_name="evaluation_messages"
+    )
+    # null when created from CSV import or manually
 
     input = SanitizedJSONField(default=dict)
     output = SanitizedJSONField(default=dict)

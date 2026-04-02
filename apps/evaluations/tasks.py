@@ -592,10 +592,12 @@ def _update_existing_message(dataset, message_id, row_data, team):
         message.output = EvaluationMessageContent(content=new_output_content, role="ai").model_dump()
         message.expected_output_chat_message = None
 
-    if any_content_changed and message.metadata:
-        message.metadata.pop("session_id", None)
-        message.metadata.pop("experiment_id", None)
-        message.metadata.update({"last_modified": "csv_upload"})
+    if any_content_changed:
+        message.session = None
+        if message.metadata:
+            message.metadata.pop("session_id", None)
+            message.metadata.pop("experiment_id", None)
+            message.metadata.update({"last_modified": "csv_upload"})
 
     message.save()
 

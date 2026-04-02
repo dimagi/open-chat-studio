@@ -20,6 +20,11 @@ urlpatterns = [
         queue_views.annotation_queue_sessions_json,
         name="queue_sessions_json",
     ),
+    path(
+        "queue/<int:pk>/import-from-dataset/",
+        queue_views.ImportFromDataset.as_view(),
+        name="queue_import_from_dataset",
+    ),
     path("queue/<int:pk>/assignees/", queue_views.ManageAssignees.as_view(), name="queue_manage_assignees"),
     path(
         "queue/<int:pk>/item/<int:item_pk>/remove/",

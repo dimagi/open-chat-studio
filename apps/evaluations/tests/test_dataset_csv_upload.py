@@ -13,6 +13,7 @@ from apps.evaluations.tasks import _update_existing_message, process_csv_rows
 from apps.evaluations.utils import generate_csv_column_suggestions
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import EvaluationDatasetFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -869,3 +870,60 @@ class TestCSVUploadEdit:
         assert message.input["content"] == "Complex data"
         assert message.participant_data == {"preferences": nested_preferences}
         assert message.session_state == {"workflow": nested_workflow}
+
+
+@pytest.mark.django_db()
+def test_update_existing_message_clears_session_fk_when_content_changed():
+    """Test that session FK is cleared when content changes via CSV upload."""
+
+    team = TeamWithUsersFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    dataset = EvaluationDataset.objects.create(name="Test", team=team)
+    message = EvaluationMessage.objects.create(
+        input=EvaluationMessageContent(content="Original question", role="human").model_dump(),
+        output=EvaluationMessageContent(content="Original answer", role="ai").model_dump(),
+        session=session,
+        metadata={"session_id": str(session.external_id)},
+    )
+    dataset.messages.add(message)
+
+    row_data_changed = {
+        "input_content": "Changed question",
+        "output_content": "Original answer",
+        "context": {},
+        "history": [],
+    }
+
+    _update_existing_message(dataset, message.id, row_data_changed, team)
+    message.refresh_from_db()
+
+    assert message.session is None
+    assert message.metadata.get("session_id") is None
+
+
+@pytest.mark.django_db()
+def test_update_existing_message_preserves_session_fk_when_content_unchanged():
+    """Test that session FK is preserved when content doesn't change via CSV upload."""
+
+    team = TeamWithUsersFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    dataset = EvaluationDataset.objects.create(name="Test", team=team)
+    message = EvaluationMessage.objects.create(
+        input=EvaluationMessageContent(content="Original question", role="human").model_dump(),
+        output=EvaluationMessageContent(content="Original answer", role="ai").model_dump(),
+        session=session,
+        metadata={"session_id": str(session.external_id)},
+    )
+    dataset.messages.add(message)
+
+    row_data_unchanged = {
+        "input_content": "Original question",
+        "output_content": "Original answer",
+        "context": {},
+        "history": [],
+    }
+
+    _update_existing_message(dataset, message.id, row_data_unchanged, team)
+    message.refresh_from_db()
+
+    assert message.session == session
