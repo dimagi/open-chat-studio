@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models.functions import JSONObject
+from django.db.models.functions import Cast, CharField, JSONObject
 from django.urls import reverse
 from django.utils import timezone
 
@@ -90,7 +90,7 @@ class EventUserQuerySet(models.QuerySet):
                 latest_event_subquery.values(
                     data=JSONObject(
                         title="title",
-                        created_at=models.F("created_at"),
+                        created_at=Cast(models.F("created_at"), CharField()),
                     )
                 )
             )
