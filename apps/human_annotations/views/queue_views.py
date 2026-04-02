@@ -543,24 +543,16 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             return self._render_form(request, queue, form)
 
         dataset = form.cleaned_data["dataset"]
-        session_ids = set()
-        for metadata in dataset.messages.values_list("metadata", flat=True):
-            if not isinstance(metadata, dict):
-                continue
-            sid = metadata.get("session_id")
-            if sid:
-                session_ids.add(str(sid))
+        session_pks = list(
+            dataset.messages.filter(session__isnull=False, session__team=request.team)
+            .values_list("session_id", flat=True)
+            .distinct()
+        )
 
-        if not session_ids:
-            messages.error(request, "No sessions found in dataset metadata.")
+        if not session_pks:
+            messages.error(request, "No sessions found in dataset.")
             return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
 
-        session_pks = list(
-            ExperimentSession.objects.filter(external_id__in=session_ids, team=request.team).values_list(
-                "id", flat=True
-            )
-        )
-        unresolved = len(session_ids) - len(session_pks)
         existing_pks = set(
             AnnotationItem.objects.filter(queue=queue, session_id__in=session_pks).values_list("session_id", flat=True)
         )
@@ -580,7 +572,5 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         msg = f"Added {len(created)} sessions."
         if skipped:
             msg += f" Skipped {skipped} already in queue."
-        if unresolved:
-            msg += f" {unresolved} session ID(s) from the dataset could not be matched to existing sessions."
         messages.success(request, msg)
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
