@@ -2,7 +2,6 @@ import csv
 import importlib
 import json
 from io import StringIO
-from typing import cast
 
 from django import forms
 from django.forms.widgets import RadioSelect
@@ -136,7 +135,8 @@ class EvaluationConfigForm(forms.ModelForm):
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
         evaluator_qs = Evaluator.objects.filter(team=team)
         self.fields["evaluators"].queryset = evaluator_qs
-        cast(EvaluatorCheckboxWidget, self.fields["evaluators"].widget)._evaluator_queryset = evaluator_qs
+        if isinstance(self.fields["evaluators"].widget, EvaluatorCheckboxWidget):
+            self.fields["evaluators"].widget._evaluator_queryset = evaluator_qs
         self.fields["experiment"].queryset = (
             Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
         )
@@ -191,6 +191,10 @@ class EvaluationConfigForm(forms.ModelForm):
                     f"The following evaluators have a different evaluation mode than the dataset: {names}. "
                     f"Dataset mode is '{dataset.evaluation_mode}', but these evaluators are set to a different mode.",
                 )
+
+        if dataset and dataset.evaluation_mode == EvaluationMode.SESSION and cleaned_data.get("run_generation"):
+            self.add_error("evaluators", "Generation is not supported for session-mode datasets.")
+            cleaned_data["run_generation"] = False
 
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")

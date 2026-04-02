@@ -1,10 +1,12 @@
 from unittest.mock import patch
 
 import pytest
+from django.test import override_settings
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.forms import EvaluationConfigForm, EvaluationDatasetEditForm, EvaluationDatasetForm
-from apps.evaluations.models import EvaluationMessage, EvaluationMode
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
+from apps.evaluations.tasks import create_session_mode_dataset_task
 from apps.evaluations.utils import make_session_evaluation_messages
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
@@ -249,8 +251,8 @@ class TestMakeSessionEvaluationMessages:
 
 @pytest.mark.django_db()
 class TestSessionModeDuplicateDetection:
-    def test_duplicate_session_skipped(self):
-        """Re-importing the same session should be skipped via metadata.session_id."""
+    def test_duplicate_session_skipped_via_fk(self):
+        """Re-importing the same session is skipped using the session FK PK (task's actual dedup path)."""
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         chat = session.chat
@@ -258,25 +260,25 @@ class TestSessionModeDuplicateDetection:
         ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
         ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Hi!")
 
-        # First import
-        messages = make_session_evaluation_messages([session.external_id])
-        assert len(messages) == 1
+        dataset = EvaluationDataset.objects.create(
+            team=team, name="Dedup Test Dataset", evaluation_mode=EvaluationMode.SESSION
+        )
 
-        created = EvaluationMessage.objects.bulk_create(messages)
-        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session", messages=created)
+        # First import via task
+        with override_settings(CELERY_TASK_ALWAYS_EAGER=True):
+            result1 = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id]).get()
 
-        # Second import — same session
-        messages_2 = make_session_evaluation_messages([session.external_id])
-        assert len(messages_2) == 1
+        assert result1["created_count"] == 1
+        assert result1["duplicates_skipped"] == 0
 
-        # Dedup check (simulating what the task does)
-        existing_session_ids = set()
-        for meta in dataset.messages.values_list("metadata", flat=True):
-            if meta and "session_id" in meta:
-                existing_session_ids.add(meta["session_id"])
+        # Second import of same session — task should detect duplicate via FK
+        with override_settings(CELERY_TASK_ALWAYS_EAGER=True):
+            result2 = create_session_mode_dataset_task.delay(dataset.id, team.id, [session.external_id]).get()
 
-        new_messages = [msg for msg in messages_2 if msg.metadata.get("session_id") not in existing_session_ids]
-        assert len(new_messages) == 0
+        assert result2["created_count"] == 0
+        assert result2["duplicates_skipped"] == 1
+        assert dataset.messages.count() == 1
+        assert dataset.status == DatasetCreationStatus.COMPLETED
 
 
 @pytest.mark.django_db()
@@ -401,6 +403,24 @@ class TestEvalConfigFormModeValidation:
             },
         )
         assert form.is_valid(), form.errors
+
+    def test_session_mode_dataset_blocks_run_generation(self):
+        """run_generation must be rejected for session-mode datasets server-side."""
+        team = TeamFactory.create()
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session")
+        evaluator = EvaluatorFactory.create(team=team, evaluation_mode="session")
+
+        form = EvaluationConfigForm(
+            team=team,
+            data={
+                "name": "Test Config",
+                "dataset": dataset.id,
+                "evaluators": [evaluator.id],
+                "run_generation": True,
+            },
+        )
+        assert not form.is_valid()
+        assert "evaluators" in form.errors
 
     def test_mismatched_message_evaluator_with_session_dataset(self):
         """A message evaluator cannot be used with a session dataset."""
