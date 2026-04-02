@@ -13,7 +13,7 @@ backfill_session_fk = _migration.backfill_session_fk
 
 
 class FakeSchemaEditor:
-    pass
+    connection = connection
 
 
 def _run_migration():
