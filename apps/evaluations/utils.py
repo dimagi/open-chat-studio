@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, create_model
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.field_definitions import FieldDefinition
+from apps.experiments.models import ExperimentSession
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationMessage
@@ -219,6 +220,10 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
         EvaluationMessageContent,
     )
 
+    session_map = {
+        str(s.external_id): s for s in ExperimentSession.objects.filter(external_id__in=message_ids_per_session.keys())
+    }
+
     def _add_additional_context(msg, existing_context):
         if comments := list(msg.comments.all()):
             existing_context.setdefault("comments", []).extend([comment.comment for comment in comments])
@@ -269,6 +274,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
             )
 
             shared_attrs = {
+                "session": session_map.get(str(session_id)),
                 "history": [msg.copy() for msg in history],
                 "metadata": {
                     "session_id": session_id,

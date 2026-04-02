@@ -163,6 +163,7 @@ def test_make_evaluation_messages_from_sessions():
     assert eval_msg_1.input["role"] == "human"
     assert eval_msg_1.output["content"] == "First AI response"
     assert eval_msg_1.output["role"] == "ai"
+    assert eval_msg_1.session == session
     assert eval_msg_1.metadata["session_id"] == session.external_id
     assert eval_msg_1.metadata["experiment_id"] == str(session.experiment.public_id)
     assert eval_msg_1.history == []  # First message, no history
@@ -176,6 +177,7 @@ def test_make_evaluation_messages_from_sessions():
     assert eval_msg_2.input["content"] == "Second human message without response"
     assert eval_msg_2.input["role"] == "human"
     assert eval_msg_2.output == {}  # No output for orphaned human
+    assert eval_msg_2.session == session
     assert eval_msg_2.metadata["session_id"] == session.external_id
     assert len(eval_msg_2.history) == 2  # Previous human + AI pair should be in history
     assert eval_msg_2.history[0]["message_type"] == ChatMessageType.HUMAN
@@ -191,6 +193,7 @@ def test_make_evaluation_messages_from_sessions():
     assert eval_msg_3.input["role"] == "human"
     assert eval_msg_3.output["content"] == "Third AI response"
     assert eval_msg_3.output["role"] == "ai"
+    assert eval_msg_3.session == session
     assert eval_msg_3.metadata["session_id"] == session.external_id
     # Verify participant and session data from trace is transferred
     assert eval_msg_3.participant_data == {"name": "John Doe", "age": 30, "location": "New York"}
@@ -208,6 +211,7 @@ def test_make_evaluation_messages_from_sessions():
     assert eval_msg_4.input == {}  # No input for orphaned AI
     assert eval_msg_4.output["content"] == "Fourth AI message without human input"
     assert eval_msg_4.output["role"] == "ai"
+    assert eval_msg_4.session == session
     assert eval_msg_4.metadata["session_id"] == session.external_id
     # History should include all previous messages
     assert len(eval_msg_4.history) == 5  # human1, ai1, human2, human3, ai3

@@ -1,0 +1,31 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'human_annotations:queue_home' request.team.slug %}">Annotation Queues</a></li>
+      <li><a href="{% url 'human_annotations:queue_detail' request.team.slug queue.pk %}">{{ queue.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Import from Dataset</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+<div class="flex flex-col gap-4 max-w-lg">
+  <h2 class="text-xl font-bold">Import Sessions into "{{ queue.name }}"</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="flex flex-col gap-4">
+      {% render_form_fields form %}
+
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">Import</button>
+        <a href="{% url 'human_annotations:queue_detail' request.team.slug queue.pk %}"
+           class="btn btn-ghost">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock app %}
