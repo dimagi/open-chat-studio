@@ -567,7 +567,7 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             if session_pk not in existing_pks
         ]
         created = AnnotationItem.objects.bulk_create(items_to_create, ignore_conflicts=True)
-        skipped = len(existing_pks)
+        skipped = len(session_pks) - len(created)
 
         msg = f"Added {len(created)} sessions."
         if skipped:
