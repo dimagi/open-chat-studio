@@ -12,13 +12,14 @@ There are two places to manage feature flags:
    - Access to the page itself is restricted to superusers.
 2. **Team Settings > Manage Feature Flags**
    - Intended for team-specific flag management.
-   - Only flags marked as team-manageable are shown.
+   - Only a subset of all flags is team-manageable (`teams_can_manage=True`).
    - Team members can view this page, but only team admins can save changes.
 
 ## How a flag becomes active
 
-A flag is active when one or more configured conditions match. You can activate a flag for:
+A flag is active when one or more configured conditions match.
 
+You can activate a flag for:
 - Everyone (all users)
 - Superusers
 - Specific teams

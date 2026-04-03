@@ -21,7 +21,7 @@ Banners are temporary notifications that can be displayed to users on specific p
 ### Access the admin interface
 
 1. Open the Django admin (typically `/admin/`).
-2. Sign in with an account that can manage banners (ie supperuser credentials).
+2. Sign in with an account that can manage banners (that is, superuser credentials).
 3. Open **Banners**.
 4. Select **Add banner**.
 
