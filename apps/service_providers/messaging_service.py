@@ -26,8 +26,8 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
-from apps.service_providers import supported_mime_types
 from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
+from apps.service_providers.file_limits import can_send_on_whatsapp
 from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
@@ -246,7 +246,7 @@ class TwilioService(MessagingService):
         self.client.messages.create(from_=from_, to=to, body=file.name, media_url=download_link)
 
     def can_send_file(self, file: File) -> bool:
-        return file.content_type in supported_mime_types.TWILIO and (file.size_mb or 0) <= self.max_file_size_mb
+        return can_send_on_whatsapp(file.content_type or "", file.content_size or 0).supported
 
 
 class TurnIOService(MessagingService):
@@ -313,20 +313,7 @@ class TurnIOService(MessagingService):
         return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def can_send_file(self, file: File) -> bool:
-        mime = file.content_type
-        size = file.content_size or 0  # in bytes
-
-        if not mime:
-            return False
-
-        if mime.startswith("image/"):
-            return size <= 5 * 1024 * 1024  # 5 MB
-        elif mime.startswith(("video/", "audio/")):
-            return size <= 16 * 1024 * 1024  # 16 MB
-        elif mime.startswith("application/"):
-            return size <= 100 * 1024 * 1024  # 100 MB
-        else:
-            return False
+        return can_send_on_whatsapp(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(
         self,
@@ -579,20 +566,7 @@ class MetaCloudAPIService(MessagingService):
         httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
 
     def can_send_file(self, file: File) -> bool:
-        mime = file.content_type
-        size = file.content_size
-
-        if mime is None or size is None:
-            return False
-
-        if mime.startswith("image/"):
-            return size <= 5 * 1024 * 1024  # 5 MB
-        elif mime.startswith(("video/", "audio/")):
-            return size <= 16 * 1024 * 1024  # 16 MB
-        elif mime.startswith("application/"):
-            return size <= 100 * 1024 * 1024  # 100 MB
-        else:
-            return False
+        return can_send_on_whatsapp(file.content_type or "", file.content_size or 0).supported
 
     def send_file_to_user(
         self,

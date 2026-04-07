@@ -17,6 +17,7 @@ from apps.human_annotations.models import (
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.teams.models import Flag
+from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
@@ -783,7 +784,8 @@ def test_queue_sessions_json_returns_external_ids(client, team_with_users, queue
     assert response.status_code == 200
     data = response.json()
     expected_ids = {str(s.external_id) for s in sessions}
-    assert set(str(i) for i in data) == expected_ids
+    assert set(str(i) for i in data["ids"]) == expected_ids
+    assert data["total"] == 3
 
 
 @pytest.mark.django_db()
@@ -815,7 +817,7 @@ def test_queue_sessions_json_excludes_sessions_without_messages(client, team_wit
 
     url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
     data = client.get(url).json()
-    assert set(data) == {str(session_with_messages.external_id)}
+    assert set(data["ids"]) == {str(session_with_messages.external_id)}
 
 
 # ===== AddSessionsToQueue GET + POST =====
@@ -867,6 +869,114 @@ def test_add_sessions_post_ignores_other_team_sessions(client, team_with_users, 
     url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
     client.post(url, {"session_ids": str(other_session.external_id)})
     assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+# ===== AddSessionsToQueue: all_matching mode =====
+
+
+@pytest.mark.django_db()
+def test_add_sessions_all_matching_adds_all_sessions_with_messages(client, team_with_users, queue):
+    sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory.create(chat=s.chat)
+    # Session without messages should be excluded
+    ExperimentSessionFactory.create(team=team_with_users)
+
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"mode": "all_matching"})
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 3
+
+
+@pytest.mark.django_db()
+def test_add_sessions_all_matching_skips_already_queued(client, team_with_users, queue):
+    sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory.create(chat=s.chat)
+    # Pre-add one session to the queue
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=sessions[0])
+
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"mode": "all_matching"})
+    assert response.status_code == 302
+    # 2 new + 1 existing = 3 total items, but only 2 newly created
+    assert AnnotationItem.objects.filter(queue=queue).count() == 3
+
+
+@pytest.mark.django_db()
+def test_add_sessions_all_matching_empty_results(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"mode": "all_matching"})
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+# ===== AddSessionsToQueue: sample mode =====
+
+
+@pytest.mark.django_db()
+def test_add_sessions_sample_adds_subset(client, team_with_users, queue):
+    sessions = ExperimentSessionFactory.create_batch(10, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory.create(chat=s.chat)
+
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"mode": "sample", "sample_percent": "50"})
+    assert response.status_code == 302
+    count = AnnotationItem.objects.filter(queue=queue).count()
+    assert 1 <= count <= 10  # Should be ~5 but random
+
+
+@pytest.mark.django_db()
+def test_add_sessions_sample_100_percent_adds_all(client, team_with_users, queue):
+    sessions = ExperimentSessionFactory.create_batch(5, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory.create(chat=s.chat)
+
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"mode": "sample", "sample_percent": "100"})
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 5
+
+
+@pytest.mark.django_db()
+def test_add_sessions_sample_clamps_invalid_percent(client, team_with_users, queue):
+    sessions = ExperimentSessionFactory.create_batch(5, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory.create(chat=s.chat)
+
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    # Percent > 100 should be clamped to 100
+    response = client.post(url, {"mode": "sample", "sample_percent": "200"})
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 5
+
+
+@pytest.mark.django_db()
+def test_add_sessions_sample_empty_results(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_add_sessions", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"mode": "sample", "sample_percent": "50"})
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+# ===== Sessions JSON endpoint =====
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_returns_ids_and_total(client, team_with_users, queue):
+    sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
+    for s in sessions:
+        ChatMessageFactory.create(chat=s.chat)
+
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    assert "ids" in data
+    assert "total" in data
+    assert data["total"] == 3
+    assert len(data["ids"]) == 3
 
 
 # ===== Annotation Reviewer Role =====
@@ -1080,3 +1190,87 @@ def test_reviewer_cannot_remove_session(reviewer_client, team_with_users, queue)
     response = reviewer_client.delete(url)
     assert response.status_code == 403
     assert AnnotationItem.objects.filter(pk=item.pk).exists()
+
+
+# ===== Import from Dataset =====
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_get_renders_form(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert "queue" in response.context
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_get_requires_permission(reviewer_client, reviewer_membership, team_with_users, queue):
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = reviewer_client.get(url)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_creates_annotation_items(client, team_with_users, queue):
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    msg = EvaluationMessageFactory.create(session=session)
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg])
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue, session=session).exists()
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_skips_existing_sessions(client, team_with_users, queue):
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    msg = EvaluationMessageFactory.create(session=session)
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg])
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session)
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 1
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_no_sessions_redirects_with_error(client, team_with_users, queue):
+    msg = EvaluationMessageFactory.create()  # no session FK
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg])
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 0
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_invalid_form_rerenders(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": ""})
+    assert response.status_code == 200
+    assert "form" in response.context
+    assert response.context["form"].errors
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_post_all_duplicates_creates_no_new_items(client, team_with_users, queue):
+    session1 = ExperimentSessionFactory.create(team=team_with_users)
+    session2 = ExperimentSessionFactory.create(team=team_with_users)
+    msg1 = EvaluationMessageFactory.create(session=session1)
+    msg2 = EvaluationMessageFactory.create(session=session2)
+    dataset = EvaluationDatasetFactory.create(team=team_with_users, messages=[msg1, msg2])
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session1)
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session2)
+
+    url = reverse("human_annotations:queue_import_from_dataset", args=[team_with_users.slug, queue.pk])
+    response = client.post(url, {"dataset": dataset.pk})
+
+    assert response.status_code == 302
+    assert AnnotationItem.objects.filter(queue=queue).count() == 2

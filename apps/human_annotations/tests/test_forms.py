@@ -2,8 +2,10 @@ import json
 
 import pytest
 
-from apps.human_annotations.forms import AnnotationQueueForm, build_annotation_form
+from apps.evaluations.models import DatasetCreationStatus
+from apps.human_annotations.forms import AnnotationQueueForm, ImportFromDatasetForm, build_annotation_form
 from apps.human_annotations.models import AnnotationQueue
+from apps.utils.factories.evaluations import EvaluationDatasetFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -111,3 +113,30 @@ def test_required_fields_reject_empty_submission(team):
     assert not form.is_valid()
     assert "score" in form.errors
     assert "notes" in form.errors
+
+
+# === ImportFromDatasetForm ===
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_form_shows_completed_datasets_for_team(team):
+    dataset = EvaluationDatasetFactory.create(team=team)  # default status is COMPLETED
+    form = ImportFromDatasetForm(team=team)
+    assert dataset in form.fields["dataset"].queryset
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_form_excludes_non_completed_datasets(team):
+    EvaluationDatasetFactory.create(team=team, status=DatasetCreationStatus.PENDING)
+    EvaluationDatasetFactory.create(team=team, status=DatasetCreationStatus.PROCESSING)
+    EvaluationDatasetFactory.create(team=team, status=DatasetCreationStatus.FAILED)
+    form = ImportFromDatasetForm(team=team)
+    assert form.fields["dataset"].queryset.count() == 0
+
+
+@pytest.mark.django_db()
+def test_import_from_dataset_form_excludes_other_team_datasets(team):
+    other_team = TeamWithUsersFactory.create()
+    EvaluationDatasetFactory.create(team=other_team)
+    form = ImportFromDatasetForm(team=team)
+    assert form.fields["dataset"].queryset.count() == 0

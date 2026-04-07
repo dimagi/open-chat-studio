@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Subquery, Value, When
+from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -88,12 +88,19 @@ def single_collection_home(request, team_slug: str, pk: int):
     document_sources = (
         DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
     )
-    collection_files_count = CollectionFile.objects.filter(collection=collection).count()
-    manually_uploaded_files_count = CollectionFile.objects.filter(collection=collection).is_manually_uploaded().count()
+    file_stats = CollectionFile.objects.filter(collection=collection).aggregate(
+        total=Count("id"),
+        manual=Count("id", filter=Q(document_source__isnull=True)),
+        unsendable=Count("id", filter=~Q(file__unsupported_channels={})),
+    )
+    collection_files_count = file_stats["total"]
+    manually_uploaded_files_count = file_stats["manual"]
+    has_unsendable_files = not collection.is_index and file_stats["unsendable"] > 0
     context = {
         "collection": collection,
         "collection_files_count": collection_files_count,
         "manually_uploaded_files_count": manually_uploaded_files_count,
+        "has_unsendable_files": has_unsendable_files,
         "document_sources": document_sources,
         "collections_supported_file_types": settings.SUPPORTED_FILE_TYPES["collections"],
         "file_search_supported_file_types": settings.SUPPORTED_FILE_TYPES["file_search"],
@@ -120,7 +127,9 @@ def collection_files_view(request, team_slug: str, collection_id: int, document_
         .values_list("count")
     )
     search_query = request.GET.get("search", "").strip()
-    collection_files = CollectionFile.objects.filter(collection=collection, document_source=document_source)
+    collection_files = CollectionFile.objects.filter(
+        collection=collection, document_source=document_source
+    ).select_related("file")
     if search_query:
         collection_files = collection_files.filter(file__name__icontains=search_query)
     collection_files = collection_files.annotate(
@@ -390,12 +399,15 @@ def add_collection_files(request, team_slug: str, pk: int):
                 )
             )
 
-        collection_files = CollectionFile.objects.bulk_create(
-            [
-                CollectionFile(collection=collection, file=file, status=status, metadata=metadata)
-                for file in created_files
-            ]
-        )
+        if not collection.is_index:
+            for file in created_files:
+                file.update_supported_channels()
+            File.objects.bulk_update(created_files, ["unsupported_channels"])
+
+        collection_file_instances = [
+            CollectionFile(collection=collection, file=file, status=status, metadata=metadata) for file in created_files
+        ]
+        collection_files = CollectionFile.objects.bulk_create(collection_file_instances)
 
     if collection.is_index:
         tasks.index_collection_files_task.delay([cf.id for cf in collection_files])

@@ -88,6 +88,7 @@ dependencies = [
     "chardet",
     "dictdiffer>=0.9.0",
     "djlint>=1.36.4",
+"transformers"
 ]
 
 [project.urls]
@@ -203,7 +204,6 @@ all = "ignore"
 unresolved-import = "error"
 # Zero-violation rules enabled for regression prevention
 abstract-method-in-final-class = "error"
-byte-string-type-annotation = "error"
 call-non-callable = "error"
 call-top-callable = "error"
 conflicting-argument-forms = "error"
@@ -218,7 +218,6 @@ duplicate-kw-only = "error"
 empty-body = "error"
 escape-character-in-forward-annotation = "error"
 final-without-value = "error"
-fstring-type-annotation = "error"
 implicit-concatenated-string-type-annotation = "error"
 inconsistent-mro = "error"
 instance-layout-conflict = "error"

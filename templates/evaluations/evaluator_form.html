@@ -162,12 +162,19 @@
                         <label class="label text-sm">
                           <span>{% translate "Field Name" %}</span>
                         </label>
-                        <input type="text"
-                               x-model="pair.name"
-                               @input="updateKeyValuePairs(fieldName)"
-                               :required="isRequired(fieldName)"
-                               placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
-                               class="input input-bordered w-full input-sm">
+                        <div class="flex gap-2 items-center">
+                          <input type="text"
+                                 x-model="pair.name"
+                                 @input="updateKeyValuePairs(fieldName)"
+                                 :required="isRequired(fieldName)"
+                                 placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
+                                 class="input input-bordered w-full input-sm">
+                          <button type="button"
+                                  @click="removeKeyValuePair(fieldName, index)"
+                                  class="btn btn-outline btn-xs btn-error">
+                            <i class="fa fa-trash"></i>
+                          </button>
+                        </div>
                       </div>
 
                       <!-- Type Selection -->
@@ -344,12 +351,6 @@
                         </label>
                       </div>
 
-                      <!-- Remove Button -->
-                      <button type="button"
-                              @click="removeKeyValuePair(fieldName, index)"
-                              class="btn btn-outline btn-sm btn-error mt-2">
-                        <i class="fa fa-trash"></i> {% translate "Remove Field" %}
-                      </button>
                     </div>
                   </template>
                   <button type="button"

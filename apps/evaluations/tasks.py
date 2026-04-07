@@ -67,8 +67,13 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         if generation_experiment is not None:
             session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
 
+        evaluators = {e.id: e for e in Evaluator.objects.filter(id__in=evaluator_ids)}
         for evaluator_id in evaluator_ids:
-            evaluator = Evaluator.objects.get(id=evaluator_id)
+            try:
+                evaluator = evaluators[evaluator_id]
+            except KeyError:
+                logger.warning(f"Evaluator {evaluator_id} not found, skipping")
+                continue
             try:
                 result = evaluator.run(message, bot_response or "")
                 EvaluationResult.objects.create(
@@ -586,10 +591,12 @@ def _update_existing_message(dataset, message_id, row_data, team):
         message.output = EvaluationMessageContent(content=new_output_content, role="ai").model_dump()
         message.expected_output_chat_message = None
 
-    if any_content_changed and message.metadata:
-        message.metadata.pop("session_id", None)
-        message.metadata.pop("experiment_id", None)
-        message.metadata.update({"last_modified": "csv_upload"})
+    if any_content_changed:
+        message.session = None
+        if message.metadata:
+            message.metadata.pop("session_id", None)
+            message.metadata.pop("experiment_id", None)
+            message.metadata.update({"last_modified": "csv_upload"})
 
     message.save()
 

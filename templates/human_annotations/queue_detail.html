@@ -25,8 +25,22 @@
     <a href="{% url 'human_annotations:annotate_queue' team_slug=request.team.slug pk=object.pk %}"
        class="btn btn-primary btn-sm">Start Annotating</a>
     {% if perms.human_annotations.add_annotationitem %}
-    <a href="{% url 'human_annotations:queue_add_sessions' team_slug=request.team.slug pk=object.pk %}"
-       class="btn btn-outline btn-sm">Add Sessions</a>
+    <div class="dropdown">
+      <div tabindex="0" role="button" class="btn btn-outline btn-sm">
+        Add Sessions
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow">
+        <li>
+          <a href="{% url 'human_annotations:queue_add_sessions' team_slug=request.team.slug pk=object.pk %}">Choose Sessions</a>
+        </li>
+        <li>
+          <a href="{% url 'human_annotations:queue_import_from_dataset' team_slug=request.team.slug pk=object.pk %}">Import from Dataset</a>
+        </li>
+      </ul>
+    </div>
     {% endif %}
     {% if perms.human_annotations.view_annotation %}
     <a href="{% url 'human_annotations:queue_export' team_slug=request.team.slug pk=object.pk %}?format=csv"

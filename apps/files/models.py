@@ -12,6 +12,7 @@ from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.generics.chips import Chip
+from apps.service_providers.file_limits import FILE_SENDABILITY_CHECKERS
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes, humanize_bytes
@@ -51,6 +52,11 @@ class File(BaseTeamModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
     metadata = SanitizedJSONField(default=dict)
+    unsupported_channels = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Channels that cannot send this file directly, with reasons",
+    )
 
     objects = FileObjectManager()
 
@@ -155,6 +161,19 @@ class File(BaseTeamModel, VersionsMixin):
         if self.content_size is None:
             return None
         return bytes_to_megabytes(self.content_size)
+
+    def update_supported_channels(self):
+        """Compute and set unsupported_channels from the file's content type and size.
+
+        Only stores entries for unsupported channels. An empty dict means the file
+        is sendable on all channels.
+        """
+        unsupported = {}
+        for channel_name, check_func in FILE_SENDABILITY_CHECKERS.items():
+            result = check_func(self.content_type or "", self.content_size or 0)
+            if not result.supported:
+                unsupported[channel_name] = {"reason": result.reason}
+        self.unsupported_channels = unsupported
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
