@@ -34,7 +34,7 @@
       </div>
       <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-10 w-52 p-2 shadow">
         <li>
-          <a href="{% url 'human_annotations:queue_add_sessions' team_slug=request.team.slug pk=object.pk %}">Choose Sessions</a>
+          <a href="{% url 'human_annotations:queue_add_sessions' team_slug=request.team.slug pk=object.pk %}">Import from Chatbots</a>
         </li>
         <li>
           <a href="{% url 'human_annotations:queue_import_from_dataset' team_slug=request.team.slug pk=object.pk %}">Import from Dataset</a>
