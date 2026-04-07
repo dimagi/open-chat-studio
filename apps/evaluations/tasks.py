@@ -32,7 +32,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
     Evaluator,
 )
-from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
+from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
 from apps.teams.utils import current_team
@@ -898,8 +898,6 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
         team_id: ID of the team
         session_ids: List of session external IDs
     """
-    from apps.evaluations.utils import make_session_evaluation_messages  # noqa: PLC0415
-
     progress_recorder = ProgressRecorder(self)
     dataset = None
 

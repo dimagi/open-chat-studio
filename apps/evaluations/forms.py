@@ -21,6 +21,7 @@ from apps.evaluations.models import (
 from apps.evaluations.tasks import (
     create_dataset_from_csv_task,
     create_dataset_from_session_messages_task,
+    create_dataset_from_sessions_task,
 )
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
@@ -404,8 +405,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
     def _save_sessions_clone(self, dataset):
         """Dispatch async task to create session-mode messages."""
-        from apps.evaluations.tasks import create_dataset_from_sessions_task  # noqa: PLC0415
-
         # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
         session_ids = self.cleaned_data.get("session_ids", set())
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())

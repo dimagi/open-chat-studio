@@ -220,7 +220,9 @@ def make_session_evaluation_messages(session_external_ids: list[str], team=None)
     Unlike make_evaluation_messages_from_sessions (which creates one message per human-AI pair),
     this creates a single message per session for holistic session evaluation.
     """
-    from apps.evaluations.models import EvaluationMessage  # noqa: PLC0415
+    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
+        EvaluationMessage,
+    )
 
     if not session_external_ids:
         return []
