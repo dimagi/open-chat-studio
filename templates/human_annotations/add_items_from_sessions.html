@@ -29,13 +29,22 @@
       </div>
     </div>
 
-    <!-- Filter controls + session count -->
+    <!-- Filter controls + session count + top-level action buttons -->
     <div class="flex items-center justify-between flex-wrap gap-2">
       <div>
         {% include "experiments/filters.html" %}
       </div>
-      <div class="text-sm font-medium">
-        <span x-text="totalCount"></span> {% translate "sessions" %}
+      <div class="flex items-center gap-3">
+        <div class="text-sm font-medium">
+          <span x-text="totalCount"></span> {% translate "sessions" %}
+        </div>
+        <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
+          <span x-text="buttonLabel">{% translate "Add to Queue" %}</span>
+        </button>
+        <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
+           class="btn btn-ghost btn-sm">
+          {% translate "Cancel" %}
+        </a>
       </div>
     </div>
 
