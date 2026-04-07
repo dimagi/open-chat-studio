@@ -323,7 +323,9 @@ class ChannelBase(ABC):
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
-            channel_cls = WebChannel
+            from apps.channels.channels_v2.web_channel import WebChannel as NewWebChannel  # noqa: PLC0415
+
+            channel_cls = NewWebChannel
         elif platform == "whatsapp":
             channel_cls = WhatsappChannel
         elif platform == "facebook":
