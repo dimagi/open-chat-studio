@@ -334,11 +334,11 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
     )
 
     evaluation_mode = forms.ChoiceField(
-        choices=EvaluationMode.choices,
+        choices=[(EvaluationMode.MESSAGE, "Message level"), (EvaluationMode.SESSION, "Session level")],
         initial=EvaluationMode.MESSAGE,
         widget=StyledRadioSelect(x_model=None),
-        label="Evaluation mode",
-        help_text="Message mode evaluates individual message pairs. Session mode evaluates entire conversations.",
+        label="Evaluation level",
+        help_text="Message level evaluates individual message pairs. Session level evaluates entire conversations.",
     )
 
     class Meta:
