@@ -199,7 +199,7 @@ export function CodeNodeEditor(
       boost: 1,
       section: "Flow Control",
     }),
-    end_session: snip("end_session", {
+    end_session: snip("end_session()", {
       label: "end_session",
       type: "function",
       detail: "Ends the session with this response",
