@@ -31,7 +31,15 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 from ..forms import AnnotationQueueForm, ImportFromDatasetForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus, QueueStatus
+from ..models import (
+    Annotation,
+    AnnotationItem,
+    AnnotationItemStatus,
+    AnnotationItemType,
+    AnnotationQueue,
+    AnnotationStatus,
+    QueueStatus,
+)
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
 User = get_user_model()
@@ -475,28 +483,60 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         annotations = Annotation.objects.filter(
             item__queue=queue,
             status=AnnotationStatus.SUBMITTED,
-        ).select_related("item", "item__session", "item__message", "reviewer")
+        ).select_related(
+            "item",
+            "item__session",
+            "item__message",
+            "item__message__chat__experiment_session",
+            "reviewer",
+        )
 
         if export_format == "jsonl":
             return self._export_jsonl(queue, annotations)
         return self._export_csv(queue, annotations)
+
+    def _get_session_external_id(self, item):
+        if item.session_id:
+            return str(item.session.external_id)
+        if item.message_id:
+            experiment_session = getattr(item.message.chat, "experiment_session", None)
+            if experiment_session:
+                return str(experiment_session.external_id)
+        return ""
+
+    def _get_flagged_reason(self, item):
+        if item.flags:
+            return item.flags[-1].get("reason", "")
+        return ""
 
     def _export_csv(self, queue, annotations):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
         schema_fields = list(queue.schema.keys())
-        fieldnames = ["item_id", "item_type", "reviewer", "annotated_at"] + schema_fields
+        fieldnames = [
+            "item_id",
+            "item_type",
+            "session_external_id",
+            "reviewer",
+            "annotated_at",
+            "flagged",
+            "flagged_reason",
+        ] + schema_fields
 
         writer = csv.DictWriter(response, fieldnames=fieldnames)
         writer.writeheader()
 
         for ann in annotations:
+            is_flagged = ann.item.status == AnnotationItemStatus.FLAGGED
             row = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
+                "session_external_id": self._get_session_external_id(ann.item),
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
+                "flagged": is_flagged,
+                "flagged_reason": self._get_flagged_reason(ann.item) if is_flagged else "",
             }
             for field in schema_fields:
                 row[field] = ann.data.get(field, "")
@@ -507,11 +547,15 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
     def _export_jsonl(self, queue, annotations):
         lines = []
         for ann in annotations:
+            is_flagged = ann.item.status == AnnotationItemStatus.FLAGGED
             record = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
+                "session_external_id": self._get_session_external_id(ann.item),
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
+                "flagged": is_flagged,
+                "flagged_reason": self._get_flagged_reason(ann.item) if is_flagged else "",
                 "annotation": ann.data,
             }
             lines.append(json.dumps(record))
