@@ -941,10 +941,9 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
 
                 created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
                 dataset.messages.add(*created_messages)
-
-            dataset.status = DatasetCreationStatus.COMPLETED
-            dataset.job_id = ""
-            dataset.save(update_fields=["status", "job_id"])
+                dataset.status = DatasetCreationStatus.COMPLETED
+                dataset.job_id = ""
+                dataset.save(update_fields=["status", "job_id"])
 
             progress_recorder.set_progress(100, 100, "Clone complete")
 
