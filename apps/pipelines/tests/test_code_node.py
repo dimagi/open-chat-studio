@@ -562,6 +562,27 @@ def main(input, **kwargs):
     assert output.update["intents"] == ["end_session"]  # ty: ignore[not-subscriptable]
 
 
+@pytest.mark.django_db()
+def test_end_session_deduplicates_across_nodes(pipeline, experiment_session):
+    code_end = """
+def main(input, **kwargs):
+    end_session()
+    return input
+"""
+    nodes = [
+        start_node(),
+        code_node(code_end, name="code1"),
+        code_node(code_end, name="code2"),
+        end_node(),
+    ]
+    config = {"configurable": {"repo": InMemoryPipelineRepository()}}
+    node_output = create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=["hi"]),
+        config=config,
+    )
+    assert node_output["intents"] == ["end_session"]
+
+
 def test_add_file_attachment_requires_bytes():
     code = """
 def main(input, **kwargs):
