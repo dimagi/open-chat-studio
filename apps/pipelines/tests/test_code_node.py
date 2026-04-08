@@ -549,6 +549,19 @@ def main(input, **kwargs):
     assert outputs["console_output"] == ""
 
 
+def test_end_session():
+    code = """
+def main(input, **kwargs):
+    end_session()
+    return input
+    """
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
+    state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    output = node._process(state, NodeContext(state))
+    assert output.update["intents"] == ["end_session"]  # ty: ignore[not-subscriptable]
+
+
 def test_add_file_attachment_requires_bytes():
     code = """
 def main(input, **kwargs):
