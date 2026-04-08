@@ -502,13 +502,6 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             return str(item.message.chat.experiment_session.external_id)
         return ""
 
-    def _get_flagged_reason(self, item):
-        if isinstance(item.flags, list) and item.flags:
-            last_flag = item.flags[-1]
-            if isinstance(last_flag, dict):
-                return last_flag.get("reason", "") or ""
-        return ""
-
     def _export_csv(self, queue, annotations):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
@@ -521,7 +514,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "reviewer",
             "annotated_at",
             "flagged",
-            "flagged_reason",
+            "flags",
         ] + schema_fields
 
         writer = csv.DictWriter(response, fieldnames=fieldnames)
@@ -536,7 +529,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": is_flagged,
-                "flagged_reason": self._get_flagged_reason(ann.item) if is_flagged else "",
+                "flags": ann.item.flags,
             }
             for field in schema_fields:
                 row[field] = ann.data.get(field, "")
@@ -555,7 +548,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": is_flagged,
-                "flagged_reason": self._get_flagged_reason(ann.item) if is_flagged else "",
+                "flags": ann.item.flags,
                 "annotation": ann.data,
             }
             lines.append(json.dumps(record))

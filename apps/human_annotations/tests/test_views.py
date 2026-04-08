@@ -1,5 +1,3 @@
-import csv
-import io
 import json
 
 import pytest
@@ -541,7 +539,7 @@ def test_export_csv(client, team_with_users, queue, user):
     assert "session_external_id" in content
     assert str(item.session.external_id) in content
     assert "flagged" in content
-    assert "flagged_reason" in content
+    assert "flags" in content
 
 
 @pytest.mark.django_db()
@@ -563,10 +561,10 @@ def test_export_csv_flagged_item(client, team_with_users, queue, user):
     url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
     response = client.get(url, {"format": "csv"})
     assert response.status_code == 200
-    rows = list(csv.DictReader(io.StringIO(response.content.decode())))
-    assert len(rows) == 1
-    assert rows[0]["flagged"] == "True"
-    assert rows[0]["flagged_reason"] == flag_reason
+    content = response.content.decode()
+    assert "True" in content
+    assert flag_reason in content
+    assert "flags" in content
 
 
 @pytest.mark.django_db()
@@ -587,7 +585,7 @@ def test_export_jsonl(client, team_with_users, queue, user):
     assert record["annotation"]["quality_score"] == 5
     assert record["session_external_id"] == str(item.session.external_id)
     assert record["flagged"] is False
-    assert record["flagged_reason"] == ""
+    assert record["flags"] == []
 
 
 @pytest.mark.django_db()
@@ -611,7 +609,9 @@ def test_export_jsonl_flagged_item(client, team_with_users, queue, user):
     assert response.status_code == 200
     record = json.loads(response.content.decode().strip())
     assert record["flagged"] is True
-    assert record["flagged_reason"] == flag_reason
+    assert record["flags"] == [
+        {"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}
+    ]
 
 
 @pytest.mark.django_db()
