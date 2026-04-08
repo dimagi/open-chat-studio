@@ -499,16 +499,14 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         if item.session_id:
             return str(item.session.external_id)
         if item.message_id:
-            experiment_session = getattr(item.message.chat, "experiment_session", None)
-            if experiment_session:
-                return str(experiment_session.external_id)
+            return str(item.message.chat.experiment_session.external_id)
         return ""
 
     def _get_flagged_reason(self, item):
         if isinstance(item.flags, list) and item.flags:
             last_flag = item.flags[-1]
             if isinstance(last_flag, dict):
-                return last_flag.get("reason", "")
+                return last_flag.get("reason", "") or ""
         return ""
 
     def _export_csv(self, queue, annotations):

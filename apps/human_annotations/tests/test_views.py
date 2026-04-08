@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 
 import pytest
@@ -561,9 +563,10 @@ def test_export_csv_flagged_item(client, team_with_users, queue, user):
     url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
     response = client.get(url, {"format": "csv"})
     assert response.status_code == 200
-    content = response.content.decode()
-    assert "True" in content
-    assert flag_reason in content
+    rows = list(csv.DictReader(io.StringIO(response.content.decode())))
+    assert len(rows) == 1
+    assert rows[0]["flagged"] == "True"
+    assert rows[0]["flagged_reason"] == flag_reason
 
 
 @pytest.mark.django_db()
@@ -609,6 +612,32 @@ def test_export_jsonl_flagged_item(client, team_with_users, queue, user):
     record = json.loads(response.content.decode().strip())
     assert record["flagged"] is True
     assert record["flagged_reason"] == flag_reason
+
+
+@pytest.mark.django_db()
+def test_export_jsonl_message_session_external_id(client, team_with_users, queue, user):
+    """session_external_id falls back to item.message.chat.experiment_session when session is None."""
+    experiment_session = ExperimentSessionFactory.create(team=team_with_users)
+    chat_message = ChatMessageFactory.create(chat=experiment_session.chat, message_type="human", content="test")
+    item = AnnotationItemFactory.create(
+        queue=queue,
+        team=team_with_users,
+        session=None,
+        item_type="message",
+        message=chat_message,
+    )
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": ""},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url, {"format": "jsonl"})
+    assert response.status_code == 200
+    record = json.loads(response.content.decode().strip())
+    assert record["session_external_id"] == str(experiment_session.external_id)
 
 
 # ===== Multi-Review =====
