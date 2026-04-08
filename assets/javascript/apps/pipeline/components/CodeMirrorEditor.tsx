@@ -198,7 +198,14 @@ export function CodeNodeEditor(
       detail: "Abort the current node execution and wait until the node is executed again.",
       boost: 1,
       section: "Flow Control",
-    })
+    }),
+    end_session: snip("end_session()", {
+      label: "end_session",
+      type: "function",
+      detail: "Ends the session with this response",
+      boost: 1,
+      section: "Session Control",
+    }),
   }
 
   function pythonCompletions(context: CompletionContext) {

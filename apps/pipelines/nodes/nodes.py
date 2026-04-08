@@ -41,6 +41,7 @@ from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
 from apps.pipelines.nodes.base import (
+    Intents,
     NodeSchema,
     OptionsSource,
     PipelineNode,
@@ -995,6 +996,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         output_state["temp_state"] = pipeline_state.get("temp_state") or {}
         output_state["participant_data"] = pipeline_state.get("participant_data") or {}
         output_state["session_state"] = pipeline_state.get("session_state") or {}
+        output_state["intents"] = pipeline_state.get("intents") or []
 
         # use 'output_state' so that we capture any updates
         participant_data_proxy = PipelineParticipantDataProxy(output_state, context.session, repo=self.repo)
@@ -1035,6 +1037,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "add_message_tag": output_state.add_message_tag,
             "add_session_tag": output_state.add_session_tag,
             "get_node_output": pipeline_accessor.get_node_output,
+            "end_session": self._end_session(output_state),
             # control flow
             "abort_with_message": self._abort_pipeline(),
             "require_node_outputs": self._require_node_outputs(context),
@@ -1146,3 +1149,9 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             state["temp_state"][key_name] = value
 
         return set_temp_state_key
+
+    def _end_session(self, state: PipelineState):
+        def end_session():
+            state["intents"] = [Intents.END_SESSION]
+
+        return end_session
