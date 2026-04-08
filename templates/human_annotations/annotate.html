@@ -77,7 +77,7 @@
                 action="{% url 'human_annotations:submit_annotation' request.team.slug queue.pk item.pk %}">
             {% csrf_token %}
             {% for field in form %}
-              <div class="form-control mb-3">
+              <div class="form-control mb-3 flex flex-col">
                 <label class="label">
                   <span class="label-text font-medium">{{ field.label }}</span>
                 </label>
