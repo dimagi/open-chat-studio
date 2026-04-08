@@ -505,8 +505,10 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         return ""
 
     def _get_flagged_reason(self, item):
-        if item.flags:
-            return item.flags[-1].get("reason", "")
+        if isinstance(item.flags, list) and item.flags:
+            last_flag = item.flags[-1]
+            if isinstance(last_flag, dict):
+                return last_flag.get("reason", "")
         return ""
 
     def _export_csv(self, queue, annotations):
