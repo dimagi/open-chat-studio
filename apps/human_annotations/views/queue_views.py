@@ -542,7 +542,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": False,
-                "flags": ann.item.flags,
+                "flags": json.dumps(ann.item.flags),
             }
             for field in schema_fields:
                 row[field] = ann.data.get(field, "")
@@ -550,6 +550,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
         for item in flagged_items:
             row = self._build_flagged_row(item)
+            row["flags"] = json.dumps(row["flags"])
             for field in schema_fields:
                 row[field] = ""
             writer.writerow(row)

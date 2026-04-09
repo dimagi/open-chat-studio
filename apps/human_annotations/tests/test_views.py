@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 
 import pytest
@@ -542,17 +544,23 @@ def test_export_csv(client, team_with_users, queue, user):
     response = client.get(url, {"format": "csv"})
     assert response.status_code == 200
     assert response["Content-Type"] == "text/csv"
-    content = response.content.decode()
-    assert "quality_score" in content
-    assert "session_external_id" in content
-    assert str(item.session.external_id) in content
-    assert "flagged" in content
-    assert "flags" in content
-    # Flagged item appears with flagged=True and flag reason
-    assert "True" in content
-    assert flag_reason in content
-    # Flagged item has empty reviewer and annotation fields
-    assert str(flagged_item.session.external_id) in content
+    reader = csv.DictReader(io.StringIO(response.content.decode()))
+    rows = {int(r["item_id"]): r for r in reader}
+    assert len(rows) == 2
+
+    # Normal item
+    normal = rows[item.pk]
+    assert normal["session_external_id"] == str(item.session.external_id)
+    assert normal["flagged"] == "False"
+    assert normal["quality_score"] == "5"
+
+    # Flagged item
+    flagged = rows[flagged_item.pk]
+    assert flagged["session_external_id"] == str(flagged_item.session.external_id)
+    assert flagged["flagged"] == "True"
+    assert flag_reason in flagged["flags"]
+    assert flagged["reviewer"] == ""
+    assert flagged["quality_score"] == ""
 
 
 @pytest.mark.django_db()
