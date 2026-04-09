@@ -530,6 +530,20 @@ def test_export_csv(client, team_with_users, queue, user):
         data={"quality_score": 5, "notes": "Great"},
         status=AnnotationStatus.SUBMITTED,
     )
+    flag_reason = "Incorrect annotation"
+    flagged_item = AnnotationItemFactory.create(
+        queue=queue,
+        team=team_with_users,
+        status=AnnotationItemStatus.FLAGGED,
+        flags=[{"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
+    )
+    Annotation.objects.create(
+        item=flagged_item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 3, "notes": "Needs review"},
+        status=AnnotationStatus.SUBMITTED,
+    )
     url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
     response = client.get(url, {"format": "csv"})
     assert response.status_code == 200
@@ -540,31 +554,8 @@ def test_export_csv(client, team_with_users, queue, user):
     assert str(item.session.external_id) in content
     assert "flagged" in content
     assert "flags" in content
-
-
-@pytest.mark.django_db()
-def test_export_csv_flagged_item(client, team_with_users, queue, user):
-    flag_reason = "Incorrect annotation"
-    item = AnnotationItemFactory.create(
-        queue=queue,
-        team=team_with_users,
-        status=AnnotationItemStatus.FLAGGED,
-        flags=[{"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
-    )
-    Annotation.objects.create(
-        item=item,
-        team=team_with_users,
-        reviewer=user,
-        data={"quality_score": 3, "notes": "Needs review"},
-        status=AnnotationStatus.SUBMITTED,
-    )
-    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
-    response = client.get(url, {"format": "csv"})
-    assert response.status_code == 200
-    content = response.content.decode()
     assert "True" in content
     assert flag_reason in content
-    assert "flags" in content
 
 
 @pytest.mark.django_db()
@@ -577,49 +568,23 @@ def test_export_jsonl(client, team_with_users, queue, user):
         data={"quality_score": 5, "notes": "Great"},
         status=AnnotationStatus.SUBMITTED,
     )
-    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
-    response = client.get(url, {"format": "jsonl"})
-    assert response.status_code == 200
-    assert response["Content-Type"] == "application/jsonl"
-    record = json.loads(response.content.decode().strip())
-    assert record["annotation"]["quality_score"] == 5
-    assert record["session_external_id"] == str(item.session.external_id)
-    assert record["flagged"] is False
-    assert record["flags"] == []
-
-
-@pytest.mark.django_db()
-def test_export_jsonl_flagged_item(client, team_with_users, queue, user):
     flag_reason = "Spam content"
-    item = AnnotationItemFactory.create(
+    flagged_item = AnnotationItemFactory.create(
         queue=queue,
         team=team_with_users,
         status=AnnotationItemStatus.FLAGGED,
         flags=[{"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
     )
     Annotation.objects.create(
-        item=item,
+        item=flagged_item,
         team=team_with_users,
         reviewer=user,
         data={"quality_score": 1, "notes": "Bad"},
         status=AnnotationStatus.SUBMITTED,
     )
-    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
-    response = client.get(url, {"format": "jsonl"})
-    assert response.status_code == 200
-    record = json.loads(response.content.decode().strip())
-    assert record["flagged"] is True
-    assert record["flags"] == [
-        {"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}
-    ]
-
-
-@pytest.mark.django_db()
-def test_export_jsonl_message_session_external_id(client, team_with_users, queue, user):
-    """session_external_id falls back to item.message.chat.experiment_session when session is None."""
     experiment_session = ExperimentSessionFactory.create(team=team_with_users)
     chat_message = ChatMessageFactory.create(chat=experiment_session.chat, message_type="human", content="test")
-    item = AnnotationItemFactory.create(
+    message_item = AnnotationItemFactory.create(
         queue=queue,
         team=team_with_users,
         session=None,
@@ -627,7 +592,7 @@ def test_export_jsonl_message_session_external_id(client, team_with_users, queue
         message=chat_message,
     )
     Annotation.objects.create(
-        item=item,
+        item=message_item,
         team=team_with_users,
         reviewer=user,
         data={"quality_score": 4, "notes": ""},
@@ -636,8 +601,27 @@ def test_export_jsonl_message_session_external_id(client, team_with_users, queue
     url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
     response = client.get(url, {"format": "jsonl"})
     assert response.status_code == 200
-    record = json.loads(response.content.decode().strip())
-    assert record["session_external_id"] == str(experiment_session.external_id)
+    assert response["Content-Type"] == "application/jsonl"
+    records = [json.loads(line) for line in response.content.decode().strip().split("\n")]
+    records_by_item = {r["item_id"]: r for r in records}
+
+    # Normal item
+    normal = records_by_item[item.pk]
+    assert normal["annotation"]["quality_score"] == 5
+    assert normal["session_external_id"] == str(item.session.external_id)
+    assert normal["flagged"] is False
+    assert normal["flags"] == []
+
+    # Flagged item
+    flagged = records_by_item[flagged_item.pk]
+    assert flagged["flagged"] is True
+    assert flagged["flags"] == [
+        {"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}
+    ]
+
+    # Message item — session_external_id falls back to message.chat.experiment_session
+    msg = records_by_item[message_item.pk]
+    assert msg["session_external_id"] == str(experiment_session.external_id)
 
 
 # ===== Multi-Review =====
