@@ -305,6 +305,65 @@ def test_queue_items_table(client, team_with_users, queue):
     assert response.status_code == 200
 
 
+@pytest.mark.django_db()
+def test_queue_items_table_filters_by_status(client, team_with_users, queue):
+    pending_item = AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
+    completed_item = AnnotationItemFactory.create(
+        queue=queue, team=team_with_users, status=AnnotationItemStatus.COMPLETED
+    )
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+
+    # Filter by pending - should only contain pending item
+    response = client.get(url, {"status": "pending"})
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(pending_item) in content
+    assert str(completed_item) not in content
+
+    # Filter by completed - should only contain completed item
+    response = client.get(url, {"status": "completed"})
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(completed_item) in content
+    assert str(pending_item) not in content
+
+    # No filter - should contain both
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(pending_item) in content
+    assert str(completed_item) in content
+
+
+@pytest.mark.django_db()
+def test_queue_items_table_ignores_invalid_status(client, team_with_users, queue):
+    AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url, {"status": "invalid_status"})
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_queue_detail_status_tabs_context(client, team_with_users, queue):
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.COMPLETED)
+    AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.FLAGGED)
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+
+    status_tabs = response.context["status_tabs"]
+    counts_by_value = {tab["value"]: tab["count"] for tab in status_tabs}
+    assert counts_by_value == {
+        "pending": 2,
+        "in_progress": 0,
+        "completed": 1,
+        "flagged": 1,
+    }
+
+
 # ===== Assignee Management =====
 
 

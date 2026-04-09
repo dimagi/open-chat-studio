@@ -114,9 +114,33 @@
     </div>
   </div>
 
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-sm" x-data="{activeStatus: ''}">
     <div class="card-body">
       <h3 class="card-title text-sm">Items</h3>
+      <div role="tablist" class="tabs tabs-bordered mb-4">
+        <button role="tab" class="tab"
+                :class="{'tab-active': activeStatus === ''}"
+                @click="activeStatus = ''"
+                hx-get="{{ items_table_url }}"
+                hx-target="#items-table"
+                hx-swap="innerHTML"
+                hx-indicator="#items-loading">
+          All
+        </button>
+        {% for tab in status_tabs %}
+        <button role="tab" class="tab"
+                :class="{'tab-active': activeStatus === '{{ tab.value }}'}"
+                @click="activeStatus = '{{ tab.value }}'"
+                hx-get="{{ items_table_url }}?status={{ tab.value }}"
+                hx-target="#items-table"
+                hx-swap="innerHTML"
+                hx-indicator="#items-loading">
+          {{ tab.label }}
+          <span class="badge badge-sm ml-1">{{ tab.count }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      <span id="items-loading" class="loading loading-spinner loading-md htmx-indicator"></span>
       <div id="items-table"
            hx-get="{{ items_table_url }}"
            hx-trigger="load"

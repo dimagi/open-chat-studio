@@ -31,7 +31,15 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 from ..forms import AnnotationQueueForm, ImportFromDatasetForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus, QueueStatus
+from ..models import (
+    Annotation,
+    AnnotationItem,
+    AnnotationItemStatus,
+    AnnotationItemType,
+    AnnotationQueue,
+    AnnotationStatus,
+    QueueStatus,
+)
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
 User = get_user_model()
@@ -146,6 +154,12 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         aggregate = getattr(queue, "aggregate", None)
         context["aggregates"] = aggregate.aggregates if aggregate else {}
 
+        status_counts = dict(queue.items.values_list("status").annotate(count=Count("id")))
+        context["status_tabs"] = [
+            {"value": status.value, "label": status.label, "count": status_counts.get(status.value, 0)}
+            for status in AnnotationItemStatus
+        ]
+
         return context
 
 
@@ -156,7 +170,7 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return (
+        queryset = (
             AnnotationItem.objects.filter(
                 queue_id=self.kwargs["pk"],
                 queue__in=AnnotationQueue.objects.visible_to(self.request.user, self.request.team),
@@ -170,6 +184,10 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
                 ),
             )
         )
+        status = self.request.GET.get("status")
+        if status and status in AnnotationItemStatus.values:
+            queryset = queryset.filter(status=status)
+        return queryset
 
 
 def _get_base_session_queryset(request, filter_params=None):
