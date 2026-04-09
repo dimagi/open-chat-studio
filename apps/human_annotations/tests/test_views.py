@@ -537,13 +537,7 @@ def test_export_csv(client, team_with_users, queue, user):
         status=AnnotationItemStatus.FLAGGED,
         flags=[{"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
     )
-    Annotation.objects.create(
-        item=flagged_item,
-        team=team_with_users,
-        reviewer=user,
-        data={"quality_score": 3, "notes": "Needs review"},
-        status=AnnotationStatus.SUBMITTED,
-    )
+    # Flagged items have no annotations — flagging skips submission
     url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
     response = client.get(url, {"format": "csv"})
     assert response.status_code == 200
@@ -554,8 +548,11 @@ def test_export_csv(client, team_with_users, queue, user):
     assert str(item.session.external_id) in content
     assert "flagged" in content
     assert "flags" in content
+    # Flagged item appears with flagged=True and flag reason
     assert "True" in content
     assert flag_reason in content
+    # Flagged item has empty reviewer and annotation fields
+    assert str(flagged_item.session.external_id) in content
 
 
 @pytest.mark.django_db()
@@ -575,13 +572,7 @@ def test_export_jsonl(client, team_with_users, queue, user):
         status=AnnotationItemStatus.FLAGGED,
         flags=[{"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
     )
-    Annotation.objects.create(
-        item=flagged_item,
-        team=team_with_users,
-        reviewer=user,
-        data={"quality_score": 1, "notes": "Bad"},
-        status=AnnotationStatus.SUBMITTED,
-    )
+    # Flagged items have no annotations — flagging skips submission
     experiment_session = ExperimentSessionFactory.create(team=team_with_users)
     chat_message = ChatMessageFactory.create(chat=experiment_session.chat, message_type="human", content="test")
     message_item = AnnotationItemFactory.create(
@@ -605,19 +596,22 @@ def test_export_jsonl(client, team_with_users, queue, user):
     records = [json.loads(line) for line in response.content.decode().strip().split("\n")]
     records_by_item = {r["item_id"]: r for r in records}
 
-    # Normal item
+    # Normal item — has submitted annotation
     normal = records_by_item[item.pk]
     assert normal["annotation"]["quality_score"] == 5
     assert normal["session_external_id"] == str(item.session.external_id)
     assert normal["flagged"] is False
     assert normal["flags"] == []
 
-    # Flagged item
+    # Flagged item — no annotation, but still appears in export
     flagged = records_by_item[flagged_item.pk]
     assert flagged["flagged"] is True
     assert flagged["flags"] == [
         {"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}
     ]
+    assert flagged["reviewer"] == ""
+    assert flagged["annotated_at"] == ""
+    assert flagged["annotation"] == {}
 
     # Message item — session_external_id falls back to message.chat.experiment_session
     msg = records_by_item[message_item.pk]

@@ -490,10 +490,13 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "item__message__chat__experiment_session",
             "reviewer",
         )
+        flagged_items = AnnotationItem.objects.filter(queue=queue, status=AnnotationItemStatus.FLAGGED).select_related(
+            "session", "message", "message__chat__experiment_session"
+        )
 
         if export_format == "jsonl":
-            return self._export_jsonl(queue, annotations)
-        return self._export_csv(queue, annotations)
+            return self._export_jsonl(queue, annotations, flagged_items)
+        return self._export_csv(queue, annotations, flagged_items)
 
     def _get_session_external_id(self, item):
         if item.session_id:
@@ -502,7 +505,18 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             return str(item.message.chat.experiment_session.external_id)
         return ""
 
-    def _export_csv(self, queue, annotations):
+    def _build_flagged_row(self, item):
+        return {
+            "item_id": item.pk,
+            "item_type": item.item_type,
+            "session_external_id": self._get_session_external_id(item),
+            "reviewer": "",
+            "annotated_at": "",
+            "flagged": True,
+            "flags": item.flags,
+        }
+
+    def _export_csv(self, queue, annotations, flagged_items):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
@@ -521,36 +535,45 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         writer.writeheader()
 
         for ann in annotations:
-            is_flagged = ann.item.status == AnnotationItemStatus.FLAGGED
             row = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
                 "session_external_id": self._get_session_external_id(ann.item),
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
-                "flagged": is_flagged,
+                "flagged": False,
                 "flags": ann.item.flags,
             }
             for field in schema_fields:
                 row[field] = ann.data.get(field, "")
             writer.writerow(row)
 
+        for item in flagged_items:
+            row = self._build_flagged_row(item)
+            for field in schema_fields:
+                row[field] = ""
+            writer.writerow(row)
+
         return response
 
-    def _export_jsonl(self, queue, annotations):
+    def _export_jsonl(self, queue, annotations, flagged_items):
         lines = []
         for ann in annotations:
-            is_flagged = ann.item.status == AnnotationItemStatus.FLAGGED
             record = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
                 "session_external_id": self._get_session_external_id(ann.item),
                 "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
                 "annotated_at": ann.created_at.isoformat(),
-                "flagged": is_flagged,
+                "flagged": False,
                 "flags": ann.item.flags,
                 "annotation": ann.data,
             }
+            lines.append(json.dumps(record))
+
+        for item in flagged_items:
+            record = self._build_flagged_row(item)
+            record["annotation"] = {}
             lines.append(json.dumps(record))
 
         content = "\n".join(lines)
