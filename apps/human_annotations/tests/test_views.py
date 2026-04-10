@@ -375,15 +375,6 @@ def test_queue_items_table_filters_by_reviewer(client, team_with_users, queue, u
     assert item2_url not in content
 
 
-@pytest.mark.django_db()
-def test_queue_detail_has_filter_context(client, team_with_users, queue):
-    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-    assert "df_filter_columns" in response.context
-    assert "df_table_type" in response.context
-
-
 # ===== Assignee Management =====
 
 

@@ -20,6 +20,8 @@ def _item_chip_url(_, request, record, ___):
 
 def _item_session_url(_, request, record, ___):
     session = record.session
+    if not session:
+        return None
     return reverse(
         "chatbots:chatbot_session_view",
         args=[get_slug_for_team(session.team_id), session.experiment.public_id, session.external_id],
