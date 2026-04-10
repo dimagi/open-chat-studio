@@ -18,16 +18,6 @@ def _item_chip_url(_, request, record, ___):
     )
 
 
-def _item_session_url(_, request, record, ___):
-    session = record.session
-    if not session:
-        return None
-    return reverse(
-        "chatbots:chatbot_session_view",
-        args=[get_slug_for_team(session.team_id), session.experiment.public_id, session.external_id],
-    )
-
-
 class AnnotationQueueTable(tables.Table):
     name = actions.ActionsColumn(
         actions=[
@@ -72,17 +62,10 @@ class AnnotationQueueTable(tables.Table):
 
 
 class AnnotationItemTable(tables.Table):
-    session = actions.ActionsColumn(
-        actions=[
-            chip_action(
-                label_factory=lambda record, _: str(record.session.external_id) if record.session else "—",
-                url_factory=_item_session_url,
-                open_url_in_new_tab=True,
-                button_style="btn-soft btn-secondary",
-            ),
-        ],
-        align="left",
+    session = TemplateColumn(
+        template_name="human_annotations/columns/item_session.html",
         verbose_name="Session",
+        orderable=False,
     )
     description = actions.ActionsColumn(
         actions=[
@@ -155,6 +138,7 @@ class AnnotationSessionsSelectionTable(tables.Table):
                 label="View Session",
                 url_factory=_annotation_session_url_factory,
                 open_url_in_new_tab=True,
+                required_permissions=["chat.view_chat"],
             ),
         ],
         orderable=False,
