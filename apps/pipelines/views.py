@@ -99,10 +99,10 @@ def _serialize_event_action(action):
 
 
 def _get_pipeline_chat_widget_context(pipeline, experiment=None):
-    context = {"pipeline_structure": pipeline.data}
+    if pipeline is None:
+        return {}
 
-    if experiment is None:
-        experiment = pipeline.experiment_set.filter(is_archived=False).first()
+    context = {"pipeline_structure": pipeline.data}
 
     if experiment is not None:
         static_triggers = StaticTrigger.objects.filter(experiment=experiment, is_archived=False).select_related(

@@ -6,12 +6,8 @@ import usePipelineStore from "./stores/pipelineStore";
 
 type WidgetElement = HTMLElement & { pageContext?: Record<string, unknown> };
 
-let cachedWidget: WidgetElement | null | undefined;
 function getWidget(): WidgetElement | null {
-  if (cachedWidget === undefined) {
-    cachedWidget = document.querySelector("open-chat-studio-widget") as WidgetElement | null;
-  }
-  return cachedWidget;
+  return document.querySelector("open-chat-studio-widget") as WidgetElement | null;
 }
 
 function syncPipelineToWidget(nodes: unknown[], edges: unknown[]) {
