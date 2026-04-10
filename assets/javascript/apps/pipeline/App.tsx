@@ -4,8 +4,18 @@ import {apiClient} from "./api/api";
 import Page from "./Page";
 import usePipelineStore from "./stores/pipelineStore";
 
+type WidgetElement = HTMLElement & { pageContext?: Record<string, unknown> };
+
+let cachedWidget: WidgetElement | null | undefined;
+function getWidget(): WidgetElement | null {
+  if (cachedWidget === undefined) {
+    cachedWidget = document.querySelector("open-chat-studio-widget") as WidgetElement | null;
+  }
+  return cachedWidget;
+}
+
 function syncPipelineToWidget(nodes: unknown[], edges: unknown[]) {
-  const widget = document.querySelector("open-chat-studio-widget") as HTMLElement & { pageContext?: Record<string, unknown> } | null;
+  const widget = getWidget();
   if (widget) {
     const existing = widget.pageContext || {};
     widget.pageContext = { ...existing, pipeline_structure: { nodes, edges } };

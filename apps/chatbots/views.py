@@ -47,7 +47,6 @@ from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
-from apps.pipelines.models import Pipeline
 from apps.pipelines.views import (
     _get_pipeline_chat_widget_context,
     _pipeline_node_default_values,
@@ -341,7 +340,9 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         experiment = get_object_or_404(
-            Experiment.objects.get_all().select_related("voice_provider"), id=kwargs["pk"], team=self.request.team
+            Experiment.objects.get_all().select_related("voice_provider", "pipeline"),
+            id=kwargs["pk"],
+            team=self.request.team,
         )
         synthetic_voices = []
         if experiment.voice_provider:
@@ -351,7 +352,6 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
             synthetic_voices = synthetic_voices.filter(service__iexact=experiment.voice_provider.type)
 
-        pipeline = Pipeline.objects.get(id=experiment.pipeline_id, team=self.request.team)
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
@@ -368,7 +368,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
-            "pipeline_chat_widget_context": _get_pipeline_chat_widget_context(pipeline, experiment),
+            "pipeline_chat_widget_context": _get_pipeline_chat_widget_context(experiment.pipeline, experiment),
             **llm_model_parameter_context(),
         }
 

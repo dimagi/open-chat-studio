@@ -90,12 +90,15 @@ class CreatePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templat
         return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
 
 
-def _get_pipeline_chat_widget_context(pipeline, experiment=None):
-    """Build chat widget context data for the pipeline view.
+def _serialize_event_action(action):
+    return {
+        "action_type": action.action_type,
+        "action_type_label": EventActionType(action.action_type).label,
+        "params": action.params,
+    }
 
-    Returns a dict with pipeline JSON and experiment events to be passed as
-    page context to the chat widget.
-    """
+
+def _get_pipeline_chat_widget_context(pipeline, experiment=None):
     context = {"pipeline_structure": pipeline.data}
 
     if experiment is None:
@@ -117,11 +120,7 @@ def _get_pipeline_chat_widget_context(pipeline, experiment=None):
                     "type": trigger.type,
                     "type_label": StaticTriggerType(trigger.type).label,
                     "is_active": trigger.is_active,
-                    "action": {
-                        "action_type": trigger.action.action_type,
-                        "action_type_label": EventActionType(trigger.action.action_type).label,
-                        "params": trigger.action.params,
-                    },
+                    "action": _serialize_event_action(trigger.action),
                 }
                 for trigger in static_triggers
             ],
@@ -131,11 +130,7 @@ def _get_pipeline_chat_widget_context(pipeline, experiment=None):
                     "total_num_triggers": trigger.total_num_triggers,
                     "is_active": trigger.is_active,
                     "trigger_from_first_message": trigger.trigger_from_first_message,
-                    "action": {
-                        "action_type": trigger.action.action_type,
-                        "action_type_label": EventActionType(trigger.action.action_type).label,
-                        "params": trigger.action.params,
-                    },
+                    "action": _serialize_event_action(trigger.action),
                 }
                 for trigger in timeout_triggers
             ],
@@ -349,7 +344,6 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
 
