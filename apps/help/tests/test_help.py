@@ -121,6 +121,32 @@ class StubAgent(BaseHelpAgent[StubInput, StubOutput]):
 
 
 class TestBaseHelpAgent:
+    def test_get_output_schema_is_json_serializable(self):
+        """Regression test: simulates the original bug.
+
+        Previously the raw Pydantic class was passed as response_format, causing the OpenAI API
+        to receive a malformed JSON schema where properties like 'properties', 'required', and
+        'type' were serialized as Python string representations (e.g. "{'result': ...}") rather
+        than proper JSON objects. Reproduces the root cause: a Pydantic class is not
+        JSON-serializable, so any attempt to encode it produces a TypeError.
+        """
+        # Simulate what the old code did — passing the class directly to the OpenAI client
+        # results in a TypeError because the class itself is not JSON-serializable.
+        with pytest.raises(TypeError, match="is not JSON serializable"):
+            json.dumps(StubOutput)
+
+        # The fix: _get_output_schema() must return a properly serializable dict.
+        schema = StubAgent._get_output_schema()
+        assert isinstance(schema, dict)
+
+        # Must serialize to valid JSON without error.
+        parsed = json.loads(json.dumps(schema))
+
+        # Properties must be proper JSON objects, not Python string representations.
+        assert isinstance(parsed.get("properties"), dict)
+        assert isinstance(parsed["properties"].get("result"), dict)
+        assert parsed["properties"]["result"]["type"] == "string"
+
     @mock.patch("apps.help.base.build_system_agent")
     def test_run_invokes_agent_and_returns_parsed_output(self, mock_build):
         mock_agent = mock.Mock()
@@ -131,7 +157,13 @@ class TestBaseHelpAgent:
         result = agent.run()
 
         assert result == StubOutput(result="hello")
-        mock_build.assert_called_once_with("low", "You are a stub.", response_format=StubOutput)
+        expected_schema = {
+            "properties": {"result": {"title": "Result", "type": "string"}},
+            "required": ["result"],
+            "title": "StubOutput",
+            "type": "object",
+        }
+        mock_build.assert_called_once_with("low", "You are a stub.", response_format=expected_schema)
         mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "say hi"}]})
 
 
@@ -215,9 +247,13 @@ class TestProgressMessagesAgent:
 
         assert result == ProgressMessagesOutput(messages=["Thinking...", "Almost there..."])
         mock_build.assert_called_once()
-        # Verify response_format was passed
+        # Verify response_format is a JSON schema dict, not the raw Pydantic class.
+        # Passing the class directly caused the OpenAI API to receive a malformed schema.
         call_kwargs = mock_build.call_args
-        assert call_kwargs.kwargs["response_format"] is ProgressMessagesOutput
+        response_format = call_kwargs.kwargs["response_format"]
+        assert isinstance(response_format, dict), "response_format must be a JSON schema dict, not a Pydantic class"
+        assert response_format.get("title") == "ProgressMessagesOutput"
+        json.dumps(response_format)  # Must be fully JSON-serializable; raises if class was passed
 
     @mock.patch("apps.help.base.build_system_agent")
     def test_user_message_includes_name_and_description(self, mock_build):
