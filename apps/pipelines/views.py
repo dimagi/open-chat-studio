@@ -23,6 +23,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
+from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
@@ -89,6 +90,60 @@ class CreatePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templat
         return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
 
 
+def _get_pipeline_chat_widget_context(pipeline, experiment=None):
+    """Build chat widget context data for the pipeline view.
+
+    Returns a dict with pipeline JSON and experiment events to be passed as
+    page context to the chat widget.
+    """
+    context = {"pipeline_structure": pipeline.data}
+
+    if experiment is None:
+        experiment = pipeline.experiment_set.filter(is_archived=False).first()
+
+    if experiment is not None:
+        static_triggers = StaticTrigger.objects.filter(experiment=experiment, is_archived=False).select_related(
+            "action"
+        )
+        timeout_triggers = TimeoutTrigger.objects.filter(experiment=experiment, is_archived=False).select_related(
+            "action"
+        )
+
+        context["experiment_events"] = {
+            "experiment_id": experiment.id,
+            "experiment_name": experiment.name,
+            "static_triggers": [
+                {
+                    "type": trigger.type,
+                    "type_label": StaticTriggerType(trigger.type).label,
+                    "is_active": trigger.is_active,
+                    "action": {
+                        "action_type": trigger.action.action_type,
+                        "action_type_label": EventActionType(trigger.action.action_type).label,
+                        "params": trigger.action.params,
+                    },
+                }
+                for trigger in static_triggers
+            ],
+            "timeout_triggers": [
+                {
+                    "delay": trigger.delay,
+                    "total_num_triggers": trigger.total_num_triggers,
+                    "is_active": trigger.is_active,
+                    "trigger_from_first_message": trigger.trigger_from_first_message,
+                    "action": {
+                        "action_type": trigger.action.action_type,
+                        "action_type_label": EventActionType(trigger.action.action_type).label,
+                        "params": trigger.action.params,
+                    },
+                }
+                for trigger in timeout_triggers
+            ],
+        }
+
+    return context
+
+
 class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.change_pipeline"
     template_name = "pipelines/pipeline_builder.html"
@@ -114,6 +169,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
             "allow_edit_name": True,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
+            "pipeline_chat_widget_context": _get_pipeline_chat_widget_context(pipeline),
             **llm_model_parameter_context(),
         }
 
