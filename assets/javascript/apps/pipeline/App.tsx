@@ -12,10 +12,21 @@ function getWidget(): WidgetElement | null {
 
 function syncPipelineToWidget(nodes: unknown[], edges: unknown[]) {
   const widget = getWidget();
-  if (widget) {
-    const existing = widget.pageContext || {};
-    widget.pageContext = { ...existing, pipeline_structure: { nodes, edges } };
+  if (!widget) {
+    return;
   }
+
+  const existing = widget.pageContext || {};
+  const existingPipelineStructure =
+    (existing.pipeline_structure as Record<string, unknown> | undefined) || {};
+  widget.pageContext = {
+    ...existing,
+    pipeline_structure: {
+      ...existingPipelineStructure,
+      nodes,
+      edges,
+    },
+  };
 }
 
 const App = function (props: { team_slug: string, pipelineId: number | undefined}) {
