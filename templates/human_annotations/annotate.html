@@ -27,10 +27,9 @@
           {% if item_content.type == "session" %}
             <div class="flex items-center gap-2 mb-2">
               <p class="text-xs text-gray-500">Participant: {{ item_content.participant }}</p>
-              <a href="{{ item_content.session_url }}" target="_blank" rel="noopener noreferrer"
-                 class="btn btn-soft btn-secondary btn-xs">
-                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>View Session
-              </a>
+              {% if perms.chat.view_chat %}
+              {% include "generic/chip_button.html" with url=item_content.session_url label="View Session" %}
+              {% endif %}
             </div>
             <div class="border rounded-2xl overflow-hidden max-h-[70vh] overflow-y-auto">
               <table class="min-w-full divide-y divide-gray-300">
