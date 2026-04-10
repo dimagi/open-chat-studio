@@ -25,13 +25,21 @@ from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
 from apps.experiments.models import ExperimentSession
 from apps.filters.models import FilterSet
+from apps.human_annotations.filters import AnnotationItemFilter
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 from ..forms import AnnotationQueueForm, ImportFromDatasetForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus, QueueStatus
+from ..models import (
+    Annotation,
+    AnnotationItem,
+    AnnotationItemType,
+    AnnotationQueue,
+    AnnotationStatus,
+    QueueStatus,
+)
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
 User = get_user_model()
@@ -138,13 +146,24 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         queue = self.object
         context["active_tab"] = "annotation_queues"
         context["progress"] = queue.get_progress()
-        context["items_table_url"] = reverse(
+        items_table_url = reverse(
             "human_annotations:queue_items_table",
             args=[self.request.team.slug, queue.pk],
         )
+        context["items_table_url"] = items_table_url
 
         aggregate = getattr(queue, "aggregate", None)
         context["aggregates"] = aggregate.aggregates if aggregate else {}
+
+        filter_context = get_filter_context_data(
+            self.request.team,
+            columns=AnnotationItemFilter.columns(self.request.team),
+            filter_class=AnnotationItemFilter,
+            table_url=items_table_url,
+            table_container_id="items-table",
+            table_type=FilterSet.TableType.ANNOTATION_ITEMS,
+        )
+        context.update(filter_context)
 
         return context
 
@@ -156,7 +175,7 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return (
+        queryset = (
             AnnotationItem.objects.filter(
                 queue_id=self.kwargs["pk"],
                 queue__in=AnnotationQueue.objects.visible_to(self.request.user, self.request.team),
@@ -170,6 +189,10 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
                 ),
             )
         )
+        timezone = self.request.session.get("detected_tz", None)
+        filter_set = AnnotationItemFilter()
+        queryset = filter_set.apply(queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone)
+        return queryset
 
 
 def _get_base_session_queryset(request, filter_params=None):

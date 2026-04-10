@@ -305,6 +305,76 @@ def test_queue_items_table(client, team_with_users, queue):
     assert response.status_code == 200
 
 
+@pytest.mark.django_db()
+def test_queue_items_table_filters_by_status(client, team_with_users, queue):
+    pending_item = AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
+    completed_item = AnnotationItemFactory.create(
+        queue=queue, team=team_with_users, status=AnnotationItemStatus.COMPLETED
+    )
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+
+    # Filter by pending using dynamic filter params
+    response = client.get(
+        url,
+        {"filter_0_column": "status", "filter_0_operator": "any of", "filter_0_value": '["Pending"]'},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(pending_item) in content
+    assert str(completed_item) not in content
+
+    # Filter by completed
+    response = client.get(
+        url,
+        {"filter_0_column": "status", "filter_0_operator": "any of", "filter_0_value": '["Completed"]'},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(completed_item) in content
+    assert str(pending_item) not in content
+
+    # No filter - should contain both
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(pending_item) in content
+    assert str(completed_item) in content
+
+
+@pytest.mark.django_db()
+def test_queue_items_table_filters_by_reviewer(client, team_with_users, queue, user):
+    item1 = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    item2 = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item1,
+        team=team_with_users,
+        reviewer=user,
+        data={},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+
+    # Filter by reviewer
+    response = client.get(
+        url,
+        {"filter_0_column": "reviewer", "filter_0_operator": "any of", "filter_0_value": f'["{user.pk}"]'},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert str(item1) in content
+    assert str(item2) not in content
+
+
+@pytest.mark.django_db()
+def test_queue_detail_has_filter_context(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "df_filter_columns" in response.context
+    assert "df_table_type" in response.context
+
+
 # ===== Assignee Management =====
 
 
