@@ -305,6 +305,85 @@ def test_queue_items_table(client, team_with_users, queue):
     assert response.status_code == 200
 
 
+@pytest.mark.django_db()
+def test_queue_items_table_filters_by_status(client, team_with_users, queue):
+    pending_item = AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
+    completed_item = AnnotationItemFactory.create(
+        queue=queue, team=team_with_users, status=AnnotationItemStatus.COMPLETED
+    )
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+
+    pending_item_url = reverse(
+        "human_annotations:annotate_item", args=[team_with_users.slug, queue.pk, pending_item.pk]
+    )
+    completed_item_url = reverse(
+        "human_annotations:annotate_item", args=[team_with_users.slug, queue.pk, completed_item.pk]
+    )
+
+    # Filter by pending using dynamic filter params
+    response = client.get(
+        url,
+        {"filter_0_column": "status", "filter_0_operator": "any of", "filter_0_value": '["Pending"]'},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert pending_item_url in content
+    assert completed_item_url not in content
+
+    # Filter by completed
+    response = client.get(
+        url,
+        {"filter_0_column": "status", "filter_0_operator": "any of", "filter_0_value": '["Completed"]'},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert completed_item_url in content
+    assert pending_item_url not in content
+
+    # No filter - should contain both
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert pending_item_url in content
+    assert completed_item_url in content
+
+
+@pytest.mark.django_db()
+def test_queue_items_table_filters_by_reviewer(client, team_with_users, queue, user):
+    item1 = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    item2 = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item1,
+        team=team_with_users,
+        reviewer=user,
+        data={},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+
+    # Filter by reviewer
+    response = client.get(
+        url,
+        {"filter_0_column": "reviewer", "filter_0_operator": "any of", "filter_0_value": f'["{user.pk}"]'},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    item1_url = reverse("human_annotations:annotate_item", args=[team_with_users.slug, queue.pk, item1.pk])
+    item2_url = reverse("human_annotations:annotate_item", args=[team_with_users.slug, queue.pk, item2.pk])
+    assert item1_url in content
+    assert item2_url not in content
+
+
+@pytest.mark.django_db()
+def test_queue_detail_has_filter_context(client, team_with_users, queue):
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "df_filter_columns" in response.context
+    assert "df_table_type" in response.context
+
+
 # ===== Assignee Management =====
 
 

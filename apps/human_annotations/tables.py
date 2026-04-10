@@ -18,6 +18,14 @@ def _item_chip_url(_, request, record, ___):
     )
 
 
+def _item_session_url(_, request, record, ___):
+    session = record.session
+    return reverse(
+        "chatbots:chatbot_session_view",
+        args=[get_slug_for_team(session.team_id), session.experiment.public_id, session.external_id],
+    )
+
+
 class AnnotationQueueTable(tables.Table):
     name = actions.ActionsColumn(
         actions=[
@@ -62,18 +70,29 @@ class AnnotationQueueTable(tables.Table):
 
 
 class AnnotationItemTable(tables.Table):
-    description = actions.ActionsColumn(
+    session = actions.ActionsColumn(
         actions=[
             chip_action(
-                label_factory=lambda record, _: str(record),
-                url_factory=_item_chip_url,
-                button_style="btn-soft btn-secondary max-w-xs truncate",
+                label_factory=lambda record, _: str(record.session.external_id) if record.session else "—",
+                url_factory=_item_session_url,
+                open_url_in_new_tab=True,
+                button_style="btn-soft btn-secondary",
             ),
         ],
         align="left",
-        verbose_name="Item",
+        verbose_name="Session",
     )
-    item_type = columns.Column(verbose_name="Type")
+    description = actions.ActionsColumn(
+        actions=[
+            chip_action(
+                label="Annotate",
+                url_factory=_item_chip_url,
+                button_style="btn-soft btn-primary",
+            ),
+        ],
+        align="left",
+        verbose_name="",
+    )
     status = TemplateColumn(
         template_name="human_annotations/columns/item_status.html",
         verbose_name="Status",
@@ -93,7 +112,7 @@ class AnnotationItemTable(tables.Table):
 
     class Meta:
         model = AnnotationItem
-        fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at", "remove"]
+        fields = ["session", "description", "status", "review_count", "annotations_summary", "created_at", "remove"]
         attrs = {"class": "table"}
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
 

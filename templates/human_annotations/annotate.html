@@ -25,7 +25,13 @@
         <div class="card-body">
           <h3 class="card-title text-sm">Item Content</h3>
           {% if item_content.type == "session" %}
-            <p class="text-xs text-gray-500 mb-2">Participant: {{ item_content.participant }}</p>
+            <div class="flex items-center gap-2 mb-2">
+              <p class="text-xs text-gray-500">Participant: {{ item_content.participant }}</p>
+              <a href="{{ item_content.session_url }}" target="_blank"
+                 class="btn btn-soft btn-secondary btn-xs">
+                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>View Session
+              </a>
+            </div>
             <div class="border rounded-2xl overflow-hidden max-h-[70vh] overflow-y-auto">
               <table class="min-w-full divide-y divide-gray-300">
                 <tbody class="divide-y divide-gray-200">

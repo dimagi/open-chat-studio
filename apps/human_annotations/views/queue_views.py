@@ -161,7 +161,7 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
                 queue_id=self.kwargs["pk"],
                 queue__in=AnnotationQueue.objects.visible_to(self.request.user, self.request.team),
             )
-            .select_related("session", "message", "queue")
+            .select_related("session__experiment", "message", "queue")
             .prefetch_related(
                 Prefetch(
                     "annotations",
