@@ -25,6 +25,7 @@ from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
 from apps.experiments.models import ExperimentSession
 from apps.filters.models import FilterSet
+from apps.human_annotations.filters import AnnotationItemFilter
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -34,7 +35,6 @@ from ..forms import AnnotationQueueForm, ImportFromDatasetForm
 from ..models import (
     Annotation,
     AnnotationItem,
-    AnnotationItemStatus,
     AnnotationItemType,
     AnnotationQueue,
     AnnotationStatus,
@@ -146,19 +146,24 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         queue = self.object
         context["active_tab"] = "annotation_queues"
         context["progress"] = queue.get_progress()
-        context["items_table_url"] = reverse(
+        items_table_url = reverse(
             "human_annotations:queue_items_table",
             args=[self.request.team.slug, queue.pk],
         )
+        context["items_table_url"] = items_table_url
 
         aggregate = getattr(queue, "aggregate", None)
         context["aggregates"] = aggregate.aggregates if aggregate else {}
 
-        status_counts = dict(queue.items.values_list("status").annotate(count=Count("id")))
-        context["status_tabs"] = [
-            {"value": status.value, "label": status.label, "count": status_counts.get(status.value, 0)}
-            for status in AnnotationItemStatus
-        ]
+        filter_context = get_filter_context_data(
+            self.request.team,
+            columns=AnnotationItemFilter.columns(self.request.team),
+            filter_class=AnnotationItemFilter,
+            table_url=items_table_url,
+            table_container_id="items-table",
+            table_type=FilterSet.TableType.ANNOTATION_ITEMS,
+        )
+        context.update(filter_context)
 
         return context
 
@@ -184,9 +189,9 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
                 ),
             )
         )
-        status = self.request.GET.get("status")
-        if status and status in AnnotationItemStatus.values:
-            queryset = queryset.filter(status=status)
+        timezone = self.request.session.get("detected_tz", None)
+        filter_set = AnnotationItemFilter()
+        queryset = filter_set.apply(queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone)
         return queryset
 
 

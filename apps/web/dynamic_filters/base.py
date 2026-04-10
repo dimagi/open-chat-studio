@@ -267,6 +267,7 @@ def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
     regardless of import order.
     """
     import apps.experiments.filters  # noqa: F401, PLC0415
+    import apps.human_annotations.filters  # noqa: F401, PLC0415
     import apps.ocs_notifications.filters  # noqa: F401, PLC0415
     import apps.participants.filters  # noqa: F401, PLC0415
     import apps.trace.filters  # noqa: F401, PLC0415

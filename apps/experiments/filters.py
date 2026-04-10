@@ -33,7 +33,7 @@ def get_filter_context_data(
     table_type: str,
 ):
     date_range_column = filter_class.date_range_column
-    if date_range_column not in columns:
+    if date_range_column and date_range_column not in columns:
         raise ValueError("Date range column is not present in list of columns")
     return {
         "df_date_range_options": DATE_RANGE_OPTIONS,
