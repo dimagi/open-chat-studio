@@ -320,8 +320,8 @@ def test_queue_items_table_filters_by_status(client, team_with_users, queue):
     )
     assert response.status_code == 200
     content = response.content.decode()
-    assert str(pending_item) in content
-    assert str(completed_item) not in content
+    assert str(pending_item.session.external_id) in content
+    assert str(completed_item.session.external_id) not in content
 
     # Filter by completed
     response = client.get(
@@ -330,15 +330,15 @@ def test_queue_items_table_filters_by_status(client, team_with_users, queue):
     )
     assert response.status_code == 200
     content = response.content.decode()
-    assert str(completed_item) in content
-    assert str(pending_item) not in content
+    assert str(completed_item.session.external_id) in content
+    assert str(pending_item.session.external_id) not in content
 
     # No filter - should contain both
     response = client.get(url)
     assert response.status_code == 200
     content = response.content.decode()
-    assert str(pending_item) in content
-    assert str(completed_item) in content
+    assert str(pending_item.session.external_id) in content
+    assert str(completed_item.session.external_id) in content
 
 
 @pytest.mark.django_db()
@@ -362,8 +362,8 @@ def test_queue_items_table_filters_by_reviewer(client, team_with_users, queue, u
     )
     assert response.status_code == 200
     content = response.content.decode()
-    assert str(item1) in content
-    assert str(item2) not in content
+    assert str(item1.session.external_id) in content
+    assert str(item2.session.external_id) not in content
 
 
 @pytest.mark.django_db()
