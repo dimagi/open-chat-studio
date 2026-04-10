@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
+from apps.custom_actions.schema_utils import resolve_references
 from apps.help.agent import build_system_agent
 
 
@@ -40,6 +41,17 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
         raise TypeError(f"Cannot determine output type for {cls.__name__}")
 
     @classmethod
+    def _get_output_schema(cls) -> dict:
+        """Convert the output model to a properly formatted JSON schema for structured output."""
+        output_type = cls._get_output_type()
+        schema = output_type.model_json_schema()
+        # Resolve any references in the schema
+        schema = resolve_references(schema)
+        # Remove unnecessary keys
+        schema.pop("$defs", None)
+        return schema
+
+    @classmethod
     def get_system_prompt(cls, input: TInput) -> str:
         raise NotImplementedError
 
@@ -51,7 +63,7 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
         agent = build_system_agent(
             self.mode,
             self.get_system_prompt(self.input),
-            response_format=self._get_output_type(),
+            response_format=self._get_output_schema(),
         )
         response = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
         return self.parse_response(response)
