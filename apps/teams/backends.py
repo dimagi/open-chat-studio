@@ -197,7 +197,7 @@ GROUPS = [
             ModelPermSetDef("annotations", "customtaggeditem", ALL),
             ModelPermSetDef("annotations", "usercomment", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
-            CustomPermissionSetDef("documents", ALL),
+            AppPermSetDef("documents", ALL),
         ],
     ),
     GroupDef(
