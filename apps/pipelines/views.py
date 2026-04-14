@@ -98,7 +98,7 @@ def _serialize_event_action(action):
     }
 
 
-def _get_experiment_settings_context(experiment):
+def _get_chatbot_settings_context(experiment):
     return {
         "tracing_configured": bool(experiment.trace_provider_id),
         "convert_speech_inputs_to_text": bool(experiment.synthetic_voice_id and experiment.echo_transcript),
@@ -151,7 +151,7 @@ def get_widget_page_context(pipeline, experiment=None):
                 if trigger.is_active
             ],
         }
-        context["settings"] = _get_experiment_settings_context(experiment)
+        context["settings"] = _get_chatbot_settings_context(experiment)
 
     return context
 
