@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group
 from django.test import Client
 from django.urls import reverse
 
+from apps.channels.models import ChannelPlatform
 from apps.human_annotations.aggregation import compute_aggregates_for_queue
 from apps.human_annotations.models import (
     Annotation,
@@ -888,6 +889,34 @@ def test_queue_sessions_json_excludes_sessions_without_messages(client, team_wit
     url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
     data = client.get(url).json()
     assert set(data["ids"]) == {str(session_with_messages.external_id)}
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_table_excludes_evaluation_sessions(client, team_with_users, queue):
+
+    normal_session = ExperimentSessionFactory.create(team=team_with_users)
+    ChatMessageFactory.create(chat=normal_session.chat)
+    eval_session = ExperimentSessionFactory.create(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
+    ChatMessageFactory.create(chat=eval_session.chat)
+
+    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+    content = response.content.decode()
+    assert str(normal_session.external_id) in content
+    assert str(eval_session.external_id) not in content
+
+
+@pytest.mark.django_db()
+def test_queue_sessions_json_excludes_evaluation_sessions(client, team_with_users, queue):
+
+    normal_session = ExperimentSessionFactory.create(team=team_with_users)
+    ChatMessageFactory.create(chat=normal_session.chat)
+    eval_session = ExperimentSessionFactory.create(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
+    ChatMessageFactory.create(chat=eval_session.chat)
+
+    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    data = client.get(url).json()
+    assert set(data["ids"]) == {str(normal_session.external_id)}
 
 
 # ===== AddSessionsToQueue GET + POST =====

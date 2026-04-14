@@ -4,7 +4,16 @@ from typing import ClassVar
 from django.contrib.auth import get_user_model
 from django.db.models import Exists, OuterRef, QuerySet
 
+from apps.channels.models import ChannelPlatform
+from apps.experiments.filters import ChannelsFilter, ChatMessageTagsFilter, VersionsFilter
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
+from apps.web.dynamic_filters.column_filters import (
+    ExperimentFilter,
+    ParticipantFilter,
+    RemoteIdFilter,
+    StatusFilter,
+    TimestampFilter,
+)
 
 from .models import Annotation, AnnotationItemStatus, AnnotationStatus
 
@@ -83,4 +92,38 @@ class AnnotationItemFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         AnnotationItemStatusFilter(),
         ReviewerFilter(),
+    ]
+
+
+class AnnotationSessionFilter(MultiColumnFilter):
+    """Session filter for annotation queues that excludes evaluation sessions from the channels filter."""
+
+    slug: ClassVar[str] = "session"
+    date_range_column: ClassVar[str] = "last_message"
+    filters: ClassVar[Sequence[ColumnFilter]] = [
+        ParticipantFilter(),
+        TimestampFilter(
+            label="Last Message",
+            column="last_activity_at",
+            query_param="last_message",
+            description="Filter by last message time",
+        ),
+        TimestampFilter(
+            label="First Message",
+            column="first_activity_at",
+            query_param="first_message",
+            description="Filter by first message time",
+        ),
+        TimestampFilter(
+            label="Message Date",
+            column="chat__messages__created_at",
+            query_param="message_date",
+            description="Filter by message date",
+        ),
+        ChatMessageTagsFilter(),
+        VersionsFilter(),
+        ChannelsFilter(exclude_platforms=[ChannelPlatform.EVALUATIONS]),
+        ExperimentFilter(),
+        StatusFilter(query_param="state"),
+        RemoteIdFilter(),
     ]
