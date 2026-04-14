@@ -98,7 +98,7 @@ class AnnotationItemFilter(MultiColumnFilter):
 class AnnotationSessionFilter(MultiColumnFilter):
     """Session filter for annotation queues that excludes evaluation sessions from the channels filter."""
 
-    slug: ClassVar[str] = "session"
+    slug: ClassVar[str] = "annotation_session"
     date_range_column: ClassVar[str] = "last_message"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
