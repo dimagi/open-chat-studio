@@ -98,11 +98,23 @@ def _serialize_event_action(action):
     }
 
 
-def _get_pipeline_chat_widget_context(pipeline, experiment=None):
+def _get_experiment_settings_context(experiment):
+    return {
+        "tracing_configured": bool(experiment.trace_provider_id),
+        "convert_speech_inputs_to_text": bool(experiment.synthetic_voice_id and experiment.echo_transcript),
+        "convert_output_text_to_speech": bool(experiment.synthetic_voice_id),
+        "user_consent_required": bool(experiment.consent_form_id),
+        "file_uploads_allowed": experiment.file_uploads_enabled,
+    }
+
+
+def get_widget_page_context(pipeline, experiment=None):
     if pipeline is None:
         return {}
 
-    context = {"pipeline_structure": pipeline.data}
+    context = {
+        "pipeline_structure": pipeline.data_without_positions,
+    }
 
     if experiment is not None:
         static_triggers = StaticTrigger.objects.filter(experiment=experiment, is_archived=False).select_related(
@@ -112,9 +124,13 @@ def _get_pipeline_chat_widget_context(pipeline, experiment=None):
             "action"
         )
 
-        context["experiment_events"] = {
-            "chatbot_id": experiment.id,
-            "chatbot_name": experiment.name,
+        context["chatbot"] = {
+            "id": experiment.id,
+            "name": experiment.name,
+            "description": experiment.description,
+            "version": experiment.version_number,
+        }
+        context["event_triggers"] = {
             "static_triggers": [
                 {
                     "type": trigger.type,
@@ -135,6 +151,7 @@ def _get_pipeline_chat_widget_context(pipeline, experiment=None):
                 if trigger.is_active
             ],
         }
+        context["settings"] = _get_experiment_settings_context(experiment)
 
     return context
 
@@ -164,7 +181,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
             "allow_edit_name": True,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
-            "pipeline_chat_widget_context": _get_pipeline_chat_widget_context(pipeline),
+            "widget_page_context": get_widget_page_context(pipeline),
             **llm_model_parameter_context(),
         }
 

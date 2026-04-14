@@ -48,10 +48,10 @@ from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.views import (
-    _get_pipeline_chat_widget_context,
     _pipeline_node_default_values,
     _pipeline_node_parameter_values,
     _pipeline_node_schemas,
+    get_widget_page_context,
     llm_model_parameter_context,
 )
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -368,7 +368,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
-            "pipeline_chat_widget_context": _get_pipeline_chat_widget_context(experiment.pipeline, experiment),
+            "widget_page_context": get_widget_page_context(experiment.pipeline, experiment),
             **llm_model_parameter_context(),
         }
 

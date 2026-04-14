@@ -242,6 +242,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         return {}
 
+    @property
+    def data_without_positions(self):
+        if not self.data or "nodes" not in self.data:
+            return self.data
+        return {
+            **self.data,
+            "nodes": [{k: v for k, v in node.items() if k != "position"} for node in self.data["nodes"]],
+        }
+
     @cached_property
     def flow_data(self) -> dict:
         flow = Flow(**self.data)

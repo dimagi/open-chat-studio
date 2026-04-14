@@ -35,6 +35,7 @@
 {% block footer %}
   {{ block.super }}
   {% if request.user.is_authenticated and ocs_config.chat_widget.enabled and ocs_config.chat_widget.chatbot_id %}
+    {% if widget_page_context %}{{ widget_page_context|json_script:"widget-page-context" }}{% endif %}
     <open-chat-studio-widget {% include "generic/attrs.html" with attrs=ocs_config.chat_widget.get_widget_attributes %}
         api-base-url="{{ request.scheme }}://{{ request.get_host }}"
         user-id="{{ request.user.email }}"
