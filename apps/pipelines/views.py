@@ -113,26 +113,26 @@ def _get_pipeline_chat_widget_context(pipeline, experiment=None):
         )
 
         context["experiment_events"] = {
-            "experiment_id": experiment.id,
-            "experiment_name": experiment.name,
+            "chatbot_id": experiment.id,
+            "chatbot_name": experiment.name,
             "static_triggers": [
                 {
                     "type": trigger.type,
                     "type_label": StaticTriggerType(trigger.type).label,
-                    "is_active": trigger.is_active,
                     "action": _serialize_event_action(trigger.action),
                 }
                 for trigger in static_triggers
+                if trigger.is_active
             ],
             "timeout_triggers": [
                 {
                     "delay": trigger.delay,
                     "total_num_triggers": trigger.total_num_triggers,
-                    "is_active": trigger.is_active,
                     "trigger_from_first_message": trigger.trigger_from_first_message,
                     "action": _serialize_event_action(trigger.action),
                 }
                 for trigger in timeout_triggers
+                if trigger.is_active
             ],
         }
 

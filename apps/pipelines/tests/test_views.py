@@ -28,7 +28,7 @@ class TestGetPipelineChatWidgetContext:
         assert len(static_triggers) == 1
         assert static_triggers[0]["type"] == StaticTriggerType.NEW_HUMAN_MESSAGE
         assert static_triggers[0]["type_label"] == StaticTriggerType.NEW_HUMAN_MESSAGE.label
-        assert static_triggers[0]["is_active"] is True
+        assert "is_active" not in static_triggers[0]
         assert static_triggers[0]["action"]["action_type"] == EventActionType.LOG
         assert static_triggers[0]["action"]["action_type_label"] == EventActionType.LOG.label
         assert static_triggers[0]["action"]["params"] == {"key": "value"}
@@ -50,8 +50,18 @@ class TestGetPipelineChatWidgetContext:
         assert len(timeout_triggers) == 1
         assert timeout_triggers[0]["delay"] == 30
         assert timeout_triggers[0]["total_num_triggers"] == 5
-        assert timeout_triggers[0]["is_active"] is True
+        assert "is_active" not in timeout_triggers[0]
         assert timeout_triggers[0]["action"]["action_type"] == EventActionType.LOG
+
+    def test_excludes_inactive_triggers(self):
+        pipeline = PipelineFactory()
+        experiment = ExperimentFactory(pipeline=pipeline, team=pipeline.team)
+        StaticTriggerFactory(experiment=experiment, is_active=False)
+        TimeoutTriggerFactory(experiment=experiment, is_active=False)
+
+        result = _get_pipeline_chat_widget_context(pipeline, experiment=experiment)
+        assert result["experiment_events"]["static_triggers"] == []
+        assert result["experiment_events"]["timeout_triggers"] == []
 
     def test_excludes_archived_triggers(self):
         pipeline = PipelineFactory()
