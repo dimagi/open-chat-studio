@@ -6,10 +6,10 @@ Please provide feedback on your experience with the user guides. If you notice e
 
 ## Keeping Code Links in Sync
 
-When pages are moved or renamed in the user documentation, the corresponding links in `settings.py` must also be updated. See: https://github.com/dimagi/open-chat-studio/blob/main/config/settings.py
+When pages are moved or renamed in the user documentation, the corresponding links in `config/settings.py` must also be updated. See: [`DOCUMENTATION_LINKS` in `config/settings.py`](https://github.com/dimagi/open-chat-studio/blob/main/config/settings.py#L694-L717)
 
 
-The `DOCUMENTATION_LINKS` dictionary in `settings.py` maps descriptive keys to documentation URLs, centralizing help content references across the application.
+The `DOCUMENTATION_LINKS` dictionary in `config/settings.py` maps descriptive keys to documentation URLs, centralizing help content references across the application.
 
 This dictionary is used by various UI components including templates, pipeline nodes, forms, and frontend JavaScript.
 
