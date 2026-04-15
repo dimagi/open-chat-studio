@@ -60,5 +60,5 @@ General questions and discussions can be conducted in the [GitHub Discussions](h
 ## Additional Resources
 
 * [How to create a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
-* [Linking a PR to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue-using-the-pull-request-sidebar)
+* [Linking a PR to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)
 * [Git setup guide](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup)
