@@ -62,6 +62,7 @@ nav:
   - Contributing:
     - Guidelines: contributing/index.md
     - Pull Requests: contributing/pull_requests.md
+    - User Docs: contributing/user_docs.md
   - Getting Started:
     - Overview: getting-started/index.md
   - Architecture:
