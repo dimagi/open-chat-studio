@@ -21,11 +21,12 @@ from django.views.generic import CreateView, DetailView, TemplateView, UpdateVie
 from django_tables2 import LazyPaginator, SingleTableView
 from waffle import flag_is_active
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage
-from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
+from apps.experiments.filters import get_filter_context_data
 from apps.experiments.models import ExperimentSession
 from apps.filters.models import FilterSet
-from apps.human_annotations.filters import AnnotationItemFilter
+from apps.human_annotations.filters import AnnotationItemFilter, AnnotationSessionFilter
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -200,8 +201,8 @@ def _get_base_session_queryset(request, filter_params=None):
     timezone = request.session.get("detected_tz", None)
     if filter_params is None:
         filter_params = FilterParams.from_request(request)
-    queryset = ExperimentSession.objects.filter(team=request.team)
-    session_filter = ExperimentSessionFilter()
+    queryset = ExperimentSession.objects.filter(team=request.team).exclude(platform=ChannelPlatform.EVALUATIONS)
+    session_filter = AnnotationSessionFilter()
     return session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
 
 
@@ -260,8 +261,8 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         sessions_json_url = reverse("human_annotations:queue_sessions_json", args=[team_slug, pk])
         filter_context = get_filter_context_data(
             request.team,
-            columns=ExperimentSessionFilter.columns(request.team),
-            filter_class=ExperimentSessionFilter,
+            columns=AnnotationSessionFilter.columns(request.team),
+            filter_class=AnnotationSessionFilter,
             table_url=table_url,
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.SESSIONS,
