@@ -18,6 +18,7 @@ class FilterSet(BaseTeamModel):
         PARTICIPANTS = "participants"
         TRACES = "traces"
         NOTIFICATIONS = "notifications"
+        ANNOTATION_ITEMS = "annotation_items"
 
     name = models.CharField(max_length=256)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

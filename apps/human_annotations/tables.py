@@ -62,18 +62,22 @@ class AnnotationQueueTable(tables.Table):
 
 
 class AnnotationItemTable(tables.Table):
+    session = TemplateColumn(
+        template_name="human_annotations/columns/item_session.html",
+        verbose_name="Session",
+        orderable=False,
+    )
     description = actions.ActionsColumn(
         actions=[
             chip_action(
-                label_factory=lambda record, _: str(record),
+                label="Annotate",
                 url_factory=_item_chip_url,
-                button_style="btn-soft btn-secondary max-w-xs truncate",
+                button_style="btn-soft btn-primary",
             ),
         ],
         align="left",
-        verbose_name="Item",
+        verbose_name="",
     )
-    item_type = columns.Column(verbose_name="Type")
     status = TemplateColumn(
         template_name="human_annotations/columns/item_status.html",
         verbose_name="Status",
@@ -93,7 +97,7 @@ class AnnotationItemTable(tables.Table):
 
     class Meta:
         model = AnnotationItem
-        fields = ["description", "item_type", "status", "review_count", "annotations_summary", "created_at", "remove"]
+        fields = ["session", "description", "status", "review_count", "annotations_summary", "created_at", "remove"]
         attrs = {"class": "table"}
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
 
@@ -134,6 +138,7 @@ class AnnotationSessionsSelectionTable(tables.Table):
                 label="View Session",
                 url_factory=_annotation_session_url_factory,
                 open_url_in_new_tab=True,
+                required_permissions=["chat.view_chat"],
             ),
         ],
         orderable=False,
