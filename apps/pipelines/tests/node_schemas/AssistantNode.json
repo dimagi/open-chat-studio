@@ -42,7 +42,7 @@
   "ui:can_delete": true,
   "ui:deprecated": true,
   "ui:deprecation_message": "Use the 'LLM' node instead.<p><a class=\"link\" href=\"https://docs.openchatstudio.com/how-to/assistants_migration/\" target=\"_blank\">Learn more</a></p>",
-  "ui:documentation_link": "/concepts/pipelines/nodes/#assistant",
+  "ui:documentation_link": "/concepts/pipelines/nodes/#assistant-as-a-node",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-user-tie",
   "ui:label": "OpenAI Assistant"
