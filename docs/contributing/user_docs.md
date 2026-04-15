@@ -19,6 +19,6 @@ For example:
 - Provide documentation for feature flags
 - Expose docs links to Django templates
 
-## Change Log in User Docs
+## Changelog in User Docs
 
-See [Changelog Process](../developer_guides/user_docs.md)
+See [Changelog Process](../developer_guides/user_docs.md).
