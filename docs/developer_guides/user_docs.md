@@ -30,8 +30,7 @@ You can add notes in the PR description to help the automation write accurate ch
 The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/actions/workflows/update-changelog.yml) in the docs repo can also be triggered manually: go to **Actions → "Update Changelog and Docs from OCS PR"** and enter the OCS PR number.
 
 ### Manual Option
-Alternatively, you can create a Changelog manually yourself: open a PR in the [docs repo][docs_repo] with any updates that users must be aware of and a [changelog entry](https://github.com/dimagi/open-chat-studio-docs/blob/main/docs/changelog.md), and then link it from the code PR.
-
+Alternatively, you can create a changelog entry manually: open a PR in the [docs repo][docs_repo] with any updates that users must be aware of and a [changelog entry](https://github.com/dimagi/open-chat-studio-docs/blob/main/docs/changelog.md), then link it from the code PR.
 
 ## Weekly Release Notes from Changelog summaries
 
