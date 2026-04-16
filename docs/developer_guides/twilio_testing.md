@@ -43,5 +43,5 @@ This generates a public HTTPS URL like `https://abc123.ngrok.io`.
 ## Troubleshooting
 
 - **Webhook not receiving messages:** Verify ngrok is running and the URL matches exactly
-- **Signature validation errors:** Ensure the Auth Token in OCS matches your Twilio account and that Django is using HTTPS for generating abosulte URLs.
+- **Signature validation errors:** Ensure the Auth Token in OCS matches your Twilio account and that Django is using HTTPS for generating absolute URLs.
 - **Voice transcription failing:** Check voice provider credentials and that the provider supports transcription
