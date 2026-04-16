@@ -539,7 +539,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
                 "session_external_id": self._get_session_external_id(ann.item),
-                "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
+                "reviewer": ann.reviewer.get_display_name(),
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": False,
                 "flags": json.dumps(ann.item.flags),
