@@ -21,4 +21,6 @@ For example:
 
 ## Changelog in User Docs
 
-See [Changelog Process](../developer_guides/user_docs.md).
+The User Documentation contains an up-to-date [Changelog](https://docs.openchatstudio.com/changelog/) page.
+
+See more about the [Changelog Process](../developer_guides/user_docs.md) for how user-facing code changes to OCS are automatically noted in the Changelog and a weekly release note is published.
