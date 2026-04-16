@@ -1,6 +1,6 @@
 # User Documentation and Changelog Process
 
-User documentation, the [user-facing changelog](https://docs.openchatstudio.com/changelog/) and weekly release notes are hosted in the [doc repo][docs_repo] and published to https://docs.openchatstudio.com/.
+User documentation and the [user-facing changelog](https://docs.openchatstudio.com/changelog/) are maintained in the [docs repo][docs_repo] and published to https://docs.openchatstudio.com/. Weekly release notes are also maintained in the docs repo, but are published as GitHub releases rather than on the docs site.
 
 In principle, all user-facing changes should be accompanied by user documentation updates and a changelog, but discretion should be used. For example, if a change is purely internal and doesn't affect the user experience, it may not need to be included. The same applies to very minor changes.
 
