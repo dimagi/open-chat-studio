@@ -1817,7 +1817,7 @@ export class OcsChat {
                       }`}
                       onClick={() => this.sendMessage(this.messageInput)}
                       disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim() || this.messageTooLong}
-                      title={this.messageTooLong ? 'Message is too long' : undefined}
+                      title={this.messageTooLong ? this.translationManager.get('composer.messageTooLong') : undefined}
                     >
                       {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                     </button>

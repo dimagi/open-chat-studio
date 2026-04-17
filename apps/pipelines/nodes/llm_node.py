@@ -105,9 +105,14 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
 
 
 def _validate_user_message_size(user_input: str, node: PipelineNode, system_message: BaseMessage) -> None:
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
     try:
         llm_provider_model = node.repo.get_llm_provider_model(node.llm_provider_model_id)
+    except ObjectDoesNotExist:
+        return
     except Exception:
+        logger.exception("Failed to load llm_provider_model for message size validation")
         return
     max_token_limit = llm_provider_model.max_token_limit
     if not max_token_limit:

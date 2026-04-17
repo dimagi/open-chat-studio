@@ -31,8 +31,8 @@ export default function TestMessageBox({
     if (!llmNode) return null;
     const modelId = llmNode.data?.params?.llm_provider_model_id;
     if (!modelId) return null;
-    const models = getCachedData().parameterValues.LlmProviderModelId as LlmProviderModel[];
-    const model = models.find((m) => String(m.value) === String(modelId));
+    const models = getCachedData().parameterValues.LlmProviderModelId as LlmProviderModel[] | undefined;
+    const model = models?.find((m) => String(m.value) === String(modelId));
     if (!model?.max_token_limit) return null;
     return model.max_token_limit * 4;
   })();

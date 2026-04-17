@@ -35,6 +35,7 @@
               user-name="{{ request.user.get_full_name }}"
             {% endif %}
             persistent-session="true"
+            {% if max_char_limit %}max-char-limit="{{ max_char_limit }}"{% endif %}
           ></open-chat-studio-widget>
         </div>
       {% else %}

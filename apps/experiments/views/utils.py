@@ -5,21 +5,25 @@ def get_max_char_limit(experiment_version) -> int | None:
     pipeline = experiment_version.pipeline
     if not pipeline:
         return None
-    llm_node = pipeline.node_set.filter(type="LLMResponseWithPrompt").first()
-    if not llm_node:
+    llm_nodes = pipeline.node_set.filter(type="LLMResponseWithPrompt")
+    if not llm_nodes.exists():
         return None
-    model_id = llm_node.params.get("llm_provider_model_id")
-    if not model_id:
-        return None
+
     from apps.service_providers.models import LlmProviderModel  # noqa: PLC0415
 
-    try:
-        max_token_limit = LlmProviderModel.objects.get(id=model_id).max_token_limit
-    except LlmProviderModel.DoesNotExist:
+    model_ids = [n.params.get("llm_provider_model_id") for n in llm_nodes if n.params.get("llm_provider_model_id")]
+    if not model_ids:
         return None
-    if not max_token_limit:
+
+    limits = list(
+        LlmProviderModel.objects.filter(id__in=model_ids)
+        .exclude(max_token_limit__isnull=True)
+        .exclude(max_token_limit=0)
+        .values_list("max_token_limit", flat=True)
+    )
+    if not limits:
         return None
-    return max_token_limit * 4
+    return min(limits) * 4
 
 
 def get_channels_context(experiment) -> tuple[list[ExperimentChannel], dict[ChannelPlatform, bool]]:
