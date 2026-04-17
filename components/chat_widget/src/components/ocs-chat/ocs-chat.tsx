@@ -181,6 +181,12 @@ export class OcsChat {
    */
   @Prop() versionNumber?: number;
 
+  /**
+   * Maximum number of characters allowed in a single message (derived from the model's token limit).
+   * When set, a live counter is shown and the send button is disabled when exceeded.
+   */
+  @Prop() maxCharLimit?: number;
+
   @State() error: string = "";
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
@@ -467,8 +473,17 @@ export class OcsChat {
     }
   }
 
+  private get messageTooLong(): boolean {
+    return this.maxCharLimit != null && this.messageInput.length > this.maxCharLimit;
+  }
+
+  private get messageNearLimit(): boolean {
+    return this.maxCharLimit != null && this.messageInput.length > this.maxCharLimit * 0.8;
+  }
+
   private async sendMessage(message: string): Promise<void> {
     if (!message.trim()) return;
+    if (this.messageTooLong) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -1754,7 +1769,7 @@ export class OcsChat {
                 <div class="input-container">
                   <textarea
                     ref={(el) => this.textareaRef = el}
-                    class="message-textarea"
+                    class={`message-textarea${this.messageTooLong ? ' message-textarea-error' : ''}`}
                     rows={1}
                     placeholder={this.translationManager.get('composer.placeholder')}
                     value={this.messageInput}
@@ -1762,6 +1777,11 @@ export class OcsChat {
                     onKeyPress={(e) => this.handleKeyPress(e)}
                     disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
                   ></textarea>
+                  {this.maxCharLimit != null && (
+                    <div class={`char-counter${this.messageTooLong ? ' char-counter-error' : (this.messageNearLimit ? ' char-counter-warning' : '')}`}>
+                      {this.messageInput.length} / {this.maxCharLimit}
+                    </div>
+                  )}
                     {/* File Upload Button */}
                     {this.allowAttachments && (
                       <input
@@ -1791,12 +1811,13 @@ export class OcsChat {
                     )}
                     <button
                       class={`send-button ${
-                        !this.isTyping && !this.isLoading && !!this.messageInput.trim()
+                        !this.isTyping && !this.isLoading && !!this.messageInput.trim() && !this.messageTooLong
                           ? 'send-button-enabled'
                           : 'send-button-disabled'
                       }`}
                       onClick={() => this.sendMessage(this.messageInput)}
-                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim()}
+                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim() || this.messageTooLong}
+                      title={this.messageTooLong ? 'Message is too long' : undefined}
                     >
                       {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                     </button>

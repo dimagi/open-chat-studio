@@ -13,6 +13,7 @@ from apps.chat.channels import WebChannel
 from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File
+from apps.pipelines.exceptions import MessageTooLargeError
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
@@ -93,8 +94,12 @@ def get_response_for_webchat_task(
         response["response"] = chat_message.content
         response["message_id"] = chat_message.id
     except Exception as e:
-        logger.exception(e)
-        response["error"] = str(e)
+        if isinstance(e, MessageTooLargeError):
+            response["error"] = str(e)
+            response["user_facing_error"] = True
+        else:
+            logger.exception(e)
+            response["error"] = str(e)
     finally:
         if experiment_session.seed_task_id:
             experiment_session.seed_task_id = ""

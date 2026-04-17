@@ -606,6 +606,27 @@
     }
   }
 
+  .message-textarea-error {
+    border-color: #ef4444;
+    &:focus {
+      outline-color: #ef4444;
+    }
+  }
+
+  .char-counter {
+    @apply text-xs text-right pr-1 pt-0.5;
+    color: #9ca3af;
+  }
+
+  .char-counter-warning {
+    color: #f59e0b;
+  }
+
+  .char-counter-error {
+    color: #ef4444;
+    font-weight: 600;
+  }
+
   .send-button {
     @apply rounded-md font-medium transition-colors duration-200;
     padding: 0.5em 1em;

@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING, cast
 
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 from langchain_core.messages import BaseMessage, RemoveMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
 
-from apps.chat.conversation import COMPRESSION_MARKER
+from apps.chat.conversation import COMPRESSION_MARKER, MESSAGES_TOO_LARGE_ERROR_MESSAGE
+from apps.pipelines.exceptions import MessageTooLargeError
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import PipelineNode
@@ -24,6 +26,8 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
     History is loaded into the state in the before_agent step, and summaries are persisted
     to the database in the before_model step, if a summary is generated.
     """
+
+    _message_token_limit: int = 0
 
     def __init__(self, node: PipelineNode, **kwargs):
         super().__init__(model=node.get_chat_model(), **kwargs)
@@ -46,8 +50,17 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         if result is not None:
             # A result means that a summary was created
             self.persist_summary(result["messages"])
+            self._check_post_compression_token_limit(result["messages"])
 
         return result
+
+    def _check_post_compression_token_limit(self, messages: list[BaseMessage]) -> None:
+        if not self._message_token_limit:
+            return
+        content_messages = [m for m in messages if not isinstance(m, RemoveMessage)]
+        token_count = count_tokens_approximately(content_messages)
+        if token_count > self._message_token_limit:
+            raise MessageTooLargeError(MESSAGES_TOO_LARGE_ERROR_MESSAGE.format(tokens=self._message_token_limit))
 
     def persist_summary(self, messages: list[BaseMessage]):
         checkpoint_message_id = self._find_latest_message_db_id(messages)
@@ -85,6 +98,7 @@ class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):
         trigger = ("tokens", token_limit)
         keep = ("messages", 20)
         super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
+        self._message_token_limit = token_limit
 
 
 class TruncateTokensHistoryMiddleware(BaseNodeHistoryMiddleware):
@@ -93,6 +107,7 @@ class TruncateTokensHistoryMiddleware(BaseNodeHistoryMiddleware):
     def __init__(self, *args, token_limit: int, **kwargs):
         keep = trigger = ("tokens", token_limit)
         super().__init__(*args, trigger=trigger, keep=keep, **kwargs)
+        self._message_token_limit = token_limit
 
     def _create_summary(self, messages_to_summarize: list) -> str:
         # Instead of creating a summary, we'll persist a compression marker. See _build_new_messages

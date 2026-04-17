@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import logging
 import operator
 from typing import TYPE_CHECKING, Annotated, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+from apps.pipelines.exceptions import MessageTooLargeError
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
@@ -25,6 +28,8 @@ from apps.service_providers.llm_service.utils import (
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
 
+logger = logging.getLogger("ocs.pipelines.nodes")
+
 
 class StateSchema(AgentState):
     # allows tools to manipulate participant data and session state
@@ -37,7 +42,14 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     user_input = context.input
     session = context.session
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, context, session, tool_callbacks)
+
+    prompt_context = _get_prompt_context(node, session, context)
+    system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
+    _validate_user_message_size(user_input, node, system_message)
+
+    agent = build_node_agent(
+        node, context, session, tool_callbacks, prompt_context=prompt_context, system_message=system_message
+    )
 
     attachments = list(context.attachments)
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
@@ -92,12 +104,38 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
     return ai_message, ai_message_metadata
 
 
+def _validate_user_message_size(user_input: str, node: PipelineNode, system_message: BaseMessage) -> None:
+    try:
+        llm_provider_model = node.repo.get_llm_provider_model(node.llm_provider_model_id)
+    except Exception:
+        return
+    max_token_limit = llm_provider_model.max_token_limit
+    if not max_token_limit:
+        return
+    system_tokens = count_tokens_approximately([system_message])
+    budget = max(max_token_limit - system_tokens, 0)
+    user_tokens = count_tokens_approximately([HumanMessage(content=user_input)])
+    if user_tokens > budget:
+        raise MessageTooLargeError(
+            f"Your message is too large for this model. "
+            f"It uses approximately {user_tokens} tokens, but only {budget} tokens are available "
+            f"after accounting for the system prompt (model limit: {max_token_limit})."
+        )
+
+
 def build_node_agent(
-    node: PipelineNode, context: NodeContext, session: ExperimentSession, tool_callbacks: ToolCallbacks
+    node: PipelineNode,
+    context: NodeContext,
+    session: ExperimentSession,
+    tool_callbacks: ToolCallbacks,
+    prompt_context: PromptTemplateContext | None = None,
+    system_message: BaseMessage | None = None,
 ):
-    prompt_context = _get_prompt_context(node, session, context)
+    if prompt_context is None:
+        prompt_context = _get_prompt_context(node, session, context)
+    if system_message is None:
+        system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
-    system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     middleware = []
     if history_middleware := node.build_history_middleware(system_message=system_message):

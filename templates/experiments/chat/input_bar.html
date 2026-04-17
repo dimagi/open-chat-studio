@@ -41,7 +41,7 @@
                 accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts,.csv,.jpeg,.jpg,.gif,.png,.tar,.xlsx,.xml,.zip"
                 class="file-input file-input-sm w-full max-w-xs"
               />
-            {% endpartialdef %}
+            {% endpartialdef code-interpreter-input %}
             {% partialdef file-search-input inline=True %}
           <!-- Supported file types for file search: https://platform.openai.com/docs/assistants/tools/file-search/supported-files -->
               <input
@@ -54,7 +54,7 @@
                 accept=".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
                 class="file-input file-input-sm w-full max-w-xs"
               />
-            {% endpartialdef %}
+            {% endpartialdef file-search-input %}
           </div>
         {% elif assistant.supports_code_interpreter_attachments %}
           <div role="button" class="btn m-1" x-bind:disabled="disableCodeInterpreterUpload"
@@ -83,8 +83,18 @@
           class="file-input file-input-sm w-full max-w-xs"
         />
       {% endif %}
-      <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off" class="input input-primary w-full">
-      <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
+      <div class="flex flex-col flex-1 gap-1">
+        <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off"
+               :class="messageTooLong ? 'input input-error w-full' : 'input input-primary w-full'">
+        {% if max_char_limit %}
+          <div class="flex justify-end text-xs pr-1">
+            <span :class="messageTooLong ? 'text-error font-semibold' : (messageNearLimit ? 'text-warning' : 'text-base-content/50')">
+              <span x-text="message.length"></span> / {{ max_char_limit }}
+            </span>
+          </div>
+        {% endif %}
+      </div>
+      <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled :title="messageTooLong ? 'Message is too long' : ''">Send</button>
     </div>
     {% if assistant %}
       <div class="flex flex-col gap-2 text-slate-500">
@@ -143,6 +153,7 @@
     const megabyte_in_bytes = 1048576;
     const byte_limit = megabyte_in_bytes * 512;
     const code_interpreter_max_files = 20
+    const maxCharLimit = {{ max_char_limit|default:"null" }};
     Alpine.data('fileUploads', () => ({
       message: "",
       code_interpreter_files: [],
@@ -150,6 +161,12 @@
       ocs_attachments: [],
       total_upload_size_bytes: 0,
       disableCodeInterpreterUpload: false,
+      get messageTooLong() {
+        return maxCharLimit !== null && this.message.length > maxCharLimit;
+      },
+      get messageNearLimit() {
+        return maxCharLimit !== null && this.message.length > maxCharLimit * 0.8;
+      },
       init() {
         let fieldsToWatch = ['message'];
         if (this.$refs.fileSearch) {
@@ -163,7 +180,8 @@
         }
         this.$watchMany(fieldsToWatch, (...args) => {
           const submitButton = document.getElementById('message-submit');
-          if (args.some(Boolean)) {
+          const hasContent = args.some(Boolean);
+          if (hasContent && !this.messageTooLong) {
             submitButton.removeAttribute('disabled');
           } else {
             submitButton.setAttribute('disabled', 'disabled');

@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import OverlayPanel from "../components/OverlayPanel";
 import { apiClient } from "../api/api";
 import usePipelineStore from "../stores/pipelineStore";
+import { getCachedData } from "../utils";
+import { LlmProviderModel } from "../types/nodeParameterValues";
 
 type TestMessageBoxParams = {
   isOpen: boolean;
@@ -18,12 +20,25 @@ export default function TestMessageBox({
   isOpen,
   setIsOpen,
 }: TestMessageBoxParams) {
-  const currentPipelineId = usePipelineStore(
-    (state) => state.currentPipelineId,
-  );
+  const currentPipelineId = usePipelineStore((state) => state.currentPipelineId);
+  const nodes = usePipelineStore((state) => state.nodes);
   const setEdgeLabel = usePipelineStore((state) => state.setEdgeLabel);
   const clearEdgeLabels = usePipelineStore((state) => state.clearEdgeLabels);
   const [newMessage, setNewMessage] = useState("");
+
+  const maxCharLimit = (() => {
+    const llmNode = nodes.find((n) => n.data?.type === "LLMResponseWithPrompt");
+    if (!llmNode) return null;
+    const modelId = llmNode.data?.params?.llm_provider_model_id;
+    if (!modelId) return null;
+    const models = getCachedData().parameterValues.LlmProviderModelId as LlmProviderModel[];
+    const model = models.find((m) => String(m.value) === String(modelId));
+    if (!model?.max_token_limit) return null;
+    return model.max_token_limit * 4;
+  })();
+
+  const messageTooLong = maxCharLimit !== null && newMessage.length > maxCharLimit;
+  const messageNearLimit = maxCharLimit !== null && newMessage.length > maxCharLimit * 0.8;
   const [userMessage, setUserMessage] = useState("");
   const [responseMessage, setResponseMessage] = useState<ResponseMessage>({});
   const [loading, setLoading] = useState(false);
@@ -33,6 +48,7 @@ export default function TestMessageBox({
   }
 
   function sendMessage() {
+    if (messageTooLong) return;
     const message = newMessage.trim() || userMessage.trim();
     if (!message) {
       return;
@@ -185,13 +201,18 @@ export default function TestMessageBox({
               >
                 <input
                   type="text"
-                  className="input w-full p-2 border rounded-sm mb-2"
+                  className={`input w-full p-2 border rounded-sm mb-1 ${messageTooLong ? "input-error" : ""}`}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."
                 />
+                {maxCharLimit !== null && (
+                  <div className={`text-xs text-right mb-2 ${messageTooLong ? "text-red-500 font-semibold" : messageNearLimit ? "text-yellow-500" : "text-gray-400"}`}>
+                    {newMessage.length} / {maxCharLimit}
+                  </div>
+                )}
                 <div className="grid grid-cols-2">
-                  <button className="btn btn-primary" type="submit">
+                  <button className="btn btn-primary" type="submit" disabled={messageTooLong}>
                     Send
                   </button>
                   <button className="btn" onClick={onClear}>Clear</button>

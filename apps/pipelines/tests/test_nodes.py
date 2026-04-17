@@ -641,3 +641,50 @@ class TestSendEmailRuntimeErrors:
         )
         with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "recipient_list"'):
             node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
+
+
+class TestValidateUserMessageSize:
+    """Tests for llm_node._validate_user_message_size"""
+
+    def _make_node(self, max_token_limit: int):
+        from apps.pipelines.nodes.llm_node import _validate_user_message_size  # noqa: PLC0415
+
+        node = Mock()
+        llm_model = Mock()
+        llm_model.max_token_limit = max_token_limit
+        node.repo.get_llm_provider_model.return_value = llm_model
+        node.llm_provider_model_id = 1
+        return node, _validate_user_message_size
+
+    def test_message_within_budget_passes(self):
+        node, validate = self._make_node(max_token_limit=1000)
+        system_message = SystemMessage(content="You are a helpful assistant.")
+        validate("short message", node, system_message)
+
+    def test_message_exceeds_budget_raises(self):
+        node, validate = self._make_node(max_token_limit=5)
+        system_message = SystemMessage(content="")
+        with pytest.raises(PipelineNodeRunError, match="too large"):
+            validate("one two three four five six seven eight nine ten", node, system_message)
+
+    def test_zero_token_limit_skips_validation(self):
+        node, validate = self._make_node(max_token_limit=0)
+        system_message = SystemMessage(content="")
+        # Should not raise even with a very long message
+        validate("word " * 10000, node, system_message)
+
+    def test_repo_error_skips_validation(self):
+        from apps.pipelines.nodes.llm_node import _validate_user_message_size  # noqa: PLC0415
+
+        node = Mock()
+        node.repo.get_llm_provider_model.side_effect = Exception("not found")
+        system_message = SystemMessage(content="")
+        # Should not raise on lookup failure
+        _validate_user_message_size("any message", node, system_message)
+
+    def test_budget_accounts_for_system_message(self):
+        node, validate = self._make_node(max_token_limit=20)
+        # A long system message eats into the budget
+        system_message = SystemMessage(content="word " * 18)
+        with pytest.raises(PipelineNodeRunError, match="too large"):
+            validate("one two three four five", node, system_message)

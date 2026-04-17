@@ -4,6 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 from apps.chat.conversation import COMPRESSION_MARKER
+from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.history_middleware import (
     BaseNodeHistoryMiddleware,
     MaxHistoryLengthHistoryMiddleware,
@@ -201,3 +202,66 @@ class TestSummarizeHistoryMiddleware:
             assert isinstance(msg, HumanMessage | AIMessage)
 
         mock_node.store_compression_checkpoint.assert_called_once()
+
+
+class TestPostCompressionTokenLimit:
+    """Tests for BaseNodeHistoryMiddleware._check_post_compression_token_limit"""
+
+    def _make_middleware(self, mock_node, token_limit):
+        middleware = TruncateTokensHistoryMiddleware(
+            session=Mock(),
+            node=mock_node,
+            token_limit=token_limit,
+        )
+        return middleware
+
+    def test_no_limit_skips_check(self, mock_node):
+        """When _message_token_limit is 0, no error is raised regardless of message size."""
+        middleware = BaseNodeHistoryMiddleware(
+            session=Mock(),
+            node=mock_node,
+            trigger=("messages", 10),
+            keep=("messages", 5),
+        )
+        # Should not raise even with many large messages
+        large_messages = [HumanMessage(content="word " * 1000)]
+        middleware._check_post_compression_token_limit(large_messages)
+
+    def test_within_limit_passes(self, mock_node):
+        """Compressed messages within the token limit do not raise."""
+        middleware = self._make_middleware(mock_node, token_limit=1000)
+        messages = [HumanMessage(content="short message")]
+        middleware._check_post_compression_token_limit(messages)
+
+    def test_exceeds_limit_raises(self, mock_node):
+        """Compressed messages exceeding the token limit raise PipelineNodeRunError."""
+        middleware = self._make_middleware(mock_node, token_limit=5)
+        # FakeLlmSimpleTokenCount counts by word; this is well over 5 words
+        messages = [HumanMessage(content="one two three four five six seven eight nine ten")]
+        with pytest.raises(PipelineNodeRunError):
+            middleware._check_post_compression_token_limit(messages)
+
+    def test_remove_messages_excluded_from_count(self, mock_node):
+        """RemoveMessage entries are excluded from the token count."""
+        middleware = self._make_middleware(mock_node, token_limit=10)
+        messages = [
+            RemoveMessage(id="x"),
+            HumanMessage(content="short"),
+        ]
+        # Should not raise; RemoveMessage is not counted
+        middleware._check_post_compression_token_limit(messages)
+
+    def test_summarize_middleware_sets_token_limit(self, mock_node):
+        """SummarizeHistoryMiddleware stores the token_limit for post-compression checks."""
+        middleware = SummarizeHistoryMiddleware(session=Mock(), node=mock_node, token_limit=500)
+        assert middleware._message_token_limit == 500
+
+    def test_truncate_middleware_sets_token_limit(self, mock_node):
+        """TruncateTokensHistoryMiddleware stores the token_limit for post-compression checks."""
+        middleware = TruncateTokensHistoryMiddleware(session=Mock(), node=mock_node, token_limit=300)
+        assert middleware._message_token_limit == 300
+
+    def test_max_history_length_middleware_no_token_limit(self, mock_node):
+        """MaxHistoryLengthHistoryMiddleware has no token limit set (0 = disabled)."""
+        middleware = MaxHistoryLengthHistoryMiddleware(session=Mock(), node=mock_node, max_history_length=10)
+        assert middleware._message_token_limit == 0

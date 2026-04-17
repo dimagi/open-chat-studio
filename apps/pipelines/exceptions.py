@@ -29,6 +29,15 @@ class PipelineNodeRunError(Exception):
     pass
 
 
+class MessageTooLargeError(PipelineNodeRunError):
+    """Raised when a user message exceeds the model's available token budget.
+
+    Safe to surface directly to the user.
+    """
+
+    pass
+
+
 class CodeNodeRunError(Exception):
     pass
 
