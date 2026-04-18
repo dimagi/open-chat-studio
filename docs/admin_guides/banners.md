@@ -18,16 +18,16 @@ Banners are temporary notifications that can be displayed to users on specific p
 
 ## Creating Banners
 
-### Access the Admin Interface
+### Access the admin interface
 
-1. Navigate to the Django admin interface (typically `/admin/`)
-2. Log in with superuser credentials
-3. Find the "Banners" section and click "Banners"
-4. Click "Add banner" to create a new banner
+1. Open the Django admin (`/django-admin/`).
+2. Sign in with an account that can manage banners (that is, superuser credentials).
+3. Open **Banners**.
+4. Select **Add banner**.
 
-### Banner Configuration
+### Banner configuration
 
-#### Basic Information
+#### Basic information
 
 - **Title** (optional): A brief title for the banner
 - **Message**: The main content displayed to users (supports markdown)
@@ -37,7 +37,7 @@ Banners are temporary notifications that can be displayed to users on specific p
   - `error` - Red error banner
   - `success` - Green success banner
 
-#### Location Settings
+#### Location settings
 
 - **Location**: Where the banner should appear:
   - `global` - All pages (default)
@@ -50,11 +50,11 @@ Banners are temporary notifications that can be displayed to users on specific p
 
 #### Scheduling
 
-- **Start Date**: When the banner should first appear (defaults to current time)
-- **End Date**: When the banner should stop appearing (required)
-- **Is Active**: Manual toggle to enable/disable the banner
+- **Start date**: First time the banner is eligible to appear.
+- **End date**: Required; banner stops appearing after this time.
+- **Is active**: Manual on/off switch.
 
-#### Advanced Options
+#### Advanced options
 
 - **Feature Flag**: Only show the banner to teams that have this feature flag enabled
 - **Dismiss Timeout**: Number of days before a dismissed banner reappears (0 = never reappear)
@@ -81,9 +81,9 @@ The banner location is determined by the `BannerLocationMiddleware` which maps U
 
 ## Message Formatting
 
-### Markdown Support
+### Markdown support
 
-Banner messages support standard markdown formatting:
+Banner messages support standard markdown, for example:
 
 ```markdown
 **Bold text** and *italic text*
@@ -92,28 +92,28 @@ Banner messages support standard markdown formatting:
 - More bullets
 ```
 
-### Template Variables
+### Template variables
 
-You can use Django template variables in banner messages:
+You can use Django template variables in banner messages, for example:
 
 ```django
 Welcome back, {{ request.user.first_name }}!
 Check out this new feature: <a href="{% url "cool-feature" request.team.slug %}">GO!</a>.
 ```
 
-**Note**: Template errors are only shown to superusers for security reasons.
+**Note**: Template errors are only shown to superusers for security reasons. If template rendering fails, the banner is hidden for normal users. Superusers see an inline error message to aid debugging.
 
-## User Interaction
+## User interaction
 
-### Dismissing Banners
+### Dismissing banners
 
-Users can dismiss banners by clicking the dismiss button (×). When dismissed:
+Users can dismiss banners by clicking the dismiss button (×). When a user dismisses a banner:
 
 - A cookie is set to remember the dismissal
 - The banner won't reappear until the dismiss timeout expires
 - The cookie expires when the banner ends or after the timeout period
 
-### Dismiss Timeout Behavior
+### Dismiss timeout behavior
 
 - **0 days**: Banner never reappears once dismissed
 - **N days**: Banner reappears N days after dismissal

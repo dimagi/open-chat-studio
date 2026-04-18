@@ -1,6 +1,6 @@
 # User Documentation and Changelog Process
 
-User documentation and the user facing changelog are hosted in the [doc repo][docs_repo] and published to https://docs.openchatstudio.com/.
+User documentation and the user-facing changelog are hosted in the [doc repo][docs_repo] and published to https://docs.openchatstudio.com/.
 
 In principle, all user-facing changes should be accompanied by documentation updates and a changelog but discretion should be used. For example, if a change is purely internal and doesn't affect the user experience, it may not need to be included or if it is a very minor change.
 
@@ -21,7 +21,7 @@ This creates a way for users to get notified of changes by subscribing to the re
 
 The automated releases are created in `draft` state which allows a developer to review the generated text before publishing. The releases should contain the following sections:
 
-* New Features: new features added to the prodcut
+* New Features: new features added to the product
 * Improvements: changes to existing features that don't classify as 'new features'
 * Bug Fixes
 
@@ -57,7 +57,7 @@ python manage.py spectacular --file api-schema.yml --validate
 
 ### API Schema updates
 
-Whenever changes are made that impact the API schema, the `api-schema.yml` file must also be updated. This is enforced by a test which will fail if the schema file is out of date. Ensuring that this file is up to date also allows us to it as a trigger for updating the API docs in the docs repo:
+Whenever changes are made that impact the API schema, the `api-schema.yml` file must also be updated. This is enforced by a test which will fail if the schema file is out of date. Ensuring that this file is up to date also allows us to use it as a trigger for updating the API docs in the docs repo:
 
 1. `api-schema.yml` file changes in the `main` branch.
 2. `api-schema-dispatch.yml` GitHub action runs which sends a dispatch event to the OCS docs repo.
