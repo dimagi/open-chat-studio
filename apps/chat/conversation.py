@@ -16,7 +16,8 @@ COMPRESSION_MARKER = "__compression_marker__"
 
 SUMMARY_TOO_LARGE_ERROR_MESSAGE = "Unable to compress chat history: existing summary too large"
 MESSAGES_TOO_LARGE_ERROR_MESSAGE = (
-    "Unable to compress chat history: Messages are too large for the context window of {tokens} tokens"
+    "Unable to compress chat history: Messages use approximately {token_count} tokens, "
+    "but only {tokens} tokens are available."
 )
 INITIAL_SUMMARY_TOKENS_ESTIMATE = 20
 # The maximum number of messages that can be uncompressed

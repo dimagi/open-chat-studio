@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 from apps.chat.conversation import COMPRESSION_MARKER
-from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.exceptions import MessageTooLargeError
 from apps.pipelines.nodes.history_middleware import (
     BaseNodeHistoryMiddleware,
     MaxHistoryLengthHistoryMiddleware,
@@ -234,11 +234,11 @@ class TestPostCompressionTokenLimit:
         middleware._check_post_compression_token_limit(messages)
 
     def test_exceeds_limit_raises(self, mock_node):
-        """Compressed messages exceeding the token limit raise PipelineNodeRunError."""
+        """Compressed messages exceeding the token limit raise MessageTooLargeError."""
         middleware = self._make_middleware(mock_node, token_limit=5)
-        # FakeLlmSimpleTokenCount counts by word; this is well over 5 words
+        # count_tokens_approximately will report well over 5 tokens for this content
         messages = [HumanMessage(content="one two three four five six seven eight nine ten")]
-        with pytest.raises(PipelineNodeRunError):
+        with pytest.raises(MessageTooLargeError):
             middleware._check_post_compression_token_limit(messages)
 
     def test_remove_messages_excluded_from_count(self, mock_node):

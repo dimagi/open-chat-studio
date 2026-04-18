@@ -60,7 +60,9 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         content_messages = [m for m in messages if not isinstance(m, RemoveMessage)]
         token_count = count_tokens_approximately(content_messages)
         if token_count > self._message_token_limit:
-            raise MessageTooLargeError(MESSAGES_TOO_LARGE_ERROR_MESSAGE.format(tokens=self._message_token_limit))
+            raise MessageTooLargeError(
+                MESSAGES_TOO_LARGE_ERROR_MESSAGE.format(token_count=token_count, tokens=self._message_token_limit)
+            )
 
     def persist_summary(self, messages: list[BaseMessage]):
         checkpoint_message_id = self._find_latest_message_db_id(messages)

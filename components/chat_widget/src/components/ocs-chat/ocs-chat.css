@@ -607,23 +607,23 @@
   }
 
   .message-textarea-error {
-    border-color: #ef4444;
+    border-color: var(--error-text-color);
     &:focus {
-      outline-color: #ef4444;
+      outline-color: var(--error-text-color);
     }
   }
 
   .char-counter {
     @apply text-xs text-right pr-1 pt-0.5;
-    color: #9ca3af;
+    color: var(--char-counter-color, #9ca3af);
   }
 
   .char-counter-warning {
-    color: #f59e0b;
+    color: var(--char-counter-warning-color, #f59e0b);
   }
 
   .char-counter-error {
-    color: #ef4444;
+    color: var(--error-text-color);
     font-weight: 600;
   }
 

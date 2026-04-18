@@ -674,12 +674,11 @@ class TestValidateUserMessageSize:
         validate("word " * 10000, node, system_message)
 
     def test_repo_error_skips_validation(self):
-        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
         from apps.pipelines.nodes.llm_node import _validate_user_message_size  # noqa: PLC0415
+        from apps.pipelines.repository import RepositoryLookupError  # noqa: PLC0415
 
         node = Mock()
-        node.repo.get_llm_provider_model.side_effect = ObjectDoesNotExist("not found")
+        node.repo.get_llm_provider_model.side_effect = RepositoryLookupError("not found")
         system_message = SystemMessage(content="")
         # Should not raise on lookup failure
         _validate_user_message_size("any message", node, system_message)

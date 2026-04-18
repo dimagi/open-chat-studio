@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import OverlayPanel from "../components/OverlayPanel";
 import { apiClient } from "../api/api";
 import usePipelineStore from "../stores/pipelineStore";
@@ -26,16 +26,22 @@ export default function TestMessageBox({
   const clearEdgeLabels = usePipelineStore((state) => state.clearEdgeLabels);
   const [newMessage, setNewMessage] = useState("");
 
-  const maxCharLimit = (() => {
-    const llmNode = nodes.find((n) => n.data?.type === "LLMResponseWithPrompt");
-    if (!llmNode) return null;
-    const modelId = llmNode.data?.params?.llm_provider_model_id;
-    if (!modelId) return null;
+  const maxCharLimit = useMemo(() => {
+    const llmNodes = nodes.filter((n) => n.data?.type === "LLMResponseWithPrompt");
+    if (!llmNodes.length) return null;
     const models = getCachedData().parameterValues.LlmProviderModelId as LlmProviderModel[] | undefined;
-    const model = models?.find((m) => String(m.value) === String(modelId));
-    if (!model?.max_token_limit) return null;
-    return model.max_token_limit * 4;
-  })();
+    if (!models) return null;
+    const limits = llmNodes
+      .map((n) => {
+        const modelId = n.data?.params?.llm_provider_model_id;
+        if (!modelId) return null;
+        const model = models.find((m) => String(m.value) === String(modelId));
+        return model?.max_token_limit ?? null;
+      })
+      .filter((l): l is number => l !== null && l > 0);
+    if (!limits.length) return null;
+    return Math.min(...limits) * 4;
+  }, [nodes]);
 
   const messageTooLong = maxCharLimit !== null && newMessage.length > maxCharLimit;
   const messageNearLimit = maxCharLimit !== null && newMessage.length > maxCharLimit * 0.8;
