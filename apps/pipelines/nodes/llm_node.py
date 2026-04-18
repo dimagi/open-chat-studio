@@ -118,13 +118,15 @@ def _validate_user_message_size(user_input: str, node: PipelineNode, system_mess
     if not max_token_limit:
         return
     system_tokens = count_tokens_approximately([system_message])
-    budget = max(max_token_limit - system_tokens, 0)
+    # Reserve capacity for the model's response so a message can't consume the entire context window.
+    response_reserve = max_token_limit // 8
+    budget = max(max_token_limit - system_tokens - response_reserve, 0)
     user_tokens = count_tokens_approximately([HumanMessage(content=user_input)])
     if user_tokens > budget:
         raise MessageTooLargeError(
             f"Your message is too large for this model. "
             f"It uses approximately {user_tokens} tokens, but only {budget} tokens are available "
-            f"after accounting for the system prompt (model limit: {max_token_limit})."
+            f"after accounting for the system prompt and response budget (model limit: {max_token_limit})."
         )
 
 

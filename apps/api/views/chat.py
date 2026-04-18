@@ -463,11 +463,18 @@ def chat_send_message(request, session_id):
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
+        400: inline_serializer(
+            "ChatTaskPollUserError",
+            {
+                "error": serializers.CharField(required=False),
+                "status": serializers.CharField(),
+            },
+        ),
         500: inline_serializer(
             "ChatTaskPollError",
             {
                 "error": serializers.CharField(required=False),
-                "status": "error",
+                "status": serializers.CharField(),
             },
         ),
     },

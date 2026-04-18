@@ -2,10 +2,12 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 
 
 def get_max_char_limit(experiment_version) -> int | None:
+    from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415
+
     pipeline = experiment_version.pipeline
     if not pipeline:
         return None
-    llm_nodes = pipeline.node_set.filter(type="LLMResponseWithPrompt")
+    llm_nodes = pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__)
     if not llm_nodes.exists():
         return None
 
