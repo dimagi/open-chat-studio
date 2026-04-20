@@ -621,16 +621,15 @@ def test_export_csv(client, team_with_users, queue, user):
 
     # Normal item
     normal = rows[item.pk]
-    assert normal["session_external_id"] == str(item.session.external_id)
+    assert normal["session_id"] == str(item.session.external_id)
     assert normal["flagged"] == "False"
     assert normal["quality_score"] == "5"
 
     # Flagged item
     flagged = rows[flagged_item.pk]
-    assert flagged["session_external_id"] == str(flagged_item.session.external_id)
+    assert flagged["session_id"] == str(flagged_item.session.external_id)
     assert flagged["flagged"] == "True"
     assert flag_reason in flagged["flags"]
-    assert flagged["reviewer"] == ""
     assert flagged["quality_score"] == ""
 
 
@@ -678,7 +677,7 @@ def test_export_jsonl(client, team_with_users, queue, user):
     # Normal item — has submitted annotation
     normal = records_by_item[item.pk]
     assert normal["annotation"]["quality_score"] == 5
-    assert normal["session_external_id"] == str(item.session.external_id)
+    assert normal["session_id"] == str(item.session.external_id)
     assert normal["flagged"] is False
     assert normal["flags"] == []
 
@@ -688,13 +687,12 @@ def test_export_jsonl(client, team_with_users, queue, user):
     assert flagged["flags"] == [
         {"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}
     ]
-    assert flagged["reviewer"] == ""
     assert flagged["annotated_at"] == ""
     assert flagged["annotation"] == {}
 
-    # Message item — session_external_id falls back to message.chat.experiment_session
+    # Message item — session_id falls back to message.chat.experiment_session
     msg = records_by_item[message_item.pk]
-    assert msg["session_external_id"] == str(experiment_session.external_id)
+    assert msg["session_id"] == str(experiment_session.external_id)
 
 
 # ===== Multi-Review =====

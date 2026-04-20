@@ -505,7 +505,6 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "item__session",
             "item__message",
             "item__message__chat__experiment_session",
-            "reviewer",
         )
         flagged_items = AnnotationItem.objects.filter(queue=queue, status=AnnotationItemStatus.FLAGGED).select_related(
             "session", "message", "message__chat__experiment_session"
@@ -526,8 +525,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         return {
             "item_id": item.pk,
             "item_type": item.item_type,
-            "session_external_id": self._get_session_external_id(item),
-            "reviewer": "",
+            "session_id": self._get_session_external_id(item),
             "annotated_at": "",
             "flagged": True,
             "flags": item.flags,
@@ -541,8 +539,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         fieldnames = [
             "item_id",
             "item_type",
-            "session_external_id",
-            "reviewer",
+            "session_id",
             "annotated_at",
             "flagged",
             "flags",
@@ -555,8 +552,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             row = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
-                "session_external_id": self._get_session_external_id(ann.item),
-                "reviewer": ann.reviewer.get_display_name(),
+                "session_id": self._get_session_external_id(ann.item),
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": False,
                 "flags": json.dumps(ann.item.flags),
@@ -580,8 +576,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             record = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
-                "session_external_id": self._get_session_external_id(ann.item),
-                "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
+                "session_id": self._get_session_external_id(ann.item),
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": False,
                 "flags": ann.item.flags,
