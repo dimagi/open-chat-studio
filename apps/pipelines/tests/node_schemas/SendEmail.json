@@ -47,7 +47,7 @@
   "ui:can_add": true,
   "ui:can_delete": true,
   "ui:deprecated": false,
-  "ui:documentation_link": "/concepts/pipelines/nodes/#email",
+  "ui:documentation_link": "/concepts/pipelines/nodes/#email-node",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-envelope",
   "ui:label": "Send an email"
