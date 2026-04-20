@@ -6,13 +6,28 @@
 <script>
     (function() {
         const canvasElement = document.getElementById('{{ record.id }}-trends');
-        if (canvasElement.chart) {
-            // Destroy existing chart if it exists
-            canvasElement.chart.destroy();
+
+        function renderTrendsChart() {
+            if (canvasElement.chart) {
+                // Destroy existing chart if it exists
+                canvasElement.chart.destroy();
+            }
+            const chartContext = canvasElement.getContext('2d');
+            const trendsData = JSON.parse(canvasElement.dataset.trends);
+            // Store chart reference on canvas for future cleanup
+            canvasElement.chart = SiteJS.trends.renderChart(chartContext, trendsData);
         }
-        const chartContext = canvasElement.getContext('2d');
-        const trendsData = JSON.parse(canvasElement.dataset.trends);
-        // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.trends.renderChart(chartContext, trendsData);
+
+        if (window.SiteJS && window.SiteJS.trends) {
+            renderTrendsChart();
+        } else {
+            // Bundle not yet loaded; retry once it is available
+            document.addEventListener('DOMContentLoaded', function onReady() {
+                if (window.SiteJS && window.SiteJS.trends) {
+                    renderTrendsChart();
+                }
+                document.removeEventListener('DOMContentLoaded', onReady);
+            });
+        }
     })();
 </script>
