@@ -147,6 +147,33 @@ def test_group_def():
     ]
 
 
+def test_chatbot_admin_documents_permissions_regression():
+    """Regression test for #3158: CHATBOT_ADMIN_GROUP must use AppPermSetDef for documents.
+
+    CustomPermissionSetDef returns raw CRUD verbs ("view", "change", etc.) which don't match
+    Django's auto-generated permission codenames ("view_collection", etc.), resulting in zero
+    permissions being granted for documents.
+    """
+    from apps.teams.backends import CHATBOT_ADMIN_GROUP
+
+    chatbot_admin = next(g for g in GROUPS if g.name == CHATBOT_ADMIN_GROUP)
+    documents_def = next(pd for pd in chatbot_admin.permission_defs if pd.app_label == "documents")
+
+    codenames = documents_def.codenames
+    raw_crud_verbs = {"view", "change", "delete", "add"}
+
+    # Codenames must not be raw CRUD verbs (the bug: CustomPermissionSetDef returns these directly)
+    assert not raw_crud_verbs.intersection(codenames), (
+        "documents permissions must not be raw CRUD verbs; use AppPermSetDef not CustomPermissionSetDef"
+    )
+
+    # Codenames must follow the "action_model" pattern for document models
+    assert "view_collection" in codenames
+    assert "add_collection" in codenames
+    assert "change_collection" in codenames
+    assert "delete_collection" in codenames
+
+
 def test_custom_permissions():
     mapped_permissions = [
         permission

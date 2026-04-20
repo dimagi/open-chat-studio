@@ -3,7 +3,7 @@ from io import BytesIO
 
 from bs4 import UnicodeDammit
 from markitdown import MarkItDown
-from markitdown._exceptions import UnsupportedFormatException
+from markitdown._exceptions import FileConversionException, UnsupportedFormatException
 from pydantic import BaseModel, Field
 
 from apps.files.models import File
@@ -62,6 +62,9 @@ def markitdown_read(file_obj) -> Document:
     try:
         result = md.convert(BytesIO(file_obj.read()))
         return Document(parts=[DocumentPart(content=result.markdown)])
+    except FileConversionException:
+        file_obj.seek(0)  # Reset file pointer to beginning before fallback
+        return plaintext_reader(file_obj)
     except UnsupportedFormatException:
         file_obj.seek(0)  # Reset file pointer to beginning before fallback
         return plaintext_reader(file_obj)
