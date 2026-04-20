@@ -45,11 +45,10 @@ Regardless of automated tests, ensure the quality of your changes:
 
 ## Documentation Policy
 
-* User-facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/).
-* Check the **"This PR requires docs/changelog update"** checkbox in the PR description to trigger automated changelog and docs handling. When a PR targeting `main` that touches files under `apps/`, `components/`, `config/`, `assets/`, or `templates/` is merged with this box checked, automation will analyse the changes and open a PR in the docs repository on your behalf. PRs that don't touch those paths will not trigger the automation — use the manual option below instead.
-* If you prefer to write the docs PR yourself, link it to the code PR and merge it after the code PR.
+User-facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/). See the [user docs guide](../developer_guides/user_docs.md) for more details including the changelog process
 
-See the [user docs guide](../developer_guides/user_docs.md) for more detail.
+If your changes affect the REST API schema, you must also update the `api-schema.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
+
 
 ## Communication
 

@@ -1,6 +1,8 @@
 # User Documentation and Changelog Process
 
-User documentation and the [user-facing changelog](https://docs.openchatstudio.com/changelog/) are maintained in the [docs repo][docs_repo] and published to https://docs.openchatstudio.com/. Weekly release notes are also maintained in the docs repo, but are published as GitHub releases rather than on the docs site.
+User documentation and the [user-facing changelog](https://docs.openchatstudio.com/changelog/) are maintained in the [docs repo][docs_repo] and published to https://docs.openchatstudio.com/. Weekly release notes are published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
+
+## User Documentation Process
 
 In principle, all user-facing changes should be accompanied by user documentation updates and a changelog, but discretion should be used. For example, if a change is purely internal and doesn't affect the user experience, it may not need to be included. The same applies to very minor changes.
 
@@ -30,7 +32,7 @@ You can add notes in the PR description to help the automation write accurate ch
 The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/actions/workflows/update-changelog.yml) in the docs repo can also be triggered manually: go to **Actions → "Update Changelog and Docs from OCS PR"** and enter the OCS PR number.
 
 ### Manual Option
-Alternatively, you can create a changelog entry manually: open a PR in the [docs repo][docs_repo] with any updates that users must be aware of and a [changelog entry](https://github.com/dimagi/open-chat-studio-docs/blob/main/docs/changelog.md), then link it from the code PR.
+Alternatively, you can create a changelog entry manually: open a PR in the [docs repo][docs_repo] with any updates that users must be aware of and create a [changelog entry](https://github.com/dimagi/open-chat-studio-docs/blob/main/docs/changelog.md), then link it from the code PR.
 
 ## Weekly Release Notes from Changelog summaries
 
@@ -59,25 +61,4 @@ Once you are happy with the release notes, publish the release. This will send a
 
 ## API Documentation
 
-The OCS REST API is primarily documented via its OpenAPI schema. The schema is created using [drf-spectacular](https://drf-spectacular.readthedocs.io/en/latest/).
-
-The current production schema is available at https://chatbots.dimagi.com/api/schema/. It is also kept in the code repository in the `api-schema.yml` file. This file serves two purposes:
-
-1. Provide an easy way to visually inspect changes to the schema.
-2. Provide a reference for generating API documentation in the docs repo (see below).
-
-The schema can be generated locally by running:
-
-```bash
-inv schema
-# OR
-python manage.py spectacular --file api-schema.yml --validate
-```
-
-### API Schema updates
-
-Whenever changes are made that impact the API schema, the `api-schema.yml` file must also be updated. This is enforced by a test which will fail if the schema file is out of date. Ensuring that this file is up to date also allows us to use it as a trigger for updating the API docs in the docs repo:
-
-1. `api-schema.yml` file changes in the `main` branch.
-2. `api-schema-dispatch.yml` GitHub action runs which sends a dispatch event to the OCS docs repo.
-3. A GitHub action in the OCS docs repo runs and creates a PR with any updated API docs.
+See the [API Documentation guide](api_documentation.md) for information on how the OCS REST API is documented, how to generate the schema locally, and what to do when your changes affect the API schema.

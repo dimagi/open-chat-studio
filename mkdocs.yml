@@ -71,6 +71,7 @@ nav:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md
       - User Docs: developer_guides/user_docs.md
+      - API Documentation: developer_guides/api_documentation.md
       - Deployment: developer_guides/deployment.md
       - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
