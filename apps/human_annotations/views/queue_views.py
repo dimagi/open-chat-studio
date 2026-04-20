@@ -586,6 +586,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
         for item in flagged_items:
             record = self._build_flagged_row(item)
+            # Flagged items have no annotation data; emit an empty dict so every record has the same shape.
             record["annotation"] = {}
             lines.append(json.dumps(record))
 
