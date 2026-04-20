@@ -10,11 +10,11 @@ Open Chat Studio is an open-source project, and you can contribute to its code d
 * Keep your PRs small—each PR should address one issue. Remove all unrelated changes.
 * [Link your Pull Request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) if applicable.
 * Document your contribution! If your changes impact how users interact with Open Chat Studio, update the relevant documentation. You can do this yourself or collaborate with documentation contributors.
-* For Work In Progress or early test results, use a Draft PR.
+* For work in progress or early test results, use a Draft PR.
 
 ## Ensure Change Quality
 
-Your pull request will automatically be tested and marked as "green" when it is ready for merging. If any builds fail ("red" status), you need to fix the issues listed in console logs. Any change to the PR branch will automatically trigger the checks, so you don't need to recreate the PR—just wait for the updated results.
+Your pull request will automatically be tested and marked as "green" when it is ready for merging. If any builds fail ("red" status), you need to fix the issues listed in the console logs. Any change to the PR branch will automatically trigger the checks, so you don't need to recreate the PR—just wait for the updated results.
 
 Regardless of automated tests, ensure the quality of your changes:
 
@@ -45,16 +45,15 @@ Regardless of automated tests, ensure the quality of your changes:
 
 ## Documentation Policy
 
-User-facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/). See the [user docs guide](../developer_guides/user_docs.md) for more details including the changelog process
+User-facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/). See the [user docs guide](../developer_guides/user_docs.md) for more details, including the changelog process.
 
 If your changes affect the REST API schema, you must also update the `api-schema.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
-
 
 ## Communication
 
 We use GitHub issues for most work and have a GitHub project where we prioritize and plan work: [GitHub Project](https://github.com/orgs/dimagi/projects/3/views/1).
 
-General questions and discussions can be conducted in the [GitHub Discussions](https://github.com/dimagi/open-chat-studio/discussions) section.
+General questions and discussions can be posted in the [GitHub Discussions](https://github.com/dimagi/open-chat-studio/discussions) section.
 
 ## Additional Resources
 
