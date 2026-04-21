@@ -433,28 +433,29 @@ class AttachMediaTool(CustomBaseTool):
         include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
         for file_id in file_ids:
             try:
-                file = File.objects.get(id=file_id)
-                self.chat_attachment.files.add(file_id)
-                self.tool_callbacks.attach_file(file_id)
-                file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
+                with transaction.atomic():
+                    file = File.objects.get(id=file_id)
+                    self.chat_attachment.files.add(file_id)
+                    self.tool_callbacks.attach_file(file_id)
+                    file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
-                if include_links:
-                    # Only the web platform is able to render these links
-                    if file.is_image:
-                        link_text = IMAGE_LINK_TEXT.format(
-                            file_id=file_id,
-                            session_id=self.experiment_session.id,
-                            team_slug=get_slug_for_team(file.team_id),
-                        )
-                    else:
-                        link_text = FILE_LINK_TEXT.format(
-                            name=file.name,
-                            file_id=file_id,
-                            session_id=self.experiment_session.id,
-                            team_slug=get_slug_for_team(file.team_id),
-                        )
-                    file_response = f"{file_response} {link_text}"
-                response.append(file_response)
+                    if include_links:
+                        # Only the web platform is able to render these links
+                        if file.is_image:
+                            link_text = IMAGE_LINK_TEXT.format(
+                                file_id=file_id,
+                                session_id=self.experiment_session.id,
+                                team_slug=get_slug_for_team(file.team_id),
+                            )
+                        else:
+                            link_text = FILE_LINK_TEXT.format(
+                                name=file.name,
+                                file_id=file_id,
+                                session_id=self.experiment_session.id,
+                                team_slug=get_slug_for_team(file.team_id),
+                            )
+                        file_response = f"{file_response} {link_text}"
+                    response.append(file_response)
             except File.DoesNotExist:
                 response.append(f"* {file_id}: File not found.")
             except utils.IntegrityError:
