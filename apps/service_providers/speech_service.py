@@ -1,5 +1,6 @@
 import logging
 import tempfile
+import time
 from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
@@ -11,6 +12,7 @@ import pydantic
 from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, UserReportableError
 from apps.experiments.models import SyntheticVoice
+from apps.service_providers.intron import INTRON_BASE_URL
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -304,3 +306,75 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
             file=audio,
         )
         return transcript.text
+
+
+class IntronSpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.Intron
+    intron_api_key: str
+    poll_interval_seconds: float = 1.0
+    poll_max_attempts: int = 120  # 2 minutes at 1s interval
+
+    _TERMINAL_FAILURE_STATUS: ClassVar[str] = "TTS_TEXT_AUDIO_PROCESSING_FAILED"
+    _SUCCESS_STATUS: ClassVar[str] = "TTS_TEXT_AUDIO_GENERATED"
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
+
+        headers = {"Authorization": f"Bearer {self.intron_api_key}"}
+
+        enqueue = httpx.post(
+            f"{INTRON_BASE_URL}/tts/v1/enqueue",
+            headers={**headers, "Content-Type": "application/json"},
+            json={
+                "text": text,
+                "voice_accent": synthetic_voice.name,
+                "voice_gender": synthetic_voice.gender,
+            },
+        )
+        if enqueue.status_code != 200:
+            raise AudioSynthesizeException(
+                f"Intron enqueue failed: status={enqueue.status_code} body={enqueue.text[:200]}"
+            )
+        text_id = enqueue.json()["text_id"]
+
+        audio_url = self._poll_until_ready(text_id, headers)
+        audio_bytes, audio_format = self._download_audio(audio_url, headers)
+
+        audio_segment = AudioSegment.from_file(BytesIO(audio_bytes), format=audio_format)
+        duration_seconds = len(audio_segment) / 1000
+        return SynthesizedAudio(audio=BytesIO(audio_bytes), duration=duration_seconds, format=audio_format)
+
+    def _poll_until_ready(self, text_id: str, headers: dict) -> str:
+        status_url = f"{INTRON_BASE_URL}/tts/v1/status/{text_id}"
+        for _ in range(self.poll_max_attempts):
+            resp = httpx.get(status_url, headers=headers)
+            if resp.status_code != 200:
+                raise AudioSynthesizeException(
+                    f"Intron status poll failed: status={resp.status_code} body={resp.text[:200]}"
+                )
+            payload = resp.json()
+            status = payload.get("status")
+            if status == self._SUCCESS_STATUS:
+                audio_url = payload.get("audio_url") or payload.get("url")
+                if not audio_url:
+                    raise AudioSynthesizeException(f"Intron reported success but no audio_url in response: {payload}")
+                return audio_url
+            if status == self._TERMINAL_FAILURE_STATUS:
+                raise AudioSynthesizeException(f"Intron synthesis failed: {payload}")
+            time.sleep(self.poll_interval_seconds)
+        raise AudioSynthesizeException(
+            f"Intron synthesis did not complete within {self.poll_max_attempts} poll attempts"
+        )
+
+    def _download_audio(self, url: str, headers: dict) -> tuple[bytes, str]:
+        resp = httpx.get(url, headers=headers)
+        if resp.status_code != 200:
+            raise AudioSynthesizeException(f"Intron audio download failed: status={resp.status_code}")
+        content_type = resp.headers.get("Content-Type", "").lower()
+        if "wav" in content_type or url.endswith(".wav"):
+            audio_format = "wav"
+        elif "ogg" in content_type or url.endswith(".ogg"):
+            audio_format = "ogg"
+        else:
+            audio_format = "mp3"
+        return resp.content, audio_format

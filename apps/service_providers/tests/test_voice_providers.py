@@ -5,6 +5,7 @@ import factory
 import pytest
 from django.db import IntegrityError
 
+from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
 from apps.files.models import File
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -105,6 +106,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
         VoiceProviderType.openai: SyntheticVoice.OpenAI,
         VoiceProviderType.openai_voice_engine: SyntheticVoice.OpenAIVoiceEngine,
         VoiceProviderType.elevenlabs: SyntheticVoice.ElevenLabs,
+        VoiceProviderType.intron: SyntheticVoice.Intron,
     }[provider_type]
     voice = SyntheticVoice(
         name="test", neural=True, language="English", language_code="en", gender="female", service=service
@@ -567,3 +569,154 @@ def test_elevenlabs_provider_delete(team_with_users):
     provider.delete()
 
     assert not SyntheticVoice.objects.filter(pk=voice.pk).exists()
+
+
+def test_intron_voice_provider(team_with_users):
+    _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.intron,
+        data={"intron_api_key": "test_key"},
+    )
+
+
+@pytest.mark.parametrize("config_key", ["intron_api_key"])
+def test_intron_voice_provider_error(config_key):
+    """Missing API key causes form + pydantic validation failure."""
+    form = VoiceProviderType.intron.form_cls(team=None, data={"intron_api_key": "test_key"})
+    assert form.is_valid()
+    form.cleaned_data.pop(config_key)
+    _test_voice_provider_error(VoiceProviderType.intron, data=form.cleaned_data)
+
+
+@pytest.mark.django_db()
+def test_intron_synthesize_voice_success(team_with_users):
+    """_synthesize_voice enqueues, polls to completion, downloads audio, returns SynthesizedAudio."""
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.intron,
+        config={"intron_api_key": "test_key"},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="yoruba",
+        neural=True,
+        language="Yoruba",
+        language_code="yoruba",
+        gender="female",
+        service=SyntheticVoice.Intron,
+        voice_provider=provider,
+    )
+
+    fake_mp3 = b"\xff\xfb\x90\x00" * 100
+
+    enqueue_response = mock.Mock(status_code=200)
+    enqueue_response.json.return_value = {"text_id": "abc123"}
+    pending_response = mock.Mock(status_code=200)
+    pending_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING"}
+    ready_response = mock.Mock(status_code=200)
+    ready_response.json.return_value = {
+        "status": "TTS_TEXT_AUDIO_GENERATED",
+        "audio_url": "https://cdn.intron.io/abc123.mp3",
+    }
+    download_response = mock.Mock(status_code=200, content=fake_mp3)
+    download_response.headers = {"Content-Type": "audio/mpeg"}
+
+    speech_service = provider.get_speech_service()
+
+    with (
+        mock.patch("apps.service_providers.speech_service.httpx.post", return_value=enqueue_response) as post,
+        mock.patch(
+            "apps.service_providers.speech_service.httpx.get",
+            side_effect=[pending_response, ready_response, download_response],
+        ) as get,
+        mock.patch("apps.service_providers.speech_service.time.sleep"),
+        mock.patch("pydub.AudioSegment") as mock_audio,
+    ):
+        mock_segment = mock.Mock()
+        mock_segment.__len__ = mock.Mock(return_value=2500)
+        mock_audio.from_file.return_value = mock_segment
+        result = speech_service._synthesize_voice("Hello world", voice)
+
+    post.assert_called_once()
+    post_args, post_kwargs = post.call_args
+    assert post_args[0] == "https://infer.voice.intron.io/tts/v1/enqueue"
+    assert post_kwargs["headers"]["Authorization"] == "Bearer test_key"
+    assert post_kwargs["json"] == {
+        "text": "Hello world",
+        "voice_accent": "yoruba",
+        "voice_gender": "female",
+    }
+    assert get.call_count == 3
+    assert result.format == "mp3"
+    assert result.duration == 2.5
+
+
+@pytest.mark.django_db()
+def test_intron_synthesize_voice_failure_status(team_with_users):
+    """_synthesize_voice raises when the API reports TTS_TEXT_AUDIO_PROCESSING_FAILED."""
+
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.intron,
+        config={"intron_api_key": "test_key"},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="yoruba",
+        neural=True,
+        language="Yoruba",
+        language_code="yoruba",
+        gender="female",
+        service=SyntheticVoice.Intron,
+        voice_provider=provider,
+    )
+
+    enqueue_response = mock.Mock(status_code=200)
+    enqueue_response.json.return_value = {"text_id": "abc123"}
+    failed_response = mock.Mock(status_code=200)
+    failed_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING_FAILED"}
+
+    speech_service = provider.get_speech_service()
+
+    with (
+        mock.patch("apps.service_providers.speech_service.httpx.post", return_value=enqueue_response),
+        mock.patch("apps.service_providers.speech_service.httpx.get", return_value=failed_response),
+        mock.patch("apps.service_providers.speech_service.time.sleep"),
+    ):
+        with pytest.raises(AudioSynthesizeException):
+            speech_service.synthesize_voice("Hello", voice)
+
+
+@pytest.mark.django_db()
+def test_intron_synthesize_voice_timeout(team_with_users):
+    """_synthesize_voice raises if polling exceeds max attempts."""
+
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.intron,
+        config={"intron_api_key": "test_key"},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="yoruba",
+        neural=True,
+        language="Yoruba",
+        language_code="yoruba",
+        gender="female",
+        service=SyntheticVoice.Intron,
+        voice_provider=provider,
+    )
+
+    enqueue_response = mock.Mock(status_code=200)
+    enqueue_response.json.return_value = {"text_id": "abc123"}
+    pending_response = mock.Mock(status_code=200)
+    pending_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING"}
+
+    speech_service = provider.get_speech_service()
+    object.__setattr__(speech_service, "poll_max_attempts", 2)
+
+    with (
+        mock.patch("apps.service_providers.speech_service.httpx.post", return_value=enqueue_response),
+        mock.patch("apps.service_providers.speech_service.httpx.get", return_value=pending_response) as get,
+        mock.patch("apps.service_providers.speech_service.time.sleep"),
+    ):
+        with pytest.raises(AudioSynthesizeException):
+            speech_service.synthesize_voice("Hello", voice)
+    assert get.call_count == 2
