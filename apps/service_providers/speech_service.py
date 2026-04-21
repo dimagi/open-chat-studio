@@ -313,6 +313,8 @@ class IntronSpeechService(SpeechService):
     intron_api_key: str
     poll_interval_seconds: float = 1.0
     poll_max_attempts: int = 120  # 2 minutes at 1s interval
+    # Per-request timeout. Bounds enqueue + each status poll + audio download independently.
+    request_timeout_seconds: float = 30.0
 
     _TERMINAL_FAILURE_STATUS: ClassVar[str] = "TTS_TEXT_AUDIO_PROCESSING_FAILED"
     _SUCCESS_STATUS: ClassVar[str] = "TTS_TEXT_AUDIO_GENERATED"
@@ -330,6 +332,7 @@ class IntronSpeechService(SpeechService):
                 "voice_accent": synthetic_voice.name,
                 "voice_gender": synthetic_voice.gender,
             },
+            timeout=self.request_timeout_seconds,
         )
         if enqueue.status_code != 200:
             raise AudioSynthesizeException(
@@ -347,7 +350,7 @@ class IntronSpeechService(SpeechService):
     def _poll_until_ready(self, text_id: str, headers: dict) -> str:
         status_url = f"{INTRON_BASE_URL}/tts/v1/status/{text_id}"
         for _ in range(self.poll_max_attempts):
-            resp = httpx.get(status_url, headers=headers)
+            resp = httpx.get(status_url, headers=headers, timeout=self.request_timeout_seconds)
             if resp.status_code != 200:
                 raise AudioSynthesizeException(
                     f"Intron status poll failed: status={resp.status_code} body={resp.text[:200]}"
@@ -370,7 +373,7 @@ class IntronSpeechService(SpeechService):
         )
 
     def _download_audio(self, url: str, headers: dict) -> tuple[bytes, str]:
-        resp = httpx.get(url, headers=headers)
+        resp = httpx.get(url, headers=headers, timeout=self.request_timeout_seconds)
         if resp.status_code != 200:
             raise AudioSynthesizeException(f"Intron audio download failed: status={resp.status_code}")
         content_type = resp.headers.get("Content-Type", "").lower()

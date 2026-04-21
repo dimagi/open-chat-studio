@@ -415,9 +415,13 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
         elif self.type == VoiceProviderType.intron.value:
-            from apps.service_providers.intron import build_synthetic_voices  # noqa: PLC0415 - avoid circular import
+            from apps.service_providers.intron import build_synthetic_voices  # noqa: PLC0415 - lazy
 
-            build_synthetic_voices(self)
+            try:
+                build_synthetic_voices(self)
+            except Exception:
+                log.exception("Failed to seed Intron voices for provider %s", self.pk)
+                warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
         return warnings
 
     @transaction.atomic()

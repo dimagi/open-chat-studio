@@ -108,6 +108,28 @@ def test_run_post_save_hook_seeds_intron_voices(team_with_users):
 
 
 @pytest.mark.django_db()
+def test_run_post_save_hook_returns_warning_on_seeding_failure(team_with_users):
+    """If build_synthetic_voices raises, the hook logs and returns a user-facing warning."""
+    from unittest import mock  # noqa: PLC0415 - only needed in this test
+
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="Intron Test",
+        type=VoiceProviderType.intron,
+        config={"intron_api_key": "test_key"},
+    )
+    with mock.patch(
+        "apps.service_providers.intron.build_synthetic_voices",
+        side_effect=RuntimeError("boom"),
+    ):
+        warnings = provider.run_post_save_hook()
+
+    assert len(warnings) == 1
+    assert "voice seeding failed" in warnings[0].lower()
+    assert provider.syntheticvoice_set.count() == 0
+
+
+@pytest.mark.django_db()
 def test_create_intron_provider_via_view_seeds_voices(team_with_users, client):
     """Creating an intron provider via the view seeds voices end-to-end.
 
