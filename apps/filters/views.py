@@ -41,12 +41,12 @@ def create_filter_set(request, team_slug: str, table_type: str):
     if not serializer.is_valid():
         return JsonResponse(serializer.errors, status=400)
 
-    with transaction.atomic():
-        try:
+    try:
+        with transaction.atomic():
             serializer.save(team=request.team, user=request.user)
-            return JsonResponse({"success": True, "filter_set": serializer.data})
-        except IntegrityError:
-            return JsonResponse({"error": "Unable to create filter set"}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Unable to create filter set"}, status=400)
+    return JsonResponse({"success": True, "filter_set": serializer.data})
 
 
 class FilterSetView(LoginAndTeamRequiredMixin, View):
