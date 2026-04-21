@@ -500,6 +500,51 @@ def test_elevenlabs_gender_mapping(labels, expected_gender):
 
 
 @pytest.mark.django_db()
+def test_run_post_save_hook_elevenlabs_calls_sync_voices(team_with_users):
+    """ElevenLabs provider's post-save hook calls sync_voices and returns no warnings on success."""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    with mock.patch.object(VoiceProvider, "sync_voices") as mock_sync:
+        warnings = provider.run_post_save_hook()
+    mock_sync.assert_called_once()
+    assert warnings == []
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_elevenlabs_returns_warning_on_failure(team_with_users):
+    """If sync_voices raises, run_post_save_hook logs and returns a user-facing warning."""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    with mock.patch.object(VoiceProvider, "sync_voices", side_effect=RuntimeError("boom")):
+        warnings = provider.run_post_save_hook()
+    assert len(warnings) == 1
+    assert "voice sync failed" in warnings[0].lower()
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_noop_for_non_elevenlabs(team_with_users):
+    """Non-ElevenLabs providers return no warnings and do not trigger sync_voices."""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="AWS Test",
+        type=VoiceProviderType.aws,
+        config={"aws_access_key_id": "k", "aws_secret_access_key": "s", "aws_region": "us-east-1"},
+    )
+    with mock.patch.object(VoiceProvider, "sync_voices") as mock_sync:
+        warnings = provider.run_post_save_hook()
+    mock_sync.assert_not_called()
+    assert warnings == []
+
+
+@pytest.mark.django_db()
 def test_elevenlabs_provider_delete(team_with_users):
     """Deleting ElevenLabs provider should delete local synced voice records"""
     provider = VoiceProvider.objects.create(

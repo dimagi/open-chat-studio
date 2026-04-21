@@ -396,6 +396,21 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             },
         )
 
+    def run_post_save_hook(self) -> list[str]:
+        """Run type-specific side effects after the provider is saved.
+
+        Returns a list of user-facing warning messages that the caller should surface
+        (e.g. via Django's messages framework). Failures are logged here.
+        """
+        warnings: list[str] = []
+        if self.type == VoiceProviderType.elevenlabs.value:
+            try:
+                self.sync_voices()
+            except Exception:
+                log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
+                warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
+        return warnings
+
     @transaction.atomic()
     def sync_voices(self):
         """Fetch voices from ElevenLabs API and sync SyntheticVoice records for this provider."""
