@@ -136,6 +136,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     ordering = ["-created_at"]
     lookup_field = "external_id"
     lookup_url_kwarg = "id"
+    lookup_value_regex = "[^/]+"  # allow dots in external_id (e.g. Slack thread_ts format)
     required_scopes = ["sessions"]
 
     def get_serializer(self, *args, **kwargs):
