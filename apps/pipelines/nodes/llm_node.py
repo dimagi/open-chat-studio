@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import operator
 from typing import TYPE_CHECKING, Annotated, cast
 
@@ -27,8 +26,6 @@ from apps.service_providers.llm_service.utils import (
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
-
-logger = logging.getLogger("ocs.pipelines.nodes")
 
 
 class StateSchema(AgentState):
@@ -111,14 +108,12 @@ def _validate_user_message_size(user_input: str, node: PipelineNode, system_mess
         llm_provider_model = node.repo.get_llm_provider_model(node.llm_provider_model_id)
     except RepositoryLookupError:
         return
-    except Exception:
-        logger.exception("Failed to load llm_provider_model for message size validation")
-        return
     max_token_limit = llm_provider_model.max_token_limit
     if not max_token_limit:
         return
     system_tokens = count_tokens_approximately([system_message])
-    # Reserve capacity for the model's response so a message can't consume the entire context window.
+    # Reserve 1/8 of the context window for the model's response. Chat history size is
+    # variable and handled downstream by history_middleware (truncation/summarisation).
     response_reserve = max_token_limit // 8
     budget = max(max_token_limit - system_tokens - response_reserve, 0)
     user_tokens = count_tokens_approximately([HumanMessage(content=user_input)])

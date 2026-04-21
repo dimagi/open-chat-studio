@@ -682,15 +682,14 @@ class TestValidateUserMessageSize:
         system_message = SystemMessage(content="")
         _validate_user_message_size("any message", node, system_message)
 
-    def test_unexpected_repo_error_logs_and_skips_validation(self):
+    def test_unexpected_repo_error_propagates(self):
         from apps.pipelines.nodes.llm_node import _validate_user_message_size  # noqa: PLC0415
 
         node = Mock()
         node.repo.get_llm_provider_model.side_effect = RuntimeError("db timeout")
         system_message = SystemMessage(content="")
-        with patch("apps.pipelines.nodes.llm_node.logger") as mock_logger:
+        with pytest.raises(RuntimeError, match="db timeout"):
             _validate_user_message_size("any message", node, system_message)
-            mock_logger.exception.assert_called_once()
 
     def test_budget_accounts_for_system_message(self):
         node, validate = self._make_node(max_token_limit=20)
