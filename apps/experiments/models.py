@@ -386,6 +386,7 @@ class SyntheticVoice(BaseModel):
     OpenAI = "OpenAI"
     OpenAIVoiceEngine = "OpenAIVoiceEngine"
     ElevenLabs = "ElevenLabs"
+    Intron = "Intron"
 
     SERVICES = (
         ("AWS", AWS),
@@ -393,8 +394,9 @@ class SyntheticVoice(BaseModel):
         ("OpenAI", OpenAI),
         ("OpenAIVoiceEngine", OpenAIVoiceEngine),
         ("ElevenLabs", ElevenLabs),
+        ("Intron", Intron),
     )
-    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, ElevenLabs]
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, ElevenLabs, Intron]
 
     objects = SyntheticVoiceObjectManager()
     name = models.CharField(
@@ -1456,7 +1458,7 @@ class ExperimentSession(BaseTeamModel):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
         if not self.external_id:
-            self.external_id = str(uuid.uuid4())
+            self.external_id = str(uuid.uuid4())  # ty: ignore[invalid-assignment]
 
         super().save(*args, **kwargs)
 
