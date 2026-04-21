@@ -64,10 +64,10 @@ class WebChannel(ChannelBase):
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
-            supports_voice_replies=False,
-            supports_files=False,
+            supports_voice_replies=self.voice_replies_supported,
+            supports_files=self.supports_multimedia,
             supports_conversational_consent=False,
-            supported_message_types=[MESSAGE_TYPES.TEXT],
+            supported_message_types=self.supported_message_types,
         )
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
