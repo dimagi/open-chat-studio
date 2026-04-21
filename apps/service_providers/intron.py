@@ -5,7 +5,12 @@ voice-discovery endpoint, so we seed SyntheticVoice rows from the static
 list below whenever a provider is created.
 """
 
+from typing import TYPE_CHECKING
+
 from apps.experiments.models import SyntheticVoice
+
+if TYPE_CHECKING:
+    from apps.service_providers.models import VoiceProvider
 
 INTRON_BASE_URL = "https://infer.voice.intron.io"
 
@@ -60,7 +65,7 @@ ACCENTS: tuple[str, ...] = (
 GENDERS: tuple[str, ...] = ("male", "female")
 
 
-def build_synthetic_voices(provider) -> None:
+def build_synthetic_voices(provider: "VoiceProvider") -> None:
     """Create (or refresh) one SyntheticVoice per (accent, gender) for `provider`.
 
     Idempotent: uses (name, gender, service, voice_provider) as the natural key.

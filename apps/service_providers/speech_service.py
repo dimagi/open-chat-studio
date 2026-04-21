@@ -355,9 +355,12 @@ class IntronSpeechService(SpeechService):
             payload = resp.json()
             status = payload.get("status")
             if status == self._SUCCESS_STATUS:
-                audio_url = payload.get("audio_url") or payload.get("url")
+                audio_url = payload.get("audio_url")
                 if not audio_url:
-                    raise AudioSynthesizeException(f"Intron reported success but no audio_url in response: {payload}")
+                    raise AudioSynthesizeException(
+                        f"Intron reported success but no audio_url in status response. "
+                        f"Response keys: {sorted(payload.keys())}"
+                    )
                 return audio_url
             if status == self._TERMINAL_FAILURE_STATUS:
                 raise AudioSynthesizeException(f"Intron synthesis failed: {payload}")

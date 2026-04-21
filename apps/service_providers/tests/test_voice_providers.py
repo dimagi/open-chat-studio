@@ -692,7 +692,7 @@ def test_intron_synthesize_voice_timeout(team_with_users):
     provider = VoiceProviderFactory(
         team=team_with_users,
         type=VoiceProviderType.intron,
-        config={"intron_api_key": "test_key"},
+        config={"intron_api_key": "test_key", "poll_max_attempts": 2},
     )
     voice = SyntheticVoice.objects.create(
         name="yoruba",
@@ -710,7 +710,6 @@ def test_intron_synthesize_voice_timeout(team_with_users):
     pending_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING"}
 
     speech_service = provider.get_speech_service()
-    object.__setattr__(speech_service, "poll_max_attempts", 2)
 
     with (
         mock.patch("apps.service_providers.speech_service.httpx.post", return_value=enqueue_response),

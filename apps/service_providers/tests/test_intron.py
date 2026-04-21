@@ -1,13 +1,18 @@
 import pytest
 
 from apps.experiments.models import SyntheticVoice
-from apps.service_providers.intron import ACCENTS, INTRON_BASE_URL, build_synthetic_voices
+from apps.service_providers.intron import ACCENTS, build_synthetic_voices
 from apps.service_providers.models import VoiceProviderType
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 
 
-def test_accents_contain_required_set():
-    required = {
+def test_accents_matches_spec_exactly():
+    """The accent catalogue must match the set enumerated in issue #2966 exactly.
+
+    Using set equality (not issubset) catches both additions and removals, so an accidental
+    change to the catalogue surfaces immediately.
+    """
+    expected = {
         "afrikaans",
         "akan",
         "amharic",
@@ -54,11 +59,7 @@ def test_accents_contain_required_set():
         "yoruba",
         "zulu",
     }
-    assert required.issubset(set(ACCENTS))
-
-
-def test_intron_base_url():
-    assert INTRON_BASE_URL == "https://infer.voice.intron.io"
+    assert set(ACCENTS) == expected
 
 
 @pytest.mark.django_db()
