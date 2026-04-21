@@ -1,10 +1,10 @@
-<dialog id="custom-action-referenced-modal"
+<dialog id="referenced-objects-modal"
         class="modal"
         x-data
-        x-init="document.querySelectorAll('#custom-action-referenced-modal').forEach(el => { if (el !== $el) el.remove() }); $el.showModal()"
+        x-init="document.querySelectorAll('#referenced-objects-modal').forEach(el => { if (el !== $el) el.remove() }); $el.showModal()"
         @close="$el.remove()">
   <div class="modal-box max-w-2xl">
-    <h3 class="font-bold text-lg">Cannot delete custom action</h3>
+    <h3 class="font-bold text-lg">Cannot delete {{ object_name }}</h3>
     <div class="py-2">
       {% include "generic/referenced_objects.html" %}
     </div>

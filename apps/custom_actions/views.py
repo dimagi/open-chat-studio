@@ -8,7 +8,6 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -21,6 +20,7 @@ from apps.custom_actions.tables import CustomActionTable
 from apps.custom_actions.tasks import check_single_custom_action_health
 from apps.experiments.models import Experiment
 from apps.generics.chips import Chip
+from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.pipelines.models import Node
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -171,21 +171,12 @@ class DeleteCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
             pipelines, assistants, experiments = _find_live_custom_action_references(custom_action)
 
             if pipelines or assistants or experiments:
-                modal_html = render_to_string(
-                    "custom_actions/referenced_objects_modal.html",
-                    context={
-                        "object_name": "custom action",
-                        "pipeline_nodes": [Chip(label=p.name, url=p.get_absolute_url()) for p in pipelines],
-                        "experiments_with_pipeline_nodes": [
-                            Chip(label=str(e), url=e.get_absolute_url()) for e in experiments
-                        ],
-                        "assistants": [Chip(label=a.name, url=a.get_absolute_url()) for a in assistants],
-                    },
+                return render_referenced_objects_modal(
+                    "custom action",
+                    pipeline_nodes=[Chip(label=p.name, url=p.get_absolute_url()) for p in pipelines],
+                    experiments_with_pipeline_nodes=[Chip(label=str(e), url=e.get_absolute_url()) for e in experiments],
+                    assistants=[Chip(label=a.name, url=a.get_absolute_url()) for a in assistants],
                 )
-                response = HttpResponse(modal_html)
-                response["HX-Retarget"] = "body"
-                response["HX-Reswap"] = "beforeend"
-                return response
 
             custom_action.delete()
 

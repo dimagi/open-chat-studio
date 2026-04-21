@@ -88,7 +88,7 @@ def test_delete_view_blocks_when_referenced_by_pipeline(team_with_users, authed_
     assert response["HX-Reswap"] == "beforeend"
     assert CustomAction.objects.filter(pk=action.pk).exists()
     body = response.content.decode()
-    assert "custom-action-referenced-modal" in body
+    assert "referenced-objects-modal" in body
     assert "custom action" in body.lower()
     assert pipeline.name in body
 
