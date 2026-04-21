@@ -338,7 +338,8 @@ class IntronSpeechService(SpeechService):
             raise AudioSynthesizeException(
                 f"Intron enqueue failed: status={enqueue.status_code} body={enqueue.text[:200]}"
             )
-        text_id = enqueue.json()["text_id"]
+        # Real response shape: {"data": {"text_id": "..."}, "message": "...", "status": "Ok"}
+        text_id = enqueue.json()["data"]["text_id"]
 
         audio_url = self._poll_until_ready(text_id, headers)
         audio_bytes, audio_format = self._download_audio(audio_url, headers)
@@ -348,6 +349,19 @@ class IntronSpeechService(SpeechService):
         return SynthesizedAudio(audio=BytesIO(audio_bytes), duration=duration_seconds, format=audio_format)
 
     def _poll_until_ready(self, text_id: str, headers: dict) -> str:
+        """Poll the status endpoint until the audio is generated; return the audio URL.
+
+        Real response shape:
+            {
+              "data": {
+                "audio_duration_in_seconds": <float>,
+                "audio_path": <str>,              # populated once generated
+                "processing_status": "TTS_TEXT_PROCESSING" | "TTS_TEXT_AUDIO_GENERATED" | ...
+              },
+              "message": <str>,
+              "status": "Ok"
+            }
+        """
         status_url = f"{INTRON_BASE_URL}/tts/v1/status/{text_id}"
         for _ in range(self.poll_max_attempts):
             resp = httpx.get(status_url, headers=headers, timeout=self.request_timeout_seconds)
@@ -355,18 +369,18 @@ class IntronSpeechService(SpeechService):
                 raise AudioSynthesizeException(
                     f"Intron status poll failed: status={resp.status_code} body={resp.text[:200]}"
                 )
-            payload = resp.json()
-            status = payload.get("status")
-            if status == self._SUCCESS_STATUS:
-                audio_url = payload.get("audio_url")
+            data = resp.json().get("data") or {}
+            processing_status = data.get("processing_status")
+            if processing_status == self._SUCCESS_STATUS:
+                audio_url = data.get("audio_path")
                 if not audio_url:
                     raise AudioSynthesizeException(
-                        f"Intron reported success but no audio_url in status response. "
-                        f"Response keys: {sorted(payload.keys())}"
+                        f"Intron reported success but no audio_path in status response. "
+                        f"Data keys: {sorted(data.keys())}"
                     )
                 return audio_url
-            if status == self._TERMINAL_FAILURE_STATUS:
-                raise AudioSynthesizeException(f"Intron synthesis failed: {payload}")
+            if processing_status == self._TERMINAL_FAILURE_STATUS:
+                raise AudioSynthesizeException(f"Intron synthesis failed: {resp.text[:500]}")
             time.sleep(self.poll_interval_seconds)
         raise AudioSynthesizeException(
             f"Intron synthesis did not complete within {self.poll_max_attempts} poll attempts"

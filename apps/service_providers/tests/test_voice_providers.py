@@ -609,13 +609,30 @@ def test_intron_synthesize_voice_success(team_with_users):
     fake_mp3 = b"\xff\xfb\x90\x00" * 100
 
     enqueue_response = mock.Mock(status_code=200)
-    enqueue_response.json.return_value = {"text_id": "abc123"}
+    enqueue_response.json.return_value = {
+        "data": {"text_id": "abc123"},
+        "message": "tts text queued for processing",
+        "status": "Ok",
+    }
     pending_response = mock.Mock(status_code=200)
-    pending_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING"}
+    pending_response.json.return_value = {
+        "data": {
+            "audio_duration_in_seconds": 0,
+            "audio_path": "",
+            "processing_status": "TTS_TEXT_PROCESSING",
+        },
+        "message": "text to speech audio not ready",
+        "status": "Ok",
+    }
     ready_response = mock.Mock(status_code=200)
     ready_response.json.return_value = {
-        "status": "TTS_TEXT_AUDIO_GENERATED",
-        "audio_url": "https://cdn.intron.io/abc123.mp3",
+        "data": {
+            "audio_duration_in_seconds": 7.0,
+            "audio_path": "https://cdn.intron.io/abc123.mp3",
+            "processing_status": "TTS_TEXT_AUDIO_GENERATED",
+        },
+        "message": "text status found",
+        "status": "Ok",
     }
     download_response = mock.Mock(status_code=200, content=fake_mp3)
     download_response.headers = {"Content-Type": "audio/mpeg"}
@@ -670,9 +687,15 @@ def test_intron_synthesize_voice_failure_status(team_with_users):
     )
 
     enqueue_response = mock.Mock(status_code=200)
-    enqueue_response.json.return_value = {"text_id": "abc123"}
+    enqueue_response.json.return_value = {
+        "data": {"text_id": "abc123"},
+        "status": "Ok",
+    }
     failed_response = mock.Mock(status_code=200)
-    failed_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING_FAILED"}
+    failed_response.json.return_value = {
+        "data": {"processing_status": "TTS_TEXT_AUDIO_PROCESSING_FAILED"},
+        "status": "Ok",
+    }
 
     speech_service = provider.get_speech_service()
 
@@ -705,9 +728,15 @@ def test_intron_synthesize_voice_timeout(team_with_users):
     )
 
     enqueue_response = mock.Mock(status_code=200)
-    enqueue_response.json.return_value = {"text_id": "abc123"}
+    enqueue_response.json.return_value = {
+        "data": {"text_id": "abc123"},
+        "status": "Ok",
+    }
     pending_response = mock.Mock(status_code=200)
-    pending_response.json.return_value = {"status": "TTS_TEXT_AUDIO_PROCESSING"}
+    pending_response.json.return_value = {
+        "data": {"processing_status": "TTS_TEXT_PROCESSING"},
+        "status": "Ok",
+    }
 
     speech_service = provider.get_speech_service()
 
