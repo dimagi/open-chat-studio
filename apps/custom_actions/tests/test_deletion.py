@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from django.core.management import call_command
 from django.urls import reverse
@@ -7,6 +9,7 @@ from apps.custom_actions.models import CustomAction, CustomActionOperation
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import EndNode, LLMResponseWithPrompt, StartNode
 from apps.utils.factories.custom_actions import CustomActionFactory
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
@@ -88,6 +91,92 @@ def test_delete_view_blocks_when_referenced_by_pipeline(team_with_users, authed_
     assert "custom-action-referenced-modal" in body
     assert "custom action" in body.lower()
     assert pipeline.name in body
+
+
+def _strip_custom_actions_from_working_pipeline(working_pipeline):
+    """Simulate a user removing the CustomAction from the working pipeline while versioned
+    pipelines still reference it. This mirrors the real-world path where the user edits the
+    working pipeline (which saves clean) but published versions retain the snapshotted ref."""
+    for flow_node in working_pipeline.data.get("nodes", []):
+        params = (flow_node.get("data") or {}).get("params") or {}
+        if "custom_actions" in params:
+            params["custom_actions"] = []
+    working_pipeline.save(update_fields=["data"])
+    for node in working_pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__):
+        node.params["custom_actions"] = []
+        node.save(update_fields=["params"])
+        CustomActionOperation.objects.filter(node=node).delete()
+
+
+@pytest.mark.django_db()
+def test_delete_view_blocks_when_only_versioned_pipeline_references_action(team_with_users, authed_client):
+    """The fix for the case where a published experiment's versioned pipeline still holds a
+    CustomActionOperation, but the working pipeline no longer references the action. The old
+    implementation collapsed the versioned pipeline to its working version and missed the
+    published experiment entirely, silently permitting a delete that would CASCADE-break the
+    versioned Node's custom_action_operation row."""
+    action = CustomActionFactory.create(team=team_with_users)
+    llm_provider = LlmProviderFactory.create(team=team_with_users)
+    llm_provider_model = LlmProviderModelFactory.create(team=team_with_users)
+    working_pipeline = PipelineFactory.create(
+        team=team_with_users,
+        data=_pipeline_data_referencing_action(action, llm_provider, llm_provider_model),
+    )
+    pipeline_v1 = working_pipeline.create_new_version()
+    assert CustomActionOperation.objects.filter(custom_action=action, node__pipeline=pipeline_v1).exists()
+
+    _strip_custom_actions_from_working_pipeline(working_pipeline)
+    assert not CustomActionOperation.objects.filter(custom_action=action, node__pipeline=working_pipeline).exists()
+
+    working_experiment = ExperimentFactory.create(
+        team=team_with_users, pipeline=working_pipeline, public_id=uuid.uuid4()
+    )
+    versioned_experiment = ExperimentFactory.create(
+        team=team_with_users,
+        name=working_experiment.name,
+        pipeline=pipeline_v1,
+        working_version=working_experiment,
+        version_number=1,
+        is_default_version=True,
+        public_id=uuid.uuid4(),
+    )
+
+    url = reverse("custom_actions:delete", kwargs={"team_slug": team_with_users.slug, "pk": action.pk})
+    response = authed_client.delete(url)
+
+    assert response.status_code == 200
+    assert response["HX-Retarget"] == "body"
+    assert CustomAction.objects.filter(pk=action.pk).exists()
+    body = response.content.decode()
+    # Specific version (v1) is shown, not the working version name alone, so the user can
+    # identify which experiment version is affected.
+    assert f"{versioned_experiment.name} (v1)" in body
+
+
+@pytest.mark.django_db()
+def test_delete_view_allows_delete_when_only_orphan_versioned_pipeline_references_action(
+    team_with_users, authed_client
+):
+    """A non-archived versioned pipeline with a CA op but no live experiment using it is
+    treated as an orphan — deletion is allowed, matching the ``_is_actively_used`` semantics
+    used elsewhere. The ``cleanup_stale_custom_action_refs`` command is expected to mop up
+    the resulting stale Node.params/Pipeline.data entries."""
+    action = CustomActionFactory.create(team=team_with_users)
+    llm_provider = LlmProviderFactory.create(team=team_with_users)
+    llm_provider_model = LlmProviderModelFactory.create(team=team_with_users)
+    working_pipeline = PipelineFactory.create(
+        team=team_with_users,
+        data=_pipeline_data_referencing_action(action, llm_provider, llm_provider_model),
+    )
+    working_pipeline.create_new_version()
+    _strip_custom_actions_from_working_pipeline(working_pipeline)
+    # No Experiment points at the versioned pipeline → orphan.
+
+    url = reverse("custom_actions:delete", kwargs={"team_slug": team_with_users.slug, "pk": action.pk})
+    response = authed_client.delete(url)
+
+    assert response.status_code == 200
+    assert not CustomAction.objects.filter(pk=action.pk).exists()
 
 
 @pytest.mark.django_db()

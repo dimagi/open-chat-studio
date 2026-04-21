@@ -1,7 +1,7 @@
 <dialog id="custom-action-referenced-modal"
         class="modal"
         x-data
-        x-init="$el.showModal()"
+        x-init="document.querySelectorAll('#custom-action-referenced-modal').forEach(el => { if (el !== $el) el.remove() }); $el.showModal()"
         @close="$el.remove()">
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg">Cannot delete custom action</h3>

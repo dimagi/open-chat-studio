@@ -1,9 +1,13 @@
+import logging
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.custom_actions.models import CustomAction
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+
+log = logging.getLogger(__name__)
 
 BATCH_SIZE = 500
 CUSTOM_ACTIONS_FIELD = "custom_actions"
@@ -22,7 +26,8 @@ class Command(BaseCommand):
             help="Report what would change without writing to the database.",
         )
 
-    def handle(self, *args, dry_run: bool = False, **options):
+    def handle(self, *args, dry_run: bool = False, verbosity: int = 1, **options):
+        self.verbosity = verbosity
         self.existing_ids = set(CustomAction.objects.values_list("id", flat=True))
 
         with transaction.atomic():
@@ -33,15 +38,19 @@ class Command(BaseCommand):
                 transaction.set_rollback(True)
 
         verb = "would update" if dry_run else "updated"
-        self.stdout.write(self.style.SUCCESS(f"{verb} {nodes_updated} node(s) and {pipelines_updated} pipeline(s)."))
+        summary = f"{verb} {nodes_updated} node(s) and {pipelines_updated} pipeline(s)."
+        log.info("cleanup_stale_custom_action_refs: %s (dry_run=%s)", summary, dry_run)
+        self.stdout.write(self.style.SUCCESS(summary))
 
     def _is_stale(self, ref) -> bool:
         if not isinstance(ref, str):
+            log.warning("cleanup_stale_custom_action_refs: non-string ref skipped: %r", ref)
             return False
         head, _, _ = ref.partition(":")
         try:
             return int(head) not in self.existing_ids
         except ValueError:
+            log.warning("cleanup_stale_custom_action_refs: unparseable ref skipped: %r", ref)
             return False
 
     def _partition_refs(self, refs):
@@ -72,9 +81,10 @@ class Command(BaseCommand):
             cleaned, dropped = self._partition_refs(refs)
             if not dropped:
                 continue
-            self.stdout.write(
-                f"Node id={node.id} pipeline={node.pipeline_id} flow_id={node.flow_id}: dropping {dropped}"
-            )
+            msg = f"Node id={node.id} pipeline={node.pipeline_id} flow_id={node.flow_id}: dropping {dropped}"
+            log.info("cleanup_stale_custom_action_refs: %s", msg)
+            if self.verbosity >= 2:
+                self.stdout.write(msg)
             node.params[CUSTOM_ACTIONS_FIELD] = cleaned
             affected_pipeline_ids.add(node.pipeline_id)
             updated += 1
@@ -124,7 +134,10 @@ class Command(BaseCommand):
             cleaned, dropped = self._partition_refs(refs)
             if not dropped:
                 continue
-            self.stdout.write(f"Pipeline id={pipeline.id} flow_id={flow_node.get('id')}: dropping {dropped}")
+            msg = f"Pipeline id={pipeline.id} flow_id={flow_node.get('id')}: dropping {dropped}"
+            log.info("cleanup_stale_custom_action_refs: %s", msg)
+            if self.verbosity >= 2:
+                self.stdout.write(msg)
             params[CUSTOM_ACTIONS_FIELD] = cleaned
             changed = True
         return changed
