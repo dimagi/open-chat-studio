@@ -1566,7 +1566,6 @@ class ExperimentSession(BaseTeamModel):
         if commit and trigger_type:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
-    @transaction.atomic()
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str,
@@ -1587,23 +1586,24 @@ class ExperimentSession(BaseTeamModel):
         """
         trace_service = None
         try:
-            with current_team(self.team):
-                experiment = use_experiment or self.experiment
-                trace_service = TracingService.create_for_experiment(experiment)
-                with trace_service.trace_or_span(
-                    name=f"{experiment.name} - {trace_info.name}",
-                    session=self,
-                    inputs={"input": instruction_prompt},
-                    metadata=trace_info.metadata,
-                    notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
-                ) as span:
-                    bot_message = self._bot_prompt_for_user(
-                        instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
-                    )
-                    self.try_send_message(message=bot_message)
-                    span.set_outputs({"response": bot_message})
-                    trace_metadata = trace_service.get_trace_metadata()
-                return trace_metadata
+            with transaction.atomic():
+                with current_team(self.team):
+                    experiment = use_experiment or self.experiment
+                    trace_service = TracingService.create_for_experiment(experiment)
+                    with trace_service.trace_or_span(
+                        name=f"{experiment.name} - {trace_info.name}",
+                        session=self,
+                        inputs={"input": instruction_prompt},
+                        metadata=trace_info.metadata,
+                        notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
+                    ) as span:
+                        bot_message = self._bot_prompt_for_user(
+                            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+                        )
+                        self.try_send_message(message=bot_message)
+                        span.set_outputs({"response": bot_message})
+                        trace_metadata = trace_service.get_trace_metadata()
+                    return trace_metadata
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
