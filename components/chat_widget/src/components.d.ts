@@ -52,11 +52,7 @@ export namespace Components {
          */
         "language"?: string;
         /**
-          * Maximum number of characters allowed in a single message (derived from the model's token limit). When set, a live counter is shown and the send button is disabled when exceeded.
-         */
-        "maxCharLimit"?: number;
-        /**
-          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.   The parent element must establish a containing block (e.g. `position: relative`).
+          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.
           * @default 'standard'
          */
         "mode": 'standard' | 'kiosk';
@@ -105,7 +101,6 @@ export namespace Components {
           * Display name for the user.
          */
         "userName"?: string;
-        "versionNumber"?: number;
         /**
           * Whether the chat widget is visible on load.
           * @default false
@@ -175,11 +170,7 @@ declare namespace LocalJSX {
          */
         "language"?: string;
         /**
-          * Maximum number of characters allowed in a single message (derived from the model's token limit). When set, a live counter is shown and the send button is disabled when exceeded.
-         */
-        "maxCharLimit"?: number;
-        /**
-          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.   The parent element must establish a containing block (e.g. `position: relative`).
+          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.
           * @default 'standard'
          */
         "mode"?: 'standard' | 'kiosk';
@@ -228,7 +219,6 @@ declare namespace LocalJSX {
           * Display name for the user.
          */
         "userName"?: string;
-        "versionNumber"?: number;
         /**
           * Whether the chat widget is visible on load.
           * @default false
