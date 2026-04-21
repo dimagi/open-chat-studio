@@ -323,6 +323,7 @@ class ChannelBase(ABC):
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.web_channel import WebChannel as NewWebChannel  # noqa: PLC0415
 
             channel_cls = NewWebChannel

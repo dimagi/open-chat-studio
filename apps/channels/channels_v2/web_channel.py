@@ -43,7 +43,6 @@ class WebChannel(ChannelBase):
     the channel class unchanged.
     """
 
-    voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
     def __init__(
