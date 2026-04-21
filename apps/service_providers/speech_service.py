@@ -342,7 +342,7 @@ class IntronSpeechService(SpeechService):
         text_id = enqueue.json()["data"]["text_id"]
 
         audio_url = self._poll_until_ready(text_id, headers)
-        audio_bytes, audio_format = self._download_audio(audio_url, headers)
+        audio_bytes, audio_format = self._download_audio(audio_url)
 
         audio_segment = AudioSegment.from_file(BytesIO(audio_bytes), format=audio_format)
         duration_seconds = len(audio_segment) / 1000
@@ -386,8 +386,11 @@ class IntronSpeechService(SpeechService):
             f"Intron synthesis did not complete within {self.poll_max_attempts} poll attempts"
         )
 
-    def _download_audio(self, url: str, headers: dict) -> tuple[bytes, str]:
-        resp = httpx.get(url, headers=headers, timeout=self.request_timeout_seconds)
+    def _download_audio(self, url: str) -> tuple[bytes, str]:
+        # The audio URL points to an intron-owned S3 bucket, not the intron API itself.
+        # S3 rejects unrelated Authorization headers with a 400, so don't forward our
+        # Bearer credentials here — the URL itself carries whatever authorization is needed.
+        resp = httpx.get(url, timeout=self.request_timeout_seconds)
         if resp.status_code != 200:
             raise AudioSynthesizeException(f"Intron audio download failed: status={resp.status_code}")
         content_type = resp.headers.get("Content-Type", "").lower()

@@ -663,6 +663,11 @@ def test_intron_synthesize_voice_success(team_with_users):
         "voice_gender": "female",
     }
     assert get.call_count == 3
+    # Status polls carry the Bearer token; the S3 download must not (S3 returns 400 otherwise).
+    first_poll_kwargs = get.call_args_list[0].kwargs
+    download_kwargs = get.call_args_list[2].kwargs
+    assert first_poll_kwargs["headers"]["Authorization"] == "Bearer test_key"
+    assert "headers" not in download_kwargs or "Authorization" not in download_kwargs.get("headers", {})
     assert result.format == "mp3"
     assert result.duration == 2.5
 
