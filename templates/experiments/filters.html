@@ -739,7 +739,7 @@
 
       areAllTagsSelected(index) {
         const filter = this.filterData.filters[index];
-        if (filter.column !== 'tags') return false;
+        if (!filter || filter.column !== 'tags') return false;
         const allTags = this.filterData.columns['tags'].options || [];
         return allTags.length > 0 && filter.selectedValues.length === allTags.length;
       },
