@@ -206,7 +206,9 @@ export class OcsChat {
   /**
    * @internal
    * Optional version number of the chatbot to use. Requires authentication.
-   * This is for internal use only and is not intended for public-facing widgets.
+   * Intentionally declared as @Prop() so the Django host page can pass it as
+   * an HTML attribute; it is not part of the public widget API and should not
+   * be used by third-party embedders.
    */
   @Prop() versionNumber?: number;
 
@@ -1762,11 +1764,6 @@ export class OcsChat {
                     onKeyPress={e => this.handleKeyPress(e)}
                     disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
                   ></textarea>
-                  {this.maxCharLimit != null && (
-                    <div class={`char-counter${this.messageTooLong ? ' char-counter-error' : this.messageNearLimit ? ' char-counter-warning' : ''}`}>
-                      {this.messageInput.length} / {this.maxCharLimit}
-                    </div>
-                  )}
                   {/* File Upload Button */}
                   {this.allowAttachments && (
                     <input
@@ -1806,6 +1803,11 @@ export class OcsChat {
                     {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                   </button>
                 </div>
+                {this.maxCharLimit != null && (
+                  <div class={`char-counter${this.messageTooLong ? ' char-counter-error' : this.messageNearLimit ? ' char-counter-warning' : ''}`}>
+                    {this.messageInput.length} / {this.maxCharLimit}
+                  </div>
+                )}
               </div>
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>
