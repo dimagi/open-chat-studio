@@ -32,8 +32,8 @@ class Command(BaseCommand):
 
         with current_team(team):
             for assistant in assistants:
-                with transaction.atomic():
-                    try:
+                try:
+                    with transaction.atomic():
                         self.stdout.write(f"\n\nEvaluating {assistant} (id={assistant.id})")
                         original_resource = assistant.tool_resources.get(tool_type="file_search")
                         original_vector_store_id = original_resource.extra.get("vector_store_id")
@@ -62,8 +62,8 @@ class Command(BaseCommand):
 
                             diff = set(tool_resource.files.values_list("external_id", flat=True))
                             self.stdout.write(f"Diff between original and new file ids: {original_file_ids - diff}")
-                    except Exception as e:
-                        traceback.print_exception(type(e), e, e.__traceback__)
+                except Exception as e:
+                    traceback.print_exception(type(e), e, e.__traceback__)
 
         self.stdout.write("\nDone")
 
