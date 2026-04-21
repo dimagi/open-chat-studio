@@ -5,6 +5,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, ClassVar
+from urllib.parse import urlparse
 
 import httpx
 import pydantic
@@ -339,7 +340,10 @@ class IntronSpeechService(SpeechService):
                 f"Intron enqueue failed: status={enqueue.status_code} body={enqueue.text[:200]}"
             )
         # Real response shape: {"data": {"text_id": "..."}, "message": "...", "status": "Ok"}
-        text_id = enqueue.json()["data"]["text_id"]
+        enqueue_data = enqueue.json().get("data") or {}
+        text_id = enqueue_data.get("text_id")
+        if not text_id:
+            raise AudioSynthesizeException(f"Intron enqueue response missing data.text_id. Body: {enqueue.text[:200]}")
 
         audio_url = self._poll_until_ready(text_id, headers)
         audio_bytes, audio_format = self._download_audio(audio_url)
@@ -394,9 +398,11 @@ class IntronSpeechService(SpeechService):
         if resp.status_code != 200:
             raise AudioSynthesizeException(f"Intron audio download failed: status={resp.status_code}")
         content_type = resp.headers.get("Content-Type", "").lower()
-        if "wav" in content_type or url.endswith(".wav"):
+        # Parse the URL path so the extension check survives query strings on signed/presigned URLs.
+        path = urlparse(url).path.lower()
+        if "wav" in content_type or path.endswith(".wav"):
             audio_format = "wav"
-        elif "ogg" in content_type or url.endswith(".ogg"):
+        elif "ogg" in content_type or path.endswith(".ogg"):
             audio_format = "ogg"
         else:
             audio_format = "mp3"

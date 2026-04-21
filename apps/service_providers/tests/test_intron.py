@@ -118,8 +118,9 @@ def test_run_post_save_hook_returns_warning_on_seeding_failure(team_with_users):
         type=VoiceProviderType.intron,
         config={"intron_api_key": "test_key"},
     )
+    # Patch the bound name in models (where run_post_save_hook resolves it), not intron.
     with mock.patch(
-        "apps.service_providers.intron.build_synthetic_voices",
+        "apps.service_providers.models.build_synthetic_voices",
         side_effect=RuntimeError("boom"),
     ):
         warnings = provider.run_post_save_hook()
