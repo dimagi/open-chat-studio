@@ -70,7 +70,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/status/"]
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/status/?token=${HEALTH_CHECK_TOKENS:?HEALTH_CHECK_TOKENS is required}"]
       interval: 30s
       timeout: 10s
       retries: 3
