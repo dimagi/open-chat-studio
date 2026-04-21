@@ -109,14 +109,14 @@ CSRF_TRUSTED_ORIGINS=https://ocs.your-org,https://ocs.yourdomain.com
 2. Select **Self-hosted**
 3. Fill in the application details:
    - **Application name**: `Open Chat Studio`
-   - **Application domain**: `chat.yourdomain.com`
+   - **Application domain**: `ocs.yourdomain.com`
    - **Path**: leave blank (protects the whole domain)
 4. Under **Policies**, add a policy named `Team access`:
    - **Action**: `Allow`
    - **Include rule**: Emails ending in `@yourdomain.com` (or connect an identity provider such as Google Workspace, GitHub, or Okta under **Settings → Authentication**)
 5. Save the application
 
-Users visiting `chat.yourdomain.com` will now be redirected to a Cloudflare login page before reaching the app.
+Users visiting `ocs.yourdomain.com` will now be redirected to a Cloudflare login page before reaching the app.
 
 ### Part B: Add Bypass policies for webhooks
 
@@ -130,7 +130,7 @@ If your domain is registered with an external registrar (GoDaddy, Namecheap, Rou
 2. Choose the **Free** plan
 3. Cloudflare scans and imports your existing DNS records  review them to make sure nothing is missing
 4. Cloudflare gives you two nameserver addresses, for example:
-   ```
+   ```text
    aria.ns.cloudflare.com
    ben.ns.cloudflare.com
    ```
@@ -166,7 +166,7 @@ flowchart TD
     end
 
     subgraph CF["Cloudflare"]
-        HIT["Webhook hits ocs.your-org<br/>(TLS terminated by Cloudflare)"]
+        HIT["Webhook hits ocs.yourdomain.com<br/>(TLS terminated by Cloudflare)"]
         BYPASS["Bypass Policy<br/>(webhook paths — no WARP needed)"]
         HIT --> BYPASS
     end
@@ -351,8 +351,8 @@ The messaging platform is hitting the Access policy instead of the Bypass policy
 `DJANGO_ALLOWED_HOSTS` or `CSRF_TRUSTED_ORIGINS` in `.env.prod` does not include your Cloudflare hostname. Verify both are set:
 
 ```bash
-DJANGO_ALLOWED_HOSTS=chat.yourdomain.com
-CSRF_TRUSTED_ORIGINS=https://chat.yourdomain.com
+DJANGO_ALLOWED_HOSTS=ocs.your-org,ocs.yourdomain.com
+CSRF_TRUSTED_ORIGINS=https://ocs.your-org,https://ocs.yourdomain.com
 ```
 
 ### Cloudflare returns a 502 for all requests
