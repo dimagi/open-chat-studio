@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -14,9 +15,11 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.custom_actions.forms import CustomActionForm
-from apps.custom_actions.models import CustomAction, HealthCheckStatus
+from apps.custom_actions.models import CustomAction, CustomActionOperation, HealthCheckStatus
 from apps.custom_actions.tables import CustomActionTable
 from apps.custom_actions.tasks import check_single_custom_action_health
+from apps.experiments.models import Experiment
+from apps.generics.chips import Chip
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -92,12 +95,60 @@ class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Updat
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
 
+def _collect_live_working_versions(objs):
+    """Collapse an iterable of versioned objects to their unique, non-archived working versions."""
+    by_id = {}
+    for obj in objs:
+        live = obj.get_working_version()
+        if not live.is_archived:
+            by_id[live.id] = live
+    return list(by_id.values())
+
+
 class DeleteCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "custom_actions.delete_customaction"
 
     def delete(self, request, team_slug: str, pk: int):
-        consent_form = get_object_or_404(CustomAction, id=pk, team=request.team)
-        consent_form.delete()
+        custom_action = get_object_or_404(CustomAction, id=pk, team=request.team)
+
+        # ``CustomActionOperation.custom_action`` is CASCADE (unlike SET_NULL
+        # service-provider FKs), so we block while any live pipeline/assistant/
+        # experiment references the action. Archived references are allowed to
+        # cascade away.
+        operations = CustomActionOperation.objects.filter(custom_action=custom_action).select_related(
+            "node__pipeline__working_version", "assistant__working_version"
+        )
+        pipelines = _collect_live_working_versions(
+            op.node.pipeline for op in operations if op.node_id and op.node.pipeline_id
+        )
+        assistants = _collect_live_working_versions(op.assistant for op in operations if op.assistant_id)
+        experiments = []
+        if pipelines:
+            experiments = _collect_live_working_versions(
+                Experiment.objects.filter(pipeline__in=pipelines, is_archived=False).select_related("working_version")
+            )
+
+        if pipelines or assistants or experiments:
+            modal_html = render_to_string(
+                "custom_actions/referenced_objects_modal.html",
+                context={
+                    "object_name": "custom action",
+                    "pipeline_nodes": [Chip(label=p.name, url=p.get_absolute_url()) for p in pipelines],
+                    "experiments_with_pipeline_nodes": [
+                        Chip(label=e.name, url=e.get_absolute_url()) for e in experiments
+                    ],
+                    "assistants": [Chip(label=a.name, url=a.get_absolute_url()) for a in assistants],
+                },
+            )
+            # Retarget so the dialog is OOB-appended to <body> instead of swapping
+            # the table row with raw HTML. The dialog auto-opens via Alpine and
+            # removes itself on close.
+            response = HttpResponse(modal_html)
+            response["HX-Retarget"] = "body"
+            response["HX-Reswap"] = "beforeend"
+            return response
+
+        custom_action.delete()
         messages.success(request, "Custom Action Deleted")
         return HttpResponse()
 
