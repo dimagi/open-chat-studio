@@ -188,7 +188,8 @@ class CreateServiceProvider(
             instance.add_files(files)
         if isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value:
             try:
-                instance.sync_voices()
+                with transaction.atomic():
+                    instance.sync_voices()
             except Exception:
                 log.exception("Failed to sync voices for ElevenLabs provider %s", instance.pk)
                 messages.warning(
