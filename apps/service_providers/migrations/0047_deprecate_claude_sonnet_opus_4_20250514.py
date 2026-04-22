@@ -10,6 +10,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Mark claude-sonnet-4-20250514 and claude-opus-4-20250514 as deprecated in the DB
         llm_model_migration(),
-        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
+        # Notify affected teams about the deprecation and recommended replacements
+        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]
