@@ -7,6 +7,7 @@ from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
+    EvaluationMode,
     EvaluationRun,
     Evaluator,
     ExperimentVersionSelection,
@@ -184,7 +185,14 @@ class EvaluationDatasetTable(tables.Table):
         },
         orderable=True,
     )
-    message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
+    items = columns.Column(accessor="message_count", verbose_name="Items", orderable=False)
+
+    def render_items(self, value, record):
+        label = "session" if record.evaluation_mode == EvaluationMode.SESSION else "message"
+        if value != 1:
+            label += "s"
+        return f"{value} {label}"
+
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:dataset_edit"),
@@ -208,7 +216,7 @@ class EvaluationDatasetTable(tables.Table):
         model = EvaluationDataset
         fields = (
             "name",
-            "message_count",
+            "items",
             "actions",
         )
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
@@ -243,6 +251,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         template_name="evaluations/session_checkbox.html",
         verbose_name="Filtered",
         orderable=False,
+        attrs={"th": {"class": "col-filtered-only"}, "td": {"class": "col-filtered-only"}},
         extra_context={
             "css_class": "checkbox checkbox-secondary filter-checkbox",
             "js_function": "updateFilteredSessions()",
@@ -353,10 +362,13 @@ class DatasetMessagesTable(tables.Table):
         ]
     )
 
-    def __init__(self, *args, highlight_message_id=None, dataset_id=None, **kwargs):
+    def __init__(self, *args, highlight_message_id=None, dataset_id=None, evaluation_mode=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.highlight_message_id = highlight_message_id
         self.dataset_id = dataset_id
+        if evaluation_mode == EvaluationMode.SESSION:
+            self.columns.hide("human_message_content")
+            self.columns.hide("ai_message_content")
 
     class Meta:
         model = EvaluationMessage
