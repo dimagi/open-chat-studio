@@ -1430,6 +1430,7 @@ components:
       - commcare_connect
       - evaluations
       - embedded_widget
+      - email
       type: string
       description: |-
         * `telegram` - Telegram
@@ -1442,6 +1443,7 @@ components:
         * `commcare_connect` - CommCare Connect
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
+        * `email` - Email
     SessionStatusEnum:
       enum:
       - active
