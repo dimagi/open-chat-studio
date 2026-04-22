@@ -50,7 +50,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
-        Model("claude-opus-4-6", k(200), parameters=ClaudeOpus46Parameters),
+        Model("claude-opus-4-6", k(200), is_translation_default=True, parameters=ClaudeOpus46Parameters),
         Model("claude-sonnet-4-6", k(200), is_default=True, parameters=ClaudeSonnet46Parameters),
         Model("claude-sonnet-4-5-20250929", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
@@ -65,9 +65,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model(
             "claude-opus-4-20250514",
             k(200),
-            is_translation_default=True,
             deprecated=True,
-            replacement="claude-opus-4-6",
+            replacement="claude-opus-4-7",
             parameters=ClaudeOpus4_20250514Parameters,
         ),
         Model("claude-3-7-sonnet-20250219", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
