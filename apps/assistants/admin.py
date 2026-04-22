@@ -2,14 +2,15 @@ from django.contrib import admin
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.experiments.admin import VersionedModelAdminMixin
+from apps.utils.admin import ReadonlyAdminMixin
 
 
-class ToolResourcesAdmin(admin.TabularInline):
+class ToolResourcesAdmin(ReadonlyAdminMixin, admin.TabularInline):
     model = ToolResources
 
 
 @admin.register(OpenAiAssistant)
-class OpenAiAssistantAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class OpenAiAssistantAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "team",
