@@ -93,6 +93,7 @@ class AnnotationItemFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         AnnotationItemStatusFilter(),
         ReviewerFilter(),
+        SessionIdFilter(columns=["session__external_id"]),
     ]
 
 
