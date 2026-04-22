@@ -1,11 +1,14 @@
 from unittest.mock import MagicMock
 
 import pytest
+from django.core import mail
 
+from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.datamodels import EmailMessage
-from apps.channels.email import get_email_experiment_channel
+from apps.channels.email import EmailChannel, EmailSender, get_email_experiment_channel
 from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession, Participant
 from apps.utils.factories.experiment import ExperimentFactory
@@ -249,3 +252,93 @@ class TestEmailRouting:
         )
         assert result_channel is None
         assert result_session is None
+
+
+class TestEmailSender:
+    def test_send_text_new_conversation(self):
+        """First message in a conversation — no threading headers."""
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+        )
+        sender.send_text("Hello!", "user@example.com")
+
+        assert len(mail.outbox) == 1
+        sent = mail.outbox[0]
+        assert sent.body == "Hello!"
+        assert sent.from_email == "bot@chat.openchatstudio.com"
+        assert sent.to == ["user@example.com"]
+        assert "Message-ID" in sent.extra_headers
+
+    def test_send_text_threaded_reply(self):
+        """Reply to an existing thread — sets In-Reply-To and References."""
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            subject="Re: Help request",
+            in_reply_to="<inbound123@example.com>",
+            references=["<root@chat.openchatstudio.com>", "<inbound123@example.com>"],
+        )
+        sender.send_text("Here's the answer", "user@example.com")
+
+        assert len(mail.outbox) == 1
+        sent = mail.outbox[0]
+        assert sent.subject == "Re: Help request"
+        assert sent.extra_headers["In-Reply-To"] == "<inbound123@example.com>"
+        assert "<root@chat.openchatstudio.com>" in sent.extra_headers["References"]
+
+    def test_last_message_id_captured(self):
+        """After sending, last_message_id holds the outbound Message-ID."""
+
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+        )
+        sender.send_text("Test", "user@example.com")
+
+        assert sender.last_message_id is not None
+        assert sender.last_message_id.startswith("<")
+        assert sender.last_message_id.endswith(">")
+
+
+class TestEmailChannel:
+    def test_capabilities(self):
+        """EmailChannel should have text-only capabilities, no voice, no consent."""
+
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {
+            "email_address": "bot@chat.openchatstudio.com",
+            "from_address": "bot@chat.openchatstudio.com",
+        }
+        experiment_mock = MagicMock()
+
+        email_channel = EmailChannel(experiment_mock, channel_mock)
+        caps = email_channel._get_capabilities()
+
+        assert caps.supports_voice_replies is False
+        assert caps.supports_files is False
+        assert caps.supports_conversational_consent is False
+        assert caps.supports_static_triggers is True
+        assert MESSAGE_TYPES.TEXT in caps.supported_message_types
+
+    def test_get_sender_returns_email_sender(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {
+            "email_address": "bot@chat.openchatstudio.com",
+        }
+        experiment_mock = MagicMock()
+
+        email_channel = EmailChannel(experiment_mock, channel_mock)
+        sender = email_channel._get_sender()
+
+        assert isinstance(sender, EmailSender)
+
+    def test_get_callbacks_returns_noop(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {}
+        experiment_mock = MagicMock()
+
+        email_channel = EmailChannel(experiment_mock, channel_mock)
+        callbacks = email_channel._get_callbacks()
+
+        assert isinstance(callbacks, ChannelCallbacks)
