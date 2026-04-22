@@ -538,6 +538,8 @@ def test_all_channels_can_be_instantiated_from_a_session(platform, twilio_provid
     """
     if platform == ChannelPlatform.EVALUATIONS:
         pytest.skip("Evaluations channel can't be instantiated from a session")
+    if platform == ChannelPlatform.EMAIL:
+        pytest.skip("Email channel class not yet implemented")
     session = ExperimentSessionFactory.create(experiment_channel__platform=platform)
     ParticipantData.objects.create(
         team=session.team,
