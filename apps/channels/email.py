@@ -83,6 +83,7 @@ def get_email_experiment_channel(
     base_filters = {
         "platform": ChannelPlatform.EMAIL,
         "experiment__is_archived": False,
+        "deleted": False,
     }
 
     # Priority 2: To-address match
@@ -251,6 +252,17 @@ def email_inbound_handler(sender, message, event, **kwargs):
         email_msg = EmailMessageDatamodel.parse(message)
     except Exception:
         logger.exception("Failed to parse inbound email")
+        return
+
+    # Quick check: does any email channel exist for this to-address?
+    # Full routing (including thread lookup) happens in the Celery task.
+    has_channel = ExperimentChannel.objects.filter(
+        platform=ChannelPlatform.EMAIL,
+        extra_data__contains={"email_address": email_msg.to_address},
+        deleted=False,
+    ).exists()
+    if not has_channel:
+        logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
         return
 
     handle_email_message.delay(email_data=email_msg.model_dump())

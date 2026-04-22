@@ -439,7 +439,14 @@ class TestHandleEmailMessageTask:
 
 @pytest.mark.django_db()
 class TestEmailInboundHandler:
-    def test_enqueues_task(self):
+    def test_enqueues_task(self, team_with_users):
+        team = team_with_users
+        ExperimentChannelFactory(
+            experiment=ExperimentFactory(team=team),
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
         inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
@@ -448,6 +455,15 @@ class TestEmailInboundHandler:
             mock_task.delay.assert_called_once()
             call_kwargs = mock_task.delay.call_args[1]
             assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
+
+    def test_no_channel_silently_ignored(self):
+        """Unmatched email is silently ignored (no bounce loop)."""
+        inbound = _make_inbound_message(to_email="unknown@nowhere.com")
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            mock_task.delay.assert_not_called()
 
     def test_spam_detected_discarded(self):
         inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com", spam_detected=True)
