@@ -4,6 +4,7 @@ import pytest
 from django.core import mail
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
+from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.datamodels import EmailMessage
 from apps.channels.email import EmailChannel, EmailSender, email_inbound_handler, get_email_experiment_channel
 from apps.channels.forms import EmailChannelForm
@@ -432,3 +433,59 @@ class TestEmailInboundHandler:
             mock_task.delay = MagicMock()
             email_inbound_handler(sender=None, message=inbound, event=MagicMock())
             mock_task.delay.assert_not_called()
+
+
+class TestEmailSessionThreading:
+    def test_sender_captures_message_id(self):
+        """After sending, last_message_id holds the outbound Message-ID."""
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+        )
+        sender.send_text("Hello!", "user@example.com")
+
+        assert sender.last_message_id is not None
+        assert "@chat.openchatstudio.com>" in sender.last_message_id
+
+    def test_new_user_message_updates_session_external_id(self):
+        """EmailChannel.new_user_message updates session.external_id with outbound Message-ID."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.external_id = "some-uuid-default"
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+
+        # Mock the sender to have a last_message_id after pipeline runs
+        mock_sender = MagicMock(spec=EmailSender)
+        mock_sender.last_message_id = "<outbound1@chat.openchatstudio.com>"
+        email_channel._sender_instance = mock_sender
+
+        # Mock super().new_user_message to just return a response
+        with patch.object(ChannelBase, "new_user_message", return_value=MagicMock()):
+            email_channel.new_user_message(MagicMock())
+
+        assert session_mock.external_id == "<outbound1@chat.openchatstudio.com>"
+        session_mock.save.assert_called_once_with(update_fields=["external_id"])
+
+    def test_does_not_overwrite_email_message_id(self):
+        """If external_id already starts with '<', it's an email Message-ID — don't overwrite."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.external_id = "<already-set@chat.openchatstudio.com>"
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+
+        mock_sender = MagicMock(spec=EmailSender)
+        mock_sender.last_message_id = "<new-id@chat.openchatstudio.com>"
+        email_channel._sender_instance = mock_sender
+
+        with patch.object(ChannelBase, "new_user_message", return_value=MagicMock()):
+            email_channel.new_user_message(MagicMock())
+
+        # Should NOT overwrite — external_id already starts with '<'
+        assert session_mock.external_id == "<already-set@chat.openchatstudio.com>"
+        session_mock.save.assert_not_called()

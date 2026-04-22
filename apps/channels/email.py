@@ -168,6 +168,20 @@ class EmailChannel(ChannelBase):
             supported_message_types=self.supported_message_types,
         )
 
+    def new_user_message(self, message):
+        response = super().new_user_message(message)
+
+        # After pipeline: capture outbound Message-ID for thread continuity.
+        # The session's external_id defaults to a UUID. If the sender produced
+        # a Message-ID, store it so future In-Reply-To lookups find this session.
+        if self.experiment_session and self._sender_instance:
+            msg_id = self._sender_instance.last_message_id
+            if msg_id and not str(self.experiment_session.external_id).startswith("<"):
+                self.experiment_session.external_id = msg_id  # ty: ignore[invalid-assignment]
+                self.experiment_session.save(update_fields=["external_id"])
+
+        return response
+
 
 def email_inbound_handler(sender, message, event, **kwargs):
     """Handle inbound email from anymail's inbound signal.
