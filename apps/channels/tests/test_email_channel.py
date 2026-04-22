@@ -1,6 +1,9 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 from apps.channels.datamodels import EmailMessage
+from apps.channels.forms import EmailChannelForm
 
 
 def _make_inbound_message(
@@ -83,3 +86,46 @@ class TestEmailMessageParse:
         inbound = _make_inbound_message(text="Just a simple message")
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
+
+
+@pytest.mark.django_db()
+class TestEmailChannelForm:
+    def test_valid_form(self, experiment):
+        form = EmailChannelForm(
+            experiment=experiment,
+            data={
+                "email_address": "support@chat.openchatstudio.com",
+                "platform": "email",
+            },
+        )
+        assert form.is_valid(), form.errors
+
+    def test_email_address_required(self, experiment):
+        form = EmailChannelForm(
+            experiment=experiment,
+            data={"platform": "email"},
+        )
+        assert not form.is_valid()
+        assert "email_address" in form.errors
+
+    def test_from_address_optional(self, experiment):
+        form = EmailChannelForm(
+            experiment=experiment,
+            data={
+                "email_address": "support@chat.openchatstudio.com",
+                "platform": "email",
+            },
+        )
+        assert form.is_valid()
+        assert form.cleaned_data.get("from_address", "") == ""
+
+    def test_is_default_defaults_to_false(self, experiment):
+        form = EmailChannelForm(
+            experiment=experiment,
+            data={
+                "email_address": "support@chat.openchatstudio.com",
+                "platform": "email",
+            },
+        )
+        assert form.is_valid()
+        assert form.cleaned_data["is_default"] is False

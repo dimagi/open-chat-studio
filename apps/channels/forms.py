@@ -655,3 +655,22 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
 
     def post_save(self, channel: ExperimentChannel):
         self.success_message = "Channel saved successfully"
+
+
+class EmailChannelForm(ExtraFormBase):
+    email_address = forms.EmailField(
+        label="Email Address",
+        help_text=(
+            "The email address that will receive messages for this channel (e.g., support@chat.openchatstudio.com)"
+        ),
+    )
+    from_address = forms.EmailField(
+        label="From Address",
+        required=False,
+        help_text="Optional: override the From address on outbound replies. Defaults to the system email.",
+    )
+    is_default = forms.BooleanField(
+        label="Default fallback channel",
+        required=False,
+        help_text="When enabled, this channel receives emails that don't match any other email channel address.",
+    )
