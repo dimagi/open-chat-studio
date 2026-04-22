@@ -270,3 +270,42 @@ class SlackMessage(BaseMessage):
     channel_id: str
     thread_ts: str
     message_text: str
+
+
+class EmailMessage(BaseMessage):
+    """Inbound email parsed from AnymailInboundMessage."""
+
+    from_address: str
+    to_address: str
+    subject: str
+    message_id: str
+    in_reply_to: str | None = None
+    references: list[str] = Field(default=[])
+
+    @staticmethod
+    def parse(inbound) -> "EmailMessage":
+        from mailparser_reply import (  # noqa: PLC0415 - optional dependency only needed for email channels
+            EmailReplyParser,
+        )
+
+        body = inbound.text or ""
+        reply = EmailReplyParser(languages=["en"]).read(body)
+        stripped_text = reply.latest_reply or body
+
+        return EmailMessage(
+            participant_id=inbound.from_email.addr_spec,
+            message_text=stripped_text,
+            from_address=inbound.from_email.addr_spec,
+            to_address=inbound.to[0].addr_spec if inbound.to else "",
+            subject=inbound.subject or "",
+            message_id=inbound.get("Message-ID", ""),
+            in_reply_to=inbound.get("In-Reply-To"),
+            references=_parse_references(inbound.get("References", "")),
+        )
+
+
+def _parse_references(refs: str) -> list[str]:
+    """Parse space-separated Message-ID list from References header."""
+    if not refs:
+        return []
+    return [r.strip() for r in refs.split() if r.strip()]
