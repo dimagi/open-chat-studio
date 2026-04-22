@@ -3,7 +3,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from apps.channels.datamodels import EmailMessage
+from apps.channels.email import get_email_experiment_channel
 from apps.channels.forms import EmailChannelForm
+from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.models import Chat
+from apps.experiments.models import ExperimentSession, Participant
+from apps.utils.factories.experiment import ExperimentFactory
 
 
 def _make_inbound_message(
@@ -129,3 +134,118 @@ class TestEmailChannelForm:
         )
         assert form.is_valid()
         assert form.cleaned_data["is_default"] is False
+
+
+@pytest.mark.django_db()
+class TestEmailRouting:
+    def _make_channel(self, team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
+        """Helper to create an email ExperimentChannel."""
+        if experiment is None:
+            experiment = ExperimentFactory(team=team)
+        extra = {"email_address": email_address}
+        if is_default:
+            extra["is_default"] = True
+        return ExperimentChannel.objects.create(
+            team=team,
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data=extra,
+            name=f"email-{email_address}",
+        )
+
+    def _make_session(self, team, channel, external_id, participant_email="user@example.com"):
+        """Helper to create a session with the required related objects."""
+        participant, _ = Participant.objects.get_or_create(
+            team=team,
+            identifier=participant_email,
+            platform=ChannelPlatform.EMAIL,
+        )
+        chat = Chat.objects.create(team=team, name="test chat")
+        return ExperimentSession.objects.create(
+            team=team,
+            experiment=channel.experiment,
+            experiment_channel=channel,
+            external_id=external_id,
+            participant=participant,
+            chat=chat,
+        )
+
+    def test_priority_1_in_reply_to_match(self, team_with_users):
+        team = team_with_users
+        channel = self._make_channel(team)
+        session = self._make_session(team, channel, "<abc123@chat.openchatstudio.com>")
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to="<abc123@chat.openchatstudio.com>",
+            references=[],
+            to_address="bot@chat.openchatstudio.com",
+            team=team,
+        )
+        assert result_channel == channel
+        assert result_session == session
+
+    def test_priority_1b_references_fallback(self, team_with_users):
+        team = team_with_users
+        channel = self._make_channel(team)
+        session = self._make_session(team, channel, "<root@chat.openchatstudio.com>")
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to="<nonexistent@example.com>",
+            references=["<root@chat.openchatstudio.com>", "<reply1@example.com>"],
+            to_address="bot@chat.openchatstudio.com",
+            team=team,
+        )
+        assert result_channel == channel
+        assert result_session == session
+
+    def test_priority_2_to_address_match(self, team_with_users):
+        team = team_with_users
+        channel = self._make_channel(team, email_address="support@chat.openchatstudio.com")
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to=None,
+            references=[],
+            to_address="support@chat.openchatstudio.com",
+            team=team,
+        )
+        assert result_channel == channel
+        assert result_session is None
+
+    def test_priority_3_default_fallback(self, team_with_users):
+        team = team_with_users
+        channel = self._make_channel(team, email_address="default@chat.openchatstudio.com", is_default=True)
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to=None,
+            references=[],
+            to_address="unknown@chat.openchatstudio.com",
+            team=team,
+        )
+        assert result_channel == channel
+        assert result_session is None
+
+    def test_priority_4_no_match(self, team_with_users):
+        team = team_with_users
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to=None,
+            references=[],
+            to_address="unknown@chat.openchatstudio.com",
+            team=team,
+        )
+        assert result_channel is None
+        assert result_session is None
+
+    def test_no_default_fallback_without_team(self, team_with_users):
+        """Default fallback requires team to be specified."""
+        team = team_with_users
+        self._make_channel(team, is_default=True)
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to=None,
+            references=[],
+            to_address="unknown@chat.openchatstudio.com",
+            team=None,
+        )
+        assert result_channel is None
+        assert result_session is None
