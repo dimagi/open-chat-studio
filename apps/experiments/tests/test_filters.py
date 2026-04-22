@@ -349,6 +349,33 @@ class TestExperimentSessionFilters:
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.participant.remote_id != test_id for s in filtered)
 
+    def test_session_id_filters(self, sessions_with_statuses):
+        sessions = sessions_with_statuses
+        session_queryset = sessions[0].experiment.sessions.all()
+        target = sessions[0]
+        target_external_id = str(target.external_id)
+
+        params = {
+            "filter_0_column": "session_id",
+            "filter_0_operator": Operators.EQUALS,
+            "filter_0_value": target_external_id,
+        }
+        session_filter = ExperimentSessionFilter()
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
+        assert list(filtered) == [target]
+
+        params["filter_0_operator"] = Operators.STARTS_WITH
+        params["filter_0_value"] = target_external_id[:8]
+        session_filter = ExperimentSessionFilter()
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
+        assert target in filtered
+
+        params["filter_0_operator"] = Operators.DOES_NOT_CONTAIN
+        params["filter_0_value"] = target_external_id
+        session_filter = ExperimentSessionFilter()
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
+        assert target not in filtered
+
 
 @pytest.mark.django_db()
 class TestParticipantFilter:
