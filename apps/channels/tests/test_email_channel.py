@@ -489,3 +489,77 @@ class TestEmailSessionThreading:
         # Should NOT overwrite — external_id already starts with '<'
         assert session_mock.external_id == "<already-set@chat.openchatstudio.com>"
         session_mock.save.assert_not_called()
+
+
+@pytest.mark.django_db()
+class TestEmailEndToEnd:
+    def _make_channel(self, team, email_address="bot@chat.openchatstudio.com"):
+        experiment = ExperimentFactory(team=team)
+        return ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": email_address},
+            team=team,
+        )
+
+    def test_signal_to_task_dispatch(self, team_with_users):
+        """Verify the full signal -> route -> task dispatch flow."""
+        team = team_with_users
+        channel = self._make_channel(team)
+
+        inbound = _make_inbound_message(
+            from_email="user@example.com",
+            to_email="bot@chat.openchatstudio.com",
+            subject="Need help",
+            text="Can you help me?",
+            message_id="<user-msg-1@example.com>",
+        )
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+
+            mock_task.delay.assert_called_once()
+            call_kwargs = mock_task.delay.call_args[1]
+            assert call_kwargs["channel_id"] == channel.id
+            assert call_kwargs["session_id"] is None
+            assert call_kwargs["email_data"]["participant_id"] == "user@example.com"
+            assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
+
+    def test_reply_routes_to_existing_session(self, team_with_users):
+        """A reply email with In-Reply-To routes to the existing session."""
+        team = team_with_users
+        channel = self._make_channel(team)
+        participant, _ = Participant.objects.get_or_create(
+            team=team,
+            identifier="user@example.com",
+            platform=ChannelPlatform.EMAIL,
+        )
+        chat = Chat.objects.create(team=team, name="test chat")
+        session = ExperimentSession.objects.create(
+            team=team,
+            experiment=channel.experiment,
+            experiment_channel=channel,
+            external_id="<outbound-1@chat.openchatstudio.com>",
+            participant=participant,
+            chat=chat,
+        )
+
+        inbound = _make_inbound_message(
+            from_email="user@example.com",
+            to_email="bot@chat.openchatstudio.com",
+            subject="Re: Need help",
+            text="Thanks for the info",
+            message_id="<user-msg-2@example.com>",
+            in_reply_to="<outbound-1@chat.openchatstudio.com>",
+            references="<outbound-1@chat.openchatstudio.com>",
+        )
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+
+            mock_task.delay.assert_called_once()
+            call_kwargs = mock_task.delay.call_args[1]
+            assert call_kwargs["channel_id"] == channel.id
+            assert call_kwargs["session_id"] == session.id
