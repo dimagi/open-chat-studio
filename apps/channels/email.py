@@ -167,3 +167,36 @@ class EmailChannel(ChannelBase):
             supports_static_triggers=True,
             supported_message_types=self.supported_message_types,
         )
+
+
+def email_inbound_handler(sender, message, event, **kwargs):
+    """Handle inbound email from anymail's inbound signal.
+
+    Parses the email, routes it, and enqueues a Celery task.
+    Returns immediately so the ESP gets a fast 200 OK.
+    """
+    from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
+    from apps.channels.tasks import handle_email_message  # noqa: PLC0415
+
+    try:
+        email_msg = EmailMessageDatamodel.parse(message)
+    except Exception:
+        logger.exception("Failed to parse inbound email")
+        return
+
+    experiment_channel, session = get_email_experiment_channel(
+        in_reply_to=email_msg.in_reply_to,
+        references=email_msg.references,
+        to_address=email_msg.to_address,
+        team=None,
+    )
+
+    if not experiment_channel:
+        logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
+        return
+
+    handle_email_message.delay(
+        email_data=email_msg.model_dump(),
+        channel_id=experiment_channel.id,
+        session_id=session.id if session else None,
+    )

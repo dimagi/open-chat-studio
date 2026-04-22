@@ -1,16 +1,18 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core import mail
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.datamodels import EmailMessage
-from apps.channels.email import EmailChannel, EmailSender, get_email_experiment_channel
+from apps.channels.email import EmailChannel, EmailSender, email_inbound_handler, get_email_experiment_channel
 from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession, Participant
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 
 
@@ -342,3 +344,91 @@ class TestEmailChannel:
         callbacks = email_channel._get_callbacks()
 
         assert isinstance(callbacks, ChannelCallbacks)
+
+
+@pytest.mark.django_db()
+class TestHandleEmailMessageTask:
+    def test_routes_and_processes_message(self, team_with_users):
+        """Integration test: task finds channel and processes the message."""
+        team = team_with_users
+        experiment = ExperimentFactory(team=team)
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+
+        email_data = {
+            "participant_id": "sender@example.com",
+            "message_text": "Hello bot",
+            "from_address": "sender@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Test",
+            "message_id": "<msg1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+        }
+
+        with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            handle_email_message(
+                email_data=email_data,
+                channel_id=channel.id,
+                session_id=None,
+            )
+            MockEmailChannel.assert_called_once()
+            mock_instance.new_user_message.assert_called_once()
+
+    def test_no_channel_logs_and_returns(self):
+        """Task with nonexistent channel_id just logs and returns."""
+        email_data = {
+            "participant_id": "sender@example.com",
+            "message_text": "Hello",
+            "from_address": "sender@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Test",
+            "message_id": "<msg1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+        }
+        # Should not raise
+        handle_email_message(
+            email_data=email_data,
+            channel_id=999999,
+            session_id=None,
+        )
+
+
+@pytest.mark.django_db()
+class TestEmailInboundHandler:
+    def test_routes_and_enqueues_task(self, team_with_users):
+        """Signal handler finds channel and enqueues the celery task."""
+        team = team_with_users
+        experiment = ExperimentFactory(team=team)
+        ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+
+        inbound = _make_inbound_message(
+            to_email="bot@chat.openchatstudio.com",
+        )
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            mock_task.delay.assert_called_once()
+
+    def test_no_match_silently_ignored(self):
+        """Unmatched email is silently ignored (no bounce loop)."""
+        inbound = _make_inbound_message(
+            to_email="unknown@nowhere.com",
+        )
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            mock_task.delay.assert_not_called()

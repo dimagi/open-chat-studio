@@ -405,6 +405,7 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 # see https://github.com/anymail/django-anymail for more details/examples
 # EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
 EMAIL_CHANNEL_DOMAIN = env("EMAIL_CHANNEL_DOMAIN", default="chat.openchatstudio.com")
+ANYMAIL_INBOUND_SECRET = env("ANYMAIL_INBOUND_SECRET", default=None)
 
 # Django sites
 
