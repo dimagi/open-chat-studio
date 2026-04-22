@@ -118,7 +118,7 @@
               </div>
             </div>
 
-            <div id="sessions-table" class="overflow-x-auto w-full" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
+            <div id="sessions-table" class="overflow-x-auto w-full{% if object.evaluation_mode == 'session' %} session-mode-active{% endif %}" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
               {% include "table/table_placeholder.html" %}
             </div>
           </div>

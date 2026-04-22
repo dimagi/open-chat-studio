@@ -212,7 +212,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         return context
 
     def get_success_url(self):
-        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+        return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
