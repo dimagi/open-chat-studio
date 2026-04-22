@@ -10,13 +10,11 @@ from django.db import transaction
 from django.db.models import QuerySet, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
-from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
@@ -40,6 +38,7 @@ from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
+from ..generics.referenced_objects import render_referenced_objects_modal
 from ..utils.prompt import PromptVars
 
 
@@ -138,16 +137,11 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 for experiment in Experiment.objects.filter(id__in=Subquery(query)).all()
             ]
 
-            response = render_to_string(
-                "generic/referenced_objects.html",
-                context={
-                    "object_name": "pipeline",
-                    "experiments": experiments,
-                    "static_trigger_experiments": static_trigger_experiments,
-                },
+            return render_referenced_objects_modal(
+                "pipeline",
+                experiments=experiments,
+                static_trigger_experiments=static_trigger_experiments,
             )
-
-        return reswap(HttpResponse(response, status=400), "none")
 
 
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
@@ -293,7 +287,6 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
 
