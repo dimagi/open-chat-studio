@@ -1,9 +1,11 @@
 from django.contrib import admin
 from field_audit.models import AuditEvent
 
+from apps.utils.admin import ReadonlyAdminMixin
+
 
 @admin.register(AuditEvent)
-class AuditEventAdmin(admin.ModelAdmin):
+class AuditEventAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = [
         "event_date",
         "object_class_path",
