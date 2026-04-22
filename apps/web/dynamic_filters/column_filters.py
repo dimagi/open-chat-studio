@@ -75,6 +75,9 @@ class SessionIdFilter(StringColumnFilter):
     label: str = "Session ID"
     description: str = "Filter by the session's external ID (UUID)"
 
+    def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
+        return self._apply_with_lookup(queryset, "iexact", value)
+
 
 class TimestampFilter(ColumnFilter):
     type: str = TYPE_TIMESTAMP

@@ -364,6 +364,12 @@ class TestExperimentSessionFilters:
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [target]
 
+        params["filter_0_operator"] = Operators.EQUALS
+        params["filter_0_value"] = target_external_id.upper()
+        session_filter = ExperimentSessionFilter()
+        filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
+        assert list(filtered) == [target], "EQUALS should be case-insensitive"
+
         params["filter_0_operator"] = Operators.STARTS_WITH
         params["filter_0_value"] = target_external_id[:8]
         session_filter = ExperimentSessionFilter()
