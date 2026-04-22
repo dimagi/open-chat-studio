@@ -49,6 +49,7 @@ from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.deletion import is_bulk_archiveable
 from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
@@ -605,10 +606,6 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
             messages.success(request, "Collection deleted")
             return HttpResponse()
         else:
-            # Find and show references.
-            # For working versions, the Pipelines.
-            # For versions, the experiments
-
             pipeline_node_chips = [
                 Chip(
                     label=node.pipeline.name,
@@ -616,25 +613,34 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                 )
                 for node in collection.get_related_nodes_queryset()
             ]
-            experiment_chips = []
-            for version in collection.versions.all():
-                if experiments := version.get_related_experiments_queryset():
-                    experiment_chips.extend(
-                        [
-                            Chip(
-                                label=f"{experiment.name} {experiment.get_version_name()} [published]",
-                                url=experiment.get_absolute_url(),
-                            )
-                            for experiment in experiments
-                        ]
-                    )
-
+            all_experiments = list(collection.get_related_experiments_queryset())
+            manual_experiments = [
+                Chip(
+                    label=(
+                        f"{e.name} [{e.get_version_name()}]"
+                        if e.is_working_version
+                        else f"{e.name} {e.get_version_name()} [published]"
+                    ),
+                    url=e.get_absolute_url(),
+                )
+                for e in all_experiments
+                if not is_bulk_archiveable(e)
+            ]
+            bulk_archiveable_experiments = [
+                Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
+                for e in all_experiments
+                if is_bulk_archiveable(e)
+            ]
             response = render_to_string(
                 "generic/referenced_objects.html",
+                request=request,
                 context={
                     "object_name": "collection",
                     "pipeline_nodes": pipeline_node_chips,
-                    "experiments_with_pipeline_nodes": experiment_chips,
+                    "experiments_with_pipeline_nodes": manual_experiments,
+                    "bulk_archiveable_experiments": bulk_archiveable_experiments,
+                    "bulk_archiveable_ids": [e.id for e in all_experiments if is_bulk_archiveable(e)],
+                    "bulk_archive_url": reverse("experiments:bulk_archive_versions", args=[team_slug]),
                 },
             )
             return reswap(HttpResponse(response, status=400), "none")

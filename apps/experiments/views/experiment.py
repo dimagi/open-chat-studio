@@ -912,6 +912,32 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
 @require_POST
 @transaction.atomic
 @login_and_team_required
+def bulk_archive_experiment_versions(request, team_slug: str):
+    """
+    Archives multiple non-working, non-published experiment versions by ID.
+    Used from the "Cannot delete" modal to clear bulk-archiveable references.
+    """
+    version_ids = request.POST.getlist("version_ids")
+    if not version_ids:
+        return HttpResponse(status=400)
+    experiments = list(
+        Experiment.objects.get_all().filter(
+            id__in=version_ids,
+            team=request.team,
+            working_version_id__isnull=False,
+            is_default_version=False,
+            is_archived=False,
+        )
+    )
+    for experiment in experiments:
+        experiment.archive()
+    messages.success(request, f"Archived {len(experiments)} experiment version(s).")
+    return HttpResponse(headers={"HX-Refresh": "true"})
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
 def update_version_description(request, team_slug: str, experiment_id: int, version_number: int):
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team

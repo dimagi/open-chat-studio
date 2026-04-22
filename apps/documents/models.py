@@ -254,20 +254,15 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         """
-        Get all experiments that reference this collection through a pipeline. This includes both published and working
-        experiments. When check_versions is True, it will return all experiments that reference any version of this
-        collection.
+        Get all non-archived experiments that reference this collection through a pipeline.
+        This includes working versions, published versions, and all other non-archived versions.
         """
         # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
         ids = list(self.versions.values_list("id", flat=True)) + [self.id]
 
-        index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids").filter(
-            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
-        )
-        collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id").filter(
-            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
-        )
-        return index_references | collection_references
+        index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids")
+        collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id")
+        return (index_references | collection_references).filter(is_archived=False)
 
     @transaction.atomic()
     def archive(self):

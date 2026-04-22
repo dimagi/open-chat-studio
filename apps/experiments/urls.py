@@ -47,6 +47,11 @@ urlpatterns = [
         name="archive-experiment",
     ),
     path(
+        "versions/bulk-archive/",
+        views.bulk_archive_experiment_versions,
+        name="bulk_archive_versions",
+    ),
+    path(
         "e/<int:experiment_id>/versions/set_default/<int:version_number>/",
         views.set_default_experiment,
         name="set-default-experiment",

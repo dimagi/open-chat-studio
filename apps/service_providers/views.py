@@ -27,7 +27,7 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
-from apps.utils.deletion import get_related_objects
+from apps.utils.deletion import get_related_objects, is_blocking_object, is_bulk_archiveable
 
 from ..generics.chips import Chip
 from ..generics.views import BaseTypeSelectFormView
@@ -60,10 +60,6 @@ class ServiceProviderTableView(
         return self.provider_type.table
 
 
-def matches_blocking_deletion_condition(obj):
-    return (getattr(obj, "working_version_id", None) is None) or (getattr(obj, "is_default_version", False) is True)
-
-
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
@@ -73,28 +69,40 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     related_objects = get_related_objects(service_config)
 
-    if related_objects:
-        filtered_objects = [obj for obj in related_objects if matches_blocking_deletion_condition(obj)]
-        related_experiments = [
+    blocking_objects = [obj for obj in related_objects if is_blocking_object(obj)]
+    if blocking_objects:
+        experiment_objects = [obj for obj in blocking_objects if isinstance(obj, Experiment)]
+        assistant_objects = [obj for obj in blocking_objects if isinstance(obj, OpenAiAssistant)]
+
+        manual_experiments = [
             Chip(
                 label=(
-                    f"{experiment.name} [{experiment.get_version_name()}]"
-                    if experiment.is_working_version
-                    else f"{experiment.name} {experiment.get_version_name()} [published]"
+                    f"{e.name} [{e.get_version_name()}]"
+                    if e.is_working_version
+                    else f"{e.name} {e.get_version_name()} [published]"
                 ),
-                url=experiment.get_absolute_url(),
+                url=e.get_absolute_url(),
             )
-            for experiment in [obj for obj in filtered_objects if isinstance(obj, Experiment)]
+            for e in experiment_objects
+            if not is_bulk_archiveable(e)
+        ]
+        bulk_archiveable_experiments = [
+            Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
+            for e in experiment_objects
+            if is_bulk_archiveable(e)
         ]
         related_assistants = [
-            Chip(label=assistant.name, url=assistant.get_absolute_url())
-            for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
+            Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in assistant_objects
         ]
         response = render_to_string(
             "generic/referenced_objects.html",
+            request=request,
             context={
                 "object_name": "service provider",
-                "experiments": related_experiments,
+                "experiments": manual_experiments,
+                "bulk_archiveable_experiments": bulk_archiveable_experiments,
+                "bulk_archiveable_ids": [e.id for e in experiment_objects if is_bulk_archiveable(e)],
+                "bulk_archive_url": reverse("experiments:bulk_archive_versions", args=[team_slug]),
                 "assistants": related_assistants,
             },
         )

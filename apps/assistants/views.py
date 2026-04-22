@@ -19,6 +19,7 @@ from apps.generics import actions
 from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.deletion import is_bulk_archiveable
 from apps.utils.tables import render_table_row
 from apps.web.waf import WafRule, waf_allow
 
@@ -228,19 +229,36 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMi
                     "pipeline"
                 )
             ]
-            experiments_with_pipeline_nodes = [
+            all_experiments = list(
+                assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
+            )
+            manual_experiments = [
                 Chip(
-                    label=f"{experiment.name} {experiment.get_version_name()} [published]",
-                    url=experiment.get_absolute_url(),
+                    label=(
+                        f"{e.name} [{e.get_version_name()}]"
+                        if e.is_working_version
+                        else f"{e.name} {e.get_version_name()} [published]"
+                    ),
+                    url=e.get_absolute_url(),
                 )
-                for experiment in assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
+                for e in all_experiments
+                if not is_bulk_archiveable(e)
+            ]
+            bulk_archiveable_experiments = [
+                Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
+                for e in all_experiments
+                if is_bulk_archiveable(e)
             ]
             response = render_to_string(
                 "generic/referenced_objects.html",
+                request=request,
                 context={
                     "object_name": "assistant",
                     "pipeline_nodes": pipeline_nodes,
-                    "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes,
+                    "experiments_with_pipeline_nodes": manual_experiments,
+                    "bulk_archiveable_experiments": bulk_archiveable_experiments,
+                    "bulk_archiveable_ids": [e.id for e in all_experiments if is_bulk_archiveable(e)],
+                    "bulk_archive_url": reverse("experiments:bulk_archive_versions", args=[team_slug]),
                 },
             )
             return reswap(HttpResponse(response, status=400), "none")

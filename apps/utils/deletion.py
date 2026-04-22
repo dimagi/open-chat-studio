@@ -190,6 +190,20 @@ def _get_m2m_related_models(model):
     return m2m_models
 
 
+def is_blocking_object(obj) -> bool:
+    """Returns True if an object blocks deletion (i.e. it is not archived)."""
+    return not getattr(obj, "is_archived", False)
+
+
+def is_bulk_archiveable(obj) -> bool:
+    """Returns True if an object can be bulk-archived (non-working, non-published, non-archived version)."""
+    return (
+        not getattr(obj, "is_archived", False)
+        and getattr(obj, "working_version_id", None) is not None
+        and not getattr(obj, "is_default_version", False)
+    )
+
+
 def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 
