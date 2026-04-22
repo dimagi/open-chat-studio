@@ -20,14 +20,17 @@
 
         if (window.SiteJS && window.SiteJS.trends) {
             renderTrendsChart();
-        } else {
-            // Bundle not yet loaded; retry once it is available
+        } else if (document.readyState === 'loading') {
+            // Bundle not yet loaded and page still loading; retry once DOM is ready
             document.addEventListener('DOMContentLoaded', function onReady() {
+                document.removeEventListener('DOMContentLoaded', onReady);
                 if (window.SiteJS && window.SiteJS.trends) {
                     renderTrendsChart();
                 }
-                document.removeEventListener('DOMContentLoaded', onReady);
             });
         }
+        // If readyState is not 'loading', DOMContentLoaded has already fired
+        // and SiteJS.trends should already be available; if it isn't, the bundle
+        // failed to load and there is nothing further we can do.
     })();
 </script>
