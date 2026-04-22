@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import dataclass, field
 from email.utils import make_msgid
 from typing import TYPE_CHECKING
 
@@ -21,39 +23,73 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.channels")
 
+# RFC 2822 reply prefixes across common languages
+_REPLY_PREFIX_RE = re.compile(r"^(re|aw|sv|fw|fwd)\s*:", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class EmailThreadContext:
+    """Threading state passed from inbound email to outbound reply."""
+
+    subject: str = ""
+    in_reply_to: str | None = None
+    references: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_inbound(cls, message) -> EmailThreadContext:
+        """Build reply threading context from a parsed inbound EmailMessage."""
+        subject = message.subject
+        if subject and not _REPLY_PREFIX_RE.match(subject):
+            subject = f"Re: {subject}"
+
+        references = list(message.references)
+        if message.message_id:
+            references.append(message.message_id)
+
+        return cls(
+            subject=subject,
+            in_reply_to=message.message_id or None,
+            references=references,
+        )
+
 
 def get_email_experiment_channel(
     in_reply_to: str | None,
     references: list[str],
     to_address: str,
+    sender_address: str | None = None,
     team: Team | None = None,
 ) -> tuple[ExperimentChannel | None, ExperimentSession | None]:
     """Route an inbound email to the correct channel and session.
 
     Priority chain (first match wins):
-    1. In-Reply-To / References -> existing session lookup
+    1. In-Reply-To / References -> existing session lookup (with sender verification)
     2. To-address -> ExperimentChannel.extra_data["email_address"]
     3. Default fallback -> extra_data["is_default"] == True (requires team)
     4. No match -> (None, None)
     """
     # Priority 1: Thread continuity via In-Reply-To
     if in_reply_to:
-        session = _lookup_session(in_reply_to)
+        session = _lookup_session(in_reply_to, sender_address)
         if session:
             return session.experiment_channel, session
 
     # Priority 1b: Fallback to References header
     for ref in references:
-        session = _lookup_session(ref)
+        session = _lookup_session(ref, sender_address)
         if session:
             return session.experiment_channel, session
+
+    base_filters = {
+        "platform": ChannelPlatform.EMAIL,
+        "experiment__is_archived": False,
+    }
 
     # Priority 2: To-address match
     channel = (
         ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMAIL,
+            **base_filters,
             extra_data__contains={"email_address": to_address},
-            deleted=False,
         )
         .select_related("experiment", "team")
         .first()
@@ -65,10 +101,9 @@ def get_email_experiment_channel(
     if team:
         default = (
             ExperimentChannel.objects.filter(
-                platform=ChannelPlatform.EMAIL,
+                **base_filters,
                 extra_data__contains={"is_default": True},
                 team=team,
-                deleted=False,
             )
             .select_related("experiment", "team")
             .first()
@@ -80,14 +115,34 @@ def get_email_experiment_channel(
     return None, None
 
 
-def _lookup_session(message_id: str) -> ExperimentSession | None:
-    """Find a session by its external_id (first outbound Message-ID)."""
+def _lookup_session(message_id: str, sender_address: str | None = None) -> ExperimentSession | None:
+    """Find a session by its external_id (first outbound Message-ID).
+
+    If sender_address is provided, verifies the sender matches the session's
+    participant to prevent session hijacking via spoofed headers.
+    """
     try:
-        return ExperimentSession.objects.select_related("team", "participant", "experiment_channel").get(
+        session = ExperimentSession.objects.select_related("team", "participant", "experiment_channel").get(
             external_id=message_id
         )
     except ExperimentSession.DoesNotExist:
         return None
+
+    if sender_address and session.participant.identifier != sender_address:
+        logger.warning(
+            "Email sender %s does not match session participant %s for session %s",
+            sender_address,
+            session.participant.identifier,
+            session.id,
+        )
+        return None
+
+    return session
+
+
+def _has_email_message_id(external_id) -> bool:
+    """Check if an external_id is an RFC 5322 Message-ID (angle-bracket-delimited)."""
+    return str(external_id).startswith("<")
 
 
 class EmailSender(ChannelSender):
@@ -97,20 +152,17 @@ class EmailSender(ChannelSender):
         self,
         from_address: str,
         domain: str,
-        subject: str = "",
-        in_reply_to: str | None = None,
-        references: list[str] | None = None,
+        thread_context: EmailThreadContext | None = None,
     ):
         self.from_address = from_address
         self.domain = domain
-        self.subject = subject
-        self.in_reply_to = in_reply_to
-        self.references = references or []
+        self.thread_context = thread_context or EmailThreadContext()
         self.last_message_id: str | None = None
 
     def send_text(self, text: str, recipient: str) -> None:
+        ctx = self.thread_context
         msg = DjangoEmailMessage(
-            subject=self.subject or "New message",
+            subject=ctx.subject or "New message",
             body=text,
             from_email=self.from_address,
             to=[recipient],
@@ -119,9 +171,9 @@ class EmailSender(ChannelSender):
         msg_id = make_msgid(domain=self.domain)
         msg.extra_headers = {"Message-ID": msg_id}
 
-        if self.in_reply_to:
-            msg.extra_headers["In-Reply-To"] = self.in_reply_to
-            msg.extra_headers["References"] = " ".join(self.references + [self.in_reply_to])
+        if ctx.in_reply_to:
+            msg.extra_headers["In-Reply-To"] = ctx.in_reply_to
+            msg.extra_headers["References"] = " ".join(ctx.references)
 
         msg.send()
         self.last_message_id = msg_id
@@ -139,10 +191,10 @@ class EmailChannel(ChannelBase):
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession | None = None,
         *,
-        email_context: dict | None = None,
+        thread_context: EmailThreadContext | None = None,
     ):
         super().__init__(experiment, experiment_channel, experiment_session)
-        self.email_context = email_context or {}
+        self.thread_context = thread_context or EmailThreadContext()
         self._sender_instance: EmailSender | None = None
 
     def _get_callbacks(self) -> ChannelCallbacks:
@@ -153,9 +205,7 @@ class EmailChannel(ChannelBase):
         self._sender_instance = EmailSender(
             from_address=extra.get("from_address") or settings.DEFAULT_FROM_EMAIL,
             domain=settings.EMAIL_CHANNEL_DOMAIN,
-            subject=self.email_context.get("subject", ""),
-            in_reply_to=self.email_context.get("in_reply_to"),
-            references=self.email_context.get("references", []),
+            thread_context=self.thread_context,
         )
         return self._sender_instance
 
@@ -176,7 +226,7 @@ class EmailChannel(ChannelBase):
         # a Message-ID, store it so future In-Reply-To lookups find this session.
         if self.experiment_session and self._sender_instance:
             msg_id = self._sender_instance.last_message_id
-            if msg_id and not str(self.experiment_session.external_id).startswith("<"):
+            if msg_id and not _has_email_message_id(self.experiment_session.external_id):
                 self.experiment_session.external_id = msg_id  # ty: ignore[invalid-assignment]
                 self.experiment_session.save(update_fields=["external_id"])
 
@@ -186,11 +236,16 @@ class EmailChannel(ChannelBase):
 def email_inbound_handler(sender, message, event, **kwargs):
     """Handle inbound email from anymail's inbound signal.
 
-    Parses the email, routes it, and enqueues a Celery task.
+    Parses the email and enqueues a Celery task for async processing.
     Returns immediately so the ESP gets a fast 200 OK.
     """
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.tasks import handle_email_message  # noqa: PLC0415
+
+    # Check ESP spam verdict before processing
+    if getattr(message, "spam_detected", None) is True:
+        logger.info("Discarding spam email from %s", getattr(message, "from_email", "unknown"))
+        return
 
     try:
         email_msg = EmailMessageDatamodel.parse(message)
@@ -198,19 +253,4 @@ def email_inbound_handler(sender, message, event, **kwargs):
         logger.exception("Failed to parse inbound email")
         return
 
-    experiment_channel, session = get_email_experiment_channel(
-        in_reply_to=email_msg.in_reply_to,
-        references=email_msg.references,
-        to_address=email_msg.to_address,
-        team=None,
-    )
-
-    if not experiment_channel:
-        logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
-        return
-
-    handle_email_message.delay(
-        email_data=email_msg.model_dump(),
-        channel_id=experiment_channel.id,
-        session_id=session.id if session else None,
-    )
+    handle_email_message.delay(email_data=email_msg.model_dump())

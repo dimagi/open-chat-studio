@@ -214,40 +214,31 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_email_message(self, email_data: dict, channel_id: int, session_id: int | None = None):
+def handle_email_message(self, email_data: dict):
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
-    from apps.channels.email import EmailChannel  # noqa: PLC0415
-
-    experiment_channel = (
-        ExperimentChannel.objects.filter(id=channel_id, experiment__is_archived=False)
-        .select_related("experiment", "team")
-        .first()
-    )
-    if not experiment_channel:
-        log.info("No experiment channel found for email channel_id=%s", channel_id)
-        return
-
-    session = None
-    if session_id:
-        session = ExperimentSession.objects.select_related("participant", "chat", "experiment_channel").get(
-            id=session_id
-        )
-
-    set_current_team(experiment_channel.team)
+    from apps.channels.email import EmailChannel, EmailThreadContext, get_email_experiment_channel  # noqa: PLC0415
 
     message = EmailMessageDatamodel(**email_data)
 
-    email_context = {
-        "subject": f"Re: {message.subject}" if not message.subject.startswith("Re:") else message.subject,
-        "in_reply_to": message.message_id,
-        "references": message.references + [message.message_id] if message.message_id else message.references,
-    }
+    experiment_channel, session = get_email_experiment_channel(
+        in_reply_to=message.in_reply_to,
+        references=message.references,
+        to_address=message.to_address,
+        sender_address=message.from_address,
+    )
+    if not experiment_channel:
+        log.info("No email channel found for to=%s, ignoring", message.to_address)
+        return
+
+    set_current_team(experiment_channel.team)
+
+    thread_context = EmailThreadContext.from_inbound(message)
 
     channel = EmailChannel(
         experiment=experiment_channel.experiment.default_version,
         experiment_channel=experiment_channel,
         experiment_session=session,
-        email_context=email_context,
+        thread_context=thread_context,
     )
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)

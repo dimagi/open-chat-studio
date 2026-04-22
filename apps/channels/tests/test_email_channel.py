@@ -6,7 +6,13 @@ from django.core import mail
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.datamodels import EmailMessage
-from apps.channels.email import EmailChannel, EmailSender, email_inbound_handler, get_email_experiment_channel
+from apps.channels.email import (
+    EmailChannel,
+    EmailSender,
+    EmailThreadContext,
+    email_inbound_handler,
+    get_email_experiment_channel,
+)
 from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
@@ -25,6 +31,7 @@ def _make_inbound_message(
     message_id="<msg1@example.com>",
     in_reply_to=None,
     references="",
+    spam_detected=None,
 ):
     """Create a mock AnymailInboundMessage."""
     msg = MagicMock()
@@ -33,6 +40,7 @@ def _make_inbound_message(
     msg.to[0].addr_spec = to_email
     msg.subject = subject
     msg.text = text
+    msg.spam_detected = spam_detected
     msg.get = MagicMock(
         side_effect=lambda key, default=None: {
             "Message-ID": message_id,
@@ -41,6 +49,40 @@ def _make_inbound_message(
         }.get(key, default)
     )
     return msg
+
+
+def _make_email_channel(team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
+    """Helper to create an email ExperimentChannel."""
+    if experiment is None:
+        experiment = ExperimentFactory(team=team)
+    extra = {"email_address": email_address}
+    if is_default:
+        extra["is_default"] = True
+    return ExperimentChannel.objects.create(
+        team=team,
+        experiment=experiment,
+        platform=ChannelPlatform.EMAIL,
+        extra_data=extra,
+        name=f"email-{email_address}",
+    )
+
+
+def _make_session(team, channel, external_id, participant_email="user@example.com"):
+    """Helper to create a session with the required related objects."""
+    participant, _ = Participant.objects.get_or_create(
+        team=team,
+        identifier=participant_email,
+        platform=ChannelPlatform.EMAIL,
+    )
+    chat = Chat.objects.create(team=team, name="test chat")
+    return ExperimentSession.objects.create(
+        team=team,
+        experiment=channel.experiment,
+        experiment_channel=channel,
+        external_id=external_id,
+        participant=participant,
+        chat=chat,
+    )
 
 
 class TestEmailMessageParse:
@@ -72,7 +114,6 @@ class TestEmailMessageParse:
         inbound = _make_inbound_message(text=body_with_quote)
         result = EmailMessage.parse(inbound)
 
-        # mail-parser-reply should strip the quoted portion
         assert "Original message" not in result.message_text
         assert "New reply text" in result.message_text
 
@@ -93,7 +134,6 @@ class TestEmailMessageParse:
         assert result.references == []
 
     def test_parse_fallback_to_full_body_when_no_reply(self):
-        """When there is no quoted text, the full body is preserved."""
         inbound = _make_inbound_message(text="Just a simple message")
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
@@ -104,28 +144,19 @@ class TestEmailChannelForm:
     def test_valid_form(self, experiment):
         form = EmailChannelForm(
             experiment=experiment,
-            data={
-                "email_address": "support@chat.openchatstudio.com",
-                "platform": "email",
-            },
+            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
         )
         assert form.is_valid(), form.errors
 
     def test_email_address_required(self, experiment):
-        form = EmailChannelForm(
-            experiment=experiment,
-            data={"platform": "email"},
-        )
+        form = EmailChannelForm(experiment=experiment, data={"platform": "email"})
         assert not form.is_valid()
         assert "email_address" in form.errors
 
     def test_from_address_optional(self, experiment):
         form = EmailChannelForm(
             experiment=experiment,
-            data={
-                "email_address": "support@chat.openchatstudio.com",
-                "platform": "email",
-            },
+            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
         )
         assert form.is_valid()
         assert form.cleaned_data.get("from_address", "") == ""
@@ -133,10 +164,7 @@ class TestEmailChannelForm:
     def test_is_default_defaults_to_false(self, experiment):
         form = EmailChannelForm(
             experiment=experiment,
-            data={
-                "email_address": "support@chat.openchatstudio.com",
-                "platform": "email",
-            },
+            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
         )
         assert form.is_valid()
         assert form.cleaned_data["is_default"] is False
@@ -144,61 +172,48 @@ class TestEmailChannelForm:
 
 @pytest.mark.django_db()
 class TestEmailRouting:
-    def _make_channel(self, team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
-        """Helper to create an email ExperimentChannel."""
-        if experiment is None:
-            experiment = ExperimentFactory(team=team)
-        extra = {"email_address": email_address}
-        if is_default:
-            extra["is_default"] = True
-        return ExperimentChannel.objects.create(
-            team=team,
-            experiment=experiment,
-            platform=ChannelPlatform.EMAIL,
-            extra_data=extra,
-            name=f"email-{email_address}",
-        )
-
-    def _make_session(self, team, channel, external_id, participant_email="user@example.com"):
-        """Helper to create a session with the required related objects."""
-        participant, _ = Participant.objects.get_or_create(
-            team=team,
-            identifier=participant_email,
-            platform=ChannelPlatform.EMAIL,
-        )
-        chat = Chat.objects.create(team=team, name="test chat")
-        return ExperimentSession.objects.create(
-            team=team,
-            experiment=channel.experiment,
-            experiment_channel=channel,
-            external_id=external_id,
-            participant=participant,
-            chat=chat,
-        )
-
     def test_priority_1_in_reply_to_match(self, team_with_users):
         team = team_with_users
-        channel = self._make_channel(team)
-        session = self._make_session(team, channel, "<abc123@chat.openchatstudio.com>")
+        channel = _make_email_channel(team)
+        session = _make_session(team, channel, "<abc123@chat.openchatstudio.com>")
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to="<abc123@chat.openchatstudio.com>",
             references=[],
             to_address="bot@chat.openchatstudio.com",
+            sender_address="user@example.com",
             team=team,
         )
         assert result_channel == channel
         assert result_session == session
 
+    def test_priority_1_rejects_mismatched_sender(self, team_with_users):
+        """Session hijack prevention: spoofed In-Reply-To from wrong sender."""
+        team = team_with_users
+        channel = _make_email_channel(team)
+        _make_session(team, channel, "<abc123@chat.openchatstudio.com>", participant_email="real-user@example.com")
+
+        result_channel, result_session = get_email_experiment_channel(
+            in_reply_to="<abc123@chat.openchatstudio.com>",
+            references=[],
+            to_address="bot@chat.openchatstudio.com",
+            sender_address="attacker@evil.com",
+            team=team,
+        )
+        # Falls through to Priority 2 (to-address match) instead
+        assert result_channel == channel
+        assert result_session is None
+
     def test_priority_1b_references_fallback(self, team_with_users):
         team = team_with_users
-        channel = self._make_channel(team)
-        session = self._make_session(team, channel, "<root@chat.openchatstudio.com>")
+        channel = _make_email_channel(team)
+        session = _make_session(team, channel, "<root@chat.openchatstudio.com>")
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to="<nonexistent@example.com>",
             references=["<root@chat.openchatstudio.com>", "<reply1@example.com>"],
             to_address="bot@chat.openchatstudio.com",
+            sender_address="user@example.com",
             team=team,
         )
         assert result_channel == channel
@@ -206,7 +221,7 @@ class TestEmailRouting:
 
     def test_priority_2_to_address_match(self, team_with_users):
         team = team_with_users
-        channel = self._make_channel(team, email_address="support@chat.openchatstudio.com")
+        channel = _make_email_channel(team, email_address="support@chat.openchatstudio.com")
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
@@ -219,7 +234,7 @@ class TestEmailRouting:
 
     def test_priority_3_default_fallback(self, team_with_users):
         team = team_with_users
-        channel = self._make_channel(team, email_address="default@chat.openchatstudio.com", is_default=True)
+        channel = _make_email_channel(team, email_address="default@chat.openchatstudio.com", is_default=True)
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
@@ -243,9 +258,8 @@ class TestEmailRouting:
         assert result_session is None
 
     def test_no_default_fallback_without_team(self, team_with_users):
-        """Default fallback requires team to be specified."""
         team = team_with_users
-        self._make_channel(team, is_default=True)
+        _make_email_channel(team, is_default=True)
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
@@ -257,9 +271,50 @@ class TestEmailRouting:
         assert result_session is None
 
 
+class TestEmailThreadContext:
+    def test_from_inbound_adds_re_prefix(self):
+        msg = MagicMock()
+        msg.subject = "Help request"
+        msg.message_id = "<msg1@example.com>"
+        msg.references = []
+
+        ctx = EmailThreadContext.from_inbound(msg)
+        assert ctx.subject == "Re: Help request"
+        assert ctx.in_reply_to == "<msg1@example.com>"
+        assert ctx.references == ["<msg1@example.com>"]
+
+    def test_from_inbound_preserves_existing_re_prefix(self):
+        msg = MagicMock()
+        msg.subject = "Re: Help request"
+        msg.message_id = "<msg2@example.com>"
+        msg.references = ["<msg1@example.com>"]
+
+        ctx = EmailThreadContext.from_inbound(msg)
+        assert ctx.subject == "Re: Help request"
+
+    def test_from_inbound_handles_case_variants(self):
+        for prefix in ["RE:", "re:", "Aw:", "Sv:", "FW:"]:
+            msg = MagicMock()
+            msg.subject = f"{prefix} Something"
+            msg.message_id = "<msg@example.com>"
+            msg.references = []
+
+            ctx = EmailThreadContext.from_inbound(msg)
+            assert not ctx.subject.startswith("Re: "), f"Should not double-prefix for '{prefix}'"
+
+    def test_from_inbound_empty_message_id(self):
+        msg = MagicMock()
+        msg.subject = "Test"
+        msg.message_id = ""
+        msg.references = ["<old@example.com>"]
+
+        ctx = EmailThreadContext.from_inbound(msg)
+        assert ctx.in_reply_to is None
+        assert ctx.references == ["<old@example.com>"]
+
+
 class TestEmailSender:
     def test_send_text_new_conversation(self):
-        """First message in a conversation — no threading headers."""
         sender = EmailSender(
             from_address="bot@chat.openchatstudio.com",
             domain="chat.openchatstudio.com",
@@ -274,13 +329,15 @@ class TestEmailSender:
         assert "Message-ID" in sent.extra_headers
 
     def test_send_text_threaded_reply(self):
-        """Reply to an existing thread — sets In-Reply-To and References."""
-        sender = EmailSender(
-            from_address="bot@chat.openchatstudio.com",
-            domain="chat.openchatstudio.com",
+        ctx = EmailThreadContext(
             subject="Re: Help request",
             in_reply_to="<inbound123@example.com>",
             references=["<root@chat.openchatstudio.com>", "<inbound123@example.com>"],
+        )
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=ctx,
         )
         sender.send_text("Here's the answer", "user@example.com")
 
@@ -291,8 +348,6 @@ class TestEmailSender:
         assert "<root@chat.openchatstudio.com>" in sent.extra_headers["References"]
 
     def test_last_message_id_captured(self):
-        """After sending, last_message_id holds the outbound Message-ID."""
-
         sender = EmailSender(
             from_address="bot@chat.openchatstudio.com",
             domain="chat.openchatstudio.com",
@@ -306,13 +361,8 @@ class TestEmailSender:
 
 class TestEmailChannel:
     def test_capabilities(self):
-        """EmailChannel should have text-only capabilities, no voice, no consent."""
-
         channel_mock = MagicMock()
-        channel_mock.extra_data = {
-            "email_address": "bot@chat.openchatstudio.com",
-            "from_address": "bot@chat.openchatstudio.com",
-        }
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com", "from_address": "bot@chat.ocs.com"}
         experiment_mock = MagicMock()
 
         email_channel = EmailChannel(experiment_mock, channel_mock)
@@ -326,14 +376,11 @@ class TestEmailChannel:
 
     def test_get_sender_returns_email_sender(self):
         channel_mock = MagicMock()
-        channel_mock.extra_data = {
-            "email_address": "bot@chat.openchatstudio.com",
-        }
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
         experiment_mock = MagicMock()
 
         email_channel = EmailChannel(experiment_mock, channel_mock)
         sender = email_channel._get_sender()
-
         assert isinstance(sender, EmailSender)
 
     def test_get_callbacks_returns_noop(self):
@@ -343,17 +390,15 @@ class TestEmailChannel:
 
         email_channel = EmailChannel(experiment_mock, channel_mock)
         callbacks = email_channel._get_callbacks()
-
         assert isinstance(callbacks, ChannelCallbacks)
 
 
 @pytest.mark.django_db()
 class TestHandleEmailMessageTask:
     def test_routes_and_processes_message(self, team_with_users):
-        """Integration test: task finds channel and processes the message."""
         team = team_with_users
         experiment = ExperimentFactory(team=team)
-        channel = ExperimentChannelFactory(
+        ExperimentChannelFactory(
             experiment=experiment,
             platform=ChannelPlatform.EMAIL,
             extra_data={"email_address": "bot@chat.openchatstudio.com"},
@@ -373,61 +418,49 @@ class TestHandleEmailMessageTask:
 
         with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
-            handle_email_message(
-                email_data=email_data,
-                channel_id=channel.id,
-                session_id=None,
-            )
+            handle_email_message(email_data=email_data)
             MockEmailChannel.assert_called_once()
             mock_instance.new_user_message.assert_called_once()
 
-    def test_no_channel_logs_and_returns(self):
-        """Task with nonexistent channel_id just logs and returns."""
+    def test_no_match_logs_and_returns(self):
         email_data = {
             "participant_id": "sender@example.com",
             "message_text": "Hello",
             "from_address": "sender@example.com",
-            "to_address": "bot@chat.openchatstudio.com",
+            "to_address": "unknown@nowhere.com",
             "subject": "Test",
             "message_id": "<msg1@example.com>",
             "in_reply_to": None,
             "references": [],
         }
         # Should not raise
-        handle_email_message(
-            email_data=email_data,
-            channel_id=999999,
-            session_id=None,
-        )
+        handle_email_message(email_data=email_data)
 
 
 @pytest.mark.django_db()
 class TestEmailInboundHandler:
-    def test_routes_and_enqueues_task(self, team_with_users):
-        """Signal handler finds channel and enqueues the celery task."""
-        team = team_with_users
-        experiment = ExperimentFactory(team=team)
-        ExperimentChannelFactory(
-            experiment=experiment,
-            platform=ChannelPlatform.EMAIL,
-            extra_data={"email_address": "bot@chat.openchatstudio.com"},
-            team=team,
-        )
-
-        inbound = _make_inbound_message(
-            to_email="bot@chat.openchatstudio.com",
-        )
+    def test_enqueues_task(self):
+        inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
             email_inbound_handler(sender=None, message=inbound, event=MagicMock())
             mock_task.delay.assert_called_once()
+            call_kwargs = mock_task.delay.call_args[1]
+            assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
 
-    def test_no_match_silently_ignored(self):
-        """Unmatched email is silently ignored (no bounce loop)."""
-        inbound = _make_inbound_message(
-            to_email="unknown@nowhere.com",
-        )
+    def test_spam_detected_discarded(self):
+        inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com", spam_detected=True)
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            mock_task.delay.assert_not_called()
+
+    def test_parse_failure_does_not_raise(self):
+        inbound = MagicMock()
+        inbound.spam_detected = None
+        inbound.from_email.addr_spec = None  # Will cause parse to fail
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
@@ -437,7 +470,6 @@ class TestEmailInboundHandler:
 
 class TestEmailSessionThreading:
     def test_sender_captures_message_id(self):
-        """After sending, last_message_id holds the outbound Message-ID."""
         sender = EmailSender(
             from_address="bot@chat.openchatstudio.com",
             domain="chat.openchatstudio.com",
@@ -448,7 +480,6 @@ class TestEmailSessionThreading:
         assert "@chat.openchatstudio.com>" in sender.last_message_id
 
     def test_new_user_message_updates_session_external_id(self):
-        """EmailChannel.new_user_message updates session.external_id with outbound Message-ID."""
         channel_mock = MagicMock()
         channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
         experiment_mock = MagicMock()
@@ -457,12 +488,10 @@ class TestEmailSessionThreading:
 
         email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
 
-        # Mock the sender to have a last_message_id after pipeline runs
         mock_sender = MagicMock(spec=EmailSender)
         mock_sender.last_message_id = "<outbound1@chat.openchatstudio.com>"
         email_channel._sender_instance = mock_sender
 
-        # Mock super().new_user_message to just return a response
         with patch.object(ChannelBase, "new_user_message", return_value=MagicMock()):
             email_channel.new_user_message(MagicMock())
 
@@ -470,7 +499,6 @@ class TestEmailSessionThreading:
         session_mock.save.assert_called_once_with(update_fields=["external_id"])
 
     def test_does_not_overwrite_email_message_id(self):
-        """If external_id already starts with '<', it's an email Message-ID — don't overwrite."""
         channel_mock = MagicMock()
         channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
         experiment_mock = MagicMock()
@@ -486,80 +514,68 @@ class TestEmailSessionThreading:
         with patch.object(ChannelBase, "new_user_message", return_value=MagicMock()):
             email_channel.new_user_message(MagicMock())
 
-        # Should NOT overwrite — external_id already starts with '<'
         assert session_mock.external_id == "<already-set@chat.openchatstudio.com>"
         session_mock.save.assert_not_called()
 
 
 @pytest.mark.django_db()
 class TestEmailEndToEnd:
-    def _make_channel(self, team, email_address="bot@chat.openchatstudio.com"):
+    def test_task_routes_new_email_to_channel(self, team_with_users):
+        """Task routes a new email to the correct channel via to-address."""
+        team = team_with_users
         experiment = ExperimentFactory(team=team)
-        return ExperimentChannelFactory(
+        ExperimentChannelFactory(
             experiment=experiment,
             platform=ChannelPlatform.EMAIL,
-            extra_data={"email_address": email_address},
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
             team=team,
         )
 
-    def test_signal_to_task_dispatch(self, team_with_users):
-        """Verify the full signal -> route -> task dispatch flow."""
+        email_data = {
+            "participant_id": "user@example.com",
+            "message_text": "Can you help me?",
+            "from_address": "user@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Need help",
+            "message_id": "<user-msg-1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+        }
+
+        with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            handle_email_message(email_data=email_data)
+
+            MockEmailChannel.assert_called_once()
+            call_kwargs = MockEmailChannel.call_args[1]
+            assert isinstance(call_kwargs["thread_context"], EmailThreadContext)
+            assert call_kwargs["thread_context"].subject == "Re: Need help"
+            mock_instance.new_user_message.assert_called_once()
+
+    def test_task_routes_reply_to_existing_session(self, team_with_users):
+        """Task routes a reply to existing session via In-Reply-To."""
         team = team_with_users
-        channel = self._make_channel(team)
-
-        inbound = _make_inbound_message(
-            from_email="user@example.com",
-            to_email="bot@chat.openchatstudio.com",
-            subject="Need help",
-            text="Can you help me?",
-            message_id="<user-msg-1@example.com>",
+        channel = _make_email_channel(team)
+        session = _make_session(
+            team, channel, "<outbound-1@chat.openchatstudio.com>", participant_email="user@example.com"
         )
 
-        with patch("apps.channels.tasks.handle_email_message") as mock_task:
-            mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+        email_data = {
+            "participant_id": "user@example.com",
+            "message_text": "Thanks for the info",
+            "from_address": "user@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Re: Need help",
+            "message_id": "<user-msg-2@example.com>",
+            "in_reply_to": "<outbound-1@chat.openchatstudio.com>",
+            "references": ["<outbound-1@chat.openchatstudio.com>"],
+        }
 
-            mock_task.delay.assert_called_once()
-            call_kwargs = mock_task.delay.call_args[1]
-            assert call_kwargs["channel_id"] == channel.id
-            assert call_kwargs["session_id"] is None
-            assert call_kwargs["email_data"]["participant_id"] == "user@example.com"
-            assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
+        with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            handle_email_message(email_data=email_data)
 
-    def test_reply_routes_to_existing_session(self, team_with_users):
-        """A reply email with In-Reply-To routes to the existing session."""
-        team = team_with_users
-        channel = self._make_channel(team)
-        participant, _ = Participant.objects.get_or_create(
-            team=team,
-            identifier="user@example.com",
-            platform=ChannelPlatform.EMAIL,
-        )
-        chat = Chat.objects.create(team=team, name="test chat")
-        session = ExperimentSession.objects.create(
-            team=team,
-            experiment=channel.experiment,
-            experiment_channel=channel,
-            external_id="<outbound-1@chat.openchatstudio.com>",
-            participant=participant,
-            chat=chat,
-        )
-
-        inbound = _make_inbound_message(
-            from_email="user@example.com",
-            to_email="bot@chat.openchatstudio.com",
-            subject="Re: Need help",
-            text="Thanks for the info",
-            message_id="<user-msg-2@example.com>",
-            in_reply_to="<outbound-1@chat.openchatstudio.com>",
-            references="<outbound-1@chat.openchatstudio.com>",
-        )
-
-        with patch("apps.channels.tasks.handle_email_message") as mock_task:
-            mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
-
-            mock_task.delay.assert_called_once()
-            call_kwargs = mock_task.delay.call_args[1]
-            assert call_kwargs["channel_id"] == channel.id
-            assert call_kwargs["session_id"] == session.id
+            MockEmailChannel.assert_called_once()
+            call_kwargs = MockEmailChannel.call_args[1]
+            assert call_kwargs["experiment_session"] == session
+            mock_instance.new_user_message.assert_called_once()

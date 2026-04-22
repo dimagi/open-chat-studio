@@ -275,12 +275,12 @@ class SlackMessage(BaseMessage):
 class EmailMessage(BaseMessage):
     """Inbound email parsed from AnymailInboundMessage."""
 
-    from_address: str
-    to_address: str
-    subject: str
-    message_id: str
+    from_address: str = Field(max_length=254)
+    to_address: str = Field(max_length=254)
+    subject: str = Field(max_length=1000)
+    message_id: str = Field(max_length=500)
     in_reply_to: str | None = None
-    references: list[str] = Field(default=[])
+    references: list[str] = Field(default=[], max_length=100)
 
     @staticmethod
     def parse(inbound) -> "EmailMessage":
@@ -289,7 +289,9 @@ class EmailMessage(BaseMessage):
         )
 
         body = inbound.text or ""
-        reply = EmailReplyParser(languages=["en"]).read(body)
+        reply = EmailReplyParser(languages=["en", "de", "fr", "es", "pt", "it", "nl", "pl", "sv", "da", "no"]).read(
+            body
+        )
         stripped_text = reply.latest_reply or body
 
         return EmailMessage(
