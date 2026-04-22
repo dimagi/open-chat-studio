@@ -46,6 +46,7 @@ dependencies = [
     "langfuse>=2.59.7",
     "langgraph>=0.2.20",
     "loguru",
+    "mail-parser-reply>=0.20",
     "nh3",
     "openai",
     "openapi_pydantic",
