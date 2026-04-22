@@ -27,7 +27,6 @@
     </ul>
   {% endif %}
 
-
   {% if static_trigger_experiments %}
     <h2 class="font-semibold my-2">Static Trigger Experiments</h2>
     <ul class="list-disc list-inside">
@@ -36,6 +35,7 @@
       {% endfor %}
     </ul>
   {% endif %}
+
   {% if assistants %}
     <h2 class="font-semibold my-2">Assistants</h2>
     <ul class="list-disc list-inside">
@@ -43,5 +43,24 @@
         <li>{% include "generic/chip.html" with chip=assistant %}</li>
       {% endfor %}
     </ul>
+  {% endif %}
+
+  {% if bulk_archiveable_experiments %}
+    <h2 class="font-semibold my-2 mt-4">Non-published versions (can be bulk-archived)</h2>
+    <p class="text-sm text-gray-600 mb-2">These non-working, non-published versions can be archived all at once.</p>
+    <ul class="list-disc list-inside mb-3">
+      {% for experiment in bulk_archiveable_experiments %}
+        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+      {% endfor %}
+    </ul>
+    {% if bulk_archive_url %}
+      <form action="{{ bulk_archive_url }}" method="POST">
+        {% csrf_token %}
+        {% for id in bulk_archiveable_ids %}
+          <input type="hidden" name="version_ids" value="{{ id }}">
+        {% endfor %}
+        <button type="submit" class="btn btn-sm btn-warning">Archive All Non-published Versions</button>
+      </form>
+    {% endif %}
   {% endif %}
 </div>

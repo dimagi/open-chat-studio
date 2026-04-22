@@ -11,6 +11,7 @@ from .consent import (  # noqa: F401
 from .experiment import (  # noqa: F401
     ExperimentVersionsTableView,
     archive_experiment_version,
+    bulk_archive_experiment_versions,
     download_file,
     end_experiment,
     experiment_complete,
