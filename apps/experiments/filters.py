@@ -158,9 +158,14 @@ class ChannelsFilter(ChoiceColumnFilter):
     label: str = "Channels"
     column: str = "platform"
     description: str = "Filter by messaging platform/channel"
+    exclude_platforms: list[str] = []
 
     def prepare(self, team, **_):
-        self.options = ChannelPlatform.for_filter(team)  # ty: ignore[invalid-assignment]
+        options = ChannelPlatform.for_filter(team)
+        if self.exclude_platforms:
+            excluded_labels = {ChannelPlatform(p).label for p in self.exclude_platforms}
+            options = [o for o in options if o not in excluded_labels]
+        self.options = options  # ty: ignore[invalid-assignment]
 
     def parse_query_value(self, query_value) -> any:
         selected_display_names = self.values_list(query_value)

@@ -41,6 +41,14 @@ class Claude46EffortParameter(TextChoices):
     MAX = "max", "Max"
 
 
+class Claude47EffortParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    XHIGH = "xhigh", "XHigh"
+    MAX = "max", "Max"
+
+
 class OpenAIVerbosityParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -289,6 +297,38 @@ class ClaudeSonnet46Parameters(ClaudeOpus46Parameters):
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
         le=64000,
+    )
+
+
+class ClaudeOpus47Parameters(LLMModelParamBase):
+    """Parameters for Claude Opus 4.7.
+
+    Unlike Opus 4.6, Opus 4.7 does not accept temperature, top_p, or top_k — setting any of
+    these to a non-default value returns a 400 error. Temperature is therefore not exposed here.
+    Opus 4.7 also introduces the 'xhigh' effort level for adaptive thinking.
+    """
+
+    max_tokens: int = Field(
+        title="Max Output Tokens",
+        default=32000,
+        description="The maximum number of tokens to generate in the completion.",
+        ge=1,
+        le=128000,
+    )
+    effort: Claude47EffortParameter = Field(
+        title="Reasoning Effort",
+        default=Claude47EffortParameter.HIGH,
+        description="Control intelligence, speed, and cost tradeoffs with adaptive thinking. "
+        "Use 'xhigh' for coding and agentic use cases.",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=Claude47EffortParameter.labels),
+    )
+    adaptive_thinking: bool = Field(
+        title="Enable Adaptive Thinking",
+        default=False,
+        description="Let Claude dynamically decide when and how much to think with adaptive thinking mode. "
+        "At the default effort level (high), Claude will almost always think. "
+        "At lower effort levels, Claude may skip thinking for simpler problems.",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
 

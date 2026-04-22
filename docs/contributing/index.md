@@ -1,11 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to Open Chat Studio! This guide will help you understand the contribution process and code style conventions.
-
-## Getting Started
-
-Before contributing, please make sure you've set up your development environment according to the [Getting Started](../getting-started/index.md) guide.
-
+Thank you for your interest in contributing to Open Chat Studio! This guide will help you understand the contribution process and coding conventions.
 
 ## Forms of Contribution
 
@@ -23,7 +18,7 @@ Before contributing, please make sure you've set up your development environment
 - **Fix Bugs or Develop New Features**
   If you want to help improve Open Chat Studio's codebase, choose an issue from the [GitHub Issue Tracker](https://github.com/dimagi/open-chat-studio/issues) and [create a Pull Request](#3-submit-a-pull-request-pr) addressing it. If you are new, check out the [Good First Issues](https://github.com/orgs/dimagi/projects/3/views/1?filterQuery=label%3A%22good+first+issue%22).
 
-  Before starting, ensure that the change has not already been implemented. You can build Open Chat Studio using the latest `main` branch and confirm that the modification is still needed.
+  Before starting, check out the latest `main` branch and confirm the change hasn't already been made.
 
 !!! tip "Discuss before you build"
     For non-trivial or complex changes, please discuss your design plan before writing code. The GitHub issue is the best place to start — add a comment outlining your approach and get feedback from maintainers. For broader ideas without a dedicated issue, open a [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). Aligning on design early avoids wasted effort and makes reviews much smoother.
@@ -34,8 +29,7 @@ Before contributing, please make sure you've set up your development environment
 ### Improve Documentation
 
 - **Developer Documentation** needs improvement, and we welcome contributions.
-- **User Documentation** is maintained in the [open-chat-studio-docs repository](https://github.com/dimagi/open-chat-studio-docs) and published at [docs.openchatstudio.com](https://docs.openchatstudio.com/).
-- The easiest way to contribute to documentation is by reviewing and providing feedback. If you notice errors or opportunities for improvement, reach out to documentation contributors or create a Pull Request directly.
+- **User Documentation** welcomes feedback and corrections. See [how to contribute](./user_docs.md).
 
 ## Technical Guide
 
@@ -43,7 +37,7 @@ This section provides the necessary steps to set up your environment, build Open
 
 ### 1. Set Up Your Environment
 
-Before contributing, please make sure you've set up your development environment according to the [Getting Started](../getting-started/index.md) guide.
+Set up your development environment following the [Getting Started](../getting-started/index.md) guide before proceeding.
 
 ### 2. Start Working on Your First Issue
 

@@ -1,22 +1,30 @@
 # Versioning Dev Documentation
 
-See also the [**User Documentation**][user-docs] on versioning.
+See the [**User Documentation**][user-docs] on versioning.
+
+The versioning feature is a working version pattern that allows OCS users to edit chatbot configurations while maintaining immutable snapshots for production use. This ensures that active chatbot sessions for participants continue running on stable chatbot versions while chatbot configuration changes are made in the background.
+
+Versioned objects include Experiment, Pipeline, Node, Collection, Survey and more. To confirm the current implementation, review the codebase and technical documentation.
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
+
 
 ---
 
 ## Versioning Terminology
 
-| Term              | User-Facing Term        | Description                                                                 |
+| Term              | [User-Facing Term][user-docs]        | Description                                                                 |
 |-------------------|-------------------------|-----------------------------------------------------------------------------|
-| **Working version** | *Unreleased version*     | The editable versio of an object.                                 |
-| **Default version** | *Published version*      | The version currently live and user facing.                         |
+| **Working version** | *Unreleased version*     | The editable version of an object.                                 |
+| **Default version** | *Published version*      | The version currently live and user-facing.                         |
 | **Version family**  | —                       | A group of instances that are versions of the same working instance. This includes the working version itself |
 
 ---
 
 ## How to Think About Versioning
 
-Users are always working on the **latest version** of their chatbot. When they create a new version, it is really only freezing their progress and assigning a version number to it. Any new edits will be made on the next version.
+Users are always working on the **latest version** of their chatbot. When they create a new version, this freezes their current progress and assigns a version number to it. Any new edits are made on the next version.
+
+### Technically
 
 - All versioned objects have a `working_version` field, which is a foreign key to an instance of the same model.
 - Creating a new version means **duplicating** the `working version`. All objects that contribute to the behavior of the chatbot are also versioned and linked to the new version. The exception to this is global objects such as LLM providers which are never versioned.
@@ -38,7 +46,7 @@ If you add a model that needs to be versioned, you generally need to do the foll
 2. Add these fields to your model:
     - `working_version`: A nullable foreign key to itself
     - `is_archived`: A `BooleanField` indicating whether or not this instance is archived
-    - `version_number`: (optional) `IntegerField' used to track the objects version number. This is only really necessary for top level objects.
+    - `version_number`: (optional) `IntegerField` used to track the object's version number. This is usually only necessary for top-level objects.
 
 3. Implement `version_details`: See the [VersionDetails section](#the-versiondetails-class)
 4. Filter returned objects to the UI: Be sure to only return working versions to users.

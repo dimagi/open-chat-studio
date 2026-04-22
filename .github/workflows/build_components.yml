@@ -38,6 +38,9 @@ jobs:
       - name: Test
         run: npm run test
         working-directory: ./components/chat_widget
+      - name: Test security
+        run: npm run test:security
+        working-directory: ./components/chat_widget
       - name: Build
         run: npm run build
         working-directory: ./components/chat_widget
