@@ -362,7 +362,6 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         self.output_schema = output_schema or {}
         if self.instance and self.instance.pk and self.instance.tag_id:
             self.fields["tag_name"].initial = self.instance.tag.name
-        # Unpack existing condition_value into the helper fields for editing.
         if self.instance and self.instance.pk and isinstance(self.instance.condition_value, dict):
             cv = self.instance.condition_value
             if self.instance.condition_type == ConditionType.EQUALS:
@@ -385,7 +384,6 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         if self.cleaned_data.get("DELETE"):
             return cleaned
         if not self._row_has_content(cleaned):
-            # Empty row — formset will ignore via empty_permitted.
             return cleaned
 
         tag_name = (cleaned.get("tag_name") or "").strip()
@@ -429,7 +427,6 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         if self.errors:
             return cleaned
 
-        # Validate condition shape against the current (possibly unsaved) output_schema.
         from apps.evaluations.tagging import (  # noqa: PLC0415
             validate_condition,
             validate_field_in_schema,
@@ -445,7 +442,6 @@ class EvaluatorTagRuleForm(forms.ModelForm):
                     self.add_error(target, msg)
             return cleaned
 
-        # Resolve/create the tag now so cross-field validation uses the real Tag row.
         tag, _ = Tag.objects.get_or_create(
             team=self.team,
             name=tag_name,

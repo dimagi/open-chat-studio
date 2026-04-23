@@ -1,8 +1,10 @@
 import inspect
+from functools import lru_cache
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -84,7 +86,7 @@ class EvaluatorFormsetMixin:
                     evaluator.save()
                     formset.instance = evaluator
                     formset.save()
-                return self._redirect_to_success()
+                return redirect(self.get_success_url())
         else:
             formset.is_valid()  # surface errors in the template
 
@@ -93,10 +95,14 @@ class EvaluatorFormsetMixin:
     def get_object_or_none(self):
         return None
 
-    def _redirect_to_success(self):
-        from django.shortcuts import redirect  # noqa: PLC0415
-
-        return redirect(self.get_success_url())
+    def _get_evaluator_form_context(self):
+        llm_providers = list(LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type"))
+        llm_provider_models = list(LlmProviderModel.objects.for_team(self.request.team))
+        return {
+            "evaluator_schemas": _evaluator_schemas(),
+            "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
+            "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
+        }
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
@@ -114,15 +120,7 @@ class CreateEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, Permissi
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        context.update(
-            {
-                "evaluator_schemas": _evaluator_schemas(),
-                "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
-                "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
-            }
-        )
+        context.update(self._get_evaluator_form_context())
         return context
 
     def get_form_kwargs(self):
@@ -146,15 +144,7 @@ class EditEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, Permission
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        context.update(
-            {
-                "evaluator_schemas": _evaluator_schemas(),
-                "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
-                "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
-            }
-        )
+        context.update(self._get_evaluator_form_context())
         return context
 
     def get_queryset(self):
@@ -183,6 +173,7 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Delete
         return HttpResponse(status=200)
 
 
+@lru_cache(maxsize=1)
 def _evaluator_schemas():
     """Returns schemas for all available evaluator classes."""
     schemas = []
@@ -240,10 +231,10 @@ def _evaluator_default_values(llm_providers: list[dict], llm_provider_models):
     """Returns the default values for evaluator parameters."""
     llm_provider_model_id = None
     provider_id = None
-    if len(llm_providers) > 0:
+    if llm_providers:
         provider = llm_providers[0]
         provider_id = provider["id"]
-        first_model = llm_provider_models.filter(type=provider["type"]).first()
+        first_model = next((m for m in llm_provider_models if m.type == provider["type"]), None)
         if first_model:
             llm_provider_model_id = first_model.id
 

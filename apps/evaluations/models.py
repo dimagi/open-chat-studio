@@ -370,8 +370,14 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        results = self.results.select_related("message", "evaluator", "session").order_by("created_at").all()
+        results = (
+            self.results.select_related("message", "evaluator", "session")
+            .prefetch_related("applied_tags__tag")
+            .order_by("created_at")
+            .all()
+        )
         table_by_message = defaultdict(dict)
+        tags_by_message = defaultdict(set)
         for result in results:
             context_columns = {
                 # exclude 'current_datetime'
@@ -393,6 +399,9 @@ class EvaluationRun(BaseTeamModel):
 
             row_data.update(context_columns)
 
+            for applied_tag in result.applied_tags.all():
+                tags_by_message[result.message.id].add(applied_tag.tag.name)
+
             if result.output.get("error"):
                 row_data["error"] = result.output.get("error")
 
@@ -400,6 +409,10 @@ class EvaluationRun(BaseTeamModel):
                 row_data["id"] = result.message.id
 
             table_by_message[result.message.id] = row_data
+
+        for message_id, row_data in table_by_message.items():
+            tags = tags_by_message.get(message_id)
+            row_data["Tags"] = ", ".join(sorted(tags)) if tags else ""
 
         return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
 

@@ -23,6 +23,7 @@ from apps.evaluations.field_definitions import (
     IntFieldDefinition,
     StringFieldDefinition,
 )
+from apps.evaluations.models import ConditionType
 
 if TYPE_CHECKING:
     from apps.annotations.models import Tag
@@ -71,9 +72,9 @@ def validate_condition(
     if not isinstance(condition_value, dict):
         raise ValidationError({"condition_value": "Condition value must be a JSON object."})
 
-    if condition_type == "equals":
+    if condition_type == ConditionType.EQUALS:
         _validate_equals_condition(condition_value, field_definition)
-    elif condition_type == "range":
+    elif condition_type == ConditionType.RANGE:
         _validate_range_condition(condition_value, field_definition)
     else:
         raise ValidationError({"condition_type": f"Unknown condition type: {condition_type}"})
@@ -142,15 +143,14 @@ def validate_tag_compatibility(tag: Tag, evaluator: Evaluator) -> None:
 
 def matches(condition_type: str, condition_value: dict, field_value: Any) -> bool:
     """Return True if field_value satisfies the condition. Raises on unknown type."""
-    match condition_type:
-        case "equals":
-            return field_value == condition_value.get("value")
-        case "range":
-            try:
-                numeric = float(field_value)
-            except (TypeError, ValueError):
-                return False
-            return float(condition_value["min"]) <= numeric <= float(condition_value["max"])
+    if condition_type == ConditionType.EQUALS:
+        return field_value == condition_value.get("value")
+    if condition_type == ConditionType.RANGE:
+        try:
+            numeric = float(field_value)
+        except (TypeError, ValueError):
+            return False
+        return float(condition_value["min"]) <= numeric <= float(condition_value["max"])
     raise ValueError(f"Unknown condition type: {condition_type}")
 
 
@@ -181,12 +181,8 @@ def evaluate_rules(rules: list[EvaluatorTagRule], result_output: dict) -> list[E
 
 
 def resolve_target(evaluator: Evaluator, evaluation_message: EvaluationMessage) -> Chat | ChatMessage | None:
-    """Return the object to tag based on the evaluator's mode, or None if no target.
-
-    SESSION mode tags the session's chat (which is where session tags live in this
-    codebase). MESSAGE mode tags the expected_output_chat_message.
-    """
-    from apps.evaluations.models import EvaluationMode  # noqa: PLC0415 - circular-safe import
+    """Return the object to tag based on the evaluator's mode, or None if no target."""
+    from apps.evaluations.models import EvaluationMode  # noqa: PLC0415
 
     if evaluator.evaluation_mode == EvaluationMode.SESSION:
         session = evaluation_message.session
@@ -206,7 +202,7 @@ def apply_rules_to_result(
     Caller is responsible for running this inside a transaction.atomic() block along
     with the EvaluationResult.create() it corresponds to.
     """
-    from apps.evaluations.models import AppliedTag  # noqa: PLC0415 - circular-safe import
+    from apps.evaluations.models import AppliedTag  # noqa: PLC0415
 
     rules = list(evaluator.tag_rules.all())
     if not rules:
@@ -232,8 +228,19 @@ def apply_rules_to_result(
         ).delete()
 
     team = evaluation_result.team
-    for tag in tags_to_apply.values():
-        target.tags.add(tag, through_defaults={"team": team, "user": None})
+    if tags_to_apply:
+        CustomTaggedItem.objects.bulk_create(
+            [
+                CustomTaggedItem(
+                    content_type=content_type,
+                    object_id=target.pk,
+                    tag=tag,
+                    team=team,
+                )
+                for tag in tags_to_apply.values()
+            ],
+            ignore_conflicts=True,
+        )
 
     if matched_rules:
         AppliedTag.objects.bulk_create(

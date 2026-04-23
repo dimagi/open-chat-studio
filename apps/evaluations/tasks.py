@@ -64,7 +64,9 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
 
     with current_team(evaluation_run.team):
-        message = EvaluationMessage.objects.get(id=message_id)
+        message = EvaluationMessage.objects.select_related("session__chat", "expected_output_chat_message").get(
+            id=message_id
+        )
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
