@@ -122,7 +122,7 @@
                 </label>
                 <div class="prompt-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
                      :data-target-field="'#param_' + fieldName"
-                     :data-autocomplete-vars='evaluationMode === "session" ? JSON.stringify(["full_history", "context"]) : JSON.stringify(["input.content", "output.content", "context", "full_history", "generated_response"])'
+                     :data-autocomplete-vars="autocompleteVars"
                      style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
                 <textarea :id="'param_' + fieldName"
                           :name="'param_' + fieldName"
@@ -804,6 +804,12 @@
               }
             });
           }
+        },
+
+        get autocompleteVars() {
+          return this.evaluationMode === 'session'
+            ? JSON.stringify(['full_history', 'context'])
+            : JSON.stringify(['input.content', 'output.content', 'context', 'full_history', 'generated_response']);
         },
 
         get paramsJson() {

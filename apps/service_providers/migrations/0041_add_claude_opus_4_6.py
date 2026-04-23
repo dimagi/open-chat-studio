@@ -2,8 +2,6 @@
 
 from django.db import migrations
 
-from apps.service_providers.migration_utils import llm_model_migration
-
 
 class Migration(migrations.Migration):
 
@@ -11,6 +9,4 @@ class Migration(migrations.Migration):
         ('service_providers', '0040_remove_shutdown_models'),
     ]
 
-    operations = [
-        llm_model_migration(),
-    ]
+    operations = []
