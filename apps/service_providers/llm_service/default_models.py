@@ -144,7 +144,6 @@ DELETED_MODELS = [
     ("azure", "gpt-4-32k"),
     ("azure", "gpt-35-turbo"),
     ("azure", "gpt-35-turbo-16k"),
-    ("azure", "gpt-4.1-nano", "gpt-4.1-mini"),
     # Anthropic
     ("anthropic", "claude-3-5-sonnet-latest"),
     ("anthropic", "claude-3-opus-latest"),
@@ -152,8 +151,6 @@ DELETED_MODELS = [
     ("anthropic", "claude-2.1"),
     ("anthropic", "claude-instant-1.2"),
     # OpenAI
-    ("openai", "gpt-3.5-turbo", "gpt-4.1-mini"),
-    ("openai", "gpt-4.1-nano", "gpt-4.1-mini"),
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
     ("openai", "gpt-4-turbo", "gpt-4.1"),
