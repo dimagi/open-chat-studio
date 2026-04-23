@@ -28,6 +28,7 @@ class TagCategories(models.TextChoices):
     RESPONSE_RATING = "response_rating", _("Response Rating")
     ERROR = "error", _("Error")
     MEDIA_TYPE = "media_type", _("Media Type")
+    EVALUATIONS = "evaluations", _("Evaluations")
 
 
 @audit_fields(
