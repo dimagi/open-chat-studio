@@ -395,12 +395,26 @@ class EvaluatorTagRuleForm(forms.ModelForm):
             self.add_error("field_name", "Field is required.")
 
         condition_type = cleaned.get("condition_type")
+        field_schema = self.output_schema.get(cleaned.get("field_name") or "", {}) or {}
+        field_type = field_schema.get("type")
         if condition_type == ConditionType.EQUALS:
             value = cleaned.get("condition_value_single")
             if not value:
                 self.add_error("condition_value_single", "Value is required for 'equals'.")
             else:
-                cleaned["condition_value"] = {"value": value}
+                coerced = value
+                if field_type == "int":
+                    try:
+                        coerced = int(value)
+                    except (TypeError, ValueError):
+                        self.add_error("condition_value_single", "Value must be an integer.")
+                elif field_type == "float":
+                    try:
+                        coerced = float(value)
+                    except (TypeError, ValueError):
+                        self.add_error("condition_value_single", "Value must be numeric.")
+                if not self.errors:
+                    cleaned["condition_value"] = {"value": coerced}
         elif condition_type == ConditionType.RANGE:
             lo = cleaned.get("condition_value_min")
             hi = cleaned.get("condition_value_max")

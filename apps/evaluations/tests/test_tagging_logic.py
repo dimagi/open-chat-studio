@@ -83,10 +83,22 @@ class TestValidateCondition:
         with pytest.raises(ValidationError):
             validate_condition("equals", {"value": "a"}, field)
 
-    def test_equals_on_non_choice_field_rejected(self):
+    def test_equals_on_int_field_accepted(self):
+        field = IntFieldDefinition(type="int", description="d")
+        validate_condition("equals", {"value": 1}, field)
+
+    def test_equals_on_float_field_accepted(self):
+        field = FloatFieldDefinition(type="float", description="d")
+        validate_condition("equals", {"value": 1.5}, field)
+
+    def test_equals_on_string_field_accepted(self):
+        field = StringFieldDefinition(type="string", description="d")
+        validate_condition("equals", {"value": "hello"}, field)
+
+    def test_equals_on_int_field_non_numeric_rejected(self):
         field = IntFieldDefinition(type="int", description="d")
         with pytest.raises(ValidationError):
-            validate_condition("equals", {"value": 1}, field)
+            validate_condition("equals", {"value": "abc"}, field)
 
     def test_equals_extra_keys_rejected(self):
         field = ChoiceFieldDefinition(type="choice", description="d", choices=["a"])

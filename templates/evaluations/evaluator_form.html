@@ -973,8 +973,9 @@
           switch (def.type) {
             case 'choice': return ['equals'];
             case 'int':
-            case 'float': return ['range'];
-            default: return [];  // string, etc.
+            case 'float': return ['equals', 'range'];
+            case 'string': return ['equals'];
+            default: return [];
           }
         },
 

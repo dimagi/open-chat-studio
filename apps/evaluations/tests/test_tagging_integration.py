@@ -73,9 +73,22 @@ class TestEvaluatorTagRuleClean:
         with pytest.raises(ValidationError):
             rule.clean()
 
-    def test_wrong_field_type_for_condition_rejected(self, team, message_evaluator):
+    def test_range_on_choice_field_rejected(self, team, message_evaluator):
         tag = EvaluationTagFactory.create(team=team)
-        # 'equals' on an int field is a type mismatch
+        # 'range' on a choice field is a type mismatch
+        rule = EvaluatorTagRule(
+            team=team,
+            evaluator=message_evaluator,
+            tag=tag,
+            field_name="sentiment",
+            condition_type=ConditionType.RANGE,
+            condition_value={"min": 0, "max": 1},
+        )
+        with pytest.raises(ValidationError):
+            rule.clean()
+
+    def test_equals_on_int_field_accepted(self, team, message_evaluator):
+        tag = EvaluationTagFactory.create(team=team)
         rule = EvaluatorTagRule(
             team=team,
             evaluator=message_evaluator,
@@ -84,8 +97,7 @@ class TestEvaluatorTagRuleClean:
             condition_type=ConditionType.EQUALS,
             condition_value={"value": 5},
         )
-        with pytest.raises(ValidationError):
-            rule.clean()
+        rule.clean()
 
     def test_unknown_field_rejected(self, team, message_evaluator):
         tag = EvaluationTagFactory.create(team=team)

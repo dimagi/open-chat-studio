@@ -21,6 +21,7 @@ from apps.evaluations.field_definitions import (
     FieldDefinition,
     FloatFieldDefinition,
     IntFieldDefinition,
+    StringFieldDefinition,
 )
 
 if TYPE_CHECKING:
@@ -84,18 +85,31 @@ def _validate_equals_condition(condition_value: dict, field_definition: FieldDef
         raise ValidationError({"condition_value": f"Extra keys for 'equals' condition: {sorted(extra)}"})
     if "value" not in condition_value:
         raise ValidationError({"condition_value": "'equals' condition requires a 'value' key."})
-    if not isinstance(field_definition, ChoiceFieldDefinition):
-        raise ValidationError({"condition_type": "'equals' condition is only valid for choice fields."})
-    if not field_definition.choices:
-        raise ValidationError({"condition_value": "Choice field has no 'choices' configured."})
-    if condition_value["value"] not in field_definition.choices:
-        raise ValidationError(
-            {
-                "condition_value": (
-                    f"Value '{condition_value['value']}' is not in the field's choices: {field_definition.choices}"
-                )
-            }
-        )
+    if isinstance(field_definition, ChoiceFieldDefinition):
+        if not field_definition.choices:
+            raise ValidationError({"condition_value": "Choice field has no 'choices' configured."})
+        if condition_value["value"] not in field_definition.choices:
+            raise ValidationError(
+                {
+                    "condition_value": (
+                        f"Value '{condition_value['value']}' is not in the field's choices: {field_definition.choices}"
+                    )
+                }
+            )
+        return
+    if isinstance(field_definition, _NUMERIC_FIELD_TYPES):
+        try:
+            field_definition.python_type(condition_value["value"])
+        except (TypeError, ValueError) as err:
+            raise ValidationError(
+                {"condition_value": (f"Value must be coercible to {field_definition.python_type.__name__}.")}
+            ) from err
+        return
+    if isinstance(field_definition, StringFieldDefinition):
+        if not isinstance(condition_value["value"], str):
+            raise ValidationError({"condition_value": "Value must be a string."})
+        return
+    raise ValidationError({"condition_type": "'equals' condition is not supported for this field type."})
 
 
 def _validate_range_condition(condition_value: dict, field_definition: FieldDefinition) -> None:
