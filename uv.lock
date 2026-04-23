@@ -2350,23 +2350,21 @@ wheels = [
 
 [[package]]
 name = "langfuse"
-version = "3.14.5"
+version = "4.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backoff" },
     { name = "httpx" },
-    { name = "openai" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
     { name = "packaging" },
     { name = "pydantic" },
-    { name = "requests" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/6b/7a945e8bc56cbf343b6f6171fd45870b0ea80ea38463b2db8dd5a9dc04a2/langfuse-3.14.5.tar.gz", hash = "sha256:2f543ec1540053d39b08a50ed5992caf1cd54d472a55cb8e5dcf6d4fcb7ff631", size = 235474, upload-time = "2026-02-23T10:42:47.721Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/ea/e4a583d39cbbb13bf070a8e8816697874df2e611f2faff5661f6f65c7ac3/langfuse-4.5.0.tar.gz", hash = "sha256:ecb2c3e19098065f64933f8f2b4d8b3a426938ca1c8e9bf7611d6df569adaa3f", size = 279309, upload-time = "2026-04-21T11:30:40.048Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/a1/10f04224542d6a57073c4f339b6763836a0899c98966f1d4ffcf56d2cf61/langfuse-3.14.5-py3-none-any.whl", hash = "sha256:5054b1c705ec69bce2d7077ce7419727ac629159428da013790979ca9cae77d5", size = 421240, upload-time = "2026-02-23T10:42:46.085Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/72/0bb02ab2144d9da38a4c91146661f6147323acdd1d17ce45c3a6f9932410/langfuse-4.5.0-py3-none-any.whl", hash = "sha256:99434f9553fa8711bfc6a2e61dac011af0c771f52d61809d7774b85f3b91c9a7", size = 479214, upload-time = "2026-04-21T11:30:38.573Z" },
 ]
 
 [[package]]
@@ -3166,7 +3164,7 @@ requires-dist = [
     { name = "langchain-google-vertexai" },
     { name = "langchain-mcp-adapters" },
     { name = "langchain-openai", specifier = ">=1.1.14" },
-    { name = "langfuse", specifier = ">=2.59.7" },
+    { name = "langfuse", specifier = ">=4.5.0" },
     { name = "langgraph", specifier = ">=0.2.20" },
     { name = "loguru" },
     { name = "markdown" },
