@@ -251,3 +251,47 @@ def test_cleanup_old_evaluation_data_does_not_delete_recent_sessions():
     assert ExperimentSession.objects.filter(id=session.id).exists()
     assert Chat.objects.filter(id=chat.id).exists()
     assert ChatMessage.objects.filter(chat_id=chat.id).count() == 1
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluate_single_message_applies_tag_rules(
+    evaluator_run_mock, evaluation_run, evaluation_message, team_with_users
+):
+    """End-to-end: matching tag rule tags the chat message, audit row is recorded,
+    and EvaluationResult is created."""
+    from apps.annotations.models import TagCategories  # noqa: PLC0415
+    from apps.evaluations.models import AppliedTag, ConditionType  # noqa: PLC0415
+    from apps.utils.factories.evaluations import (  # noqa: PLC0415
+        EvaluationTagFactory,
+        EvaluatorTagRuleFactory,
+    )
+
+    run, evaluator = evaluation_run
+    # Ensure the evaluation message has a chat message target for MESSAGE mode.
+    from apps.chat.models import ChatMessageType  # noqa: PLC0415
+    from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory  # noqa: PLC0415
+
+    chat = ChatFactory.create(team=team_with_users)
+    expected_output = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Generated reply")
+    evaluation_message.expected_output_chat_message = expected_output
+    evaluation_message.save()
+
+    tag = EvaluationTagFactory.create(team=team_with_users, name="unacceptable")
+    rule = EvaluatorTagRuleFactory.create(
+        team=team_with_users,
+        evaluator=evaluator,
+        tag=tag,
+        field_name="sentiment",
+        condition_type=ConditionType.EQUALS,
+        condition_value={"value": "negative"},
+    )
+
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
+
+    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+
+    result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
+    assert result.output == {"result": {"sentiment": "negative"}}
+    assert expected_output.tags.filter(pk=tag.pk, category=TagCategories.EVALUATIONS).exists()
+    assert AppliedTag.objects.filter(rule=rule, evaluation_result=result).count() == 1

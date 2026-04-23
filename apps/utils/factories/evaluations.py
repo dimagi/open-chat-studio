@@ -80,6 +80,11 @@ class AppliedTagFactory(DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     rule = factory.SubFactory(EvaluatorTagRuleFactory, team=factory.SelfAttribute("..team"))
     tag = factory.LazyAttribute(lambda obj: obj.rule.tag)
+    evaluation_result = factory.SubFactory(
+        "apps.utils.factories.evaluations.EvaluationResultFactory",
+        team=factory.SelfAttribute("..team"),
+        evaluator=factory.SelfAttribute("..rule.evaluator"),
+    )
 
 
 class EvaluationMessageFactory(DjangoModelFactory):
