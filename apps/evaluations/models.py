@@ -412,7 +412,7 @@ class EvaluationRun(BaseTeamModel):
 
         for message_id, row_data in table_by_message.items():
             tags = tags_by_message.get(message_id)
-            row_data["Tags"] = ", ".join(sorted(tags)) if tags else ""
+            row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
 
         return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
 
