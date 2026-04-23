@@ -480,7 +480,8 @@
 
       <div class="space-y-3">
         {% for rule_form in tag_rule_formset %}
-          <div class="card bg-base-200 p-4">
+          <div class="card bg-base-200 p-4"
+               x-data="{ conditionType: '{{ rule_form.condition_type.value|default_if_none:'equals'|escapejs }}', fieldName: '{{ rule_form.field_name.value|default_if_none:''|escapejs }}' }">
             {% for hidden in rule_form.hidden_fields %}{{ hidden }}{% endfor %}
             {% if rule_form.non_field_errors %}
               <div class="alert alert-error mb-2">{{ rule_form.non_field_errors }}</div>
@@ -494,19 +495,23 @@
               <div>
                 <label class="label text-sm"><span>{% translate "Field" %}</span></label>
                 <select name="{{ rule_form.field_name.html_name }}"
-                        class="select select-bordered w-full select-sm"
-                        x-init="$el.value = '{{ rule_form.field_name.value|default_if_none:''|escapejs }}'">
+                        x-model="fieldName"
+                        class="select select-bordered w-full select-sm">
                   <option value="">{% translate "Select field..." %}</option>
-                  <template x-for="fieldName in schemaFieldNames()" :key="fieldName">
-                    <option :value="fieldName" x-text="fieldName"
-                            :selected="'{{ rule_form.field_name.value|default_if_none:''|escapejs }}' === fieldName"></option>
+                  <template x-for="name in schemaFieldNames()" :key="name">
+                    <option :value="name" x-text="name"></option>
                   </template>
                 </select>
                 {{ rule_form.field_name.errors }}
               </div>
               <div>
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
-                {{ rule_form.condition_type }}
+                <select name="{{ rule_form.condition_type.html_name }}"
+                        x-model="conditionType"
+                        class="select select-bordered w-full select-sm">
+                  <option value="equals">{% translate "Equals" %}</option>
+                  <option value="range">{% translate "Range" %}</option>
+                </select>
                 {{ rule_form.condition_type.errors }}
               </div>
               <div class="flex items-end">
@@ -517,14 +522,14 @@
               </div>
             </div>
             <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div x-show="document.querySelector('[name=\'{{ rule_form.condition_type.html_name }}\']').value === 'equals'">
+              <div x-show="conditionType === 'equals'">
                 <label class="label text-sm"><span>{% translate "Value" %}</span></label>
                 <input type="text" name="{{ rule_form.condition_value_single.html_name }}"
                        value="{{ rule_form.condition_value_single.value|default_if_none:'' }}"
                        class="input input-bordered w-full input-sm">
                 {{ rule_form.condition_value_single.errors }}
               </div>
-              <div x-show="document.querySelector('[name=\'{{ rule_form.condition_type.html_name }}\']').value === 'range'"
+              <div x-show="conditionType === 'range'"
                    class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="label text-sm"><span>{% translate "Min" %}</span></label>
@@ -546,7 +551,63 @@
         {% endfor %}
 
         <!-- Empty-form template for adding rows client-side -->
-        <template x-if="false"><div id="tag-rule-empty-form">{{ tag_rule_formset.empty_form|safe }}</div></template>
+        <template id="tag-rule-empty-form">
+          <div class="card bg-base-200 p-4"
+               x-data="{ conditionType: 'equals', fieldName: '' }">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label class="label text-sm"><span>{% translate "Tag name" %}</span></label>
+                <input type="text" name="tag_rules-__prefix__-tag_name" maxlength="100"
+                       class="input input-bordered w-full input-sm">
+              </div>
+              <div>
+                <label class="label text-sm"><span>{% translate "Field" %}</span></label>
+                <select name="tag_rules-__prefix__-field_name"
+                        x-model="fieldName"
+                        class="select select-bordered w-full select-sm">
+                  <option value="">{% translate "Select field..." %}</option>
+                  <template x-for="name in schemaFieldNames()" :key="name">
+                    <option :value="name" x-text="name"></option>
+                  </template>
+                </select>
+              </div>
+              <div>
+                <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
+                <select name="tag_rules-__prefix__-condition_type"
+                        x-model="conditionType"
+                        class="select select-bordered w-full select-sm">
+                  <option value="equals">{% translate "Equals" %}</option>
+                  <option value="range">{% translate "Range" %}</option>
+                </select>
+              </div>
+              <div class="flex items-end">
+                <label class="label cursor-pointer gap-2">
+                  <input type="checkbox" name="tag_rules-__prefix__-DELETE" class="checkbox checkbox-sm">
+                  <span class="label-text text-sm">{% translate "Remove" %}</span>
+                </label>
+              </div>
+            </div>
+            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div x-show="conditionType === 'equals'">
+                <label class="label text-sm"><span>{% translate "Value" %}</span></label>
+                <input type="text" name="tag_rules-__prefix__-condition_value_single"
+                       class="input input-bordered w-full input-sm">
+              </div>
+              <div x-show="conditionType === 'range'" class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="label text-sm"><span>{% translate "Min" %}</span></label>
+                  <input type="number" step="any" name="tag_rules-__prefix__-condition_value_min"
+                         class="input input-bordered w-full input-sm">
+                </div>
+                <div>
+                  <label class="label text-sm"><span>{% translate "Max" %}</span></label>
+                  <input type="number" step="any" name="tag_rules-__prefix__-condition_value_max"
+                         class="input input-bordered w-full input-sm">
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
 
       <button type="button"
@@ -880,14 +941,16 @@
           const index = parseInt(totalInput.value, 10);
           const template = document.getElementById('tag-rule-empty-form');
           if (!template) return;
-          const html = template.innerHTML.replace(/__prefix__/g, index);
+          const fragment = template.content.cloneNode(true);
           const wrapper = document.createElement('div');
-          wrapper.innerHTML = html;
-          const container = template.parentElement.parentElement; // .space-y-3
-          // Insert before the empty-form template node
-          const emptyNode = template.parentElement;
-          container.insertBefore(wrapper.firstElementChild || wrapper, emptyNode);
+          wrapper.appendChild(fragment);
+          wrapper.innerHTML = wrapper.innerHTML.replace(/__prefix__/g, index);
+          const newRow = wrapper.firstElementChild;
+          template.parentElement.insertBefore(newRow, template);
           totalInput.value = index + 1;
+          if (window.Alpine && newRow) {
+            window.Alpine.initTree(newRow);
+          }
         }
       }));
     });
