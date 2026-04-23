@@ -507,12 +507,7 @@
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
                 <select name="{{ rule_form.condition_type.html_name }}"
                         x-model="conditionType"
-                        x-effect="{
-                            const allowed = allowedConditionsForField(fieldName);
-                            if (fieldName && !allowed.includes(conditionType)) {
-                                conditionType = allowed[0] || '';
-                            }
-                        }"
+                        x-effect="conditionType = (fieldName && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType"
                         :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
                         class="select select-bordered w-full select-sm">
                   <template x-if="allowedConditionsForField(fieldName).includes('equals')">
@@ -590,12 +585,7 @@
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
                 <select name="tag_rules-__prefix__-condition_type"
                         x-model="conditionType"
-                        x-effect="{
-                            const allowed = allowedConditionsForField(fieldName);
-                            if (fieldName && !allowed.includes(conditionType)) {
-                                conditionType = allowed[0] || '';
-                            }
-                        }"
+                        x-effect="conditionType = (fieldName && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType"
                         :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
                         class="select select-bordered w-full select-sm">
                   <template x-if="allowedConditionsForField(fieldName).includes('equals')">
