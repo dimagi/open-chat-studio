@@ -295,3 +295,45 @@ def test_evaluate_single_message_applies_tag_rules(
     assert result.output == {"result": {"sentiment": "negative"}}
     assert expected_output.tags.filter(pk=tag.pk, category=TagCategories.EVALUATIONS).exists()
     assert AppliedTag.objects.filter(rule=rule, evaluation_result=result).count() == 1
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluate_single_message_skips_tagging_for_preview_run(
+    evaluator_run_mock, evaluation_run, evaluation_message, team_with_users
+):
+    """PREVIEW runs produce EvaluationResult rows but must not apply tag rules or record audit rows."""
+    from apps.chat.models import ChatMessageType  # noqa: PLC0415
+    from apps.evaluations.models import AppliedTag, ConditionType, EvaluationRunType  # noqa: PLC0415
+    from apps.utils.factories.evaluations import (  # noqa: PLC0415
+        EvaluationTagFactory,
+        EvaluatorTagRuleFactory,
+    )
+    from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory  # noqa: PLC0415
+
+    run, evaluator = evaluation_run
+    run.type = EvaluationRunType.PREVIEW
+    run.save()
+
+    chat = ChatFactory.create(team=team_with_users)
+    expected_output = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Generated reply")
+    evaluation_message.expected_output_chat_message = expected_output
+    evaluation_message.save()
+
+    tag = EvaluationTagFactory.create(team=team_with_users, name="unacceptable")
+    EvaluatorTagRuleFactory.create(
+        team=team_with_users,
+        evaluator=evaluator,
+        tag=tag,
+        field_name="sentiment",
+        condition_type=ConditionType.EQUALS,
+        condition_value={"value": "negative"},
+    )
+
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
+
+    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+
+    assert EvaluationResult.objects.filter(message=evaluation_message, run=run, evaluator=evaluator).exists()
+    assert not expected_output.tags.filter(pk=tag.pk).exists()
+    assert AppliedTag.objects.count() == 0

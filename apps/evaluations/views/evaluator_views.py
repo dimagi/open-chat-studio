@@ -72,8 +72,6 @@ class EvaluatorFormsetMixin:
         if form.is_valid():
             evaluator = form.save(commit=False)
             evaluator.team = request.team
-            if not evaluator.pk:
-                evaluator.created_by = request.user
             # Re-bind formset against the pending-save evaluator so nested validation has team + schema.
             formset = EvaluatorTagRuleFormSet(
                 data=request.POST,

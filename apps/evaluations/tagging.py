@@ -68,7 +68,11 @@ def validate_condition(
     condition_value: Any,
     field_definition: FieldDefinition,
 ) -> None:
-    """Raise ValidationError when the condition is malformed for the given field."""
+    """Raise ValidationError when the condition is malformed for the given field.
+
+    Mutates condition_value in place to coerce values to the field's native python_type
+    so stored rules match the type of the evaluator output and `==` comparisons behave.
+    """
     if not isinstance(condition_value, dict):
         raise ValidationError({"condition_value": "Condition value must be a JSON object."})
 
@@ -100,7 +104,7 @@ def _validate_equals_condition(condition_value: dict, field_definition: FieldDef
         return
     if isinstance(field_definition, _NUMERIC_FIELD_TYPES):
         try:
-            field_definition.python_type(condition_value["value"])
+            condition_value["value"] = field_definition.python_type(condition_value["value"])
         except (TypeError, ValueError) as err:
             raise ValidationError(
                 {"condition_value": (f"Value must be coercible to {field_definition.python_type.__name__}.")}
@@ -129,6 +133,8 @@ def _validate_range_condition(condition_value: dict, field_definition: FieldDefi
         raise ValidationError({"condition_value": f"min/max must be coercible to {py_type.__name__}."}) from err
     if lo > hi:
         raise ValidationError({"condition_value": "'min' must be <= 'max'."})
+    condition_value["min"] = lo
+    condition_value["max"] = hi
 
 
 def validate_tag_compatibility(tag: Tag, evaluator: Evaluator) -> None:
@@ -179,7 +185,11 @@ def evaluate_rules(rules: list[EvaluatorTagRule], result_output: dict) -> list[E
 
 
 def resolve_target(evaluator: Evaluator, evaluation_message: EvaluationMessage) -> Chat | ChatMessage | None:
-    """Return the object to tag based on the evaluator's mode, or None if no target."""
+    """Return the object to tag based on the evaluator's mode, or None if no target.
+
+    SESSION mode returns the session's `Chat` (not the `ExperimentSession` itself) because
+    `Chat` owns the TaggedModelMixin contract — tags live on the chat, not the session row.
+    """
     from apps.evaluations.models import EvaluationMode  # noqa: PLC0415
 
     if evaluator.evaluation_mode == EvaluationMode.SESSION:
