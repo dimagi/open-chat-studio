@@ -462,8 +462,8 @@
     <input type="hidden" name="type" x-model="selectedType">
     <input type="hidden" name="params" x-model="paramsJson">
 
-    <!-- Tag Rules -->
-    <div class="mt-8 pt-6 border-t">
+    <!-- Tag Rules (LLM evaluator only) -->
+    <div class="mt-8 pt-6 border-t" x-show="selectedType === 'LlmEvaluator'">
       <h3 class="text-lg font-medium mb-3">{% translate "Tag Rules" %}</h3>
       <p class="text-sm text-gray-500 mb-3">
         {% translate "Auto-apply an Evaluations-category tag to the evaluated target when an output field matches a condition." %}
