@@ -323,7 +323,10 @@ class ChannelBase(ABC):
         if platform == "telegram":
             channel_cls = TelegramChannel
         elif platform == "web":
-            channel_cls = WebChannel
+            # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
+            from apps.channels.channels_v2.web_channel import WebChannel as NewWebChannel  # noqa: PLC0415
+
+            channel_cls = NewWebChannel
         elif platform == "whatsapp":
             channel_cls = WhatsappChannel
         elif platform == "facebook":
@@ -985,12 +988,13 @@ class ChannelBase(ABC):
         # Add experiment version to the list if it's a versioned experiment
         if self.experiment.is_a_version:
             version_number = self.experiment.version_number
-            current_versions = self.experiment_session.experiment_versions or []
+            current_versions = cast(list[int], self.experiment_session.experiment_versions or [])
             if version_number not in current_versions:
                 self.experiment_session.experiment_versions = current_versions + [version_number]
                 self.experiment_session.save(update_fields=["experiment_versions"])
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.web_channel.WebChannel
 class WebChannel(ChannelBase):
     """Message Handler for the UI"""
 

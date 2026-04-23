@@ -7,9 +7,9 @@ from django.utils import timezone
 from field_audit.models import AuditAction
 from taskbadger.celery import Task as TaskbadgerTask
 
+from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.chat.bots import create_conversation
-from apps.chat.channels import WebChannel
 from apps.experiments.export import filtered_export_to_csv, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File

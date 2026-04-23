@@ -6,11 +6,10 @@ from django.db import models, transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, FormView, TemplateView, UpdateView
-from django_htmx.http import HttpResponseClientRefresh, reswap
+from django_htmx.http import HttpResponseClientRefresh
 from django_tables2 import SingleTableView
 
 from apps.chat.agent.tools import get_assistant_tools
@@ -24,6 +23,7 @@ from apps.web.waf import WafRule, waf_allow
 
 from ..files.models import File
 from ..generics.chips import Chip
+from ..generics.referenced_objects import render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required, team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
@@ -235,15 +235,11 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 )
                 for experiment in assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
             ]
-            response = render_to_string(
-                "generic/referenced_objects.html",
-                context={
-                    "object_name": "assistant",
-                    "pipeline_nodes": pipeline_nodes,
-                    "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes,
-                },
+            return render_referenced_objects_modal(
+                "assistant",
+                pipeline_nodes=pipeline_nodes,
+                experiments_with_pipeline_nodes=experiments_with_pipeline_nodes,
             )
-            return reswap(HttpResponse(response, status=400), "none")
 
 
 class SyncOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):

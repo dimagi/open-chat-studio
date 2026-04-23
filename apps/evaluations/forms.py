@@ -14,11 +14,13 @@ from apps.evaluations.models import (
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
+    EvaluationMode,
     Evaluator,
     ExperimentVersionSelection,
 )
 from apps.evaluations.tasks import (
     create_dataset_from_csv_task,
+    create_dataset_from_session_messages_task,
     create_dataset_from_sessions_task,
 )
 from apps.evaluations.utils import parse_history_text
@@ -26,18 +28,41 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 
 
+class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
+    """CheckboxSelectMultiple that adds data-evaluation-mode to each option for Alpine.js filtering."""
+
+    def __init__(self, *args, evaluator_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._evaluator_queryset = evaluator_queryset
+        self._mode_by_id = {}
+
+    def optgroups(self, name, value, attrs=None):
+        if self._evaluator_queryset is not None:
+            self._mode_by_id = {str(e.id): e.evaluation_mode for e in self._evaluator_queryset}
+        return super().optgroups(name, value, attrs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        mode = self._mode_by_id.get(str(value), "")
+        if mode:
+            option["attrs"]["data-evaluation-mode"] = mode
+        return option
+
+
 class StyledRadioSelect(RadioSelect):
-    def __init__(self, attrs=None):
+    def __init__(self, attrs=None, x_model="mode"):
         default_attrs = {"class": "space-y-1"}
         if attrs:
             default_attrs.update(attrs)
         super().__init__(attrs=default_attrs)
+        self.x_model = x_model
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
 
         option["attrs"]["class"] = "radio radio-primary mr-2"
-        option["attrs"]["x-model"] = "mode"
+        if self.x_model:
+            option["attrs"]["x-model"] = self.x_model
         return option
 
 
@@ -101,7 +126,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "base_experiment",
         ]
         widgets = {
-            "evaluators": forms.CheckboxSelectMultiple(),
+            "evaluators": EvaluatorCheckboxWidget(),
         }
 
     def __init__(self, team, *args, **kwargs):
@@ -109,7 +134,10 @@ class EvaluationConfigForm(forms.ModelForm):
         self.team = team
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
-        self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
+        evaluator_qs = Evaluator.objects.filter(team=team)
+        self.fields["evaluators"].queryset = evaluator_qs
+        if isinstance(self.fields["evaluators"].widget, EvaluatorCheckboxWidget):
+            self.fields["evaluators"].widget._evaluator_queryset = evaluator_qs
         self.fields["experiment"].queryset = (
             Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
         )
@@ -153,6 +181,22 @@ class EvaluationConfigForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
+        dataset = cleaned_data.get("dataset")
+        evaluators = cleaned_data.get("evaluators")
+        if dataset and evaluators:
+            mismatched = [e for e in evaluators if e.evaluation_mode != dataset.evaluation_mode]
+            if mismatched:
+                names = ", ".join(e.name for e in mismatched)
+                self.add_error(
+                    "evaluators",
+                    f"The following evaluators have a different evaluation mode than the dataset: {names}. "
+                    f"Dataset mode is '{dataset.evaluation_mode}', but these evaluators are set to a different mode.",
+                )
+
+        if dataset and dataset.evaluation_mode == EvaluationMode.SESSION and cleaned_data.get("run_generation"):
+            self.add_error("evaluators", "Generation is not supported for session-mode datasets.")
+            cleaned_data["run_generation"] = False
+
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
@@ -175,6 +219,9 @@ class EvaluationConfigForm(forms.ModelForm):
             elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
                 cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
                 cleaned_data["experiment_version"] = None
+        elif not experiment:
+            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["experiment_version"] = None
         else:
             cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
             try:
@@ -214,10 +261,11 @@ class EvaluationConfigForm(forms.ModelForm):
 class EvaluatorForm(forms.ModelForm):
     class Meta:
         model = Evaluator
-        fields = ("name", "type", "params")
+        fields = ("name", "type", "params", "evaluation_mode")
         widgets = {
             "type": forms.HiddenInput(),
             "params": forms.HiddenInput(),
+            "evaluation_mode": forms.RadioSelect(choices=EvaluationMode.choices),
         }
 
     def __init__(self, team, *args, **kwargs):
@@ -285,9 +333,17 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         required=False,
     )
 
+    evaluation_mode = forms.ChoiceField(
+        choices=[(EvaluationMode.MESSAGE, "Message level"), (EvaluationMode.SESSION, "Session level")],
+        initial=EvaluationMode.MESSAGE,
+        widget=StyledRadioSelect(x_model=None),
+        label="Evaluation level",
+        help_text="Message level evaluates individual message pairs. Session level evaluates entire conversations.",
+    )
+
     class Meta:
         model = EvaluationDataset
-        fields = ("name",)
+        fields = ("name", "evaluation_mode")
 
     def __init__(self, team, *args, **kwargs):
         self.filter_params = kwargs.pop("filter_params", None)
@@ -327,7 +383,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
         return session_ids, filtered_session_ids
 
-    def _save_clone(self, dataset):
+    def _save_session_messages_clone(self, dataset):
         """Dispatch async task to clone messages from sessions."""
         session_ids = self.cleaned_data.get("session_ids", [])
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
@@ -335,13 +391,32 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         if not session_ids and not filtered_session_ids:
             return
 
-        task = create_dataset_from_sessions_task.delay(
+        task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
             list(session_ids),
             list(filtered_session_ids),
             self.filter_params.to_query() if self.filter_params else None,
             self.timezone,
+        )
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
+    def _save_sessions_clone(self, dataset):
+        """Dispatch async task to create session-mode messages."""
+        # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
+        session_ids = self.cleaned_data.get("session_ids", set())
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
+        all_session_ids = list(session_ids | filtered_session_ids)
+
+        if not all_session_ids:
+            return
+
+        task = create_dataset_from_sessions_task.delay(
+            dataset.id,
+            self.team.id,
+            all_session_ids,
         )
 
         dataset.job_id = task.id
@@ -391,6 +466,11 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
+        evaluation_mode = cleaned_data.get("evaluation_mode")
+
+        if evaluation_mode == EvaluationMode.SESSION and mode != "clone":
+            raise forms.ValidationError({"mode": "Session-mode datasets can only be created by cloning from sessions."})
+
         if mode == "clone":
             session_ids, filtered_session_ids = self._clean_clone()
             cleaned_data["session_ids"] = session_ids
@@ -571,7 +651,10 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             return dataset
 
         if mode == "clone":
-            self._save_clone(dataset)
+            if dataset.evaluation_mode == EvaluationMode.SESSION:
+                self._save_sessions_clone(dataset)
+            else:
+                self._save_session_messages_clone(dataset)
         elif mode == "csv":
             self._save_csv(dataset)
 
@@ -627,9 +710,16 @@ def _clean_json_field(field_name: str, field_value: str) -> dict:
 class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
     """Form for editing existing evaluation datasets."""
 
+    class Meta(EvaluationDatasetBaseForm.Meta):
+        fields = ("name",)
+
     def __init__(self, team, *args, **kwargs):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
+        self.fields["mode"].required = False
+        # evaluation_mode is immutable after creation
+        if "evaluation_mode" in self.fields:
+            del self.fields["evaluation_mode"]
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -671,6 +761,9 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
             if self.cleaned_data.get("mode") == "clone":
                 dataset.status = DatasetCreationStatus.PENDING
                 dataset.save(update_fields=["status"])
-                self._save_clone(dataset)
+                if dataset.evaluation_mode == EvaluationMode.SESSION:
+                    self._save_sessions_clone(dataset)
+                else:
+                    self._save_session_messages_clone(dataset)
 
         return dataset

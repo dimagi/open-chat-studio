@@ -11,13 +11,12 @@ from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
-from django_htmx.http import HttpResponseClientRedirect, reswap
+from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 
 from apps.documents import tasks
@@ -45,6 +44,7 @@ from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
+from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
@@ -629,15 +629,11 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                         ]
                     )
 
-            response = render_to_string(
-                "generic/referenced_objects.html",
-                context={
-                    "object_name": "collection",
-                    "pipeline_nodes": pipeline_node_chips,
-                    "experiments_with_pipeline_nodes": experiment_chips,
-                },
+            return render_referenced_objects_modal(
+                "collection",
+                pipeline_nodes=pipeline_node_chips,
+                experiments_with_pipeline_nodes=experiment_chips,
             )
-            return reswap(HttpResponse(response, status=400), "none")
 
 
 @require_POST

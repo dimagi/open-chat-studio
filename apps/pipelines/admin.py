@@ -1,11 +1,13 @@
 from django import forms
 from django.contrib import admin
 
+from apps.utils.admin import ReadonlyAdminMixin
+
 from ..utils.json import PrettyJSONEncoder
 from .models import Node, Pipeline, PipelineChatHistory, PipelineChatMessages
 
 
-class PipelineNodeInline(admin.TabularInline):
+class PipelineNodeInline(ReadonlyAdminMixin, admin.TabularInline):
     model = Node
     extra = 0
 
@@ -15,12 +17,12 @@ class PipelineAdminForm(forms.ModelForm):
 
 
 @admin.register(Pipeline)
-class PipelineAdmin(admin.ModelAdmin):
+class PipelineAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     form = PipelineAdminForm
     inlines = [PipelineNodeInline]
 
 
-class PipelineChatMessagesInline(admin.TabularInline):
+class PipelineChatMessagesInline(ReadonlyAdminMixin, admin.TabularInline):
     model = PipelineChatMessages
     extra = 0
 
@@ -30,5 +32,5 @@ class PipelineChatMessagesInline(admin.TabularInline):
 
 
 @admin.register(PipelineChatHistory)
-class PipelineChatHistoryAdmin(admin.ModelAdmin):
+class PipelineChatHistoryAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     inlines = [PipelineChatMessagesInline]

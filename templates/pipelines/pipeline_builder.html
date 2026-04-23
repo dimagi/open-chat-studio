@@ -54,7 +54,6 @@
     window.DOCUMENTATION_BASE_URL = '{{ docs_base_url }}';
     document.addEventListener('DOMContentLoaded', () => {
       SiteJS.pipeline.renderPipeline("#pipelineBuilder", "{{ request.team.slug }}", {{ pipeline_id }});
-    }
-    )
+    });
   </script>
 {% endblock page_js %}

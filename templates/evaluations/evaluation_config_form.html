@@ -2,15 +2,82 @@
 {% load form_tags i18n %}
 
 {% block form %}
-  <div x-data="{  runGeneration: {{ form.run_generation.value|yesno:'true,false' }}  }">
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('evaluationConfigForm', (runGenerationInitial, showVersionSelectInitial) => ({
+        runGeneration: runGenerationInitial,
+        datasetMode: 'message',
+        showVersionSelect: showVersionSelectInitial,
+        isSessionMode() { return this.datasetMode === 'session'; },
+        onDatasetChange() {
+          const opt = this.$refs.datasetSelect.selectedOptions[0];
+          this.datasetMode = opt?.dataset?.evaluationMode || 'message';
+          if (this.datasetMode === 'session') { this.runGeneration = false; }
+        },
+        // Hide evaluators whose mode doesn't match the selected dataset's evaluation mode
+        filterEvaluators(el) {
+          el.querySelectorAll('input[data-evaluation-mode]').forEach(input => {
+            const li = input.closest('li') || input.parentElement;
+            const visible = input.dataset.evaluationMode === this.datasetMode;
+            li.style.display = visible ? '' : 'none';
+            input.disabled = !visible;
+          });
+        },
+        onExperimentChange() {
+          // Hide the version select box while HTMX loads the new options
+          this.showVersionSelect = false;
+        },
+        init() {
+          if (this.$refs.datasetSelect && this.$refs.datasetSelect.selectedOptions[0]) {
+            this.datasetMode = this.$refs.datasetSelect.selectedOptions[0].dataset?.evaluationMode || 'message';
+            if (this.datasetMode === 'session') { this.runGeneration = false; }
+          }
+        },
+      }));
+    });
+  </script>
+  <div x-data="evaluationConfigForm({{ form.run_generation.value|yesno:'true,false' }}, {{ form.experiment.value|yesno:'true,false' }})">
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
-    {% render_form_fields form "dataset" %}
-    {% render_form_fields form "evaluators" %}
-    {% render_form_fields form "run_generation" %}
 
-    <div class="fieldset w-full" x-show="runGeneration" x-cloak x-collapse>
+    <div class="fieldset w-full">
+        <label class="label font-bold" for="{{ form.dataset.id_for_label }}">
+            <div>{{ form.dataset.label }}</div>
+        </label>
+        <select name="{{ form.dataset.name }}"
+                id="{{ form.dataset.id_for_label }}"
+                class="select w-full"
+                x-ref="datasetSelect"
+                @change="onDatasetChange()">
+            <option value="">---------</option>
+            {% for dataset in form.dataset.field.queryset %}
+                <option value="{{ dataset.pk }}"
+                        data-evaluation-mode="{{ dataset.evaluation_mode }}"
+                        {% if form.dataset.value|stringformat:"s" == dataset.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ dataset }}
+                </option>
+            {% endfor %}
+        </select>
+        {{ form.dataset.errors }}
+    </div>
+
+    <div x-effect="filterEvaluators($el)">
+        {% render_form_fields form "evaluators" %}
+    </div>
+
+    <div x-show="!isSessionMode()">
+        {% render_form_fields form "run_generation" %}
+    </div>
+
+    <template x-if="isSessionMode()">
+        <div class="alert alert-info mb-4">
+            <i class="fa-solid fa-info-circle"></i>
+            <span>{% translate "Generation is not available for session-mode datasets." %}</span>
+        </div>
+    </template>
+
+    <div class="fieldset w-full" x-show="runGeneration && !isSessionMode()" x-cloak x-collapse>
       <label class="label font-bold" for="{{ form.experiment.id_for_label }}">
         <div>
           {{ form.experiment.label }}
@@ -30,11 +97,7 @@
               hx-include="[name='{{ form.experiment.name }}']"
               hx-swap="outerHTML show:#version-select-container"
               hx-indicator="#version-loading"
-              onchange="
-                        // hide the version select box whenever a new item is selected
-                        const container = document.getElementById('version-select-container');
-                        container.style.display = 'none';
-                       ">
+              @change="onExperimentChange()">
         {% if form.experiment.empty_label %}
           <option value="">{{ form.experiment.empty_label }}</option>
         {% endif %}
@@ -46,8 +109,8 @@
     </div>
 
     {# The version select field starts hidden in the "new" form until the user selects an experiment #}
-    <div x-show="runGeneration" x-cloak x-collapse>
-      <div id="version-select-container" {% if not form.experiment.value %}style="display: none;"{% endif %}>
+    <div x-show="runGeneration && !isSessionMode()" x-cloak x-collapse>
+      <div id="version-select-container" x-show="showVersionSelect">
         {% render_form_fields form "experiment_version" %}
       </div>
     </div>

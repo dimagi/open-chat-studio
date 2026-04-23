@@ -214,6 +214,78 @@ def _clean_field_name(field_name):
     return field_name or "context_variable"
 
 
+def make_session_evaluation_messages(session_external_ids: list[str], team=None) -> list["EvaluationMessage"]:
+    """Create one EvaluationMessage per session, with the full conversation as history.
+
+    Unlike make_evaluation_messages_from_sessions (which creates one message per human-AI pair),
+    this creates a single message per session for holistic session evaluation.
+    """
+    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
+        EvaluationMessage,
+    )
+
+    if not session_external_ids:
+        return []
+
+    filters = {"chat__experiment_session__external_id__in": session_external_ids}
+    if team is not None:
+        filters["chat__experiment_session__team"] = team
+    all_messages = list(
+        ChatMessage.objects.filter(**filters)
+        .annotate(
+            session_external_id=F("chat__experiment_session__external_id"),
+            experiment_public_id=F("chat__experiment_session__experiment__public_id"),
+            trace_participant_data=F("input_message_trace__participant_data"),
+            trace_session_state=F("input_message_trace__session_state"),
+        )
+        .order_by("created_at")
+    )
+
+    sessions: dict[str, list] = {}
+    for msg in all_messages:
+        sessions.setdefault(msg.session_external_id, []).append(msg)
+
+    session_map = {str(s.external_id): s for s in ExperimentSession.objects.filter(external_id__in=sessions.keys())}
+
+    result = []
+    for session_id, messages in sessions.items():
+        history = [
+            {
+                "message_type": msg.message_type,
+                "content": msg.content,
+                "summary": msg.summary,
+            }
+            for msg in messages
+        ]
+
+        participant_data = {}
+        session_state = {}
+        for msg in reversed(messages):
+            if msg.message_type == ChatMessageType.AI:
+                participant_data = msg.trace_participant_data or {}
+                session_state = msg.trace_session_state or {}
+                break
+
+        eval_message = EvaluationMessage(
+            session=session_map.get(str(session_id)),
+            input={},
+            output={},
+            history=history,
+            participant_data=participant_data,
+            session_state=session_state,
+            metadata={
+                "session_id": str(session_id),
+                "experiment_id": str(messages[0].experiment_public_id),
+                "created_mode": "clone",
+            },
+            input_chat_message=None,
+            expected_output_chat_message=None,
+        )
+        result.append(eval_message)
+
+    return result
+
+
 def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:
     from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
         EvaluationMessage,
