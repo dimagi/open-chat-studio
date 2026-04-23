@@ -674,3 +674,18 @@ class EmailChannelForm(ExtraFormBase):
         required=False,
         help_text="When enabled, this channel receives emails that don't match any other email channel address.",
     )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("is_default"):
+            existing = ExperimentChannel.objects.filter(
+                platform=ChannelPlatform.EMAIL,
+                extra_data__contains={"is_default": True},
+                team=self.experiment.team,
+                deleted=False,
+            )
+            if self.channel:
+                existing = existing.exclude(pk=self.channel.pk)
+            if existing.exists():
+                self.add_error("is_default", "Another email channel is already set as the default for this team.")
+        return cleaned_data

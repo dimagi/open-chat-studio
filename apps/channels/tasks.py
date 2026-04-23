@@ -2,6 +2,7 @@ import uuid
 
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from django.db import OperationalError  # noqa: F811 - used at runtime in task decorator
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
@@ -213,18 +214,30 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     channel.new_user_message(message)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_email_message(self, email_data: dict):
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    ignore_result=True,
+    autoretry_for=(OperationalError, ConnectionError),
+    max_retries=3,
+    retry_backoff=60,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def handle_email_message(self, email_data: dict, team_id: int | None = None):
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.email import EmailChannel, EmailThreadContext, get_email_experiment_channel  # noqa: PLC0415
+    from apps.teams.models import Team  # noqa: PLC0415
 
     message = EmailMessageDatamodel(**email_data)
+    team = Team.objects.filter(id=team_id).first() if team_id else None
 
     experiment_channel, session = get_email_experiment_channel(
         in_reply_to=message.in_reply_to,
         references=message.references,
         to_address=message.to_address,
         sender_address=message.from_address,
+        team=team,
     )
     if not experiment_channel:
         log.info("No email channel found for to=%s, ignoring", message.to_address)

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.mail import EmailMessage as DjangoEmailMessage
+from django.db import IntegrityError  # noqa: F811 - used at runtime in except clause
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.channels")
+
+_MAX_REFERENCES = 50
 
 # RFC 2822 reply prefixes across common languages
 _REPLY_PREFIX_RE = re.compile(r"^(re|aw|sv|fw|fwd)\s*:", re.IGNORECASE)
@@ -45,6 +48,8 @@ class EmailThreadContext:
         references = list(message.references)
         if message.message_id:
             references.append(message.message_id)
+        if len(references) > _MAX_REFERENCES:
+            references = [references[0], *references[-(_MAX_REFERENCES - 1) :]]
 
         return cls(
             subject=subject,
@@ -229,7 +234,14 @@ class EmailChannel(ChannelBase):
             msg_id = self._sender_instance.last_message_id
             if msg_id and not _has_email_message_id(self.experiment_session.external_id):
                 self.experiment_session.external_id = msg_id  # ty: ignore[invalid-assignment]
-                self.experiment_session.save(update_fields=["external_id"])
+                try:
+                    self.experiment_session.save(update_fields=["external_id"])
+                except IntegrityError:
+                    logger.warning(
+                        "Could not save Message-ID %s as external_id for session %s (duplicate)",
+                        msg_id,
+                        self.experiment_session.id,
+                    )
 
         return response
 
@@ -254,15 +266,47 @@ def email_inbound_handler(sender, message, event, **kwargs):
         logger.exception("Failed to parse inbound email")
         return
 
-    # Quick check: does any email channel exist for this to-address?
-    # Full routing (including thread lookup) happens in the Celery task.
-    has_channel = ExperimentChannel.objects.filter(
-        platform=ChannelPlatform.EMAIL,
-        extra_data__contains={"email_address": email_msg.to_address},
-        deleted=False,
-    ).exists()
-    if not has_channel:
+    team_id = None
+    can_route = False
+
+    # Priority check 1: specific channel match by to-address
+    channel = (
+        ExperimentChannel.objects.filter(
+            platform=ChannelPlatform.EMAIL,
+            extra_data__contains={"email_address": email_msg.to_address},
+            deleted=False,
+        )
+        .only("team_id")
+        .first()
+    )
+    if channel:
+        can_route = True
+        team_id = channel.team_id
+
+    # Priority check 2: thread continuity via In-Reply-To
+    if not can_route and email_msg.in_reply_to:
+        can_route = ExperimentSession.objects.filter(
+            external_id=email_msg.in_reply_to,
+            experiment_channel__platform=ChannelPlatform.EMAIL,
+        ).exists()
+
+    # Priority check 3: default fallback channel
+    if not can_route:
+        default = (
+            ExperimentChannel.objects.filter(
+                platform=ChannelPlatform.EMAIL,
+                extra_data__contains={"is_default": True},
+                deleted=False,
+            )
+            .only("team_id")
+            .first()
+        )
+        if default:
+            can_route = True
+            team_id = default.team_id
+
+    if not can_route:
         logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
         return
 
-    handle_email_message.delay(email_data=email_msg.model_dump())
+    handle_email_message.delay(email_data=email_msg.model_dump(), team_id=team_id)

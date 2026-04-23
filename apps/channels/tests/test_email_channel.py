@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core import mail
+from django.db import IntegrityError  # noqa: F811 - used at runtime in test
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
@@ -168,6 +169,38 @@ class TestEmailChannelForm:
         )
         assert form.is_valid()
         assert form.cleaned_data["is_default"] is False
+
+    def test_duplicate_default_rejected(self, experiment):
+        """Only one default email channel per team."""
+        _make_email_channel(experiment.team, email_address="first@chat.openchatstudio.com", is_default=True)
+
+        form = EmailChannelForm(
+            experiment=experiment,
+            data={
+                "email_address": "second@chat.openchatstudio.com",
+                "is_default": True,
+                "platform": "email",
+            },
+        )
+        assert not form.is_valid()
+        assert "is_default" in form.errors
+
+    def test_duplicate_default_allowed_when_editing_same_channel(self, experiment):
+        """Editing the existing default channel should not trigger uniqueness error."""
+        channel = _make_email_channel(
+            experiment.team, experiment=experiment, email_address="first@chat.openchatstudio.com", is_default=True
+        )
+
+        form = EmailChannelForm(
+            experiment=experiment,
+            channel=channel,
+            data={
+                "email_address": "first@chat.openchatstudio.com",
+                "is_default": True,
+                "platform": "email",
+            },
+        )
+        assert form.is_valid(), form.errors
 
 
 @pytest.mark.django_db()
@@ -455,6 +488,39 @@ class TestEmailInboundHandler:
             mock_task.delay.assert_called_once()
             call_kwargs = mock_task.delay.call_args[1]
             assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
+            assert call_kwargs["team_id"] == team.id
+
+    def test_thread_reply_allowed_through(self, team_with_users):
+        """Reply via In-Reply-To is enqueued even when to-address doesn't match a channel."""
+        team = team_with_users
+        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com")
+        _make_session(team, channel, "<outbound-1@chat.openchatstudio.com>")
+
+        inbound = _make_inbound_message(
+            to_email="different@chat.openchatstudio.com",
+            in_reply_to="<outbound-1@chat.openchatstudio.com>",
+        )
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            mock_task.delay.assert_called_once()
+            call_kwargs = mock_task.delay.call_args[1]
+            assert call_kwargs["team_id"] is None
+
+    def test_default_channel_allowed_through(self, team_with_users):
+        """Email to unknown address is enqueued when a default channel exists."""
+        team = team_with_users
+        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+
+        inbound = _make_inbound_message(to_email="unknown@chat.openchatstudio.com")
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            mock_task.delay.assert_called_once()
+            call_kwargs = mock_task.delay.call_args[1]
+            assert call_kwargs["team_id"] == team.id
 
     def test_no_channel_silently_ignored(self):
         """Unmatched email is silently ignored (no bounce loop)."""
@@ -532,6 +598,28 @@ class TestEmailSessionThreading:
 
         assert session_mock.external_id == "<already-set@chat.openchatstudio.com>"
         session_mock.save.assert_not_called()
+
+    def test_external_id_integrity_error_handled(self):
+        """IntegrityError when saving external_id is handled gracefully."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.external_id = "some-uuid-default"
+        session_mock.save.side_effect = IntegrityError("duplicate key")
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+
+        mock_sender = MagicMock(spec=EmailSender)
+        mock_sender.last_message_id = "<outbound1@chat.openchatstudio.com>"
+        email_channel._sender_instance = mock_sender
+
+        with patch.object(ChannelBase, "new_user_message", return_value=MagicMock()):
+            # Should not raise
+            result = email_channel.new_user_message(MagicMock())
+
+        assert result is not None
+        session_mock.save.assert_called_once_with(update_fields=["external_id"])
 
 
 @pytest.mark.django_db()

@@ -280,7 +280,7 @@ class EmailMessage(BaseMessage):
     subject: str = Field(max_length=1000)
     message_id: str = Field(max_length=500)
     in_reply_to: str | None = None
-    references: list[str] = Field(default=[], max_length=100)
+    references: list[str] = Field(default=[])
 
     @staticmethod
     def parse(inbound) -> "EmailMessage":
@@ -306,8 +306,18 @@ class EmailMessage(BaseMessage):
         )
 
 
+_MAX_REFERENCES = 50
+
+
 def _parse_references(refs: str) -> list[str]:
-    """Parse space-separated Message-ID list from References header."""
+    """Parse space-separated Message-ID list from References header.
+
+    Keeps the first reference (root message / session anchor) plus the
+    most recent ones to prevent unbounded growth in long email threads.
+    """
     if not refs:
         return []
-    return [r.strip() for r in refs.split() if r.strip()]
+    parsed = [r.strip() for r in refs.split() if r.strip()]
+    if len(parsed) <= _MAX_REFERENCES:
+        return parsed
+    return [parsed[0], *parsed[-(_MAX_REFERENCES - 1) :]]

@@ -84,6 +84,7 @@ THIRD_PARTY_APPS = [
     "template_partials",
     "silk",
     "oauth2_provider",
+    "anymail",
 ]
 
 PROJECT_APPS = [
@@ -400,7 +401,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Email setup
 
 # use in development
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 # use in production
 # see https://github.com/anymail/django-anymail for more details/examples
 # EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
