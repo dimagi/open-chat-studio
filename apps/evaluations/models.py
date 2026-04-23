@@ -6,6 +6,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -445,3 +446,62 @@ class EvaluationRunAggregate(BaseModel):
 
     class Meta:
         unique_together = ("run", "evaluator")
+
+
+class ConditionType(models.TextChoices):
+    EQUALS = "equals", "Equals"
+    RANGE = "range", "Range"
+
+
+class EvaluatorTagRule(BaseTeamModel):
+    """A rule that applies a tag to the eval target when an evaluator output field matches a condition."""
+
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE, related_name="tag_rules")
+    tag = models.ForeignKey("annotations.Tag", on_delete=models.PROTECT, related_name="evaluator_tag_rules")
+    field_name = models.CharField(max_length=255)
+    condition_type = models.CharField(max_length=20, choices=ConditionType.choices)
+    condition_value = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"{self.evaluator.name}: {self.field_name} {self.condition_type} {self.condition_value}"
+
+    def clean(self):
+        super().clean()
+        from apps.evaluations.tagging import (  # noqa: PLC0415 - circular: tagging imports models
+            validate_condition,
+            validate_field_in_schema,
+            validate_tag_compatibility,
+        )
+
+        if self.evaluator_id and self.team_id and self.evaluator.team_id != self.team_id:
+            raise ValidationError({"team": "Rule team must match evaluator team."})
+
+        if self.tag_id:
+            validate_tag_compatibility(self.tag, self.evaluator)
+
+        if self.evaluator_id:
+            output_schema = self.evaluator.params.get("output_schema", {}) or {}
+            field_def = validate_field_in_schema(self.field_name, output_schema)
+            validate_condition(self.condition_type, self.condition_value, field_def)
+
+
+class AppliedTag(BaseTeamModel):
+    """Audit row recording that a specific rule applied a tag against a specific evaluation result."""
+
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name="applied_tags")
+    rule = models.ForeignKey(EvaluatorTagRule, on_delete=models.CASCADE, related_name="applications")
+    tag = models.ForeignKey("annotations.Tag", on_delete=models.PROTECT)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evaluation_result", "rule", "tag"],
+                name="unique_applied_tag_per_result_rule",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["rule"]),
+        ]
+
+    def __str__(self):
+        return f"AppliedTag(result={self.evaluation_result_id}, rule={self.rule_id}, tag={self.tag_id})"
