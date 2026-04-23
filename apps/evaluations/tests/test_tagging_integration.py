@@ -535,7 +535,7 @@ class TestEvaluatorTagRuleFormset:
         rule = rules[0]
         assert rule.tag.name == "unacceptable"
         assert rule.tag.category == TagCategories.EVALUATIONS.value
-        assert rule.tag.is_system_tag is True
+        assert rule.tag.is_system_tag is False
         assert rule.condition_value == {"value": "negative"}
         assert rule.evaluator_id == message_evaluator.id
 

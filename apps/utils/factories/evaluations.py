@@ -49,7 +49,7 @@ class EvaluatorFactory(DjangoModelFactory):
 
 
 class EvaluationTagFactory(DjangoModelFactory):
-    """Factory for EVALUATIONS-category system tags used by tag rules."""
+    """Factory for EVALUATIONS-category tags used by tag rules."""
 
     class Meta:
         model = Tag
@@ -57,7 +57,7 @@ class EvaluationTagFactory(DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"eval-tag-{n}")
-    is_system_tag = True
+    is_system_tag = False
     category = TagCategories.EVALUATIONS
 
 

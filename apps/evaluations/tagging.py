@@ -132,13 +132,11 @@ def _validate_range_condition(condition_value: dict, field_definition: FieldDefi
 
 
 def validate_tag_compatibility(tag: Tag, evaluator: Evaluator) -> None:
-    """Ensure the tag is compatible with this evaluator (category, team, system flag)."""
+    """Ensure the tag is compatible with this evaluator (category, team)."""
     if tag.team_id != evaluator.team_id:
         raise ValidationError({"tag": "Tag must belong to the same team as the evaluator."})
     if tag.category != TagCategories.EVALUATIONS:
         raise ValidationError({"tag": f"Tag must be in the '{TagCategories.EVALUATIONS}' category."})
-    if not tag.is_system_tag:
-        raise ValidationError({"tag": "Tag must be a system tag."})
 
 
 def matches(condition_type: str, condition_value: dict, field_value: Any) -> bool:

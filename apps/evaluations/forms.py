@@ -445,7 +445,7 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         tag, _ = Tag.objects.get_or_create(
             team=self.team,
             name=tag_name,
-            is_system_tag=True,
+            is_system_tag=False,
             category=TagCategories.EVALUATIONS,
         )
         cleaned["tag"] = tag
