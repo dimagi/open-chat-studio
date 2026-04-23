@@ -498,7 +498,8 @@
                         class="select select-bordered w-full select-sm">
                   <option value="">{% translate "Select field..." %}</option>
                   <template x-for="name in schemaFieldNames()" :key="name">
-                    <option :value="name" x-text="name" :selected="name === fieldName"></option>
+                    <option :value="name" :selected="name === fieldName" :disabled="!isUsableField(name)"
+                            x-text="isUsableField(name) ? name : name + ' (add choices to use)'"></option>
                   </template>
                 </select>
                 {{ rule_form.field_name.errors }}
@@ -506,10 +507,13 @@
               <div>
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
                 <select name="{{ rule_form.condition_type.html_name }}"
-                        x-model="conditionType"
-                        x-effect="conditionType = (fieldName && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType"
+                        x-effect="conditionType = (fieldName && schemaFieldNames().includes(fieldName) && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType; if ($el.value !== conditionType) { $nextTick(() => { $el.value = conditionType }) }"
+                        @change="conditionType = $event.target.value"
                         :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
                         class="select select-bordered w-full select-sm">
+                  <template x-if="!fieldName">
+                    <option value="" selected>{% translate "Pick a field first" %}</option>
+                  </template>
                   <template x-if="allowedConditionsForField(fieldName).includes('equals')">
                     <option value="equals">{% translate "Equals" %}</option>
                   </template>
@@ -530,12 +534,26 @@
                 </label>
               </div>
             </div>
-            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="fieldName && conditionType">
               <div x-show="conditionType === 'equals'">
                 <label class="label text-sm"><span>{% translate "Value" %}</span></label>
-                <input type="text" name="{{ rule_form.condition_value_single.html_name }}"
-                       value="{{ rule_form.condition_value_single.value|default_if_none:'' }}"
-                       class="input input-bordered w-full input-sm">
+                <template x-if="fieldType(fieldName) === 'choice'">
+                  <select name="{{ rule_form.condition_value_single.html_name }}"
+                          class="select select-bordered w-full select-sm">
+                    <option value="">{% translate "Select a choice..." %}</option>
+                    <template x-for="choice in fieldChoices(fieldName)" :key="choice">
+                      <option :value="choice" x-text="choice"
+                              :selected="choice === '{{ rule_form.condition_value_single.value|default_if_none:''|escapejs }}'"></option>
+                    </template>
+                  </select>
+                </template>
+                <template x-if="fieldType(fieldName) !== 'choice'">
+                  <input :type="['int','float'].includes(fieldType(fieldName)) ? 'number' : 'text'"
+                         step="any"
+                         name="{{ rule_form.condition_value_single.html_name }}"
+                         value="{{ rule_form.condition_value_single.value|default_if_none:'' }}"
+                         class="input input-bordered w-full input-sm">
+                </template>
                 {{ rule_form.condition_value_single.errors }}
               </div>
               <div x-show="conditionType === 'range'"
@@ -577,17 +595,21 @@
                         class="select select-bordered w-full select-sm">
                   <option value="">{% translate "Select field..." %}</option>
                   <template x-for="name in schemaFieldNames()" :key="name">
-                    <option :value="name" x-text="name" :selected="name === fieldName"></option>
+                    <option :value="name" :selected="name === fieldName" :disabled="!isUsableField(name)"
+                            x-text="isUsableField(name) ? name : name + ' (add choices to use)'"></option>
                   </template>
                 </select>
               </div>
               <div>
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
                 <select name="tag_rules-__prefix__-condition_type"
-                        x-model="conditionType"
-                        x-effect="conditionType = (fieldName && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType"
+                        x-effect="conditionType = (fieldName && schemaFieldNames().includes(fieldName) && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType; if ($el.value !== conditionType) { $nextTick(() => { $el.value = conditionType }) }"
+                        @change="conditionType = $event.target.value"
                         :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
                         class="select select-bordered w-full select-sm">
+                  <template x-if="!fieldName">
+                    <option value="" selected>{% translate "Pick a field first" %}</option>
+                  </template>
                   <template x-if="allowedConditionsForField(fieldName).includes('equals')">
                     <option value="equals">{% translate "Equals" %}</option>
                   </template>
@@ -607,11 +629,24 @@
                 </label>
               </div>
             </div>
-            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="fieldName && conditionType">
               <div x-show="conditionType === 'equals'">
                 <label class="label text-sm"><span>{% translate "Value" %}</span></label>
-                <input type="text" name="tag_rules-__prefix__-condition_value_single"
-                       class="input input-bordered w-full input-sm">
+                <template x-if="fieldType(fieldName) === 'choice'">
+                  <select name="tag_rules-__prefix__-condition_value_single"
+                          class="select select-bordered w-full select-sm">
+                    <option value="">{% translate "Select a choice..." %}</option>
+                    <template x-for="choice in fieldChoices(fieldName)" :key="choice">
+                      <option :value="choice" x-text="choice"></option>
+                    </template>
+                  </select>
+                </template>
+                <template x-if="fieldType(fieldName) !== 'choice'">
+                  <input :type="['int','float'].includes(fieldType(fieldName)) ? 'number' : 'text'"
+                         step="any"
+                         name="tag_rules-__prefix__-condition_value_single"
+                         class="input input-bordered w-full input-sm">
+                </template>
               </div>
               <div x-show="conditionType === 'range'" class="grid grid-cols-2 gap-2">
                 <div>
@@ -632,9 +667,13 @@
 
       <button type="button"
               @click="addTagRuleRow()"
+              :disabled="!hasAnyUsableField()"
               class="btn btn-outline btn-primary btn-sm mt-3">
         <i class="fa fa-plus"></i> {% translate "Add tag rule" %}
       </button>
+      <p class="text-xs text-gray-500 mt-1" x-show="!hasAnyUsableField()">
+        {% translate "Define at least one output field (choice with choices, int, float, or string) before adding tag rules." %}
+      </p>
     </div>
   </div>
 {% endblock form %}
@@ -967,6 +1006,26 @@
             case 'string': return ['equals'];
             default: return [];
           }
+        },
+
+        fieldType(fieldName) {
+          const schema = (this.params && this.params.output_schema) || {};
+          return (schema[fieldName] || {}).type || '';
+        },
+
+        fieldChoices(fieldName) {
+          const schema = (this.params && this.params.output_schema) || {};
+          return ((schema[fieldName] || {}).choices || []).filter(c => c && String(c).trim() !== '');
+        },
+
+        isUsableField(fieldName) {
+          const type = this.fieldType(fieldName);
+          if (type === 'choice') return this.fieldChoices(fieldName).length > 0;
+          return ['int', 'float', 'string'].includes(type);
+        },
+
+        hasAnyUsableField() {
+          return this.schemaFieldNames().some(n => this.isUsableField(n));
         },
 
         addTagRuleRow() {
