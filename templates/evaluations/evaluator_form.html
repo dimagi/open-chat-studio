@@ -493,11 +493,12 @@
               <div>
                 <label class="label text-sm"><span>{% translate "Field" %}</span></label>
                 <select name="{{ rule_form.field_name.html_name }}"
-                        x-model="fieldName"
+                        x-effect="if (schemaFieldNames().includes(fieldName) && $el.value !== fieldName) { $nextTick(() => { $el.value = fieldName }) }"
+                        @change="fieldName = $event.target.value"
                         class="select select-bordered w-full select-sm">
                   <option value="">{% translate "Select field..." %}</option>
                   <template x-for="name in schemaFieldNames()" :key="name">
-                    <option :value="name" x-text="name"></option>
+                    <option :value="name" x-text="name" :selected="name === fieldName"></option>
                   </template>
                 </select>
                 {{ rule_form.field_name.errors }}
@@ -561,11 +562,12 @@
               <div>
                 <label class="label text-sm"><span>{% translate "Field" %}</span></label>
                 <select name="tag_rules-__prefix__-field_name"
-                        x-model="fieldName"
+                        x-effect="if (schemaFieldNames().includes(fieldName) && $el.value !== fieldName) { $nextTick(() => { $el.value = fieldName }) }"
+                        @change="fieldName = $event.target.value"
                         class="select select-bordered w-full select-sm">
                   <option value="">{% translate "Select field..." %}</option>
                   <template x-for="name in schemaFieldNames()" :key="name">
-                    <option :value="name" x-text="name"></option>
+                    <option :value="name" x-text="name" :selected="name === fieldName"></option>
                   </template>
                 </select>
               </div>
