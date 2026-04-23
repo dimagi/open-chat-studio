@@ -507,10 +507,25 @@
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
                 <select name="{{ rule_form.condition_type.html_name }}"
                         x-model="conditionType"
+                        x-effect="{
+                            const allowed = allowedConditionsForField(fieldName);
+                            if (fieldName && !allowed.includes(conditionType)) {
+                                conditionType = allowed[0] || '';
+                            }
+                        }"
+                        :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
                         class="select select-bordered w-full select-sm">
-                  <option value="equals">{% translate "Equals" %}</option>
-                  <option value="range">{% translate "Range" %}</option>
+                  <template x-if="allowedConditionsForField(fieldName).includes('equals')">
+                    <option value="equals">{% translate "Equals" %}</option>
+                  </template>
+                  <template x-if="allowedConditionsForField(fieldName).includes('range')">
+                    <option value="range">{% translate "Range" %}</option>
+                  </template>
                 </select>
+                <p class="text-xs text-gray-500 mt-1"
+                   x-show="fieldName && allowedConditionsForField(fieldName).length === 0">
+                  {% translate "This field type does not support conditions. Use a choice, int, or float field." %}
+                </p>
                 {{ rule_form.condition_type.errors }}
               </div>
               <div class="flex items-end">
@@ -575,10 +590,25 @@
                 <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
                 <select name="tag_rules-__prefix__-condition_type"
                         x-model="conditionType"
+                        x-effect="{
+                            const allowed = allowedConditionsForField(fieldName);
+                            if (fieldName && !allowed.includes(conditionType)) {
+                                conditionType = allowed[0] || '';
+                            }
+                        }"
+                        :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
                         class="select select-bordered w-full select-sm">
-                  <option value="equals">{% translate "Equals" %}</option>
-                  <option value="range">{% translate "Range" %}</option>
+                  <template x-if="allowedConditionsForField(fieldName).includes('equals')">
+                    <option value="equals">{% translate "Equals" %}</option>
+                  </template>
+                  <template x-if="allowedConditionsForField(fieldName).includes('range')">
+                    <option value="range">{% translate "Range" %}</option>
+                  </template>
                 </select>
+                <p class="text-xs text-gray-500 mt-1"
+                   x-show="fieldName && allowedConditionsForField(fieldName).length === 0">
+                  {% translate "This field type does not support conditions. Use a choice, int, or float field." %}
+                </p>
               </div>
               <div class="flex items-end">
                 <label class="label cursor-pointer gap-2">
@@ -933,6 +963,19 @@
         schemaFieldNames() {
           const schema = (this.params && this.params.output_schema) || {};
           return Object.keys(schema);
+        },
+
+        allowedConditionsForField(fieldName) {
+          if (!fieldName) return [];
+          const schema = (this.params && this.params.output_schema) || {};
+          const def = schema[fieldName];
+          if (!def || !def.type) return [];
+          switch (def.type) {
+            case 'choice': return ['equals'];
+            case 'int':
+            case 'float': return ['range'];
+            default: return [];  // string, etc.
+          }
         },
 
         addTagRuleRow() {
