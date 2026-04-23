@@ -425,3 +425,63 @@ class TestTransactionRollback:
 
         assert not chat_message.tags.filter(pk=rule.tag_id).exists()
         assert AppliedTag.objects.count() == 0
+
+
+# ---- EvaluatorForm schema-drift validation --------------------------------
+
+
+class TestEvaluatorFormSchemaDrift:
+    def test_rule_with_removed_field_blocks_save(self, team, message_evaluator):
+        from apps.evaluations.forms import EvaluatorForm  # noqa: PLC0415
+
+        EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=message_evaluator,
+            field_name="sentiment",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "negative"},
+        )
+        # New output_schema drops "sentiment"
+        new_params = {
+            "llm_prompt": "prompt",
+            "llm_provider_id": 1,
+            "llm_provider_model_id": 1,
+            "output_schema": {"score": {"type": "int", "description": "d"}},
+        }
+        form_data = {
+            "name": message_evaluator.name,
+            "type": "LlmEvaluator",
+            "params": new_params,
+            "evaluation_mode": message_evaluator.evaluation_mode,
+        }
+        form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            assert not form.is_valid()
+        assert any("sentiment" in str(e) for e in form.errors.get("__all__", []))
+
+    def test_rule_with_incompatible_type_blocks_save(self, team, message_evaluator):
+        from apps.evaluations.forms import EvaluatorForm  # noqa: PLC0415
+
+        EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=message_evaluator,
+            field_name="sentiment",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "negative"},
+        )
+        # sentiment is now an int field; equals no longer applies
+        new_params = {
+            "llm_prompt": "prompt",
+            "llm_provider_id": 1,
+            "llm_provider_model_id": 1,
+            "output_schema": {"sentiment": {"type": "int", "description": "d"}},
+        }
+        form_data = {
+            "name": message_evaluator.name,
+            "type": "LlmEvaluator",
+            "params": new_params,
+            "evaluation_mode": message_evaluator.evaluation_mode,
+        }
+        form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            assert not form.is_valid()

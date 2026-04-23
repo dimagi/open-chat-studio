@@ -303,7 +303,31 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
+        self._validate_existing_tag_rules_against_schema(params)
+
         return cleaned_data
+
+    def _validate_existing_tag_rules_against_schema(self, params):
+        """Block save when an existing tag rule no longer matches the new output_schema."""
+        if not (self.instance and self.instance.pk):
+            return
+        from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+        from apps.evaluations.tagging import (  # noqa: PLC0415
+            validate_condition,
+            validate_field_in_schema,
+        )
+
+        output_schema = (params or {}).get("output_schema") or {}
+        for rule in self.instance.tag_rules.all():
+            try:
+                field_def = validate_field_in_schema(rule.field_name, output_schema)
+                validate_condition(rule.condition_type, rule.condition_value, field_def)
+            except DjangoValidationError as err:
+                raise forms.ValidationError(
+                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
+                    f"output schema: {err.messages[0] if err.messages else err}"
+                ) from err
 
 
 class EvaluationMessageForm(forms.ModelForm):
