@@ -1,6 +1,7 @@
 import inspect
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
@@ -8,7 +9,7 @@ from django_tables2 import SingleTableView
 
 from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
-from apps.evaluations.forms import EvaluatorForm
+from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import Evaluator
 from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -44,8 +45,62 @@ class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):
         )
 
 
+class EvaluatorFormsetMixin:
+    """Shared formset plumbing for Create/Edit evaluator views."""
+
+    def _build_tag_rule_formset(self, instance, data=None):
+        return EvaluatorTagRuleFormSet(
+            data=data,
+            instance=instance,
+            team=self.request.team,
+            output_schema=(instance.params or {}).get("output_schema", {}) if instance else {},
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if "tag_rule_formset" not in context:
+            context["tag_rule_formset"] = self._build_tag_rule_formset(context.get("object"))
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = getattr(self, "object", None) or self.get_object_or_none()
+        form = self.get_form()
+        formset = self._build_tag_rule_formset(self.object or Evaluator(team=request.team), data=request.POST)
+
+        if form.is_valid():
+            evaluator = form.save(commit=False)
+            evaluator.team = request.team
+            if not evaluator.pk:
+                evaluator.created_by = request.user
+            # Re-bind formset against the pending-save evaluator so nested validation has team + schema.
+            formset = EvaluatorTagRuleFormSet(
+                data=request.POST,
+                instance=evaluator,
+                team=request.team,
+                output_schema=(form.cleaned_data.get("params") or {}).get("output_schema", {}),
+            )
+            if formset.is_valid():
+                with transaction.atomic():
+                    evaluator.save()
+                    formset.instance = evaluator
+                    formset.save()
+                return self._redirect_to_success()
+        else:
+            formset.is_valid()  # surface errors in the template
+
+        return self.render_to_response(self.get_context_data(form=form, tag_rule_formset=formset))
+
+    def get_object_or_none(self):
+        return None
+
+    def _redirect_to_success(self):
+        from django.shortcuts import redirect  # noqa: PLC0415
+
+        return redirect(self.get_success_url())
+
+
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"
     model = Evaluator
@@ -76,13 +131,8 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Create
     def get_success_url(self):
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.created_by = self.request.user
-        return super().form_valid(form)
 
-
-class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     permission_required = "evaluations.change_evaluator"
     model = Evaluator
     form_class = EvaluatorForm
@@ -112,6 +162,9 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateVi
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "team": self.request.team}
+
+    def get_object_or_none(self):
+        return self.get_object()
 
     def get_success_url(self):
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])

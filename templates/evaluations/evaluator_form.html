@@ -463,6 +463,98 @@
     <!-- Hidden fields for Django form -->
     <input type="hidden" name="type" x-model="selectedType">
     <input type="hidden" name="params" x-model="paramsJson">
+
+    <!-- Tag Rules -->
+    <div class="mt-8 pt-6 border-t">
+      <h3 class="text-lg font-medium mb-3">{% translate "Tag Rules" %}</h3>
+      <p class="text-sm text-gray-500 mb-3">
+        {% translate "Auto-apply an Evaluations-category tag to the evaluated target when an output field matches a condition." %}
+      </p>
+
+      {{ tag_rule_formset.management_form }}
+      {% if tag_rule_formset.non_form_errors %}
+        <div class="alert alert-error mb-3">
+          {{ tag_rule_formset.non_form_errors }}
+        </div>
+      {% endif %}
+
+      <div class="space-y-3">
+        {% for rule_form in tag_rule_formset %}
+          <div class="card bg-base-200 p-4">
+            {% for hidden in rule_form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% if rule_form.non_field_errors %}
+              <div class="alert alert-error mb-2">{{ rule_form.non_field_errors }}</div>
+            {% endif %}
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label class="label text-sm"><span>{% translate "Tag name" %}</span></label>
+                {{ rule_form.tag_name }}
+                {{ rule_form.tag_name.errors }}
+              </div>
+              <div>
+                <label class="label text-sm"><span>{% translate "Field" %}</span></label>
+                <select name="{{ rule_form.field_name.html_name }}"
+                        class="select select-bordered w-full select-sm"
+                        x-init="$el.value = '{{ rule_form.field_name.value|default_if_none:''|escapejs }}'">
+                  <option value="">{% translate "Select field..." %}</option>
+                  <template x-for="fieldName in schemaFieldNames()" :key="fieldName">
+                    <option :value="fieldName" x-text="fieldName"
+                            :selected="'{{ rule_form.field_name.value|default_if_none:''|escapejs }}' === fieldName"></option>
+                  </template>
+                </select>
+                {{ rule_form.field_name.errors }}
+              </div>
+              <div>
+                <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
+                {{ rule_form.condition_type }}
+                {{ rule_form.condition_type.errors }}
+              </div>
+              <div class="flex items-end">
+                <label class="label cursor-pointer gap-2">
+                  {{ rule_form.DELETE }}
+                  <span class="label-text text-sm">{% translate "Remove" %}</span>
+                </label>
+              </div>
+            </div>
+            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div x-show="document.querySelector('[name=\'{{ rule_form.condition_type.html_name }}\']').value === 'equals'">
+                <label class="label text-sm"><span>{% translate "Value" %}</span></label>
+                <input type="text" name="{{ rule_form.condition_value_single.html_name }}"
+                       value="{{ rule_form.condition_value_single.value|default_if_none:'' }}"
+                       class="input input-bordered w-full input-sm">
+                {{ rule_form.condition_value_single.errors }}
+              </div>
+              <div x-show="document.querySelector('[name=\'{{ rule_form.condition_type.html_name }}\']').value === 'range'"
+                   class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="label text-sm"><span>{% translate "Min" %}</span></label>
+                  <input type="number" step="any" name="{{ rule_form.condition_value_min.html_name }}"
+                         value="{{ rule_form.condition_value_min.value|default_if_none:'' }}"
+                         class="input input-bordered w-full input-sm">
+                  {{ rule_form.condition_value_min.errors }}
+                </div>
+                <div>
+                  <label class="label text-sm"><span>{% translate "Max" %}</span></label>
+                  <input type="number" step="any" name="{{ rule_form.condition_value_max.html_name }}"
+                         value="{{ rule_form.condition_value_max.value|default_if_none:'' }}"
+                         class="input input-bordered w-full input-sm">
+                  {{ rule_form.condition_value_max.errors }}
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+
+        <!-- Empty-form template for adding rows client-side -->
+        <template x-if="false"><div id="tag-rule-empty-form">{{ tag_rule_formset.empty_form|safe }}</div></template>
+      </div>
+
+      <button type="button"
+              @click="addTagRuleRow()"
+              class="btn btn-outline btn-primary btn-sm mt-3">
+        <i class="fa fa-plus"></i> {% translate "Add tag rule" %}
+      </button>
+    </div>
   </div>
 {% endblock form %}
 {# djlint:on #}
@@ -775,6 +867,27 @@
 
         get paramsJson() {
           return JSON.stringify(this.params);
+        },
+
+        schemaFieldNames() {
+          const schema = (this.params && this.params.output_schema) || {};
+          return Object.keys(schema);
+        },
+
+        addTagRuleRow() {
+          const totalInput = document.querySelector('input[name="tag_rules-TOTAL_FORMS"]');
+          if (!totalInput) return;
+          const index = parseInt(totalInput.value, 10);
+          const template = document.getElementById('tag-rule-empty-form');
+          if (!template) return;
+          const html = template.innerHTML.replace(/__prefix__/g, index);
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = html;
+          const container = template.parentElement.parentElement; // .space-y-3
+          // Insert before the empty-form template node
+          const emptyNode = template.parentElement;
+          container.insertBefore(wrapper.firstElementChild || wrapper, emptyNode);
+          totalInput.value = index + 1;
         }
       }));
     });

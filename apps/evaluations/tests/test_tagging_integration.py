@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
@@ -485,3 +485,113 @@ class TestEvaluatorFormSchemaDrift:
         form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
         with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
             assert not form.is_valid()
+
+
+# ---- Tag-rule formset --------------------------------------------------------
+
+
+class TestEvaluatorTagRuleFormset:
+    def test_adds_new_rule_via_formset(self, team, message_evaluator):
+        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
+
+        output_schema = {
+            "sentiment": {
+                "type": "choice",
+                "description": "sent",
+                "choices": ["positive", "negative"],
+            }
+        }
+        data = {
+            "tag_rules-TOTAL_FORMS": "1",
+            "tag_rules-INITIAL_FORMS": "0",
+            "tag_rules-MIN_NUM_FORMS": "0",
+            "tag_rules-MAX_NUM_FORMS": "1000",
+            "tag_rules-0-tag_name": "unacceptable",
+            "tag_rules-0-field_name": "sentiment",
+            "tag_rules-0-condition_type": ConditionType.EQUALS,
+            "tag_rules-0-condition_value_single": "negative",
+        }
+        formset = EvaluatorTagRuleFormSet(
+            data=data,
+            instance=message_evaluator,
+            team=team,
+            output_schema=output_schema,
+        )
+        assert formset.is_valid(), formset.errors
+        rules = formset.save()
+        assert len(rules) == 1
+        rule = rules[0]
+        assert rule.tag.name == "unacceptable"
+        assert rule.tag.category == TagCategories.EVALUATIONS.value
+        assert rule.tag.is_system_tag is True
+        assert rule.condition_value == {"value": "negative"}
+        assert rule.evaluator_id == message_evaluator.id
+
+    def test_range_rule_accepts_min_max(self, team, message_evaluator):
+        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
+
+        output_schema = {"score": {"type": "int", "description": "s"}}
+        data = {
+            "tag_rules-TOTAL_FORMS": "1",
+            "tag_rules-INITIAL_FORMS": "0",
+            "tag_rules-MIN_NUM_FORMS": "0",
+            "tag_rules-MAX_NUM_FORMS": "1000",
+            "tag_rules-0-tag_name": "low-score",
+            "tag_rules-0-field_name": "score",
+            "tag_rules-0-condition_type": ConditionType.RANGE,
+            "tag_rules-0-condition_value_min": "0",
+            "tag_rules-0-condition_value_max": "3",
+        }
+        formset = EvaluatorTagRuleFormSet(
+            data=data,
+            instance=message_evaluator,
+            team=team,
+            output_schema=output_schema,
+        )
+        assert formset.is_valid(), formset.errors
+        rules = formset.save()
+        assert rules[0].condition_value == {"min": 0.0, "max": 3.0}
+
+    def test_empty_rows_are_ignored(self, team, message_evaluator):
+        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
+
+        data = {
+            "tag_rules-TOTAL_FORMS": "1",
+            "tag_rules-INITIAL_FORMS": "0",
+            "tag_rules-MIN_NUM_FORMS": "0",
+            "tag_rules-MAX_NUM_FORMS": "1000",
+        }
+        formset = EvaluatorTagRuleFormSet(
+            data=data,
+            instance=message_evaluator,
+            team=team,
+            output_schema={},
+        )
+        assert formset.is_valid()
+        assert formset.save() == []
+
+    def test_missing_value_reports_error(self, team, message_evaluator):
+        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
+
+        data = {
+            "tag_rules-TOTAL_FORMS": "1",
+            "tag_rules-INITIAL_FORMS": "0",
+            "tag_rules-MIN_NUM_FORMS": "0",
+            "tag_rules-MAX_NUM_FORMS": "1000",
+            "tag_rules-0-tag_name": "needs-value",
+            "tag_rules-0-field_name": "sentiment",
+            "tag_rules-0-condition_type": ConditionType.EQUALS,
+        }
+        formset = EvaluatorTagRuleFormSet(
+            data=data,
+            instance=message_evaluator,
+            team=team,
+            output_schema={
+                "sentiment": {
+                    "type": "choice",
+                    "description": "s",
+                    "choices": ["positive"],
+                }
+            },
+        )
+        assert not formset.is_valid()
