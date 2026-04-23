@@ -479,8 +479,10 @@
       <div class="space-y-3">
         {% for rule_form in tag_rule_formset %}
           <div class="card bg-base-200 p-4"
-               x-data="{ conditionType: '{{ rule_form.condition_type.value|default_if_none:'equals'|escapejs }}', fieldName: '{{ rule_form.field_name.value|default_if_none:''|escapejs }}' }">
+               x-data="{ conditionType: '{{ rule_form.condition_type.value|default_if_none:'equals'|escapejs }}', fieldName: '{{ rule_form.field_name.value|default_if_none:''|escapejs }}', deleted: {{ rule_form.DELETE.value|yesno:'true,false' }} }"
+               x-show="!deleted">
             {% for hidden in rule_form.hidden_fields %}{{ hidden }}{% endfor %}
+            <input type="checkbox" name="{{ rule_form.DELETE.html_name }}" x-model="deleted" class="hidden">
             {% if rule_form.non_field_errors %}
               <div class="alert alert-error mb-2">{{ rule_form.non_field_errors }}</div>
             {% endif %}
@@ -527,11 +529,13 @@
                 </p>
                 {{ rule_form.condition_type.errors }}
               </div>
-              <div class="flex items-end">
-                <label class="label cursor-pointer gap-2">
-                  {{ rule_form.DELETE }}
-                  <span class="label-text text-sm">{% translate "Remove" %}</span>
-                </label>
+              <div class="flex items-end justify-end">
+                <button type="button"
+                        @click="deleted = true"
+                        class="btn btn-outline btn-xs btn-error"
+                        aria-label='{% translate "Remove tag rule" %}'>
+                  <i class="fa fa-trash"></i>
+                </button>
               </div>
             </div>
             <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="fieldName && conditionType">
@@ -580,7 +584,9 @@
         <!-- Empty-form template for adding rows client-side -->
         <template id="tag-rule-empty-form">
           <div class="card bg-base-200 p-4"
-               x-data="{ conditionType: 'equals', fieldName: '' }">
+               x-data="{ conditionType: 'equals', fieldName: '', deleted: false }"
+               x-show="!deleted">
+            <input type="checkbox" name="tag_rules-__prefix__-DELETE" x-model="deleted" class="hidden">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div>
                 <label class="label text-sm"><span>{% translate "Tag name" %}</span></label>
@@ -622,11 +628,13 @@
                   {% translate "This field type does not support conditions. Use a choice, int, or float field." %}
                 </p>
               </div>
-              <div class="flex items-end">
-                <label class="label cursor-pointer gap-2">
-                  <input type="checkbox" name="tag_rules-__prefix__-DELETE" class="checkbox checkbox-sm">
-                  <span class="label-text text-sm">{% translate "Remove" %}</span>
-                </label>
+              <div class="flex items-end justify-end">
+                <button type="button"
+                        @click="deleted = true"
+                        class="btn btn-outline btn-xs btn-error"
+                        aria-label='{% translate "Remove tag rule" %}'>
+                  <i class="fa fa-trash"></i>
+                </button>
               </div>
             </div>
             <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="fieldName && conditionType">
