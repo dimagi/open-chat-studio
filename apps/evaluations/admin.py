@@ -3,12 +3,14 @@ from django.contrib import admin
 from apps.utils.admin import ReadonlyAdminMixin
 
 from .models import (
+    AppliedTag,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationResult,
     EvaluationRun,
     Evaluator,
+    EvaluatorTagRule,
 )
 
 
@@ -59,3 +61,24 @@ class EvaluationResultAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
 class EvaluationMessageAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("id", "input", "output", "context")
     search_fields = ("id",)
+
+
+class EvaluatorTagRuleInline(admin.TabularInline):
+    model = EvaluatorTagRule
+    extra = 0
+    fields = ("tag", "field_name", "condition_type", "condition_value")
+    autocomplete_fields = ("tag",)
+
+
+@admin.register(EvaluatorTagRule)
+class EvaluatorTagRuleAdmin(admin.ModelAdmin):
+    list_display = ("id", "evaluator", "tag", "field_name", "condition_type", "team")
+    list_filter = ("team", "condition_type")
+    search_fields = ("field_name", "evaluator__name", "tag__name")
+
+
+@admin.register(AppliedTag)
+class AppliedTagAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
+    list_display = ("id", "evaluation_result", "rule", "tag", "team")
+    list_filter = ("team",)
+    search_fields = ("rule__evaluator__name",)
