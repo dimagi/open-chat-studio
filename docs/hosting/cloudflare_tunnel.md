@@ -237,6 +237,8 @@ Revoking a seat removes their active session immediately. If your policy uses a 
 
 The one-time PIN option (email magic link) works without an external IdP and is the simplest starting point.
 
+For ongoing administration — adding and removing users, device management, session settings, audit logs, and common troubleshooting — see the [Cloudflare Zero Trust Administration guide](./cloudflare_admin.md).
+
 ## WARP device access
 
 For teams who want device-level Zero Trust (not just browser-based login), Cloudflare WARP extends the trust chain to the device itself. This is optional but gives you posture checks  only registered, enrolled devices with valid certificates can access the app.

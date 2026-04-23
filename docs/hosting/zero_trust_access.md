@@ -4,7 +4,16 @@ Zero Trust access lets you expose Open Chat Studio to the internet, including we
 
 Instead of a public IP with firewall rules, an agent running on your server initiates an outbound-only encrypted tunnel to a cloud relay. External traffic arrives through that relay, so your server's network perimeter stays closed.
 
-## When to use this
+## When to use this approach
+
+Use Zero Trust tunneling when:
+
+- You are running Open Chat Studio on a server without a static public IP or domain.
+- You want to avoid exposing the application port directly to the internet.
+- You need fine-grained access control based on email addresses, identity providers, or device posture.
+- You want audit logs of every access attempt.
+
+## When you do not need it
 
 Zero Trust access is optional. You only need it if:
 
