@@ -25,7 +25,6 @@ class ExperimentFilter(ChoiceColumnFilter):
     )
 
     def prepare(self, team, **_):
-
         experiments = (
             Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")
         )
@@ -68,6 +67,16 @@ class RemoteIdFilter(ChoiceColumnFilter):
     column: str = "participant__remote_id"
     label: str = "Remote ID"
     description: str = "Filter by participant's remote/external ID"
+
+
+class SessionIdFilter(StringColumnFilter):
+    query_param: str = "session_id"
+    columns: list[str] = ["external_id"]
+    label: str = "Session ID"
+    description: str = "Filter by the session's external ID (UUID)"
+
+    def apply_equals(self, queryset, value, timezone=None) -> QuerySet:
+        return self._apply_with_lookup(queryset, "iexact", value)
 
 
 class TimestampFilter(ColumnFilter):

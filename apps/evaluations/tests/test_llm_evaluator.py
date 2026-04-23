@@ -91,6 +91,8 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
         "context": {"current_datetime": "2023-01-01T00:00:00"},
         "history": [],
         "metadata": {},
+        "participant_data": {},
+        "session_state": {},
     }
     assert results[1].output["message"] == {
         "input": {"content": "Hello, I'm sad and downtrodden", "role": "human"},
@@ -98,6 +100,8 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
         "context": {"current_datetime": "2023-01-01T00:00:00"},
         "history": [],
         "metadata": {},
+        "participant_data": {},
+        "session_state": {},
     }
 
 

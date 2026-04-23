@@ -5,6 +5,7 @@ from urllib.parse import quote
 import httpx
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -14,9 +15,13 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.custom_actions.forms import CustomActionForm
-from apps.custom_actions.models import CustomAction, HealthCheckStatus
+from apps.custom_actions.models import CustomAction, CustomActionOperation, HealthCheckStatus
 from apps.custom_actions.tables import CustomActionTable
 from apps.custom_actions.tasks import check_single_custom_action_health
+from apps.experiments.models import Experiment
+from apps.generics.chips import Chip
+from apps.generics.referenced_objects import render_referenced_objects_modal
+from apps.pipelines.models import Node
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -92,12 +97,89 @@ class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Updat
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
 
+def _find_live_custom_action_references(custom_action):
+    """Return (working_pipelines, working_assistants, experiments) that would be silently
+    broken by CASCADE if this CustomAction were deleted.
+
+    - Working pipelines / working assistants with a live op are returned directly (the user
+      can edit them to remove the ref).
+    - Versioned pipelines / versioned assistants with a live op are surfaced as the
+      non-archived Experiment version(s) that still reference them, so the user can see
+      exactly which experiment version is affected.
+    """
+    operations = CustomActionOperation.objects.filter(custom_action=custom_action).select_related(
+        "node__pipeline", "assistant"
+    )
+
+    working_pipelines = {}
+    versioned_pipeline_ids = set()
+    working_assistants = {}
+    versioned_assistant_ids = set()
+
+    for op in operations:
+        if op.node_id and op.node and op.node.pipeline_id:
+            pipeline = op.node.pipeline
+            if pipeline.is_archived:
+                continue
+            if pipeline.is_working_version:
+                working_pipelines[pipeline.id] = pipeline
+            else:
+                versioned_pipeline_ids.add(pipeline.id)
+        elif op.assistant_id and op.assistant:
+            assistant = op.assistant
+            if assistant.is_archived:
+                continue
+            if assistant.is_working_version:
+                working_assistants[assistant.id] = assistant
+            else:
+                versioned_assistant_ids.add(assistant.id)
+
+    experiments = {}
+    target_pipeline_ids = set(working_pipelines) | versioned_pipeline_ids
+    if target_pipeline_ids:
+        for exp in Experiment.objects.filter(pipeline_id__in=target_pipeline_ids, is_archived=False):
+            experiments[exp.id] = exp
+
+    if versioned_assistant_ids:
+        pipeline_ids_via_assistants = set(
+            Node.objects.assistant_nodes()
+            .filter(
+                params__assistant_id__in=[str(aid) for aid in versioned_assistant_ids],
+                is_archived=False,
+                pipeline__is_archived=False,
+            )
+            .values_list("pipeline_id", flat=True)
+        )
+        if pipeline_ids_via_assistants:
+            for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids_via_assistants, is_archived=False):
+                experiments.setdefault(exp.id, exp)
+
+    return list(working_pipelines.values()), list(working_assistants.values()), list(experiments.values())
+
+
 class DeleteCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "custom_actions.delete_customaction"
 
     def delete(self, request, team_slug: str, pk: int):
-        consent_form = get_object_or_404(CustomAction, id=pk, team=request.team)
-        consent_form.delete()
+        # ``CustomActionOperation.custom_action`` is CASCADE (unlike SET_NULL
+        # service-provider FKs), so we block while any live pipeline/assistant/
+        # experiment references the action. Wrap in a transaction with a row-level
+        # lock so a concurrent pipeline save can't slip a new ref in between the
+        # reference check and the delete.
+        with transaction.atomic():
+            custom_action = get_object_or_404(CustomAction.objects.select_for_update(), id=pk, team=request.team)
+            pipelines, assistants, experiments = _find_live_custom_action_references(custom_action)
+
+            if pipelines or assistants or experiments:
+                return render_referenced_objects_modal(
+                    "custom action",
+                    pipeline_nodes=[Chip(label=p.name, url=p.get_absolute_url()) for p in pipelines],
+                    experiments_with_pipeline_nodes=[Chip(label=str(e), url=e.get_absolute_url()) for e in experiments],
+                    assistants=[Chip(label=a.name, url=a.get_absolute_url()) for a in assistants],
+                )
+
+            custom_action.delete()
+
         messages.success(request, "Custom Action Deleted")
         return HttpResponse()
 

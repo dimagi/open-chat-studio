@@ -127,7 +127,9 @@ class TestDeleteCollection:
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
         # Case 1 - The pipeline is using the collection
         response = client.delete(url)
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert response["HX-Reswap"] == "beforeend"
 
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
         create_remote_index.return_value = "v-321"
@@ -136,7 +138,9 @@ class TestDeleteCollection:
         node.save()
 
         response = client.delete(url)
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert response["HX-Reswap"] == "beforeend"
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])

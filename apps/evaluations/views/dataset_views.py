@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 from datetime import timedelta
+from functools import cached_property
 from io import StringIO
 from itertools import islice
 
@@ -211,7 +212,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         return context
 
     def get_success_url(self):
-        return reverse("evaluations:dataset_home", args=[self.request.team.slug])
+        return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -268,14 +269,13 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     template_name = "evaluations/dataset_messages_table.html"
     permission_required = "evaluations.view_evaluationdataset"
 
-    def get_queryset(self):
-        dataset_id = self.kwargs.get("dataset_id")
-        # Verify the dataset exists and user has access
-        get_object_or_404(EvaluationDataset, id=dataset_id, team=self.request.team)
+    @cached_property
+    def dataset(self):
+        return get_object_or_404(EvaluationDataset, id=self.kwargs["dataset_id"], team=self.request.team)
 
-        return EvaluationMessage.objects.filter(
-            evaluationdataset__id=dataset_id, evaluationdataset__team=self.request.team
-        ).order_by("id")
+    def get_queryset(self):
+        dataset = self.dataset
+        return EvaluationMessage.objects.filter(evaluationdataset=dataset).order_by("id")
 
     def get_highlight_message_id(self):
         """Extract and validate the message_id query parameter for highlighting."""
@@ -304,12 +304,14 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["highlight_message_id"] = self.get_highlight_message_id()
+        context["evaluation_mode"] = self.dataset.evaluation_mode
         return context
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["highlight_message_id"] = self.get_highlight_message_id()
         kwargs["dataset_id"] = self.kwargs["dataset_id"]
+        kwargs["evaluation_mode"] = self.dataset.evaluation_mode
         return kwargs
 
 
@@ -341,7 +343,9 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
         table_view.kwargs = {"dataset_id": dataset_id}
 
         queryset = table_view.get_queryset()
-        table = table_view.table_class(queryset, dataset_id=dataset_id, request=request)
+        table = table_view.table_class(
+            queryset, dataset_id=dataset_id, evaluation_mode=dataset.evaluation_mode, request=request
+        )
 
         return render(request, "table/single_table.html", {"table": table})
 
@@ -412,7 +416,9 @@ def update_message(request, team_slug, message_id):
 
     dataset = message.evaluationdataset_set.first()
     if dataset:
-        table = DatasetMessagesTable(data=[message], dataset_id=dataset.id, request=request)
+        table = DatasetMessagesTable(
+            data=[message], dataset_id=dataset.id, evaluation_mode=dataset.evaluation_mode, request=request
+        )
         response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")

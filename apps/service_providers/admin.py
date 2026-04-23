@@ -4,6 +4,7 @@ from django.utils.html import format_html
 
 from apps.assistants.models import OpenAiAssistant
 from apps.pipelines.models import Node
+from apps.utils.admin import ReadonlyAdminMixin
 
 from .models import (
     EmbeddingProviderModel,
@@ -16,13 +17,13 @@ from .models import (
 
 
 @admin.register(LlmProvider)
-class ServiceConfigAdmin(admin.ModelAdmin):
+class ServiceConfigAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
 
 
 @admin.register(LlmProviderModel)
-class LlmProviderModelAdmin(admin.ModelAdmin):
+class LlmProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "type", "max_token_limit", "team")
     list_filter = ("team", "type", "name")
     readonly_fields = ["related_assistants", "related_nodes"]
@@ -50,25 +51,24 @@ class LlmProviderModelAdmin(admin.ModelAdmin):
 
 
 @admin.register(VoiceProvider)
-class VoiceProviderAdmin(admin.ModelAdmin):
+class VoiceProviderAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
 
 
 @admin.register(MessagingProvider)
-class MessagingProviderAdmin(admin.ModelAdmin):
+class MessagingProviderAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
 
 
 @admin.register(TraceProvider)
-class TraceProviderAdmin(admin.ModelAdmin):
+class TraceProviderAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
 
 
 @admin.register(EmbeddingProviderModel)
-class EmbeddingProviderModelAdmin(admin.ModelAdmin):
+class EmbeddingProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
-    readonly_fields = ("team",)

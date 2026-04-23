@@ -10,6 +10,7 @@ from typing import cast
 from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
+from django.db import transaction
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -31,7 +32,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
     Evaluator,
 )
-from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
+from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
 from apps.teams.utils import current_team
@@ -667,7 +668,6 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
 
 
 def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
-
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
 
@@ -796,7 +796,7 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def create_dataset_from_sessions_task(
+def create_dataset_from_session_messages_task(
     self, dataset_id, team_id, session_ids, filtered_session_ids, filter_query, timezone
 ):
     """
@@ -882,5 +882,76 @@ def create_dataset_from_sessions_task(
     except Exception as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
         message = "An error occurred while cloning messages from sessions"
+        _save_dataset_error(dataset, message)
+        return {"success": False, "error": message}
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
+    """
+    Create session-mode evaluation messages from sessions asynchronously.
+
+    Each session becomes one EvaluationMessage with the full conversation as history.
+
+    Args:
+        dataset_id: ID of the EvaluationDataset to populate
+        team_id: ID of the team
+        session_ids: List of session external IDs
+    """
+    progress_recorder = ProgressRecorder(self)
+    dataset = None
+
+    try:
+        dataset = EvaluationDataset.objects.select_related("team").get(id=dataset_id, team_id=team_id)
+    except EvaluationDataset.DoesNotExist:
+        logger.error(f"Dataset {dataset_id} not found for team {team_id}")
+        return {"success": False, "error": "Dataset not found"}
+
+    dataset.status = DatasetCreationStatus.PROCESSING
+    dataset.save(update_fields=["status"])
+
+    try:
+        progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
+
+        with current_team(dataset.team):
+            evaluation_messages = make_session_evaluation_messages(session_ids, team=dataset.team)
+
+            progress_recorder.set_progress(
+                40, 100, f"Found {len(evaluation_messages)} sessions, checking for duplicates..."
+            )
+
+            with transaction.atomic():
+                # Re-read existing session PKs inside the transaction for consistency
+                existing_session_pks = set(
+                    dataset.messages.select_for_update()
+                    .filter(session__isnull=False)
+                    .values_list("session_id", flat=True)
+                )
+
+                messages_to_add = [msg for msg in evaluation_messages if msg.session_id not in existing_session_pks]
+
+                if not messages_to_add:
+                    dataset.status = DatasetCreationStatus.COMPLETED
+                    dataset.job_id = ""
+                    dataset.save(update_fields=["status", "job_id"])
+                    progress_recorder.set_progress(100, 100, "Clone complete - no new sessions to add")
+                    return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
+
+                progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new session messages...")
+
+                created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
+                dataset.messages.add(*created_messages)
+                dataset.status = DatasetCreationStatus.COMPLETED
+                dataset.job_id = ""
+                dataset.save(update_fields=["status", "job_id"])
+
+            progress_recorder.set_progress(100, 100, "Clone complete")
+
+            duplicates_skipped = len(evaluation_messages) - len(messages_to_add)
+            return {"success": True, "created_count": len(created_messages), "duplicates_skipped": duplicates_skipped}
+
+    except Exception as e:
+        logger.exception(f"Error in session-mode clone task for dataset {dataset_id}: {e}")
+        message = "An error occurred while creating session-mode messages"
         _save_dataset_error(dataset, message)
         return {"success": False, "error": message}
