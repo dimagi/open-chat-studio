@@ -53,6 +53,7 @@ class LangFuseTracer(Tracer):
         super().__init__(type_, config)
         self.client = None
         self.trace_record = None
+        self._langfuse_trace_id: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -90,6 +91,7 @@ class LangFuseTracer(Tracer):
                     metadata=metadata,
                 ) as trace:
                     self.trace_record = trace
+                    self._langfuse_trace_id = self.client.get_current_trace_id()
                     yield trace_context
                     self._update_span_from_context(trace, trace_context)
         finally:
@@ -99,6 +101,7 @@ class LangFuseTracer(Tracer):
             # Reset state
             self.client = None
             self.trace_record = None
+            self._langfuse_trace_id = None
             self.session = None
 
     @contextmanager
@@ -149,11 +152,19 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
+        # get_trace_url() does a blocking HTTP fetch for project_id; isolate failures
+        # so we still capture trace_id in the chat message metadata.
+        try:
+            trace_url = self.client.get_trace_url(trace_id=self._langfuse_trace_id)
+        except Exception:
+            logger.exception("Failed to fetch Langfuse trace URL for trace_id=%s", self._langfuse_trace_id)
+            trace_url = None
+
         return cast(
             dict[str, str],
             {
-                "trace_id": self.trace_record.trace_id,
-                "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
+                "trace_id": self._langfuse_trace_id,
+                "trace_url": trace_url,
                 "trace_provider": self.type,
             },
         )
@@ -162,7 +173,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
         # span.update() no longer accepts tags in v4; use the ingestion API directly
-        self.client._create_trace_tags_via_ingestion(trace_id=self.trace_record.trace_id, tags=tags)
+        self.client._create_trace_tags_via_ingestion(trace_id=self._langfuse_trace_id, tags=tags)
 
     def set_output_message_id(self, output_message_id: str) -> None:
         pass
