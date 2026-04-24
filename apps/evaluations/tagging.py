@@ -84,6 +84,29 @@ def validate_condition(
         raise ValidationError({"condition_type": f"Unknown condition type: {condition_type}"})
 
 
+def _coerce_numeric(raw: Any, py_type: type) -> int | float:
+    """Coerce raw to py_type, rejecting non-integral values when py_type is int.
+
+    - str digits like "5" coerce cleanly.
+    - Integral floats like 5.0 are accepted when py_type is int.
+    - Non-integral floats like 1.9 are rejected when py_type is int (no silent truncation).
+    """
+    if py_type is int and isinstance(raw, float) and not raw.is_integer():
+        raise ValidationError({"condition_value": f"Value must be an integer (got {raw!r})."})
+    if py_type is int and isinstance(raw, str):
+        try:
+            as_float = float(raw)
+        except (TypeError, ValueError) as err:
+            raise ValidationError({"condition_value": "Value must be coercible to int."}) from err
+        if not as_float.is_integer():
+            raise ValidationError({"condition_value": f"Value must be an integer (got {raw!r})."})
+        return int(as_float)
+    try:
+        return py_type(raw)
+    except (TypeError, ValueError) as err:
+        raise ValidationError({"condition_value": f"Value must be coercible to {py_type.__name__}."}) from err
+
+
 def _validate_equals_condition(condition_value: dict, field_definition: FieldDefinition) -> None:
     extra = set(condition_value.keys()) - {"value"}
     if extra:
@@ -103,12 +126,7 @@ def _validate_equals_condition(condition_value: dict, field_definition: FieldDef
             )
         return
     if isinstance(field_definition, _NUMERIC_FIELD_TYPES):
-        try:
-            condition_value["value"] = field_definition.python_type(condition_value["value"])
-        except (TypeError, ValueError) as err:
-            raise ValidationError(
-                {"condition_value": (f"Value must be coercible to {field_definition.python_type.__name__}.")}
-            ) from err
+        condition_value["value"] = _coerce_numeric(condition_value["value"], field_definition.python_type)
         return
     if isinstance(field_definition, StringFieldDefinition):
         if not isinstance(condition_value["value"], str):
@@ -126,11 +144,8 @@ def _validate_range_condition(condition_value: dict, field_definition: FieldDefi
     if not isinstance(field_definition, _NUMERIC_FIELD_TYPES):
         raise ValidationError({"condition_type": "'range' condition is only valid for numeric (int/float) fields."})
     py_type = field_definition.python_type
-    try:
-        lo = py_type(condition_value["min"])
-        hi = py_type(condition_value["max"])
-    except (TypeError, ValueError) as err:
-        raise ValidationError({"condition_value": f"min/max must be coercible to {py_type.__name__}."}) from err
+    lo = _coerce_numeric(condition_value["min"], py_type)
+    hi = _coerce_numeric(condition_value["max"], py_type)
     if lo > hi:
         raise ValidationError({"condition_value": "'min' must be <= 'max'."})
     condition_value["min"] = lo
@@ -210,7 +225,7 @@ def apply_rules_to_result(
     Caller is responsible for running this inside a transaction.atomic() block along
     with the EvaluationResult.create() it corresponds to.
     """
-    from apps.evaluations.models import AppliedTag  # noqa: PLC0415
+    from apps.evaluations.models import AppliedTag, EvaluationMode  # noqa: PLC0415
 
     rules = list(evaluator.tag_rules.all())
     if not rules:
@@ -226,6 +241,25 @@ def apply_rules_to_result(
     tags_to_remove = rule_tag_ids - set(tags_to_apply.keys())
 
     content_type = ContentType.objects.get_for_model(type(target))
+
+    if tags_to_remove:
+        # Don't clobber a shared eval tag that another evaluator's rule has applied to this
+        # target. We consult the AppliedTag audit: if any still-existing rule from a
+        # different evaluator has an application of this tag on a message that resolves to
+        # the same target, treat the tag as "owned" elsewhere and skip the removal.
+        other_applications = AppliedTag.objects.filter(
+            tag_id__in=tags_to_remove,
+        ).exclude(rule__evaluator_id=evaluator.id)
+        if evaluator.evaluation_mode == EvaluationMode.SESSION:
+            other_applications = other_applications.filter(
+                evaluation_result__message__session_id=evaluation_message.session_id,
+            )
+        else:
+            other_applications = other_applications.filter(
+                evaluation_result__message__expected_output_chat_message_id=target.pk,
+            )
+        owned_by_other = set(other_applications.values_list("tag_id", flat=True))
+        tags_to_remove = tags_to_remove - owned_by_other
 
     if tags_to_remove:
         CustomTaggedItem.objects.filter(

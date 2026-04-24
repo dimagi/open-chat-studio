@@ -442,16 +442,22 @@ class EvaluatorTagRuleForm(forms.ModelForm):
                     self.add_error(target, msg)
             return cleaned
 
-        tag, _ = Tag.objects.get_or_create(
-            team=self.team,
-            name=tag_name,
-            is_system_tag=False,
-            category=TagCategories.EVALUATIONS,
-        )
-        cleaned["tag"] = tag
-        self.instance.tag = tag
+        # Defer Tag.objects.get_or_create to save() so a failure elsewhere in the formset
+        # cannot leave behind an orphan Tag row that was never attached to a saved rule.
+        self._resolved_tag_name = tag_name
         self.instance.condition_value = cleaned["condition_value"]
         return cleaned
+
+    def save(self, commit=True):
+        tag_name = getattr(self, "_resolved_tag_name", None)
+        if tag_name:
+            self.instance.tag, _ = Tag.objects.get_or_create(
+                team=self.team,
+                name=tag_name,
+                is_system_tag=False,
+                category=TagCategories.EVALUATIONS,
+            )
+        return super().save(commit=commit)
 
     def _post_clean(self):
         # Our clean() runs the cross-field validation (validate_field_in_schema,

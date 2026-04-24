@@ -134,7 +134,6 @@ class EvaluationMessage(BaseModel):
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
     ) -> list[EvaluationMessage]:
-
         base_queryset = (
             ChatMessage.objects.filter(
                 chat__experiment_session__team=team,
@@ -489,7 +488,7 @@ class EvaluatorTagRule(BaseTeamModel):
         if self.evaluator_id and self.team_id and self.evaluator.team_id != self.team_id:
             raise ValidationError({"team": "Rule team must match evaluator team."})
 
-        if self.tag_id:
+        if self.tag_id and self.evaluator_id:
             validate_tag_compatibility(self.tag, self.evaluator)
 
         if self.evaluator_id:
