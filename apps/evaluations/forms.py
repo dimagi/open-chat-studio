@@ -5,6 +5,7 @@ from io import StringIO
 
 from django import forms
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
@@ -22,6 +23,7 @@ from apps.evaluations.models import (
     EvaluatorTagRule,
     ExperimentVersionSelection,
 )
+from apps.evaluations.rule_validation import validate_condition, validate_field_in_schema
 from apps.evaluations.tasks import (
     create_dataset_from_csv_task,
     create_dataset_from_session_messages_task,
@@ -316,11 +318,6 @@ class EvaluatorForm(forms.ModelForm):
         if not (self.instance and self.instance.pk):
             return
 
-        from apps.evaluations.tagging import (  # noqa: PLC0415
-            validate_condition,
-            validate_field_in_schema,
-        )
-
         output_schema = (params or {}).get("output_schema") or {}
         for rule in self.instance.tag_rules.all():
             try:
@@ -360,6 +357,9 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
         self.output_schema = output_schema or {}
+        # Defer Tag.objects.get_or_create to save(); clean() stashes the resolved
+        # tag name here for save() to pick up.
+        self._resolved_tag_name: str | None = None
         if self.instance and self.instance.pk and self.instance.tag_id:
             self.fields["tag_name"].initial = self.instance.tag.name
         if self.instance and self.instance.pk and isinstance(self.instance.condition_value, dict):
@@ -386,12 +386,29 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         if not self._row_has_content(cleaned):
             return cleaned
 
+        tag_name = self._clean_required_row_fields(cleaned)
+        self._clean_condition_value(cleaned)
+        if self.errors:
+            return cleaned
+
+        if not self._validate_against_schema(cleaned):
+            return cleaned
+
+        self._resolved_tag_name = tag_name
+        self.instance.condition_value = cleaned["condition_value"]
+        return cleaned
+
+    def _clean_required_row_fields(self, cleaned: dict) -> str:
+        """Add errors for missing tag_name/field_name and return the stripped tag name."""
         tag_name = (cleaned.get("tag_name") or "").strip()
         if not tag_name:
             self.add_error("tag_name", "Tag name is required.")
         if not cleaned.get("field_name"):
             self.add_error("field_name", "Field is required.")
+        return tag_name
 
+    def _clean_condition_value(self, cleaned: dict) -> None:
+        """Populate cleaned['condition_value'] for the selected condition_type, adding errors on failure."""
         condition_type = cleaned.get("condition_type")
         field_schema = self.output_schema.get(cleaned.get("field_name") or "", {}) or {}
         field_type = field_schema.get("type")
@@ -399,61 +416,44 @@ class EvaluatorTagRuleForm(forms.ModelForm):
             value = cleaned.get("condition_value_single")
             if not value:
                 self.add_error("condition_value_single", "Value is required for 'equals'.")
-            else:
-                coerced = value
-                if field_type == "int":
-                    try:
-                        coerced = int(value)
-                    except (TypeError, ValueError):
-                        self.add_error("condition_value_single", "Value must be an integer.")
-                elif field_type == "float":
-                    try:
-                        coerced = float(value)
-                    except (TypeError, ValueError):
-                        self.add_error("condition_value_single", "Value must be numeric.")
-                if not self.errors:
-                    cleaned["condition_value"] = {"value": coerced}
+                return
+            try:
+                coerced = ConditionType.coerce_value(value, field_type)
+            except (TypeError, ValueError):
+                msg = "Value must be an integer." if field_type == "int" else "Value must be numeric."
+                self.add_error("condition_value_single", msg)
+                return
+            if not self.errors:
+                cleaned["condition_value"] = {"value": coerced}
         elif condition_type == ConditionType.RANGE:
             lo = cleaned.get("condition_value_min")
             hi = cleaned.get("condition_value_max")
             if lo in (None, "") or hi in (None, ""):
                 self.add_error("condition_value_min", "Min and max are required for 'range'.")
-            else:
-                try:
-                    cleaned["condition_value"] = {"min": float(lo), "max": float(hi)}
-                except (TypeError, ValueError):
-                    self.add_error("condition_value_min", "Min/max must be numeric.")
+                return
+            try:
+                cleaned["condition_value"] = {"min": float(lo), "max": float(hi)}
+            except (TypeError, ValueError):
+                self.add_error("condition_value_min", "Min/max must be numeric.")
 
-        if self.errors:
-            return cleaned
-
-        from apps.evaluations.tagging import (  # noqa: PLC0415
-            validate_condition,
-            validate_field_in_schema,
-        )
-
+    def _validate_against_schema(self, cleaned: dict) -> bool:
+        """Run schema-level validation; return False when errors were added."""
         try:
             field_def = validate_field_in_schema(cleaned["field_name"], self.output_schema)
-            validate_condition(condition_type, cleaned["condition_value"], field_def)
+            validate_condition(cleaned.get("condition_type"), cleaned["condition_value"], field_def)
         except DjangoValidationError as err:
             for field, messages in err.message_dict.items():
                 target = field if field in self.fields else None
                 for msg in messages:
                     self.add_error(target, msg)
-            return cleaned
-
-        # Defer Tag.objects.get_or_create to save() so a failure elsewhere in the formset
-        # cannot leave behind an orphan Tag row that was never attached to a saved rule.
-        self._resolved_tag_name = tag_name
-        self.instance.condition_value = cleaned["condition_value"]
-        return cleaned
+            return False
+        return True
 
     def save(self, commit=True):
-        tag_name = getattr(self, "_resolved_tag_name", None)
-        if tag_name:
+        if self._resolved_tag_name:
             self.instance.tag, _ = Tag.objects.get_or_create(
                 team=self.team,
-                name=tag_name,
+                name=self._resolved_tag_name,
                 is_system_tag=False,
                 category=TagCategories.EVALUATIONS,
             )
@@ -466,8 +466,6 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         # rows whose condition_value wasn't set by form.clean() because of an
         # earlier in-row error. Skip model.clean(); the model's own clean() still
         # runs when rules are created outside the form (e.g. Django admin).
-        from django.forms.models import construct_instance  # noqa: PLC0415
-
         opts = self._meta
         try:
             self.instance = construct_instance(self, self.instance, opts.fields, opts.exclude)

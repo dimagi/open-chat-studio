@@ -14,6 +14,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.rule_validation import (
+    validate_condition,
+    validate_field_in_schema,
+    validate_tag_compatibility,
+)
 from apps.evaluations.utils import make_evaluation_messages_from_sessions
 from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
@@ -464,6 +469,32 @@ class ConditionType(models.TextChoices):
     EQUALS = "equals", "Equals"
     RANGE = "range", "Range"
 
+    @staticmethod
+    def coerce_value(raw, field_type: str | None):
+        """Coerce a raw equals-value input to the target field's python type.
+
+        Returns the input unchanged when `field_type` isn't numeric; raises
+        (TypeError, ValueError) on failed int/float conversion so the form can
+        surface a user-facing error.
+        """
+        if field_type == "int":
+            return int(raw)
+        if field_type == "float":
+            return float(raw)
+        return raw
+
+    def matches(self, condition_value: dict, field_value) -> bool:
+        """Return True if field_value satisfies this condition."""
+        if self == ConditionType.EQUALS:
+            return field_value == condition_value.get("value")
+        if self == ConditionType.RANGE:
+            try:
+                numeric = float(field_value)
+            except (TypeError, ValueError):
+                return False
+            return float(condition_value["min"]) <= numeric <= float(condition_value["max"])
+        raise ValueError(f"Unknown condition type: {self}")
+
 
 class EvaluatorTagRule(BaseTeamModel):
     """A rule that applies a tag to the eval target when an evaluator output field matches a condition."""
@@ -479,11 +510,6 @@ class EvaluatorTagRule(BaseTeamModel):
 
     def clean(self):
         super().clean()
-        from apps.evaluations.tagging import (  # noqa: PLC0415 - circular: tagging imports models
-            validate_condition,
-            validate_field_in_schema,
-            validate_tag_compatibility,
-        )
 
         if self.evaluator_id and self.team_id and self.evaluator.team_id != self.team_id:
             raise ValidationError({"team": "Rule team must match evaluator team."})

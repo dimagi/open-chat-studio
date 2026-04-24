@@ -190,51 +190,6 @@ class TestApplyRulesToResult:
         # AppliedTag records each application
         assert AppliedTag.objects.filter(rule=rule).count() == 2
 
-    def test_removal_semantics_between_runs(self, team, message_evaluator):
-        rule = EvaluatorTagRuleFactory.create(
-            team=team,
-            evaluator=message_evaluator,
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
-        )
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-        chat_message = message.expected_output_chat_message
-
-        r1 = self._build_result(team, message_evaluator, message, {"result": {"sentiment": "negative"}})
-        apply_rules_to_result(r1, message_evaluator, message)
-        assert chat_message.tags.filter(pk=rule.tag_id).exists()
-
-        r2 = self._build_result(team, message_evaluator, message, {"result": {"sentiment": "positive"}})
-        apply_rules_to_result(r2, message_evaluator, message)
-        assert not chat_message.tags.filter(pk=rule.tag_id).exists()
-
-    def test_removal_only_touches_evaluations_category(self, team, message_evaluator):
-        rule = EvaluatorTagRuleFactory.create(
-            team=team,
-            evaluator=message_evaluator,
-            tag__name="foo",
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
-        )
-        # user tag with the same name — different Tag row due to unique_together
-        user_tag = Tag.objects.create(team=team, name="foo", is_system_tag=False, category="")
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-        chat_message = message.expected_output_chat_message
-        chat_message.tags.add(user_tag, through_defaults={"team": team})
-
-        r1 = self._build_result(team, message_evaluator, message, {"result": {"sentiment": "negative"}})
-        apply_rules_to_result(r1, message_evaluator, message)
-        assert chat_message.tags.filter(pk=rule.tag_id).exists()
-        assert chat_message.tags.filter(pk=user_tag.pk).exists()
-
-        # Cleanup pass: result now says positive — eval tag removed, user tag preserved.
-        r2 = self._build_result(team, message_evaluator, message, {"result": {"sentiment": "positive"}})
-        apply_rules_to_result(r2, message_evaluator, message)
-        assert not chat_message.tags.filter(pk=rule.tag_id).exists()
-        assert chat_message.tags.filter(pk=user_tag.pk).exists()
-
     def test_null_target_no_op(self, team, message_evaluator):
         EvaluatorTagRuleFactory.create(
             team=team,

@@ -1,8 +1,8 @@
-"""Eval-driven tagging: pure predicate logic + DB orchestration.
+"""Eval-driven tagging: DB orchestration.
 
-Pure helpers (no Django DB access) live at the top so they can be unit-tested
-without `@pytest.mark.django_db`. The DB-touching orchestrator lives at the
-bottom and is called from the evaluation task.
+Pure validators live in `rule_validation.py` (re-exported here for callers
+and tests that already imported them from this module). The DB-touching
+orchestrator at the bottom is called from the evaluation task.
 """
 
 from __future__ import annotations
@@ -11,22 +11,17 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import ValidationError
-from pydantic import TypeAdapter
-from pydantic import ValidationError as PydanticValidationError
 
-from apps.annotations.models import CustomTaggedItem, TagCategories
-from apps.evaluations.field_definitions import (
-    ChoiceFieldDefinition,
-    FieldDefinition,
-    FloatFieldDefinition,
-    IntFieldDefinition,
-    StringFieldDefinition,
-)
+from apps.annotations.models import CustomTaggedItem
 from apps.evaluations.models import ConditionType
+from apps.evaluations.rule_validation import (  # noqa: F401 - re-exported for callers/tests
+    parse_field_definition,
+    validate_condition,
+    validate_field_in_schema,
+    validate_tag_compatibility,
+)
 
 if TYPE_CHECKING:
-    from apps.annotations.models import Tag
     from apps.chat.models import Chat, ChatMessage
     from apps.evaluations.models import (
         EvaluationMessage,
@@ -37,140 +32,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.evaluations.tagging")
 
-_FIELD_DEFINITION_ADAPTER = TypeAdapter(FieldDefinition)
-
-_NUMERIC_FIELD_TYPES = (IntFieldDefinition, FloatFieldDefinition)
-
-
-def parse_field_definition(field_def: dict | FieldDefinition) -> FieldDefinition:
-    """Parse a raw dict into a typed FieldDefinition, or return as-is if already one."""
-    if isinstance(field_def, (IntFieldDefinition, FloatFieldDefinition, ChoiceFieldDefinition)):
-        return field_def
-    # Let pydantic pick the right variant from the discriminated union via `type`.
-    return _FIELD_DEFINITION_ADAPTER.validate_python(field_def)
-
-
-def validate_field_in_schema(field_name: str, output_schema: dict) -> FieldDefinition:
-    """Ensure field_name exists in output_schema and return its FieldDefinition."""
-    if not field_name:
-        raise ValidationError({"field_name": "Field name is required."})
-    if field_name not in output_schema:
-        raise ValidationError({"field_name": f"Field '{field_name}' is not defined in the evaluator's output schema."})
-    raw = output_schema[field_name]
-    try:
-        return parse_field_definition(raw)
-    except PydanticValidationError as err:
-        raise ValidationError({"field_name": f"Field '{field_name}' has an invalid definition: {err}"}) from err
-
-
-def validate_condition(
-    condition_type: str,
-    condition_value: Any,
-    field_definition: FieldDefinition,
-) -> None:
-    """Raise ValidationError when the condition is malformed for the given field.
-
-    Mutates condition_value in place to coerce values to the field's native python_type
-    so stored rules match the type of the evaluator output and `==` comparisons behave.
-    """
-    if not isinstance(condition_value, dict):
-        raise ValidationError({"condition_value": "Condition value must be a JSON object."})
-
-    if condition_type == ConditionType.EQUALS:
-        _validate_equals_condition(condition_value, field_definition)
-    elif condition_type == ConditionType.RANGE:
-        _validate_range_condition(condition_value, field_definition)
-    else:
-        raise ValidationError({"condition_type": f"Unknown condition type: {condition_type}"})
-
-
-def _coerce_numeric(raw: Any, py_type: type) -> int | float:
-    """Coerce raw to py_type, rejecting non-integral values when py_type is int.
-
-    - str digits like "5" coerce cleanly.
-    - Integral floats like 5.0 are accepted when py_type is int.
-    - Non-integral floats like 1.9 are rejected when py_type is int (no silent truncation).
-    """
-    if py_type is int and isinstance(raw, float) and not raw.is_integer():
-        raise ValidationError({"condition_value": f"Value must be an integer (got {raw!r})."})
-    if py_type is int and isinstance(raw, str):
-        try:
-            as_float = float(raw)
-        except (TypeError, ValueError) as err:
-            raise ValidationError({"condition_value": "Value must be coercible to int."}) from err
-        if not as_float.is_integer():
-            raise ValidationError({"condition_value": f"Value must be an integer (got {raw!r})."})
-        return int(as_float)
-    try:
-        return py_type(raw)
-    except (TypeError, ValueError) as err:
-        raise ValidationError({"condition_value": f"Value must be coercible to {py_type.__name__}."}) from err
-
-
-def _validate_equals_condition(condition_value: dict, field_definition: FieldDefinition) -> None:
-    extra = set(condition_value.keys()) - {"value"}
-    if extra:
-        raise ValidationError({"condition_value": f"Extra keys for 'equals' condition: {sorted(extra)}"})
-    if "value" not in condition_value:
-        raise ValidationError({"condition_value": "'equals' condition requires a 'value' key."})
-    if isinstance(field_definition, ChoiceFieldDefinition):
-        if not field_definition.choices:
-            raise ValidationError({"condition_value": "Choice field has no 'choices' configured."})
-        if condition_value["value"] not in field_definition.choices:
-            raise ValidationError(
-                {
-                    "condition_value": (
-                        f"Value '{condition_value['value']}' is not in the field's choices: {field_definition.choices}"
-                    )
-                }
-            )
-        return
-    if isinstance(field_definition, _NUMERIC_FIELD_TYPES):
-        condition_value["value"] = _coerce_numeric(condition_value["value"], field_definition.python_type)
-        return
-    if isinstance(field_definition, StringFieldDefinition):
-        if not isinstance(condition_value["value"], str):
-            raise ValidationError({"condition_value": "Value must be a string."})
-        return
-    raise ValidationError({"condition_type": "'equals' condition is not supported for this field type."})
-
-
-def _validate_range_condition(condition_value: dict, field_definition: FieldDefinition) -> None:
-    extra = set(condition_value.keys()) - {"min", "max"}
-    if extra:
-        raise ValidationError({"condition_value": f"Extra keys for 'range' condition: {sorted(extra)}"})
-    if "min" not in condition_value or "max" not in condition_value:
-        raise ValidationError({"condition_value": "'range' condition requires both 'min' and 'max' keys."})
-    if not isinstance(field_definition, _NUMERIC_FIELD_TYPES):
-        raise ValidationError({"condition_type": "'range' condition is only valid for numeric (int/float) fields."})
-    py_type = field_definition.python_type
-    lo = _coerce_numeric(condition_value["min"], py_type)
-    hi = _coerce_numeric(condition_value["max"], py_type)
-    if lo > hi:
-        raise ValidationError({"condition_value": "'min' must be <= 'max'."})
-    condition_value["min"] = lo
-    condition_value["max"] = hi
-
-
-def validate_tag_compatibility(tag: Tag, evaluator: Evaluator) -> None:
-    """Ensure the tag is compatible with this evaluator (category, team)."""
-    if tag.team_id != evaluator.team_id:
-        raise ValidationError({"tag": "Tag must belong to the same team as the evaluator."})
-    if tag.category != TagCategories.EVALUATIONS:
-        raise ValidationError({"tag": f"Tag must be in the '{TagCategories.EVALUATIONS}' category."})
-
 
 def matches(condition_type: str, condition_value: dict, field_value: Any) -> bool:
     """Return True if field_value satisfies the condition. Raises on unknown type."""
-    if condition_type == ConditionType.EQUALS:
-        return field_value == condition_value.get("value")
-    if condition_type == ConditionType.RANGE:
-        try:
-            numeric = float(field_value)
-        except (TypeError, ValueError):
-            return False
-        return float(condition_value["min"]) <= numeric <= float(condition_value["max"])
-    raise ValueError(f"Unknown condition type: {condition_type}")
+    try:
+        ct = ConditionType(condition_type)
+    except ValueError as err:
+        raise ValueError(f"Unknown condition type: {condition_type}") from err
+    return ct.matches(condition_value, field_value)
 
 
 def evaluate_rules(rules: list[EvaluatorTagRule], result_output: dict) -> list[EvaluatorTagRule]:
@@ -220,12 +89,12 @@ def apply_rules_to_result(
     evaluator: Evaluator,
     evaluation_message: EvaluationMessage,
 ) -> None:
-    """Apply this evaluator's tag rules to the target, removing stale tags and recording audit rows.
+    """Apply this evaluator's tag rules to the target and record audit rows.
 
     Caller is responsible for running this inside a transaction.atomic() block along
     with the EvaluationResult.create() it corresponds to.
     """
-    from apps.evaluations.models import AppliedTag, EvaluationMode  # noqa: PLC0415
+    from apps.evaluations.models import AppliedTag  # noqa: PLC0415
 
     rules = list(evaluator.tag_rules.all())
     if not rules:
@@ -236,63 +105,34 @@ def apply_rules_to_result(
         return
 
     matched_rules = evaluate_rules(rules, evaluation_result.output or {})
+    if not matched_rules:
+        return
+
     tags_to_apply = {rule.tag_id: rule.tag for rule in matched_rules}
-    rule_tag_ids = {rule.tag_id for rule in rules}
-    tags_to_remove = rule_tag_ids - set(tags_to_apply.keys())
-
     content_type = ContentType.objects.get_for_model(type(target))
-
-    if tags_to_remove:
-        # Don't clobber a shared eval tag that another evaluator's rule has applied to this
-        # target. We consult the AppliedTag audit: if any still-existing rule from a
-        # different evaluator has an application of this tag on a message that resolves to
-        # the same target, treat the tag as "owned" elsewhere and skip the removal.
-        other_applications = AppliedTag.objects.filter(
-            tag_id__in=tags_to_remove,
-        ).exclude(rule__evaluator_id=evaluator.id)
-        if evaluator.evaluation_mode == EvaluationMode.SESSION:
-            other_applications = other_applications.filter(
-                evaluation_result__message__session_id=evaluation_message.session_id,
-            )
-        else:
-            other_applications = other_applications.filter(
-                evaluation_result__message__expected_output_chat_message_id=target.pk,
-            )
-        owned_by_other = set(other_applications.values_list("tag_id", flat=True))
-        tags_to_remove = tags_to_remove - owned_by_other
-
-    if tags_to_remove:
-        CustomTaggedItem.objects.filter(
-            content_type=content_type,
-            object_id=target.pk,
-            tag_id__in=tags_to_remove,
-            tag__category=TagCategories.EVALUATIONS,
-        ).delete()
-
     team = evaluation_result.team
-    if tags_to_apply:
-        CustomTaggedItem.objects.bulk_create(
-            [
-                CustomTaggedItem(
-                    content_type=content_type,
-                    object_id=target.pk,
-                    tag=tag,
-                    team=team,
-                )
-                for tag in tags_to_apply.values()
-            ],
-            ignore_conflicts=True,
-        )
 
-    if matched_rules:
-        AppliedTag.objects.bulk_create(
-            [
-                AppliedTag(
-                    team=team,
-                    evaluation_result=evaluation_result,
-                    rule=rule,
-                    tag=rule.tag,
-                )
-                for rule in matched_rules
-            ]
-        )
+    CustomTaggedItem.objects.bulk_create(
+        [
+            CustomTaggedItem(
+                content_type=content_type,
+                object_id=target.pk,
+                tag=tag,
+                team=team,
+            )
+            for tag in tags_to_apply.values()
+        ],
+        ignore_conflicts=True,
+    )
+
+    AppliedTag.objects.bulk_create(
+        [
+            AppliedTag(
+                team=team,
+                evaluation_result=evaluation_result,
+                rule=rule,
+                tag=rule.tag,
+            )
+            for rule in matched_rules
+        ]
+    )
