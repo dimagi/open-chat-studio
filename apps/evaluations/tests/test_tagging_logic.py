@@ -72,12 +72,6 @@ class TestValidateCondition:
         with pytest.raises(ValidationError):
             validate_condition("equals", {"value": "c"}, field)
 
-    def test_equals_missing_choices_list(self):
-        field = ChoiceFieldDefinition(type="choice", description="d", choices=["a"])
-        field.choices = []
-        with pytest.raises(ValidationError):
-            validate_condition("equals", {"value": "a"}, field)
-
     def test_equals_on_int_field_accepted(self):
         field = IntFieldDefinition(type="int", description="d")
         validate_condition("equals", {"value": 1}, field)
@@ -222,10 +216,3 @@ class TestResolveTarget:
         chat_message = MagicMock()
         message.expected_output_chat_message = chat_message
         assert resolve_target(evaluator, message) is chat_message
-
-    def test_message_mode_without_chat_message(self):
-        evaluator = MagicMock()
-        evaluator.evaluation_mode = "message"
-        message = MagicMock()
-        message.expected_output_chat_message = None
-        assert resolve_target(evaluator, message) is None

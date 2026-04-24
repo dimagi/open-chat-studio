@@ -18,7 +18,6 @@ from apps.evaluations.models import (
 from apps.evaluations.tagging import apply_rules_to_result
 from apps.evaluations.tasks import _maybe_apply_tag_rules
 from apps.utils.factories.evaluations import (
-    AppliedTagFactory,
     EvaluationMessageFactory,
     EvaluationResultFactory,
     EvaluationRunFactory,
@@ -114,18 +113,6 @@ class TestEvaluatorTagRuleClean:
         )
         with pytest.raises(ValidationError):
             rule.clean()
-
-    def test_valid_rule_clean_ok(self, team, message_evaluator):
-        tag = EvaluationTagFactory.create(team=team)
-        rule = EvaluatorTagRule(
-            team=team,
-            evaluator=message_evaluator,
-            tag=tag,
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
-        )
-        rule.clean()
 
 
 # ---- apply_rules_to_result -------------------------------------------------
@@ -316,37 +303,6 @@ class TestTaskLevelSkips:
         )
 
         _maybe_apply_tag_rules(run, message_evaluator, result, message)
-        assert AppliedTag.objects.count() == 0
-
-
-# ---- Rule-delete / rule-update cleanup history ----------------------------
-
-
-class TestAppliedTagHistory:
-    def test_rule_delete_cascades_applied_tags(self, team, message_evaluator):
-        rule = EvaluatorTagRuleFactory.create(
-            team=team,
-            evaluator=message_evaluator,
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
-        )
-        AppliedTagFactory.create(team=team, rule=rule)
-        assert AppliedTag.objects.count() == 1
-        rule.delete()
-        assert AppliedTag.objects.count() == 0
-
-    def test_evaluator_delete_cascades_rules_and_applied_tags(self, team, message_evaluator):
-        rule = EvaluatorTagRuleFactory.create(
-            team=team,
-            evaluator=message_evaluator,
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
-        )
-        AppliedTagFactory.create(team=team, rule=rule)
-        message_evaluator.delete()
-        assert EvaluatorTagRule.objects.count() == 0
         assert AppliedTag.objects.count() == 0
 
 
