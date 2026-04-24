@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0046_alter_voiceprovider_type'),
+        ('service_providers', '0049_deprecate_openai_gpt41nano_gpt35turbo'),
     ]
 
     operations = [
