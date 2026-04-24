@@ -283,8 +283,6 @@ jobs:
         wait-for-service-stability: false
 
     - name: Wait for service stability
-      env:
-        AWS_MAX_ATTEMPTS: 80
       run: |
           # Run the three waiters in parallel. `set -e` (default in GH Actions bash)
           # doesn't apply to background processes, so we capture each exit code via
