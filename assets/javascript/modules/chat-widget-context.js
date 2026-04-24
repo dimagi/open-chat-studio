@@ -46,16 +46,29 @@ export function getClientPageContext() {
  * @param {string|null} serverContext.pageTitle - Page title
  * @param {Array} serverContext.messages - Django messages [{text, level}]
  */
+/**
+ * Load widget_page_context from a JSON script tag if present.
+ */
+function getWidgetPageContext() {
+  const el = document.getElementById('widget-page-context');
+  if (!el) {
+    return {};
+  }
+  return JSON.parse(el.textContent) || {};
+}
+
 export function initChatWidgetPageContext(serverContext = {}) {
   const widget = document.querySelector('open-chat-studio-widget');
   if (widget) {
     const clientContext = getClientPageContext();
+    const widgetPageContext = getWidgetPageContext();
     widget.pageContext = {
       ...clientContext,
       team: serverContext.team || null,
       activeTab: serverContext.activeTab || null,
       pageTitle: serverContext.pageTitle || clientContext.title,
-      messages: serverContext.messages || []
+      messages: serverContext.messages || [],
+      ...widgetPageContext,
     };
   }
 }

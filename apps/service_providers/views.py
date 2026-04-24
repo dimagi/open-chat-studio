@@ -9,10 +9,8 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
-from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
@@ -30,6 +28,7 @@ from apps.service_providers.models import (
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
+from ..generics.referenced_objects import render_referenced_objects_modal
 from ..generics.views import BaseTypeSelectFormView
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
@@ -90,15 +89,12 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
             Chip(label=assistant.name, url=assistant.get_absolute_url())
             for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
         ]
-        response = render_to_string(
-            "generic/referenced_objects.html",
-            context={
-                "object_name": "service provider",
-                "experiments": related_experiments,
-                "assistants": related_assistants,
-            },
-        )
-        return reswap(HttpResponse(response, status=400), "none")
+        if related_experiments or related_assistants:
+            return render_referenced_objects_modal(
+                "service provider",
+                experiments=related_experiments,
+                assistants=related_assistants,
+            )
     service_config.delete()
     return HttpResponse()
 

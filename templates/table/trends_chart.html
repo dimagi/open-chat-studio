@@ -6,13 +6,31 @@
 <script>
     (function() {
         const canvasElement = document.getElementById('{{ record.id }}-trends');
-        if (canvasElement.chart) {
-            // Destroy existing chart if it exists
-            canvasElement.chart.destroy();
+
+        function renderTrendsChart() {
+            if (canvasElement.chart) {
+                // Destroy existing chart if it exists
+                canvasElement.chart.destroy();
+            }
+            const chartContext = canvasElement.getContext('2d');
+            const trendsData = JSON.parse(canvasElement.dataset.trends);
+            // Store chart reference on canvas for future cleanup
+            canvasElement.chart = SiteJS.trends.renderChart(chartContext, trendsData);
         }
-        const chartContext = canvasElement.getContext('2d');
-        const trendsData = JSON.parse(canvasElement.dataset.trends);
-        // Store chart reference on canvas for future cleanup
-        canvasElement.chart = SiteJS.trends.renderChart(chartContext, trendsData);
+
+        if (window.SiteJS && window.SiteJS.trends) {
+            renderTrendsChart();
+        } else if (document.readyState === 'loading') {
+            // Bundle not yet loaded and page still loading; retry once DOM is ready
+            document.addEventListener('DOMContentLoaded', function onReady() {
+                document.removeEventListener('DOMContentLoaded', onReady);
+                if (window.SiteJS && window.SiteJS.trends) {
+                    renderTrendsChart();
+                }
+            });
+        }
+        // If readyState is not 'loading', DOMContentLoaded has already fired
+        // and SiteJS.trends should already be available; if it isn't, the bundle
+        // failed to load and there is nothing further we can do.
     })();
 </script>

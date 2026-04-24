@@ -4,17 +4,18 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from apps.experiments.admin import VersionedModelAdminMixin
+from apps.utils.admin import ReadonlyAdminMixin
 
 from .models import EventAction, EventLog, ScheduledMessage, StaticTrigger, TimeoutTrigger
 
 
-class EventLogInline(GenericTabularInline):
+class EventLogInline(ReadonlyAdminMixin, GenericTabularInline):
     model = EventLog
     extra = 0
 
 
 @admin.register(TimeoutTrigger)
-class TimeoutTriggerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class TimeoutTriggerAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "action_type",
         "experiment",
@@ -39,7 +40,7 @@ class TimeoutTriggerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(StaticTrigger)
-class StaticTriggerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class StaticTriggerAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "type",
         "experiment",
@@ -63,10 +64,10 @@ class StaticTriggerAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(EventAction)
-class EventActionAdmin(admin.ModelAdmin):
+class EventActionAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ["action_type"]
 
 
 @admin.register(ScheduledMessage)
-class ScheduledMessageAdmin(admin.ModelAdmin):
+class ScheduledMessageAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ["name", "external_id", "is_complete"]
