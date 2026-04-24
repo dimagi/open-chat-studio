@@ -11,13 +11,8 @@ from apps.evaluations.field_definitions import (
     IntFieldDefinition,
     StringFieldDefinition,
 )
-from apps.evaluations.tagging import (
-    evaluate_rules,
-    matches,
-    resolve_target,
-    validate_condition,
-    validate_field_in_schema,
-)
+from apps.evaluations.rule_validation import validate_condition, validate_field_in_schema
+from apps.evaluations.tagging import evaluate_rules, matches, resolve_target
 
 
 class _Rule:

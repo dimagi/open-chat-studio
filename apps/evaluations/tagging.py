@@ -1,8 +1,7 @@
 """Eval-driven tagging: DB orchestration.
 
-Pure validators live in `rule_validation.py` (re-exported here for callers
-and tests that already imported them from this module). The DB-touching
-orchestrator at the bottom is called from the evaluation task.
+Pure validators live in `rule_validation.py`. The DB-touching orchestrator
+at the bottom is called from the evaluation task.
 """
 
 from __future__ import annotations
@@ -14,12 +13,6 @@ from django.contrib.contenttypes.models import ContentType
 
 from apps.annotations.models import CustomTaggedItem
 from apps.evaluations.models import ConditionType
-from apps.evaluations.rule_validation import (  # noqa: F401 - re-exported for callers/tests
-    parse_field_definition,
-    validate_condition,
-    validate_field_in_schema,
-    validate_tag_compatibility,
-)
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
