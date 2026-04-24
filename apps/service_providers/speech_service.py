@@ -5,7 +5,6 @@ from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, ClassVar
-from urllib.parse import urlparse
 
 import httpx
 import pydantic
@@ -402,12 +401,12 @@ class IntronSpeechService(SpeechService):
         resp = httpx.get(url, timeout=self.request_timeout_seconds)
         if resp.status_code != 200:
             raise AudioSynthesizeException(f"Intron audio download failed: status={resp.status_code}")
+        # Intron's S3 sets Content-Type correctly; if it's ever missing/wrong the default of
+        # "mp3" degrades gracefully because pydub auto-detects format from the magic bytes.
         content_type = resp.headers.get("Content-Type", "").lower()
-        # Parse the URL path so the extension check survives query strings on signed/presigned URLs.
-        path = urlparse(url).path.lower()
-        if "wav" in content_type or path.endswith(".wav"):
+        if "wav" in content_type:
             audio_format = "wav"
-        elif "ogg" in content_type or path.endswith(".ogg"):
+        elif "ogg" in content_type:
             audio_format = "ogg"
         else:
             audio_format = "mp3"
