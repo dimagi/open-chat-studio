@@ -5,9 +5,16 @@ import pytest
 import time_machine
 from django.utils import timezone
 
+from apps.annotations.models import TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
+from apps.evaluations.models import (
+    AppliedTag,
+    ConditionType,
+    EvaluationResult,
+    EvaluationRunType,
+    ExperimentVersionSelection,
+)
 from apps.evaluations.tasks import (
     EVAL_SESSIONS_TTL_DAYS,
     cleanup_old_evaluation_data,
@@ -22,9 +29,11 @@ from apps.utils.factories.evaluations import (
     EvaluationDatasetFactory,
     EvaluationMessageFactory,
     EvaluationRunFactory,
+    EvaluationTagFactory,
     EvaluatorFactory,
+    EvaluatorTagRuleFactory,
 )
-from apps.utils.factories.experiment import ChatbotFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatbotFactory, ChatFactory, ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.langchain import build_fake_llm_service
 
@@ -260,18 +269,8 @@ def test_evaluate_single_message_applies_tag_rules(
 ):
     """End-to-end: matching tag rule tags the chat message, audit row is recorded,
     and EvaluationResult is created."""
-    from apps.annotations.models import TagCategories  # noqa: PLC0415
-    from apps.evaluations.models import AppliedTag, ConditionType  # noqa: PLC0415
-    from apps.utils.factories.evaluations import (  # noqa: PLC0415
-        EvaluationTagFactory,
-        EvaluatorTagRuleFactory,
-    )
-
     run, evaluator = evaluation_run
     # Ensure the evaluation message has a chat message target for MESSAGE mode.
-    from apps.chat.models import ChatMessageType  # noqa: PLC0415
-    from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory  # noqa: PLC0415
-
     chat = ChatFactory.create(team=team_with_users)
     expected_output = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Generated reply")
     evaluation_message.expected_output_chat_message = expected_output
@@ -303,14 +302,6 @@ def test_evaluate_single_message_skips_tagging_for_preview_run(
     evaluator_run_mock, evaluation_run, evaluation_message, team_with_users
 ):
     """PREVIEW runs produce EvaluationResult rows but must not apply tag rules or record audit rows."""
-    from apps.chat.models import ChatMessageType  # noqa: PLC0415
-    from apps.evaluations.models import AppliedTag, ConditionType, EvaluationRunType  # noqa: PLC0415
-    from apps.utils.factories.evaluations import (  # noqa: PLC0415
-        EvaluationTagFactory,
-        EvaluatorTagRuleFactory,
-    )
-    from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory  # noqa: PLC0415
-
     run, evaluator = evaluation_run
     run.type = EvaluationRunType.PREVIEW
     run.save()

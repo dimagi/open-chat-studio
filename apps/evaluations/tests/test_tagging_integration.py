@@ -4,8 +4,10 @@ from unittest.mock import patch
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
+from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
@@ -14,6 +16,7 @@ from apps.evaluations.models import (
     EvaluatorTagRule,
 )
 from apps.evaluations.tagging import apply_rules_to_result
+from apps.evaluations.tasks import _maybe_apply_tag_rules
 from apps.utils.factories.evaluations import (
     AppliedTagFactory,
     EvaluationMessageFactory,
@@ -274,8 +277,6 @@ class TestTaskLevelSkips:
     """The task-level layer skips preview runs and error outputs."""
 
     def test_preview_run_skips_tagging(self, team, message_evaluator):
-        from apps.evaluations.tasks import _maybe_apply_tag_rules  # noqa: PLC0415
-
         EvaluatorTagRuleFactory.create(
             team=team,
             evaluator=message_evaluator,
@@ -297,8 +298,6 @@ class TestTaskLevelSkips:
         assert AppliedTag.objects.count() == 0
 
     def test_error_output_skips_tagging(self, team, message_evaluator):
-        from apps.evaluations.tasks import _maybe_apply_tag_rules  # noqa: PLC0415
-
         EvaluatorTagRuleFactory.create(
             team=team,
             evaluator=message_evaluator,
@@ -357,10 +356,6 @@ class TestAppliedTagHistory:
 class TestTransactionRollback:
     def test_bulk_create_failure_rolls_back(self, team, message_evaluator):
         """If AppliedTag.bulk_create raises, CustomTaggedItem writes roll back too."""
-        from django.db import transaction  # noqa: PLC0415
-
-        from apps.evaluations.tasks import _maybe_apply_tag_rules  # noqa: PLC0415
-
         rule = EvaluatorTagRuleFactory.create(
             team=team,
             evaluator=message_evaluator,
@@ -399,8 +394,6 @@ class TestTransactionRollback:
 
 class TestEvaluatorFormSchemaDrift:
     def test_rule_with_removed_field_blocks_save(self, team, message_evaluator):
-        from apps.evaluations.forms import EvaluatorForm  # noqa: PLC0415
-
         EvaluatorTagRuleFactory.create(
             team=team,
             evaluator=message_evaluator,
@@ -427,8 +420,6 @@ class TestEvaluatorFormSchemaDrift:
         assert any("sentiment" in str(e) for e in form.errors.get("__all__", []))
 
     def test_rule_with_incompatible_type_blocks_save(self, team, message_evaluator):
-        from apps.evaluations.forms import EvaluatorForm  # noqa: PLC0415
-
         EvaluatorTagRuleFactory.create(
             team=team,
             evaluator=message_evaluator,
@@ -459,8 +450,6 @@ class TestEvaluatorFormSchemaDrift:
 
 class TestEvaluatorTagRuleFormset:
     def test_adds_new_rule_via_formset(self, team, message_evaluator):
-        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
-
         output_schema = {
             "sentiment": {
                 "type": "choice",
@@ -495,8 +484,6 @@ class TestEvaluatorTagRuleFormset:
         assert rule.evaluator_id == message_evaluator.id
 
     def test_range_rule_accepts_min_max(self, team, message_evaluator):
-        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
-
         output_schema = {"score": {"type": "int", "description": "s"}}
         data = {
             "tag_rules-TOTAL_FORMS": "1",
@@ -520,8 +507,6 @@ class TestEvaluatorTagRuleFormset:
         assert rules[0].condition_value == {"min": 0.0, "max": 3.0}
 
     def test_empty_rows_are_ignored(self, team, message_evaluator):
-        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
-
         data = {
             "tag_rules-TOTAL_FORMS": "1",
             "tag_rules-INITIAL_FORMS": "0",
@@ -538,8 +523,6 @@ class TestEvaluatorTagRuleFormset:
         assert formset.save() == []
 
     def test_missing_value_reports_error(self, team, message_evaluator):
-        from apps.evaluations.forms import EvaluatorTagRuleFormSet  # noqa: PLC0415
-
         data = {
             "tag_rules-TOTAL_FORMS": "1",
             "tag_rules-INITIAL_FORMS": "0",

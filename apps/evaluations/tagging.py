@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.contenttypes.models import ContentType
 
 from apps.annotations.models import CustomTaggedItem
-from apps.evaluations.models import ConditionType
+from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
@@ -67,8 +67,6 @@ def resolve_target(evaluator: Evaluator, evaluation_message: EvaluationMessage) 
     SESSION mode returns the session's `Chat` (not the `ExperimentSession` itself) because
     `Chat` owns the TaggedModelMixin contract — tags live on the chat, not the session row.
     """
-    from apps.evaluations.models import EvaluationMode  # noqa: PLC0415
-
     if evaluator.evaluation_mode == EvaluationMode.SESSION:
         session = evaluation_message.session
         if session is None:
@@ -87,8 +85,6 @@ def apply_rules_to_result(
     Caller is responsible for running this inside a transaction.atomic() block along
     with the EvaluationResult.create() it corresponds to.
     """
-    from apps.evaluations.models import AppliedTag  # noqa: PLC0415
-
     rules = list(evaluator.tag_rules.all())
     if not rules:
         return

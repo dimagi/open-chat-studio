@@ -2,9 +2,8 @@
 
 Extracted from `tagging.py` so that `models.py` can import validators at module
 level without circular imports (models → rule_validation; tagging → models).
-All helpers in this module are DB-free and rely only on string values of
-condition types ("equals", "range") to avoid importing `ConditionType` from
-`models.py`.
+All helpers in this module are DB-free. `ConditionType` also lives here so
+both `models.py` and validators can share the same enum without a cycle.
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
+from django.db import models
 from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
@@ -33,10 +33,36 @@ _FIELD_DEFINITION_ADAPTER = TypeAdapter(FieldDefinition)
 
 _NUMERIC_FIELD_TYPES = (IntFieldDefinition, FloatFieldDefinition)
 
-# String values matching ConditionType.EQUALS / RANGE. Kept as literals to
-# avoid importing ConditionType from models.py (would re-introduce a cycle).
-_EQUALS = "equals"
-_RANGE = "range"
+
+class ConditionType(models.TextChoices):
+    EQUALS = "equals", "Equals"
+    RANGE = "range", "Range"
+
+    @staticmethod
+    def coerce_value(raw, field_type: str | None):
+        """Coerce a raw equals-value input to the target field's python type.
+
+        Returns the input unchanged when `field_type` isn't numeric; raises
+        (TypeError, ValueError) on failed int/float conversion so the form can
+        surface a user-facing error.
+        """
+        if field_type == "int":
+            return int(raw)
+        if field_type == "float":
+            return float(raw)
+        return raw
+
+    def matches(self, condition_value: dict, field_value) -> bool:
+        """Return True if field_value satisfies this condition."""
+        if self == ConditionType.EQUALS:
+            return field_value == condition_value.get("value")
+        if self == ConditionType.RANGE:
+            try:
+                numeric = float(field_value)
+            except (TypeError, ValueError):
+                return False
+            return float(condition_value["min"]) <= numeric <= float(condition_value["max"])
+        raise ValueError(f"Unknown condition type: {self}")
 
 
 def parse_field_definition(field_def: dict | FieldDefinition) -> FieldDefinition:
@@ -72,9 +98,9 @@ def validate_condition(
     if not isinstance(condition_value, dict):
         raise ValidationError({"condition_value": "Condition value must be a JSON object."})
 
-    if condition_type == _EQUALS:
+    if condition_type == ConditionType.EQUALS:
         _validate_equals_condition(condition_value, field_definition)
-    elif condition_type == _RANGE:
+    elif condition_type == ConditionType.RANGE:
         _validate_range_condition(condition_value, field_definition)
     else:
         raise ValidationError({"condition_type": f"Unknown condition type: {condition_type}"})
