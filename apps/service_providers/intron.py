@@ -65,7 +65,7 @@ ACCENTS: tuple[str, ...] = (
 GENDERS: tuple[str, ...] = ("male", "female")
 
 
-def build_synthetic_voices(provider: "VoiceProvider") -> None:
+def build_intron_synthetic_voices(provider: "VoiceProvider") -> None:
     """Create (or refresh) one SyntheticVoice per (accent, gender) for `provider`.
 
     Idempotent: uses (name, gender, service, voice_provider) as the natural key.

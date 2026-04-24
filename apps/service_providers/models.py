@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
-from apps.service_providers.intron import build_synthetic_voices
+from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -420,7 +420,7 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 # Nested savepoint: any IntegrityError from the seeding loop rolls back its own
                 # rows without poisoning the outer transaction, so the provider itself still commits.
                 with transaction.atomic(savepoint=True):
-                    build_synthetic_voices(self)
+                    build_intron_synthetic_voices(self)
             except Exception:
                 log.exception("Failed to seed Intron voices for provider %s", self.pk)
                 warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")

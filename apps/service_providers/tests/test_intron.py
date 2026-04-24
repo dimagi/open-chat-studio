@@ -2,19 +2,19 @@ import pytest
 from django.urls import reverse
 
 from apps.experiments.models import SyntheticVoice
-from apps.service_providers.intron import ACCENTS, build_synthetic_voices
+from apps.service_providers.intron import ACCENTS, build_intron_synthetic_voices
 from apps.service_providers.models import VoiceProvider, VoiceProviderType
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 
 
 @pytest.mark.django_db()
-def test_build_synthetic_voices_creates_one_per_accent_and_gender(team_with_users):
+def test_build_intron_synthetic_voices_creates_one_per_accent_and_gender(team_with_users):
     provider = VoiceProviderFactory(
         team=team_with_users,
         type=VoiceProviderType.intron,
         config={"intron_api_key": "test_key"},
     )
-    build_synthetic_voices(provider)
+    build_intron_synthetic_voices(provider)
     voices = provider.syntheticvoice_set.all()
     assert voices.count() == len(ACCENTS) * 2
     yoruba_voices = voices.filter(name="yoruba")
@@ -25,15 +25,15 @@ def test_build_synthetic_voices_creates_one_per_accent_and_gender(team_with_user
 
 
 @pytest.mark.django_db()
-def test_build_synthetic_voices_idempotent(team_with_users):
+def test_build_intron_synthetic_voices_idempotent(team_with_users):
     provider = VoiceProviderFactory(
         team=team_with_users,
         type=VoiceProviderType.intron,
         config={"intron_api_key": "test_key"},
     )
-    build_synthetic_voices(provider)
+    build_intron_synthetic_voices(provider)
     original = provider.syntheticvoice_set.count()
-    build_synthetic_voices(provider)
+    build_intron_synthetic_voices(provider)
     assert provider.syntheticvoice_set.count() == original
 
 
@@ -53,7 +53,7 @@ def test_run_post_save_hook_seeds_intron_voices(team_with_users):
 
 @pytest.mark.django_db()
 def test_run_post_save_hook_returns_warning_on_seeding_failure(team_with_users):
-    """If build_synthetic_voices raises, the hook logs and returns a user-facing warning."""
+    """If build_intron_synthetic_voices raises, the hook logs and returns a user-facing warning."""
     from unittest import mock  # noqa: PLC0415 - only needed in this test
 
     provider = VoiceProvider.objects.create(
@@ -64,7 +64,7 @@ def test_run_post_save_hook_returns_warning_on_seeding_failure(team_with_users):
     )
     # Patch the bound name in models (where run_post_save_hook resolves it), not intron.
     with mock.patch(
-        "apps.service_providers.models.build_synthetic_voices",
+        "apps.service_providers.models.build_intron_synthetic_voices",
         side_effect=RuntimeError("boom"),
     ):
         warnings = provider.run_post_save_hook()
