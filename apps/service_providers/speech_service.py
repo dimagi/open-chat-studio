@@ -323,36 +323,41 @@ class IntronSpeechService(SpeechService):
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
 
-        headers = {"Authorization": f"Bearer {self.intron_api_key}"}
-
-        enqueue = httpx.post(
-            f"{INTRON_BASE_URL}/tts/v1/enqueue",
-            headers={**headers, "Content-Type": "application/json"},
-            json={
-                "text": text,
-                "voice_accent": synthetic_voice.name,
-                "voice_gender": synthetic_voice.gender,
-            },
-            timeout=self.request_timeout_seconds,
-        )
-        if enqueue.status_code != 200:
-            raise AudioSynthesizeException(
-                f"Intron enqueue failed: status={enqueue.status_code} body={enqueue.text[:200]}"
+        # Pool the TCP/TLS connection across enqueue + (up to 120) status polls against the Intron API.
+        # The S3 audio download is intentionally made outside this client because S3 rejects the Bearer
+        # header with a 400, and mixing hosts in the same pool wouldn't improve reuse anyway.
+        auth_headers = {"Authorization": f"Bearer {self.intron_api_key}"}
+        with httpx.Client(headers=auth_headers, timeout=self.request_timeout_seconds) as client:
+            enqueue = client.post(
+                f"{INTRON_BASE_URL}/tts/v1/enqueue",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "text": text,
+                    "voice_accent": synthetic_voice.name,
+                    "voice_gender": synthetic_voice.gender,
+                },
             )
-        # Real response shape: {"data": {"text_id": "..."}, "message": "...", "status": "Ok"}
-        enqueue_data = enqueue.json().get("data") or {}
-        text_id = enqueue_data.get("text_id")
-        if not text_id:
-            raise AudioSynthesizeException(f"Intron enqueue response missing data.text_id. Body: {enqueue.text[:200]}")
+            if enqueue.status_code != 200:
+                raise AudioSynthesizeException(
+                    f"Intron enqueue failed: status={enqueue.status_code} body={enqueue.text[:200]}"
+                )
+            # Real response shape: {"data": {"text_id": "..."}, "message": "...", "status": "Ok"}
+            enqueue_data = enqueue.json().get("data") or {}
+            text_id = enqueue_data.get("text_id")
+            if not text_id:
+                raise AudioSynthesizeException(
+                    f"Intron enqueue response missing data.text_id. Body: {enqueue.text[:200]}"
+                )
 
-        audio_url = self._poll_until_ready(text_id, headers)
+            audio_url = self._poll_until_ready(client, text_id)
+
         audio_bytes, audio_format = self._download_audio(audio_url)
 
         audio_segment = AudioSegment.from_file(BytesIO(audio_bytes), format=audio_format)
         duration_seconds = len(audio_segment) / 1000
         return SynthesizedAudio(audio=BytesIO(audio_bytes), duration=duration_seconds, format=audio_format)
 
-    def _poll_until_ready(self, text_id: str, headers: dict) -> str:
+    def _poll_until_ready(self, client: httpx.Client, text_id: str) -> str:
         """Poll the status endpoint until the audio is generated; return the audio URL.
 
         Real response shape:
@@ -368,7 +373,7 @@ class IntronSpeechService(SpeechService):
         """
         status_url = f"{INTRON_BASE_URL}/tts/v1/status/{text_id}"
         for _ in range(self.poll_max_attempts):
-            resp = httpx.get(status_url, headers=headers, timeout=self.request_timeout_seconds)
+            resp = client.get(status_url)
             if resp.status_code != 200:
                 raise AudioSynthesizeException(
                     f"Intron status poll failed: status={resp.status_code} body={resp.text[:200]}"

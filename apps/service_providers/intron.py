@@ -66,20 +66,24 @@ GENDERS: tuple[str, ...] = ("male", "female")
 
 
 def build_intron_synthetic_voices(provider: "VoiceProvider") -> None:
-    """Create (or refresh) one SyntheticVoice per (accent, gender) for `provider`.
+    """Create one SyntheticVoice per (accent, gender) for `provider`.
 
-    Idempotent: uses (name, gender, service, voice_provider) as the natural key.
+    Idempotent: `ignore_conflicts=True` relies on the (name, gender, service,
+    voice_provider) unique index so re-running against an already-seeded provider
+    is a no-op. Defaults are deterministic from the tuple, so there's nothing to
+    refresh on the existing rows.
     """
-    for accent in ACCENTS:
-        for gender in GENDERS:
-            SyntheticVoice.objects.update_or_create(
-                name=accent,
-                gender=gender,
-                service=SyntheticVoice.Intron,
-                voice_provider=provider,
-                defaults={
-                    "neural": True,
-                    "language": accent.capitalize(),
-                    "language_code": accent,
-                },
-            )
+    voices = [
+        SyntheticVoice(
+            name=accent,
+            gender=gender,
+            service=SyntheticVoice.Intron,
+            voice_provider=provider,
+            neural=True,
+            language=accent.capitalize(),
+            language_code=accent,
+        )
+        for accent in ACCENTS
+        for gender in GENDERS
+    ]
+    SyntheticVoice.objects.bulk_create(voices, ignore_conflicts=True)
