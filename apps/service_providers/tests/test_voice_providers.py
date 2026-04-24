@@ -620,9 +620,11 @@ def test_intron_synthesize_voice_failure_status(team_with_users):
 
     speech_service = provider.get_speech_service()
 
+    # IntronSpeechService pools enqueue + polls through a single httpx.Client context,
+    # so we patch Client.post/Client.get rather than the module-level functions.
     with (
-        mock.patch("apps.service_providers.speech_service.httpx.post", return_value=enqueue_response),
-        mock.patch("apps.service_providers.speech_service.httpx.get", return_value=failed_response),
+        mock.patch("httpx.Client.post", return_value=enqueue_response),
+        mock.patch("httpx.Client.get", return_value=failed_response),
         mock.patch("apps.service_providers.speech_service.time.sleep"),
     ):
         with pytest.raises(AudioSynthesizeException):
@@ -661,9 +663,11 @@ def test_intron_synthesize_voice_timeout(team_with_users):
 
     speech_service = provider.get_speech_service()
 
+    # IntronSpeechService pools enqueue + polls through a single httpx.Client context,
+    # so we patch Client.post/Client.get rather than the module-level functions.
     with (
-        mock.patch("apps.service_providers.speech_service.httpx.post", return_value=enqueue_response),
-        mock.patch("apps.service_providers.speech_service.httpx.get", return_value=pending_response) as get,
+        mock.patch("httpx.Client.post", return_value=enqueue_response),
+        mock.patch("httpx.Client.get", return_value=pending_response) as get,
         mock.patch("apps.service_providers.speech_service.time.sleep"),
     ):
         with pytest.raises(AudioSynthesizeException):

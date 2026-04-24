@@ -7,6 +7,8 @@ list below whenever a provider is created.
 
 from typing import TYPE_CHECKING
 
+from field_audit.models import AuditAction
+
 from apps.experiments.models import SyntheticVoice
 
 if TYPE_CHECKING:
@@ -86,4 +88,4 @@ def build_intron_synthetic_voices(provider: "VoiceProvider") -> None:
         for accent in ACCENTS
         for gender in GENDERS
     ]
-    SyntheticVoice.objects.bulk_create(voices, ignore_conflicts=True)
+    SyntheticVoice.objects.bulk_create(voices, ignore_conflicts=True, audit_action=AuditAction.AUDIT)
