@@ -65,7 +65,7 @@ class EvaluatorFormsetMixin:
         return context
 
     def post(self, request, *args, **kwargs):
-        self.object = getattr(self, "object", None) or self.get_object_or_none()
+        self.object = self.get_object_or_none()
         form = self.get_form()
         formset = self._build_tag_rule_formset(self.object or Evaluator(team=request.team), data=request.POST)
 
@@ -104,7 +104,7 @@ class EvaluatorFormsetMixin:
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, EvaluatorFormsetMixin, CreateView):
     permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"
     model = Evaluator
@@ -128,7 +128,7 @@ class CreateEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, Permissi
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
 
-class EditEvaluator(EvaluatorFormsetMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, EvaluatorFormsetMixin, UpdateView):
     permission_required = "evaluations.change_evaluator"
     model = Evaluator
     form_class = EvaluatorForm
