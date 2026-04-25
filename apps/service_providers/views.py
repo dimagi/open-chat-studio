@@ -182,14 +182,9 @@ class CreateServiceProvider(
         if file_formset:
             files = file_formset.save(self.request)
             instance.add_files(files)
-        if isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value:
-            try:
-                instance.sync_voices()
-            except Exception:
-                log.exception("Failed to sync voices for ElevenLabs provider %s", instance.pk)
-                messages.warning(
-                    self.request, "Provider saved, but voice sync failed. You can retry via the sync button."
-                )
+        if isinstance(instance, VoiceProvider):
+            for warning in instance.run_post_save_hook():
+                messages.warning(self.request, warning)
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)

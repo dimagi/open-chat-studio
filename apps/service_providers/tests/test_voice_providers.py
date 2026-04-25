@@ -5,6 +5,7 @@ import factory
 import pytest
 from django.db import IntegrityError
 
+from apps.chat.exceptions import AudioSynthesizeException
 from apps.experiments.models import SyntheticVoice
 from apps.files.models import File
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -105,6 +106,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
         VoiceProviderType.openai: SyntheticVoice.OpenAI,
         VoiceProviderType.openai_voice_engine: SyntheticVoice.OpenAIVoiceEngine,
         VoiceProviderType.elevenlabs: SyntheticVoice.ElevenLabs,
+        VoiceProviderType.intron: SyntheticVoice.Intron,
     }[provider_type]
     voice = SyntheticVoice(
         name="test", neural=True, language="English", language_code="en", gender="female", service=service
@@ -500,6 +502,51 @@ def test_elevenlabs_gender_mapping(labels, expected_gender):
 
 
 @pytest.mark.django_db()
+def test_run_post_save_hook_elevenlabs_calls_sync_voices(team_with_users):
+    """ElevenLabs provider's post-save hook calls sync_voices and returns no warnings on success."""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    with mock.patch.object(VoiceProvider, "sync_voices") as mock_sync:
+        warnings = provider.run_post_save_hook()
+    mock_sync.assert_called_once()
+    assert warnings == []
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_elevenlabs_returns_warning_on_failure(team_with_users):
+    """If sync_voices raises, run_post_save_hook logs and returns a user-facing warning."""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    with mock.patch.object(VoiceProvider, "sync_voices", side_effect=RuntimeError("boom")):
+        warnings = provider.run_post_save_hook()
+    assert len(warnings) == 1
+    assert "voice sync failed" in warnings[0].lower()
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_noop_for_non_elevenlabs(team_with_users):
+    """Non-ElevenLabs providers return no warnings and do not trigger sync_voices."""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="AWS Test",
+        type=VoiceProviderType.aws,
+        config={"aws_access_key_id": "k", "aws_secret_access_key": "s", "aws_region": "us-east-1"},
+    )
+    with mock.patch.object(VoiceProvider, "sync_voices") as mock_sync:
+        warnings = provider.run_post_save_hook()
+    mock_sync.assert_not_called()
+    assert warnings == []
+
+
+@pytest.mark.django_db()
 def test_elevenlabs_provider_delete(team_with_users):
     """Deleting ElevenLabs provider should delete local synced voice records"""
     provider = VoiceProvider.objects.create(
@@ -522,3 +569,107 @@ def test_elevenlabs_provider_delete(team_with_users):
     provider.delete()
 
     assert not SyntheticVoice.objects.filter(pk=voice.pk).exists()
+
+
+def test_intron_voice_provider(team_with_users):
+    _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.intron,
+        data={"intron_api_key": "test_key"},
+    )
+
+
+@pytest.mark.parametrize("config_key", ["intron_api_key"])
+def test_intron_voice_provider_error(config_key):
+    """Missing API key causes form + pydantic validation failure."""
+    form = VoiceProviderType.intron.form_cls(team=None, data={"intron_api_key": "test_key"})
+    assert form.is_valid()
+    form.cleaned_data.pop(config_key)
+    _test_voice_provider_error(VoiceProviderType.intron, data=form.cleaned_data)
+
+
+@pytest.mark.django_db()
+def test_intron_synthesize_voice_failure_status(team_with_users):
+    """_synthesize_voice raises when the API reports TTS_TEXT_AUDIO_PROCESSING_FAILED."""
+
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.intron,
+        config={"intron_api_key": "test_key"},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="yoruba",
+        neural=True,
+        language="Yoruba",
+        language_code="yoruba",
+        gender="female",
+        service=SyntheticVoice.Intron,
+        voice_provider=provider,
+    )
+
+    enqueue_response = mock.Mock(status_code=200)
+    enqueue_response.json.return_value = {
+        "data": {"text_id": "abc123"},
+        "status": "Ok",
+    }
+    failed_response = mock.Mock(status_code=200)
+    failed_response.json.return_value = {
+        "data": {"processing_status": "TTS_TEXT_AUDIO_PROCESSING_FAILED"},
+        "status": "Ok",
+    }
+
+    speech_service = provider.get_speech_service()
+
+    # IntronSpeechService pools enqueue + polls through a single httpx.Client context,
+    # so we patch Client.post/Client.get rather than the module-level functions.
+    with (
+        mock.patch("httpx.Client.post", return_value=enqueue_response),
+        mock.patch("httpx.Client.get", return_value=failed_response),
+        mock.patch("apps.service_providers.speech_service.time.sleep"),
+    ):
+        with pytest.raises(AudioSynthesizeException):
+            speech_service.synthesize_voice("Hello", voice)
+
+
+@pytest.mark.django_db()
+def test_intron_synthesize_voice_timeout(team_with_users):
+    """_synthesize_voice raises if polling exceeds max attempts."""
+
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.intron,
+        config={"intron_api_key": "test_key", "poll_max_attempts": 2},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="yoruba",
+        neural=True,
+        language="Yoruba",
+        language_code="yoruba",
+        gender="female",
+        service=SyntheticVoice.Intron,
+        voice_provider=provider,
+    )
+
+    enqueue_response = mock.Mock(status_code=200)
+    enqueue_response.json.return_value = {
+        "data": {"text_id": "abc123"},
+        "status": "Ok",
+    }
+    pending_response = mock.Mock(status_code=200)
+    pending_response.json.return_value = {
+        "data": {"processing_status": "TTS_TEXT_PROCESSING"},
+        "status": "Ok",
+    }
+
+    speech_service = provider.get_speech_service()
+
+    # IntronSpeechService pools enqueue + polls through a single httpx.Client context,
+    # so we patch Client.post/Client.get rather than the module-level functions.
+    with (
+        mock.patch("httpx.Client.post", return_value=enqueue_response),
+        mock.patch("httpx.Client.get", return_value=pending_response) as get,
+        mock.patch("apps.service_providers.speech_service.time.sleep"),
+    ):
+        with pytest.raises(AudioSynthesizeException):
+            speech_service.synthesize_voice("Hello", voice)
+    assert get.call_count == 2
