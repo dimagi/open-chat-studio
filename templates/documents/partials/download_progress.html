@@ -1,33 +1,28 @@
 {% load static %}
 
-<div
-  class="w-full"
-  x-data="ocsDownloadProgress()"
-  x-init="init()"
->
+<div class="w-full" id="ocs-download-progress-root">
   <!-- Progress UI -->
-  <div
-    class="flex flex-col gap-3 p-4 bg-base-200 rounded-lg"
-    x-show="status === 'progress'"
-    x-cloak
-  >
+  <div id="ocs-progress-panel" class="flex flex-col gap-3 p-4 bg-base-200 rounded-lg">
     <div class="flex items-center gap-2">
       <span class="loading loading-spinner loading-sm"></span>
-      <h3 class="font-semibold" x-text="title"></h3>
+      <h3 class="font-semibold">Creating ZIP file...</h3>
     </div>
 
     <div class="progress-wrapper progress w-full bg-base-300 rounded-full overflow-hidden h-4">
       <div
+        id="ocs-progress-bar"
         class="progress-bar h-full bg-primary transition-all duration-300 ease-out"
-        :style="`width: ${progressPercent}%`"
+        style="width: 0%"
       ></div>
     </div>
 
-    <div class="text-sm text-center text-base-content/70" x-text="message"></div>
+    <div id="ocs-progress-message" class="text-sm text-center text-base-content/70">
+      Waiting for progress to start...
+    </div>
   </div>
 
   <!-- Success UI -->
-  <div class="mt-4" x-show="status === 'success'" x-cloak>
+  <div id="ocs-success-panel" class="mt-4" style="display: none;">
     <div class="alert alert-success">
       <i class="fa-solid fa-check-circle"></i>
       <div class="flex-1">
@@ -37,32 +32,28 @@
     </div>
 
     <div class="flex gap-2 mt-4">
-      <a
-        :href="downloadUrl"
-        class="btn btn-primary btn-sm"
-        download
-      >
+      <a id="ocs-download-link" href="#" class="btn btn-primary btn-sm" download>
         <i class="fa-solid fa-download"></i> Download ZIP
       </a>
 
-      <button class="btn btn-outline btn-sm" @click="reload()">
+      <button class="btn btn-outline btn-sm" onclick="location.reload()">
         <i class="fa-solid fa-rotate-right"></i> Done
       </button>
     </div>
   </div>
 
   <!-- Error UI -->
-  <div class="mt-4" x-show="status === 'error'" x-cloak>
+  <div id="ocs-error-panel" class="mt-4" style="display: none;">
     <div class="alert alert-error">
       <i class="fa-solid fa-exclamation-triangle"></i>
       <div class="flex-1">
         <h3 class="font-bold">Error creating ZIP file</h3>
-        <div class="text-sm" x-text="errorMessage"></div>
+        <div id="ocs-error-message" class="text-sm">An error occurred while creating the ZIP file.</div>
       </div>
     </div>
 
     <div class="mt-4">
-      <button class="btn btn-outline btn-sm" @click="reload()">
+      <button class="btn btn-outline btn-sm" onclick="location.reload()">
         <i class="fa-solid fa-rotate-right"></i> Try Again
       </button>
     </div>
@@ -70,72 +61,87 @@
 </div>
 
 <script>
-  function ocsDownloadProgress() {
-    return {
-      // UI state
-      status: "progress", // progress | success | error
-      title: "Creating ZIP file...",
-      message: "Waiting for progress to start...",
-      progressPercent: 0,
+  (function () {
+    const progressUrl = "{% url 'celery_progress:task_status' task_id %}";
+    const downloadBaseUrl = "{% url 'files:base' team.slug 0 %}";
 
-      // result state
-      downloadUrl: "#",
-      errorMessage: "An error occurred while creating the ZIP file.",
+    function showPanel(panelId) {
+      ["ocs-progress-panel", "ocs-success-panel", "ocs-error-panel"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = id === panelId ? "" : "none";
+      });
+    }
 
-      reload() {
-        location.reload();
+    CeleryProgressBar.initProgressBar(progressUrl, {
+      pollInterval: 500,
+
+      onProgress: function (_bar, _msg, progress) {
+        var bar = document.getElementById("ocs-progress-bar");
+        var msg = document.getElementById("ocs-progress-message");
+        if (bar) bar.style.width = (progress.percent || 0) + "%";
+
+        var description = progress.description ||
+          (progress.current && progress.total
+            ? "Processing file " + progress.current + " of " + progress.total
+            : "Starting...");
+
+        if (progress.current === 0) {
+          description = progress.pending
+            ? "Waiting for ZIP creation to start..."
+            : "ZIP creation started...";
+        }
+
+        if (msg) msg.textContent = description;
       },
 
-      init() {
-        const progressUrl = "{% url 'celery_progress:task_status' task_id %}";
-        const downloadBaseUrl = "{% url 'files:base' team.slug 0 %}";
+      onSuccess: function (_bar, _msg, result) {
+        var fileId = (typeof result === "object" && result.result) ? result.result : result;
 
-        CeleryProgressBar.initProgressBar(progressUrl, {
-          pollInterval: 500,
-
-          onProgress: (_progressBarElement, _progressBarMessageElement, progress) => {
-            // Update Alpine state (instead of DOM)
-            this.progressPercent = progress.percent || 0;
-
-            let description =
-              progress.description ||
-              (progress.current && progress.total
-                ? `Processing file ${progress.current} of ${progress.total}`
-                : "Starting...");
-
-            if (progress.current === 0) {
-              description = progress.pending
-                ? "Waiting for ZIP creation to start..."
-                : "ZIP creation started...";
-            }
-
-            this.message = description;
-          },
-
-          onSuccess: (_progressBarElement, _progressBarMessageElement, result) => {
-            // Celery result may be number or { result: number }
-            const fileId = (typeof result === "object" && result.result) ? result.result : result;
-
-            if (fileId) {
-              // Replace only the trailing "/0" segment to avoid corrupting slugs containing "0"
-              this.downloadUrl = downloadBaseUrl.replace(/\/0(\/?$)/, `/${fileId}$1`);
-              this.status = "success";
-            } else {
-              this.errorMessage = "No file was created. Please try again.";
-              this.status = "error";
-            }
-          },
-
-          onError: (_progressBarElement, _progressBarMessageElement, error) => {
-            this.errorMessage =
-              (error && error.message)
-                ? error.message
-                : "An error occurred while creating the ZIP file.";
-
-            this.status = "error";
-          },
-        });
+        if (fileId) {
+          var link = document.getElementById("ocs-download-link");
+          if (link) link.href = downloadBaseUrl.replace(/\/0(\/?$)/, "/" + fileId + "$1");
+          showPanel("ocs-success-panel");
+        } else {
+          var errMsg = document.getElementById("ocs-error-message");
+          if (errMsg) errMsg.textContent = "No file was created. Please try again.";
+          showPanel("ocs-error-panel");
+        }
       },
-    };
-  }
+
+      onError: function (_bar, _msg, error) {
+        var errMsg = document.getElementById("ocs-error-message");
+        if (errMsg) {
+          errMsg.textContent = (error && error.message)
+            ? error.message
+            : "An error occurred while creating the ZIP file.";
+        }
+        showPanel("ocs-error-panel");
+      },
+
+      onNetworkError: function (_bar, _msg, _error) {
+        var errMsg = document.getElementById("ocs-error-message");
+        if (errMsg) errMsg.textContent = "Network error — check your connection.";
+        showPanel("ocs-error-panel");
+      },
+
+      onHttpError: function (_bar, _msg, _error) {
+        var errMsg = document.getElementById("ocs-error-message");
+        if (errMsg) errMsg.textContent = "Server error — please try again.";
+        showPanel("ocs-error-panel");
+      },
+
+      onRetry: function (_bar, _msg, _excMessage, retrySeconds) {
+        var msg = document.getElementById("ocs-progress-message");
+        if (msg) msg.textContent = "Retrying... (next attempt in " + retrySeconds + "s)";
+      },
+
+      onTaskError: function (_bar, _msg, excMessage) {
+        var errMsg = document.getElementById("ocs-error-message");
+        if (errMsg) {
+          errMsg.textContent = excMessage || "An error occurred while creating the ZIP file.";
+        }
+        showPanel("ocs-error-panel");
+      },
+    });
+  })();
 </script>
