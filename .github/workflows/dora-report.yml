@@ -80,7 +80,7 @@ jobs:
           fi
           echo "Pulling since $SINCE"
           dora pull --repo ${{ github.repository }} --since "$SINCE" --environment aws-prod
-          dora report --format json --output dora-report.json
+          dora report --format json --output dora-report.json --weeks 52
 
       - name: Upload report.json to S3 (public-read)
         run: |
