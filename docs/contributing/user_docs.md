@@ -44,7 +44,7 @@ Some parts of the OCS application link directly to user documentation pages, inc
 If you are only editing page content, this usually does not apply.
 
 ### Steps
-1. If you move or rename a page in the docs repository, the corresponding link in the main OCS codebase may also need to be updated in  [`DOCUMENTATION_LINKS in  `config/settings.py`](https://github.com/dimagi/open-chat-studio/blob/main/config/settings.py)
+1. If you move or rename a page in the docs repository, the corresponding link in the main OCS codebase may also need to be updated in  [`DOCUMENTATION_LINKS` in `config/settings.py`](https://github.com/dimagi/open-chat-studio/blob/main/config/settings.py).
 2. If you are working from a fork of the repository, then run `python manage.py update_pipeline_schema` to manually update the pipeline schema files that use these DOCUMENTATION_LINKS
 
 

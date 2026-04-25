@@ -8,7 +8,7 @@ Open Chat Studio is an open-source project, and you can contribute to its code d
 * Give your branches, commits, and Pull Requests meaningful names and descriptions. This helps track changes later. If your changes cover a particular component, indicate it in the PR name as a prefix, for example: `[DOCS] PR name`.
 * Keep your PRs small—each PR should address one issue. Remove all unrelated changes.
 * [Link your Pull Request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) if applicable.
-* [Document your contribution](#documentation-policy) if your changes are user-facing. [AI automation](../developer_guides/user_docs.md#user-documentation-process) can help draft documentation and changelog entries.
+* [Document your contribution](#documentation-policy) if your changes are user-facing. [AI automation](../developer_guides/user_docs.md#guidelines) can help draft documentation and changelog entries.
 * For work in progress or early test results, use a Draft PR.
 
 ## Ensure Change Quality
