@@ -4,6 +4,20 @@
 {% block page_head %}
   {{ block.super }}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      document.body.addEventListener("htmx:afterSwap", function (evt) {
+        if (evt.detail.target && evt.detail.target.id === "collection-actions-wrapper") {
+          const scripts = evt.detail.target.querySelectorAll("script");
+          scripts.forEach(function (oldScript) {
+            const newScript = document.createElement("script");
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+          });
+        }
+      });
+    });
+  </script>
 {% endblock page_head %}
 
 {% block breadcrumbs %}

@@ -1,4 +1,5 @@
 import contextlib
+import logging
 import zipfile
 from datetime import timedelta
 from io import BytesIO
@@ -17,6 +18,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
+from apps.documents.exceptions import ZipCreationError
 from apps.documents.models import (
     Collection,
     CollectionFile,
@@ -317,7 +319,9 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         # Track filenames to handle duplicates
-        used_filenames = {}
+        used_filenames: dict[str, int] = {}
+        retry_count = self.request.retries
+        log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
 
         for idx, collection_file in enumerate(collection_files, start=1):
             file = collection_file.file
@@ -336,9 +340,28 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
 
             try:
                 with file.file.open("rb") as f:
-                    zip_file.writestr(filename, f.read())
-            except Exception as e:
-                logger.error(f"Error adding file {file.id} to ZIP: {str(e)}")
+                    content = f.read()
+
+                if file.content_size and len(content) != file.content_size:
+                    raise ZipCreationError(
+                        f"File {file.id} returned {len(content)} bytes but expected {file.content_size}"
+                    )
+
+                zip_file.writestr(filename, content)
+
+            except ZipCreationError:
+                raise
+
+            except Exception as exc:
+                logger.log(
+                    log_level,
+                    "Failed to process file while building ZIP archive",
+                    extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+                    exc_info=True,
+                )
+                raise ZipCreationError(
+                    f"Could not process file {file.id} for collection {collection_id}"
+                ) from exc
 
             progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
 
