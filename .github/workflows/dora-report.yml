@@ -44,9 +44,16 @@ jobs:
           aws-region: ${{ vars.DORA_AWS_REGION }}
 
       - name: Download dora.db from S3
+        id: download_db
         run: |
           # First run 404s — start with an empty DB. Subsequent runs reuse the cached state.
-          aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || echo "no existing DB — will pull from scratch"
+          aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || true
+          if [ -f dora.db ]; then
+            echo "db_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "db_present=false" >> "$GITHUB_OUTPUT"
+            echo "No existing DB in S3 — will perform a cold pull"
+          fi
 
       - name: Install dora
         run: uv tool install "git+https://github.com/dimagi/dora[s3]"
@@ -54,8 +61,19 @@ jobs:
       - name: Pull & report
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DB_PRESENT: ${{ steps.download_db.outputs.db_present }}
         run: |
-          dora pull --repo ${{ github.repository }} --since 2025-01-01
+          # Cold pull (no DB): fetch full history from the bootstrap date.
+          # Hot pull (DB present): only refresh the last 30 days — gives buffer
+          # for retroactive label changes (e.g. caused-incident applied late)
+          # while keeping API calls minimal.
+          if [ "$DB_PRESENT" = "true" ]; then
+            SINCE=$(date -u -d '30 days ago' +%Y-%m-%d)
+          else
+            SINCE=2025-01-01
+          fi
+          echo "Pulling since $SINCE"
+          dora pull --repo ${{ github.repository }} --since "$SINCE"
           dora report --format json --output dora-report.json
 
       - name: Upload report.json to S3 (public-read)
