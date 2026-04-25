@@ -5,6 +5,7 @@ from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
+from botocore.exceptions import BotoCoreError, ClientError
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -18,7 +19,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
-from apps.documents.exceptions import ZipCreationError
+from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
     Collection,
     CollectionFile,
@@ -290,6 +291,7 @@ def delete_document_source_task(self, document_source_id: int):
     acks_late=True,
     ignore_result=False,
     autoretry_for=(Exception,),
+    dont_autoretry_for=(ZipIntegrityError,),
     retry_kwargs={"max_retries": 3, "countdown": 60},
 )
 def create_collection_zip_task(self, collection_id: int, team_id: int):
@@ -317,6 +319,8 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
 
     zip_buffer = BytesIO()
 
+    skipped_files: list[str] = []
+
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         # Track filenames to handle duplicates
         used_filenames: dict[str, int] = {}
@@ -343,27 +347,48 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
                     content = f.read()
 
                 if file.content_size and len(content) != file.content_size:
-                    raise ZipCreationError(
+                    logger.error(
+                        "File integrity check failed while building ZIP archive",
+                        extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+                    )
+                    raise ZipIntegrityError(
                         f"File {file.id} returned {len(content)} bytes but expected {file.content_size}"
                     )
 
                 zip_file.writestr(filename, content)
 
-            except ZipCreationError:
+            except ZipIntegrityError:
                 raise
 
-            except Exception as exc:
+            except (ClientError, BotoCoreError, ConnectionError, TimeoutError) as exc:
+                # Transient storage/network error — retry the whole task
                 logger.log(
                     log_level,
-                    "Failed to process file while building ZIP archive",
+                    "Transient error reading file while building ZIP archive",
                     extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
                     exc_info=True,
                 )
                 raise ZipCreationError(
-                    f"Could not process file {file.id} for collection {collection_id}"
+                    f"Could not read file {file.id} for collection {collection_id}"
                 ) from exc
 
+            except Exception:
+                # Permanent per-file error — skip and record in manifest
+                logger.warning(
+                    "Skipping unreadable file while building ZIP archive",
+                    extra={"collection_id": collection_id, "file_id": file.id},
+                    exc_info=True,
+                )
+                skipped_files.append(f"{filename} (file id: {file.id})")
+                continue
+
             progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
+
+        if skipped_files:
+            manifest = "The following files could not be included in this archive:\n\n" + "\n".join(
+                f"- {name}" for name in skipped_files
+            )
+            zip_file.writestr("SKIPPED_FILES.txt", manifest)
 
     zip_buffer.seek(0)
     timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
