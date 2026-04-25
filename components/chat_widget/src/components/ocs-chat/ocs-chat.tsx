@@ -1424,7 +1424,12 @@ export class OcsChat {
     }
 
     const storageKey = `ocs-user-id`;
-    const stored = localStorage.getItem(storageKey);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(storageKey);
+    } catch {
+      // localStorage blocked; fall through to in-memory id generation
+    }
     if (stored) {
       this.generatedUserId = stored;
       return stored;
@@ -1435,7 +1440,11 @@ export class OcsChat {
     const randomString = Array.from(array, byte => byte.toString(36)).join('').substr(0, 9);
     const newUserId = `ocs:${Date.now()}_${randomString}`;
     this.generatedUserId = newUserId;
-    localStorage.setItem(storageKey, newUserId);
+    try {
+      localStorage.setItem(storageKey, newUserId);
+    } catch {
+      // localStorage blocked; the generated id lives in component state for this page
+    }
 
     return newUserId;
   }
