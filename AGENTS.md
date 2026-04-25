@@ -60,8 +60,8 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
 
 ## Don't
-* Use local imports for any reason other than to avoid circular imports or as a means to reduce startup time (reserved for specific imports)
-* Don't commit implementation plans to the repo unless asked
+* Do not local imports for any reason other than to avoid circular imports or as a means to reduce startup time (reserved for specific imports)
+* Do not commit implementation plans to the repo unless asked
 
 ## Additional notes
 
