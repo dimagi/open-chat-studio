@@ -451,3 +451,83 @@ describe('ocs-chat progress message during polling', () => {
     expect(typingText).toBeFalsy();
   });
 });
+
+describe('ocs-chat localStorage blocked (SecurityError)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockStartSession.mockResolvedValue({session_id: 'test-session-id'});
+    mockSendMessage.mockResolvedValue({status: 'success', task_id: 'test-task-id'});
+    mockPollTask.mockReturnValue({cancel: jest.fn()});
+    mockStartMessagePolling.mockReturnValue({stop: jest.fn()});
+
+    global.fetch = setupFetchMock();
+
+    const throwSecurityError = () => {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    };
+    const localStorageMock = {
+      getItem: jest.fn(throwSecurityError),
+      setItem: jest.fn(throwSecurityError),
+      removeItem: jest.fn(throwSecurityError),
+      clear: jest.fn(throwSecurityError),
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+    });
+
+    Object.defineProperty(window, 'crypto', {
+      value: {
+        getRandomValues: jest.fn((arr: Uint8Array) => {
+          for (let i = 0; i < arr.length; i++) {
+            arr[i] = Math.floor(Math.random() * 256);
+          }
+          return arr;
+        }),
+      },
+      writable: true,
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    jest.restoreAllMocks();
+  });
+
+  it('starts a session successfully when localStorage throws on read and write', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    await page.waitForChanges();
+
+    await page.rootInstance.sendMessage('Hello');
+    await page.waitForChanges();
+
+    expect(page.rootInstance.sessionId).toBe('test-session-id');
+    expect(page.rootInstance.error).toBeFalsy();
+    expect(page.rootInstance.generatedUserId).toMatch(/^ocs:\d+_.+/);
+  });
+
+  it('reuses the same in-memory user id across calls when localStorage is blocked', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    await page.waitForChanges();
+
+    const firstId = page.rootInstance.getOrGenerateUserId();
+    const secondId = page.rootInstance.getOrGenerateUserId();
+
+    expect(firstId).toMatch(/^ocs:\d+_.+/);
+    expect(secondId).toBe(firstId);
+  });
+
+  it('does not throw during componentWillLoad when localStorage is blocked', async () => {
+    await expect(newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true" persistent-session="true"></open-chat-studio-widget>',
+    })).resolves.toBeDefined();
+  });
+});
