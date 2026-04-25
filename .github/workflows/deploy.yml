@@ -35,7 +35,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.environment }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -284,25 +284,30 @@ jobs:
 
     - name: Wait for service stability
       run: |
-          aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE_DJANGO $ECS_SERVICE_CELERY $ECS_SERVICE_CELERY_BEAT
+          # Run the three waiters in parallel. `set -e` (default in GH Actions bash)
+          # doesn't apply to background processes, so we capture each exit code via
+          # `wait <pid>` and fail only after all three have finished.
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_DJANGO" &
+          pid_django=$!
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_CELERY" &
+          pid_celery=$!
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_CELERY_BEAT" &
+          pid_celery_beat=$!
 
-    - name: Update deployment status (success)
-      if: success()
+          rc=0
+          wait "$pid_django"      || { echo "Django service failed to stabilise"; rc=1; }
+          wait "$pid_celery"      || { echo "Celery service failed to stabilise"; rc=1; }
+          wait "$pid_celery_beat" || { echo "CeleryBeat service failed to stabilise"; rc=1; }
+          exit $rc
+
+    - name: Update deployment status
+      if: always()
       uses: chrnorm/deployment-status@v2
       with:
         token: '${{ github.token }}'
         environment-url: ${{ steps.deployment.outputs.environment_url }}
         deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-        state: 'success'
-
-    - name: Update deployment status (failure)
-      if: failure()
-      uses: chrnorm/deployment-status@v2
-      with:
-        token: '${{ github.token }}'
-        environment-url: ${{ steps.deployment.outputs.environment_url }}
-        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-        state: 'failure'
+        state: ${{ job.status == 'success' && 'success' || 'failure' }}
 
     - name: Create Sentry release
       if: success()
