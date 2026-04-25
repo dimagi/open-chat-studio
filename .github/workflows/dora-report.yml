@@ -50,22 +50,14 @@ jobs:
 
       - name: Download dora.db from S3
         id: download_db
-        env:
-          RESET: ${{ inputs.reset }}
         run: |
           # First run 404s — start with an empty DB. Subsequent runs reuse the cached state.
-          # Reset input forces a cold pull by skipping the download.
-          if [ "$RESET" = "true" ]; then
-            echo "Reset requested — skipping DB download, will perform a cold pull"
-            echo "db_present=false" >> "$GITHUB_OUTPUT"
+          aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || true
+          if [ -f dora.db ]; then
+            echo "db_present=true" >> "$GITHUB_OUTPUT"
           else
-            aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || true
-            if [ -f dora.db ]; then
-              echo "db_present=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "db_present=false" >> "$GITHUB_OUTPUT"
-              echo "No existing DB in S3 — will perform a cold pull"
-            fi
+            echo "db_present=false" >> "$GITHUB_OUTPUT"
+            echo "No existing DB in S3 — will perform a cold pull"
           fi
 
       - name: Install dora
@@ -75,12 +67,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DB_PRESENT: ${{ steps.download_db.outputs.db_present }}
+          RESET: ${{ inputs.reset }}
         run: |
-          # Cold pull (no DB): fetch full history from the bootstrap date.
+          # Cold pull (no DB) or reset requested: fetch full history from the bootstrap date.
           # Hot pull (DB present): only refresh the last 30 days — gives buffer
           # for retroactive label changes (e.g. caused-incident applied late)
           # while keeping API calls minimal.
-          if [ "$DB_PRESENT" = "true" ]; then
+          if [ "$DB_PRESENT" = "true" ] && [ "$RESET" != "true" ]; then
             SINCE=$(date -u -d '30 days ago' +%Y-%m-%d)
           else
             SINCE=2025-01-01
