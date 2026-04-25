@@ -23,6 +23,11 @@ on:
   schedule:
     - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
   workflow_dispatch:
+    inputs:
+      reset:
+        description: "Reset: ignore cached DB and pull full history from 2025-01-01"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write   # required for OIDC
@@ -45,14 +50,22 @@ jobs:
 
       - name: Download dora.db from S3
         id: download_db
+        env:
+          RESET: ${{ inputs.reset }}
         run: |
           # First run 404s — start with an empty DB. Subsequent runs reuse the cached state.
-          aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || true
-          if [ -f dora.db ]; then
-            echo "db_present=true" >> "$GITHUB_OUTPUT"
-          else
+          # Reset input forces a cold pull by skipping the download.
+          if [ "$RESET" = "true" ]; then
+            echo "Reset requested — skipping DB download, will perform a cold pull"
             echo "db_present=false" >> "$GITHUB_OUTPUT"
-            echo "No existing DB in S3 — will perform a cold pull"
+          else
+            aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || true
+            if [ -f dora.db ]; then
+              echo "db_present=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "db_present=false" >> "$GITHUB_OUTPUT"
+              echo "No existing DB in S3 — will perform a cold pull"
+            fi
           fi
 
       - name: Install dora
@@ -73,7 +86,7 @@ jobs:
             SINCE=2025-01-01
           fi
           echo "Pulling since $SINCE"
-          dora pull --repo ${{ github.repository }} --since "$SINCE"
+          dora pull --repo ${{ github.repository }} --since "$SINCE" --environment aws-prod
           dora report --format json --output dora-report.json
 
       - name: Upload report.json to S3 (public-read)
