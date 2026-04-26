@@ -76,7 +76,7 @@ jobs:
           if [ "$DB_PRESENT" = "true" ] && [ "$RESET" != "true" ]; then
             SINCE=$(date -u -d '30 days ago' +%Y-%m-%d)
           else
-            SINCE=2025-01-01
+            SINCE=$(date -u -d '1 year ago' +%Y-%m-%d)
           fi
           echo "Pulling since $SINCE"
           dora pull --repo ${{ github.repository }} --since "$SINCE" --environment aws-prod
