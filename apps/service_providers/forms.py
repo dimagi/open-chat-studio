@@ -171,6 +171,12 @@ class GoogleGeminiConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     google_api_key = forms.CharField(label=_("API Key"))
 
 
+class VoyageAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["voyage_api_key"]
+
+    voyage_api_key = forms.CharField(label=_("API Key"))
+
+
 class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["credentials_json"]
     api_transport = forms.ChoiceField(
