@@ -15,7 +15,7 @@ All user-facing changes should ideally be accompanied by documentation and chang
 
 The easiest way to trigger a docs/changelog update is to check the **"This PR requires docs/changelog update"** checkbox in the PR description.
 
-### Automatic creation of changelog entries
+### Automatic creation of documentation updates and changelog entries
 The [dispatch workflow](https://github.com/dimagi/open-chat-studio/blob/main/.github/workflows/docs-changelog-dispatch.yml) runs when a PR targeting `main` that touches files under `apps/`, `components/`, `config/`, `assets/`, or `templates/` is merged with the PR description box checked. It sends a dispatch event to the [docs repo][docs_repo], which then uses Claude AI to analyze the changes and open a PR with documentation updates and a changelog entry on your behalf.
 
 #### Widget vs. Main App changes
