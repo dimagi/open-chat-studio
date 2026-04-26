@@ -384,3 +384,18 @@ class GoogleLocalIndexManager(LocalIndexManager):
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
         )
         return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)
+
+
+class VoyageAILocalIndexManager(LocalIndexManager):
+    def get_embedding_vector(self, content: str) -> Vector:
+        if not content:
+            raise ValueError("Cannot embed empty string")
+
+        from langchain_voyageai import VoyageAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
+
+        embeddings = VoyageAIEmbeddings(
+            voyage_api_key=self._api_key,
+            model=self.embedding_model_name,
+            output_dimension=settings.EMBEDDING_VECTOR_SIZE,
+        )
+        return embeddings.embed_query(content)
