@@ -278,28 +278,24 @@ def test_create_collection_zip_task_transient_error_raises_and_creates_no_file(p
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_file_not_found_skips_and_creates_manifest(progress_recorder_mock):
-    """FileNotFoundError (permanent per-file error) skips the file and writes SKIPPED_FILES.txt."""
+def test_create_collection_zip_task_file_not_found_raises_and_creates_no_file(progress_recorder_mock):
+    """FileNotFoundError aborts the task — no File object is created (fail-fast)."""
     collection = CollectionFactory.create(name="missing-file-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
     with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(FileNotFoundError("not found"))):
-        result = create_collection_zip_task(collection.id, team.id)
+        with pytest.raises(ZipCreationError):
+            create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
-    with zip_file_obj.file.open("rb") as f:
-        with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
-            assert "SKIPPED_FILES.txt" in zf.namelist()
-            assert "file1.txt" in zf.read("SKIPPED_FILES.txt").decode()
+    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
 
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_second_file_error_skips_and_includes_first(progress_recorder_mock):
-    """A permanent read error on the second file skips it — first file is in the ZIP with a manifest."""
+def test_create_collection_zip_task_second_file_error_aborts_and_creates_no_file(progress_recorder_mock):
+    """A read error on the second file aborts the task — no partial ZIP is saved (fail-fast)."""
     collection = CollectionFactory.create(name="second-file-error-collection")
     team = collection.team
 
@@ -320,16 +316,10 @@ def test_create_collection_zip_task_second_file_error_skips_and_includes_first(p
             raise OSError("storage failure on second file")
 
     with patch("django.db.models.fields.files.FieldFile.open", open_first_ok_second_fails):
-        result = create_collection_zip_task(collection.id, team.id)
+        with pytest.raises(ZipCreationError):
+            create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
-    with zip_file_obj.file.open("rb") as f:
-        with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
-            assert "file1.txt" in zf.namelist()
-            assert zf.read("file1.txt") == b"Good content"
-            assert "SKIPPED_FILES.txt" in zf.namelist()
-            assert "file2.txt" in zf.read("SKIPPED_FILES.txt").decode()
+    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
 
 
 @pytest.mark.django_db()
@@ -471,18 +461,15 @@ def test_create_collection_zip_task_integrity_error_does_not_retry(progress_reco
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_permanent_error_logs_warning_and_skips(progress_recorder_mock):
-    """A permanent per-file OSError is logged at WARNING and the file is skipped."""
-    collection = CollectionFactory.create(name="permanent-skip-collection")
+def test_create_collection_zip_task_oserror_raises_and_creates_no_file(progress_recorder_mock):
+    """An unexpected OSError aborts the task and creates no File object (fail-fast)."""
+    collection = CollectionFactory.create(name="permanent-error-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
-    with patch("apps.documents.tasks.logger") as logger_mock:
-        with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("disk error"))):
-            result = create_collection_zip_task(collection.id, team.id)
+    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("disk error"))):
+        with pytest.raises(ZipCreationError):
+            create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    logger_mock.warning.assert_called_once()
-    extra_used = logger_mock.warning.call_args[1]["extra"]
-    assert extra_used["file_id"] == file1.id
+    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0

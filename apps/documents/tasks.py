@@ -317,10 +317,10 @@ def _read_file_content(file, collection_id: int, log_level: int, retry_count: in
     try:
         with file.file.open("rb") as f:
             content = f.read()
-    except (ClientError, BotoCoreError, ConnectionError, TimeoutError) as exc:
+    except Exception as exc:
         logger.log(
             log_level,
-            "Transient error reading file while building ZIP archive",
+            "Error reading file while building ZIP archive",
             extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
             exc_info=True,
         )
@@ -374,7 +374,6 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
     retry_count = self.request.retries
     log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
     zip_buffer = BytesIO()
-    skipped_files: list[str] = []
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         used_filenames: dict[str, int] = {}
@@ -382,28 +381,9 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
         for idx, collection_file in enumerate(collection_files, start=1):
             file = collection_file.file
             filename = _resolve_filename(file.name, used_filenames)
-
-            try:
-                content = _read_file_content(file, collection_id, log_level, retry_count)
-            except (ZipCreationError, ZipIntegrityError):
-                raise
-            except Exception:
-                logger.warning(
-                    "Skipping unreadable file while building ZIP archive",
-                    extra={"collection_id": collection_id, "file_id": file.id},
-                    exc_info=True,
-                )
-                skipped_files.append(f"{filename} (file id: {file.id})")
-                continue
-
+            content = _read_file_content(file, collection_id, log_level, retry_count)
             zip_file.writestr(filename, content)
             progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
-
-        if skipped_files:
-            manifest = "The following files could not be included in this archive:\n\n" + "\n".join(
-                f"- {name}" for name in skipped_files
-            )
-            zip_file.writestr("SKIPPED_FILES.txt", manifest)
 
     zip_buffer.seek(0)
     timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
