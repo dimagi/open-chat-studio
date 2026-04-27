@@ -259,33 +259,19 @@ def _make_open_mock(exc: Exception):
     [
         ClientError({"Error": {"Code": "404", "Message": "NoSuchKey"}}, "GetObject"),
         EndpointConnectionError(endpoint_url="https://s3.amazonaws.com"),
+        FileNotFoundError("not found"),
+        OSError("disk error"),
     ],
-    ids=["s3_client_error", "endpoint_connection_error"],
+    ids=["s3_client_error", "endpoint_connection_error", "file_not_found", "os_error"],
 )
-def test_create_collection_zip_task_transient_error_raises_and_creates_no_file(progress_recorder_mock, error):
-    """Transient S3 errors during file read abort the task and create no File object."""
-    collection = CollectionFactory.create(name="transient-error-collection")
+def test_create_collection_zip_task_read_error_raises_and_creates_no_file(progress_recorder_mock, error):
+    """Any file read error aborts the task and creates no File object (fail-fast)."""
+    collection = CollectionFactory.create(name="read-error-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
     with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
-        with pytest.raises(ZipCreationError):
-            create_collection_zip_task(collection.id, team.id)
-
-    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_file_not_found_raises_and_creates_no_file(progress_recorder_mock):
-    """FileNotFoundError aborts the task — no File object is created (fail-fast)."""
-    collection = CollectionFactory.create(name="missing-file-collection")
-    team = collection.team
-    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
-    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
-
-    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(FileNotFoundError("not found"))):
         with pytest.raises(ZipCreationError):
             create_collection_zip_task(collection.id, team.id)
 
@@ -459,17 +445,3 @@ def test_create_collection_zip_task_integrity_error_does_not_retry(progress_reco
     retry_mock.assert_not_called()
 
 
-@pytest.mark.django_db()
-@patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_oserror_raises_and_creates_no_file(progress_recorder_mock):
-    """An unexpected OSError aborts the task and creates no File object (fail-fast)."""
-    collection = CollectionFactory.create(name="permanent-error-collection")
-    team = collection.team
-    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
-    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
-
-    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("disk error"))):
-        with pytest.raises(ZipCreationError):
-            create_collection_zip_task(collection.id, team.id)
-
-    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
