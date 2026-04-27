@@ -190,6 +190,32 @@ def test_create_collection_zip_task_handles_duplicate_filenames(progress_recorde
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
+def test_create_collection_zip_task_no_collision_between_duplicate_and_real_file(progress_recorder_mock):
+    """A file genuinely named document_1.txt must not collide with a renamed duplicate of document.txt."""
+    collection = CollectionFactory.create(name="collision-collection")
+    team = collection.team
+
+    file1 = FileFactory.create(team=team, name="document.txt", file=ContentFile(b"original", name="document.txt"))
+    file2 = FileFactory.create(team=team, name="document.txt", file=ContentFile(b"duplicate", name="document.txt"))
+    file3 = FileFactory.create(team=team, name="document_1.txt", file=ContentFile(b"real one", name="document_1.txt"))
+
+    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
+    CollectionFile.objects.create(file=file2, collection=collection, document_source=None)
+    CollectionFile.objects.create(file=file3, collection=collection, document_source=None)
+
+    result = create_collection_zip_task(collection.id, team.id)
+
+    assert result is not None
+    zip_file_obj = File.objects.get(id=result)
+    with zip_file_obj.file.open("rb") as f:
+        with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
+            namelist = zf.namelist()
+            assert len(namelist) == 3
+            assert len(set(namelist)) == 3  # all names are unique
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.timezone")
 def test_create_collection_zip_task_sets_expiry_date(timezone_mock, progress_recorder_mock):
     collection = CollectionFactory.create(name="expiry-test-collection")

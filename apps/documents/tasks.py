@@ -286,17 +286,34 @@ def delete_document_source_task(self, document_source_id: int):
 
 
 def _resolve_filename(name: str, used_filenames: dict[str, int]) -> str:
-    if name in used_filenames:
+    """Return a unique archive entry name, appending a counter suffix on collision.
+
+    Mutates used_filenames so that every resolved name — including suffixed ones —
+    is tracked, preventing a legitimately-named file from colliding with a generated
+    duplicate (e.g. a real ``document_1.txt`` and a renamed copy of ``document.txt``).
+    """
+    if name not in used_filenames:
+        used_filenames[name] = 0
+        return name
+
+    parts = name.rsplit(".", 1)
+    while True:
         used_filenames[name] += 1
-        parts = name.rsplit(".", 1)
-        if len(parts) == 2:
-            return f"{parts[0]}_{used_filenames[name]}.{parts[1]}"
-        return f"{name}_{used_filenames[name]}"
-    used_filenames[name] = 0
-    return name
+        suffix = used_filenames[name]
+        candidate = f"{parts[0]}_{suffix}.{parts[1]}" if len(parts) == 2 else f"{name}_{suffix}"
+        if candidate not in used_filenames:
+            used_filenames[candidate] = 0
+            return candidate
 
 
 def _read_file_content(file, collection_id: int, log_level: int, retry_count: int) -> bytes:
+    """Read and validate file bytes from storage.
+
+    Raises:
+        ZipCreationError: on transient storage or network failures (triggers Celery retry).
+        ZipIntegrityError: when bytes read do not match the recorded content_size
+            (permanent — excluded from autoretry).
+    """
     try:
         with file.file.open("rb") as f:
             content = f.read()
@@ -319,14 +336,18 @@ def _read_file_content(file, collection_id: int, log_level: int, retry_count: in
     return content
 
 
+_ZIP_MAX_RETRIES = 3
+
+
 @shared_task(
     bind=True,
     base=TaskbadgerTask,
     acks_late=True,
     ignore_result=False,
+    max_retries=_ZIP_MAX_RETRIES,
     autoretry_for=(Exception,),
     dont_autoretry_for=(ZipIntegrityError,),
-    retry_kwargs={"max_retries": 3, "countdown": 60},
+    retry_kwargs={"max_retries": _ZIP_MAX_RETRIES, "countdown": 60},
 )
 def create_collection_zip_task(self, collection_id: int, team_id: int):
     """
