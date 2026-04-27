@@ -34,7 +34,7 @@ def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -
             name=filename,
             team=experiment.team,
             content_type="text/csv",
-            file=ContentFile(tmp.read().encode("utf-8"), name=filename),
+            file=ContentFile(tmp.read(), name=filename),
         )
     return {"file_id": file_obj.id}
 

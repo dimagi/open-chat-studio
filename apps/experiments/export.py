@@ -2,7 +2,9 @@ import csv
 import io
 import json
 import tempfile
-from typing import Generator, Iterator
+from collections.abc import Generator, Iterator
+
+_SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 import dictdiffer
 
@@ -224,14 +226,24 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str, None, None
 def export_to_tempfile(experiment, sessions_queryset, translation_language=None) -> tempfile.SpooledTemporaryFile:
     """Write the CSV export to a spooled temporary file and return it, seeked to 0.
 
-    The caller is responsible for closing the file.  Using a spooled file means
-    small exports stay in memory while large ones spill to disk automatically,
-    avoiding a single large in-memory allocation.
+    Use as a context manager (``with export_to_tempfile(...) as tmp:``) so that
+    the file is closed and any spilled data on disk is removed automatically.
+    Using a spooled file means small exports stay in memory while large ones spill
+    to disk automatically, avoiding a single large in-memory allocation.
+
+    The returned file is opened in binary mode (``mode="wb+"``); callers should
+    read raw bytes from it (e.g. ``tmp.read()`` returns ``bytes``).
     """
-    tmp = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024, mode="w+", encoding="utf-8", newline="")
-    writer = csv.writer(tmp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")
+    # Wrap in a TextIOWrapper so csv.writer receives a text-mode file object.
+    # detach=False: the wrapper does not close the underlying SpooledTemporaryFile
+    # when it is itself garbage-collected, preserving the caller's ability to seek/read.
+    text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
+    writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     for row in generate_export_rows(experiment, sessions_queryset, translation_language):
         writer.writerow(row)
+    text_wrapper.flush()
+    text_wrapper.detach()  # release the wrapper without closing the underlying file
     tmp.seek(0)
     return tmp
 
