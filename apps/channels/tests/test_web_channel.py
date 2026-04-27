@@ -19,7 +19,7 @@ def pipeline():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.parametrize("with_seed_message", [True, False])
 @patch("apps.events.tasks.enqueue_static_triggers", Mock())
-@patch("apps.chat.channels.WebChannel.new_user_message")
+@patch("apps.channels.channels_v2.web_channel.WebChannel.new_user_message")
 def test_start_new_session(new_user_message, with_seed_message, experiment):
     """A simple test to make sure we create a session and send a session message"""
     if with_seed_message:
@@ -52,7 +52,7 @@ def test_start_new_session(new_user_message, with_seed_message, experiment):
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @pytest.mark.parametrize("with_seed_message", [True, False])
 @patch("apps.events.tasks.enqueue_static_triggers", Mock())
-@patch("apps.chat.channels.WebChannel.new_user_message")
+@patch("apps.channels.channels_v2.web_channel.WebChannel.new_user_message")
 def test_start_new_session_pipeline(new_user_message, with_seed_message, experiment, pipeline: Pipeline):
     """A simple test to make sure we create a session and send a session message for a Pipeline Bot"""
     experiment.pipeline_id = pipeline.id

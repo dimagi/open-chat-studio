@@ -95,7 +95,11 @@
       },
 
       onSuccess: function (_bar, _msg, result) {
+<<<<<<< HEAD
         var fileId = (typeof result === "object" && result.result) ? result.result : result;
+=======
+        var fileId = (result != null && typeof result === "object" && result.result) ? result.result : result;
+>>>>>>> 2188731c1859daffba771e75be6e3ea93a2bbc23
 
         if (fileId) {
           var link = document.getElementById("ocs-download-link");
@@ -131,7 +135,13 @@
       },
 
       onRetry: function (_bar, _msg, _excMessage, retrySeconds) {
+<<<<<<< HEAD
         var msg = document.getElementById("ocs-progress-message");
+=======
+        var bar = document.getElementById("ocs-progress-bar");
+        var msg = document.getElementById("ocs-progress-message");
+        if (bar) bar.style.width = "0%";
+>>>>>>> 2188731c1859daffba771e75be6e3ea93a2bbc23
         if (msg) msg.textContent = "Retrying... (next attempt in " + retrySeconds + "s)";
       },
 

@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from apps.documents.exceptions import ZipCreationError
+from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import CollectionFile, FileStatus
 from apps.documents.tasks import (
     create_collection_zip_task,
@@ -190,6 +190,32 @@ def test_create_collection_zip_task_handles_duplicate_filenames(progress_recorde
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
+def test_create_collection_zip_task_no_collision_between_duplicate_and_real_file(progress_recorder_mock):
+    """A file genuinely named document_1.txt must not collide with a renamed duplicate of document.txt."""
+    collection = CollectionFactory.create(name="collision-collection")
+    team = collection.team
+
+    file1 = FileFactory.create(team=team, name="document.txt", file=ContentFile(b"original", name="document.txt"))
+    file2 = FileFactory.create(team=team, name="document.txt", file=ContentFile(b"duplicate", name="document.txt"))
+    file3 = FileFactory.create(team=team, name="document_1.txt", file=ContentFile(b"real one", name="document_1.txt"))
+
+    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
+    CollectionFile.objects.create(file=file2, collection=collection, document_source=None)
+    CollectionFile.objects.create(file=file3, collection=collection, document_source=None)
+
+    result = create_collection_zip_task(collection.id, team.id)
+
+    assert result is not None
+    zip_file_obj = File.objects.get(id=result)
+    with zip_file_obj.file.open("rb") as f:
+        with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
+            namelist = zf.namelist()
+            assert len(namelist) == 3
+            assert len(set(namelist)) == 3  # all names are unique
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.timezone")
 def test_create_collection_zip_task_sets_expiry_date(timezone_mock, progress_recorder_mock):
     collection = CollectionFactory.create(name="expiry-test-collection")
@@ -228,14 +254,21 @@ def _make_open_mock(exc: Exception):
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_s3_client_error_raises_and_creates_no_file(progress_recorder_mock):
-    """S3 ClientError during file read aborts task and creates no File object."""
-    collection = CollectionFactory.create(name="s3-error-collection")
+@pytest.mark.parametrize(
+    "error",
+    [
+        ClientError({"Error": {"Code": "404", "Message": "NoSuchKey"}}, "GetObject"),
+        EndpointConnectionError(endpoint_url="https://s3.amazonaws.com"),
+    ],
+    ids=["s3_client_error", "endpoint_connection_error"],
+)
+def test_create_collection_zip_task_transient_error_raises_and_creates_no_file(progress_recorder_mock, error):
+    """Transient S3 errors during file read abort the task and create no File object."""
+    collection = CollectionFactory.create(name="transient-error-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
-    error = ClientError({"Error": {"Code": "404", "Message": "NoSuchKey"}}, "GetObject")
     with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
         with pytest.raises(ZipCreationError):
             create_collection_zip_task(collection.id, team.id)
@@ -245,39 +278,28 @@ def test_create_collection_zip_task_s3_client_error_raises_and_creates_no_file(p
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_endpoint_connection_error_raises_zip_creation_error(progress_recorder_mock):
-    """S3 EndpointConnectionError aborts task and creates no File object."""
-    collection = CollectionFactory.create(name="connection-error-collection")
-    team = collection.team
-    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
-    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
-
-    error = EndpointConnectionError(endpoint_url="https://s3.amazonaws.com")
-    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
-        with pytest.raises(ZipCreationError):
-            create_collection_zip_task(collection.id, team.id)
-
-    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_file_not_found_raises_zip_creation_error(progress_recorder_mock):
-    """FileNotFoundError (local storage) aborts task."""
+def test_create_collection_zip_task_file_not_found_skips_and_creates_manifest(progress_recorder_mock):
+    """FileNotFoundError (permanent per-file error) skips the file and writes SKIPPED_FILES.txt."""
     collection = CollectionFactory.create(name="missing-file-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
     with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(FileNotFoundError("not found"))):
-        with pytest.raises(ZipCreationError):
-            create_collection_zip_task(collection.id, team.id)
+        result = create_collection_zip_task(collection.id, team.id)
+
+    assert result is not None
+    zip_file_obj = File.objects.get(id=result)
+    with zip_file_obj.file.open("rb") as f:
+        with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
+            assert "SKIPPED_FILES.txt" in zf.namelist()
+            assert "file1.txt" in zf.read("SKIPPED_FILES.txt").decode()
 
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_second_file_error_creates_no_file(progress_recorder_mock):
-    """A read error on the second file aborts the task — no partial ZIP is saved."""
+def test_create_collection_zip_task_second_file_error_skips_and_includes_first(progress_recorder_mock):
+    """A permanent read error on the second file skips it — first file is in the ZIP with a manifest."""
     collection = CollectionFactory.create(name="second-file-error-collection")
     team = collection.team
 
@@ -298,10 +320,16 @@ def test_create_collection_zip_task_second_file_error_creates_no_file(progress_r
             raise OSError("storage failure on second file")
 
     with patch("django.db.models.fields.files.FieldFile.open", open_first_ok_second_fails):
-        with pytest.raises(ZipCreationError):
-            create_collection_zip_task(collection.id, team.id)
+        result = create_collection_zip_task(collection.id, team.id)
 
-    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
+    assert result is not None
+    zip_file_obj = File.objects.get(id=result)
+    with zip_file_obj.file.open("rb") as f:
+        with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
+            assert "file1.txt" in zf.namelist()
+            assert zf.read("file1.txt") == b"Good content"
+            assert "SKIPPED_FILES.txt" in zf.namelist()
+            assert "file2.txt" in zf.read("SKIPPED_FILES.txt").decode()
 
 
 @pytest.mark.django_db()
@@ -350,13 +378,14 @@ def test_create_collection_zip_task_no_content_size_skips_size_check(progress_re
 @patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.logger")
 def test_create_collection_zip_task_logs_warning_on_first_attempt(logger_mock, progress_recorder_mock):
-    """On the first attempt (retries=0) the error is logged at WARNING level."""
+    """On the first transient attempt (retries=0) the error is logged at WARNING level."""
     collection = CollectionFactory.create(name="log-warning-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
-    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("read error"))):
+    error = ClientError({"Error": {"Code": "500", "Message": "InternalError"}}, "GetObject")
+    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
         with pytest.raises(ZipCreationError):
             create_collection_zip_task(collection.id, team.id)
 
@@ -371,17 +400,18 @@ def test_create_collection_zip_task_logs_warning_on_first_attempt(logger_mock, p
 @patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.logger")
 def test_create_collection_zip_task_logs_error_on_final_retry(logger_mock, progress_recorder_mock):
-    """On the final retry (retries == max_retries) the error is logged at ERROR level."""
+    """On the final transient retry (retries == max_retries) the error is logged at ERROR level."""
     collection = CollectionFactory.create(name="log-error-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
     max_retries = 3
+    error = ClientError({"Error": {"Code": "500", "Message": "InternalError"}}, "GetObject")
 
     create_collection_zip_task.push_request(retries=max_retries)
     try:
-        with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("read error"))):
+        with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
             with patch.object(create_collection_zip_task, "max_retries", max_retries):
                 with pytest.raises(ZipCreationError):
                     create_collection_zip_task(collection.id, team.id)
@@ -398,17 +428,61 @@ def test_create_collection_zip_task_logs_error_on_final_retry(logger_mock, progr
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
 def test_create_collection_zip_task_celery_retries_on_zip_creation_error(progress_recorder_mock):
-    """Celery's autoretry_for triggers self.retry when ZipCreationError is raised."""
+    """Celery's autoretry_for triggers self.retry when a transient ZipCreationError is raised."""
     collection = CollectionFactory.create(name="retry-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
     retry_mock = MagicMock(side_effect=ZipCreationError("retry called"))
+    error = ClientError({"Error": {"Code": "500", "Message": "InternalError"}}, "GetObject")
 
-    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("read error"))):
+    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
         with patch.object(create_collection_zip_task, "retry", retry_mock):
             with pytest.raises(ZipCreationError):
                 create_collection_zip_task(collection.id, team.id)
 
     retry_mock.assert_called_once()
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.ProgressRecorder")
+def test_create_collection_zip_task_integrity_error_does_not_retry(progress_recorder_mock):
+    """ZipIntegrityError is not retried — task fails immediately on size mismatch."""
+    collection = CollectionFactory.create(name="integrity-error-collection")
+    team = collection.team
+    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
+    File.objects.filter(id=file1.id).update(content_size=1024)
+    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
+
+    retry_mock = MagicMock()
+
+    @contextmanager
+    def open_returns_wrong_size(*args, **kwargs):
+        yield BytesIO(b"data")
+
+    with patch("django.db.models.fields.files.FieldFile.open", open_returns_wrong_size):
+        with patch.object(create_collection_zip_task, "retry", retry_mock):
+            with pytest.raises(ZipIntegrityError):
+                create_collection_zip_task(collection.id, team.id)
+
+    retry_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.ProgressRecorder")
+def test_create_collection_zip_task_permanent_error_logs_warning_and_skips(progress_recorder_mock):
+    """A permanent per-file OSError is logged at WARNING and the file is skipped."""
+    collection = CollectionFactory.create(name="permanent-skip-collection")
+    team = collection.team
+    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
+    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
+
+    with patch("apps.documents.tasks.logger") as logger_mock:
+        with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(OSError("disk error"))):
+            result = create_collection_zip_task(collection.id, team.id)
+
+    assert result is not None
+    logger_mock.warning.assert_called_once()
+    extra_used = logger_mock.warning.call_args[1]["extra"]
+    assert extra_used["file_id"] == file1.id

@@ -52,12 +52,23 @@ class ExperimentVersionSelection(models.TextChoices):
     LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
+class EvaluationMode(models.TextChoices):
+    MESSAGE = "message", "Message"
+    SESSION = "session", "Session"
+
+
 class Evaluator(BaseTeamModel):
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=128)  # The evaluator type, should be one from evaluators.py
     params = SanitizedJSONField(
         default=dict
     )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
+    evaluation_mode = models.CharField(
+        max_length=10,
+        choices=EvaluationMode.choices,
+        default=EvaluationMode.MESSAGE,
+        help_text="Message mode evaluates individual message pairs; Session mode evaluates entire conversations",
+    )
 
     def __str__(self):
         try:
@@ -110,6 +121,8 @@ class EvaluationMessage(BaseModel):
     metadata = SanitizedJSONField(default=dict)
 
     def __str__(self):
+        if not self.input and not self.output:
+            return "Session evaluation"
         input_role = self.input.get("role", "(human)").title()
         input_content = self.input.get("content", "no content")
         output_role = self.output.get("role", "(ai)").title()
@@ -199,11 +212,19 @@ class EvaluationMessage(BaseModel):
             "context": self.context,
             "history": self.history,
             "metadata": self.metadata,
+            "participant_data": self.participant_data,
+            "session_state": self.session_state,
         }
 
 
 class EvaluationDataset(BaseTeamModel):
     name = models.CharField(max_length=255)
+    evaluation_mode = models.CharField(
+        max_length=10,
+        choices=EvaluationMode.choices,
+        default=EvaluationMode.MESSAGE,
+        help_text="Message mode stores individual message pairs; Session mode stores entire conversations",
+    )
     messages = models.ManyToManyField(EvaluationMessage)
     status = models.CharField(
         max_length=20,
@@ -215,7 +236,8 @@ class EvaluationDataset(BaseTeamModel):
     error_message = models.TextField(blank=True)
 
     def __str__(self):
-        return f"{self.name} ({self.messages.count()} messages)"
+        mode = EvaluationMode(self.evaluation_mode).label
+        return f"{self.name} ({self.messages.count()} {mode}s)"
 
     def get_absolute_url(self):
         return reverse("evaluations:dataset_edit", args=[get_slug_for_team(self.team_id), self.id])

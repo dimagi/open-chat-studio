@@ -1,0 +1,92 @@
+# DORA metrics — runs the dimagi/dora CLI weekly and publishes report.json + dora.db to S3.
+#
+# Required GitHub repo configuration (Settings → Secrets and variables → Actions → Variables):
+#   DORA_AWS_ROLE_ARN  — IAM role ARN to assume via OIDC (e.g. arn:aws:iam::123456789012:role/dora-report-uploader)
+#   DORA_AWS_REGION    — AWS region of the S3 bucket (e.g. us-east-1)
+#   DORA_S3_BUCKET     — S3 bucket name (no s3:// prefix, no trailing slash)
+#
+# AWS one-time setup:
+#   1. IAM → Identity providers: add OIDC provider for token.actions.githubusercontent.com
+#      (audience: sts.amazonaws.com).
+#   2. Create the role referenced by DORA_AWS_ROLE_ARN with a trust policy restricting
+#      sub to "repo:dimagi/open-chat-studio:ref:refs/heads/main" and
+#      "repo:dimagi/open-chat-studio:environment:*" / workflow_dispatch as needed.
+#   3. Attach a policy granting s3:GetObject + s3:PutObject (and s3:PutObjectAcl for the
+#      public-read JSON) on arn:aws:s3:::<bucket>/dora.db and /dora-report.json.
+#   4. Bucket CORS must allow GET from "*" so the dashboard can fetch the JSON.
+#
+# Dashboard link once published:
+#   https://dimagi.github.io/dora/?url=https://<bucket>.s3.<region>.amazonaws.com/dora-report.json
+name: DORA metrics
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Reset: ignore cached DB and pull full history from 2025-01-01"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Configure AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v6.0.0
+        with:
+          role-to-assume: ${{ vars.DORA_AWS_ROLE_ARN }}
+          role-session-name: DoraReport
+          aws-region: ${{ vars.DORA_AWS_REGION }}
+
+      - name: Download dora.db from S3
+        id: download_db
+        run: |
+          # First run 404s — start with an empty DB. Subsequent runs reuse the cached state.
+          aws s3 cp "s3://${{ vars.DORA_S3_BUCKET }}/dora.db" ./dora.db || true
+          if [ -f dora.db ]; then
+            echo "db_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "db_present=false" >> "$GITHUB_OUTPUT"
+            echo "No existing DB in S3 — will perform a cold pull"
+          fi
+
+      - name: Install dora
+        run: uv tool install "git+https://github.com/dimagi/dora[s3]"
+
+      - name: Pull & report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DB_PRESENT: ${{ steps.download_db.outputs.db_present }}
+          RESET: ${{ inputs.reset }}
+        run: |
+          # Cold pull (no DB) or reset requested: fetch full history from the bootstrap date.
+          # Hot pull (DB present): only refresh the last 30 days — gives buffer
+          # for retroactive label changes (e.g. caused-incident applied late)
+          # while keeping API calls minimal.
+          if [ "$DB_PRESENT" = "true" ] && [ "$RESET" != "true" ]; then
+            SINCE=$(date -u -d '30 days ago' +%Y-%m-%d)
+          else
+            SINCE=$(date -u -d '1 year ago' +%Y-%m-%d)
+          fi
+          echo "Pulling since $SINCE"
+          dora pull --repo ${{ github.repository }} --since "$SINCE" --environment aws-prod
+          dora report --format json --output dora-report.json --weeks 52
+
+      - name: Upload report.json to S3 (public-read)
+        run: |
+          dora upload dora-report.json \
+            --target "s3://${{ vars.DORA_S3_BUCKET }}/dora-report.json" \
+            --public-read
+
+      - name: Upload dora.db to S3 (private)
+        run: aws s3 cp dora.db "s3://${{ vars.DORA_S3_BUCKET }}/dora.db"

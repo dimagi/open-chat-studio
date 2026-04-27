@@ -83,6 +83,11 @@ class TempState(TypedDict):
     attachments: list
 
 
+def _merge_intents(left: list[Intents], right: list[Intents]) -> list[Intents]:
+    """Merge intents from multiple nodes, deduplicating to prevent the same intent being processed more than once."""
+    return list(dict.fromkeys(left + right))
+
+
 class PipelineState(dict):
     messages: Annotated[Sequence[Any], operator.add]
 
@@ -110,7 +115,7 @@ class PipelineState(dict):
     # source node for the current node
     node_source: str
 
-    intents: Annotated[list[Intents], operator.add]
+    intents: Annotated[list[Intents], _merge_intents]
     synthetic_voice_id: int | None
 
     participant_data: Annotated[dict, operator.or_]

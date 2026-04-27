@@ -5,6 +5,7 @@ from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
+from botocore.exceptions import BotoCoreError, ClientError
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -18,7 +19,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
-from apps.documents.exceptions import ZipCreationError
+from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
     Collection,
     CollectionFile,
@@ -284,13 +285,69 @@ def delete_document_source_task(self, document_source_id: int):
         document_source.delete()
 
 
+def _resolve_filename(name: str, used_filenames: dict[str, int]) -> str:
+    """Return a unique archive entry name, appending a counter suffix on collision.
+
+    Mutates used_filenames so that every resolved name — including suffixed ones —
+    is tracked, preventing a legitimately-named file from colliding with a generated
+    duplicate (e.g. a real ``document_1.txt`` and a renamed copy of ``document.txt``).
+    """
+    if name not in used_filenames:
+        used_filenames[name] = 0
+        return name
+
+    parts = name.rsplit(".", 1)
+    while True:
+        used_filenames[name] += 1
+        suffix = used_filenames[name]
+        candidate = f"{parts[0]}_{suffix}.{parts[1]}" if len(parts) == 2 else f"{name}_{suffix}"
+        if candidate not in used_filenames:
+            used_filenames[candidate] = 0
+            return candidate
+
+
+def _read_file_content(file, collection_id: int, log_level: int, retry_count: int) -> bytes:
+    """Read and validate file bytes from storage.
+
+    Raises:
+        ZipCreationError: on transient storage or network failures (triggers Celery retry).
+        ZipIntegrityError: when bytes read do not match the recorded content_size
+            (permanent — excluded from autoretry).
+    """
+    try:
+        with file.file.open("rb") as f:
+            content = f.read()
+    except (ClientError, BotoCoreError, ConnectionError, TimeoutError) as exc:
+        logger.log(
+            log_level,
+            "Transient error reading file while building ZIP archive",
+            extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+            exc_info=True,
+        )
+        raise ZipCreationError(f"Could not read file {file.id} for collection {collection_id}") from exc
+
+    if file.content_size and len(content) != file.content_size:
+        logger.error(
+            "File integrity check failed while building ZIP archive",
+            extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+        )
+        raise ZipIntegrityError(f"File {file.id} returned {len(content)} bytes but expected {file.content_size}")
+
+    return content
+
+
+_ZIP_MAX_RETRIES = 3
+
+
 @shared_task(
     bind=True,
     base=TaskbadgerTask,
     acks_late=True,
     ignore_result=False,
+    max_retries=_ZIP_MAX_RETRIES,
     autoretry_for=(Exception,),
-    retry_kwargs={"max_retries": 3, "countdown": 60},
+    dont_autoretry_for=(ZipIntegrityError,),
+    retry_kwargs={"max_retries": _ZIP_MAX_RETRIES, "countdown": 60},
 )
 def create_collection_zip_task(self, collection_id: int, team_id: int):
     """
@@ -304,7 +361,6 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
         logger.error(f"Collection {collection_id} not found")
         return None
 
-    # Get all manually uploaded files (excluding document source files)
     collection_files = CollectionFile.objects.filter(
         collection=collection, document_source__isnull=True
     ).select_related("file")
@@ -315,68 +371,50 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
         logger.warning(f"No manually uploaded files found in collection {collection_id}")
         return None
 
+    retry_count = self.request.retries
+    log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
     zip_buffer = BytesIO()
+    skipped_files: list[str] = []
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        # Track filenames to handle duplicates
         used_filenames: dict[str, int] = {}
-        retry_count = self.request.retries
-        log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
 
         for idx, collection_file in enumerate(collection_files, start=1):
             file = collection_file.file
-            filename = file.name
-
-            # Handle duplicate filenames
-            if filename in used_filenames:
-                used_filenames[filename] += 1
-                name_parts = filename.rsplit(".", 1)
-                if len(name_parts) == 2:
-                    filename = f"{name_parts[0]}_{used_filenames[filename]}.{name_parts[1]}"
-                else:
-                    filename = f"{filename}_{used_filenames[filename]}"
-            else:
-                used_filenames[filename] = 0
+            filename = _resolve_filename(file.name, used_filenames)
 
             try:
-                with file.file.open("rb") as f:
-                    content = f.read()
-
-                if file.content_size and len(content) != file.content_size:
-                    raise ZipCreationError(
-                        f"File {file.id} returned {len(content)} bytes but expected {file.content_size}"
-                    )
-
-                zip_file.writestr(filename, content)
-
-            except ZipCreationError:
+                content = _read_file_content(file, collection_id, log_level, retry_count)
+            except (ZipCreationError, ZipIntegrityError):
                 raise
-
-            except Exception as exc:
-                logger.log(
-                    log_level,
-                    "Failed to process file while building ZIP archive",
-                    extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+            except Exception:
+                logger.warning(
+                    "Skipping unreadable file while building ZIP archive",
+                    extra={"collection_id": collection_id, "file_id": file.id},
                     exc_info=True,
                 )
-                raise ZipCreationError(
-                    f"Could not process file {file.id} for collection {collection_id}"
-                ) from exc
+                skipped_files.append(f"{filename} (file id: {file.id})")
+                continue
 
+            zip_file.writestr(filename, content)
             progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
+
+        if skipped_files:
+            manifest = "The following files could not be included in this archive:\n\n" + "\n".join(
+                f"- {name}" for name in skipped_files
+            )
+            zip_file.writestr("SKIPPED_FILES.txt", manifest)
 
     zip_buffer.seek(0)
     timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"{slugify(collection.name)}_files_{timestamp}.zip"
-
-    expiry_date = timezone.now() + timedelta(hours=24)
 
     zip_file_obj = File.objects.create(
         team_id=team_id,
         name=zip_filename,
         file=ContentFile(zip_buffer.getvalue(), name=zip_filename),
         content_type="application/zip",
-        expiry_date=expiry_date,
+        expiry_date=timezone.now() + timedelta(hours=24),
         purpose=FilePurpose.DATA_EXPORT,
     )
 

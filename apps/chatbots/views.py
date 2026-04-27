@@ -20,8 +20,9 @@ from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import ChannelBase, WebChannel
+from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
@@ -51,6 +52,7 @@ from apps.pipelines.views import (
     _pipeline_node_default_values,
     _pipeline_node_parameter_values,
     _pipeline_node_schemas,
+    get_widget_page_context,
     llm_model_parameter_context,
 )
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -339,7 +341,9 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
         llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
         llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         experiment = get_object_or_404(
-            Experiment.objects.get_all().select_related("voice_provider"), id=kwargs["pk"], team=self.request.team
+            Experiment.objects.get_all().select_related("voice_provider", "pipeline"),
+            id=kwargs["pk"],
+            team=self.request.team,
         )
         synthetic_voices = []
         if experiment.voice_provider:
@@ -365,6 +369,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            "widget_page_context": get_widget_page_context(experiment.pipeline, experiment),
             **llm_model_parameter_context(),
         }
 

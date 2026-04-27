@@ -1,64 +1,64 @@
 # User Documentation and Changelog Process
 
-User documentation and the user facing changelog are hosted in the [doc repo][docs_repo] and published to https://docs.openchatstudio.com/.
+User documentation and the [user-facing changelog](https://docs.openchatstudio.com/changelog/) are maintained in the [docs repo][docs_repo] and published to https://docs.openchatstudio.com/. Weekly release notes are published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
 
-In principle, all user-facing changes should be accompanied by documentation updates and a changelog but discretion should be used. For example, if a change is purely internal and doesn't affect the user experience, it may not need to be included or if it is a very minor change.
+## User Documentation Process
+
+In principle, all user-facing changes should be accompanied by user documentation updates and a changelog, but discretion should be used. For example, if a change is purely internal and doesn't affect the user experience, it may not need to be included. The same applies to very minor changes.
 
 ## Changelog process
 
-The easiest way to trigger a docs/changelog update is to check the **"This PR requires docs/changelog update"** checkbox in the PR description. The automation runs when a PR targeting `main` that touches files under `apps/`, `components/`, `config/`, `assets/`, or `templates/` is merged with the box checked — it will then analyse the changes and open a PR in the [docs repo][docs_repo] with a changelog entry on your behalf. You can add notes in the PR description to help the automation write accurate changelog and docs content.
+The easiest way to trigger a docs/changelog update is to check the **"This PR requires docs/changelog update"** checkbox in the PR description.
 
-Note: PRs that don't touch the paths above (e.g. docs-only changes) will not trigger the automation. Use the manual option below in those cases.
+### Automatic creation of changelog entries
+The [dispatch workflow](https://github.com/dimagi/open-chat-studio/blob/main/.github/workflows/docs-changelog-dispatch.yml) runs when a PR targeting `main` that touches files under `apps/`, `components/`, `config/`, `assets/`, or `templates/` is merged with the PR description box checked. It sends a dispatch event to the [docs repo][docs_repo], which then uses Claude AI to analyze the changes and open a PR with a changelog entry on your behalf.
 
-Alternatively, you can create the docs PR yourself: open a PR in the [docs repo][docs_repo] with any documentation updates and a changelog entry, and then link it from the code PR.
+#### Widget vs. Main App changes
 
-Changelog entries should be brief but should link to any relevant documentation for further details.
+The automation handles **chat widget** changes (files under `components/`) differently from main app changes:
 
-### Changelog summaries
+| Change type | Changelog file | PR base branch |
+|---|---|---|
+| Main App | `docs/changelog.md` | `main` |
+| Widget (`components/`) | `docs/chat_widget/changelog.md` | `widget-develop` |
 
-Once a week (currently on a Monday) a GitHub actions workflow runs and generates a [release](https://github.com/dimagi/open-chat-studio-docs/releases) in the docs repo with a summary of the changes since the previous release.
-This creates a way for users to get notified of changes by subscribing to the release feed.
+- If a PR touches **both** widget and main app files, it is treated as a widget change and only the widget changelog is updated.
+- Keep widget and main app changes in separate PRs to ensure both changelogs are updated.
+- You can add notes in the PR description to help the automation write accurate changelog and docs content.
+- Changelog entries should be brief but should link to any relevant documentation for further details. For widget releases, include the version number in the PR description (e.g. "v0.4.9").
+- **Note**: PRs that don't touch the paths above (e.g. tech docs-only changes) will not trigger the automation. Use the manual option below in those cases.
 
-The automated releases are created in `draft` state which allows a developer to review the generated text before publishing. The releases should contain the following sections:
+### Manual trigger in docs repo
+The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/actions/workflows/update-changelog.yml) in the docs repo can also be triggered manually: go to **GitHub Actions → "Update Changelog and Docs from OCS PR"** and enter the OCS PR number.
 
-* New Features: new features added to the prodcut
+### Manual option
+Alternatively, you can update the main changelog or widget changelog as appropriate (see above).
+
+## Weekly release notes from changelog summaries
+
+Once a week (currently on a Monday), a [GitHub Actions workflow](https://github.com/dimagi/open-chat-studio-docs/blob/main/.github/workflows/release.yml) runs and generates a [release note](https://github.com/dimagi/open-chat-studio-docs/releases) in the GitHub **docs repo** with a summary of the changes since the previous release.
+This creates a way for users to get notified of changes by subscribing to the release feed of the docs repo.
+
+The automated releases are created in `draft` state, which allows a developer to review the generated text before publishing. The releases should contain the following sections:
+
+* New Features: new features added to the product
 * Improvements: changes to existing features that don't classify as 'new features'
 * Bug Fixes
 
-It should not contain a top level summary, upgrade recommendations, etc.
+It should not contain a top-level summary, upgrade recommendations, etc.
 
+### Review and Publish Release Note
 The process for manually reviewing and publishing a release is:
 
-1. Review the repo diff between this release and the previous release. You can access this by using the 'Compare' drop down in the left sidebar. This is a good idea to ensure that the release notes are accurate and complete.
+1. Review the repo diff between this release and the previous release. You can access this using the 'Compare' dropdown in the left sidebar. This is a good idea to ensure that the release notes are accurate and complete.
 2. Review the previous release notes to see if there are any items that have already been included in a previous release.
-3. If there are docs to link to for any item, ensure that they are added.
-4. If you think there should be docs where there aren't, either create them immediately or create a ticket to be prioritized later.
+3. If there are user docs to link to for any item, ensure that they are added.
+4. If you think there should be docs where there aren't, either create them immediately or create a [ticket](https://github.com/dimagi/open-chat-studio-docs/issues) to be prioritized later.
 
-Once you are happy with the release notes, publish the release. This will send a notification to all users who are subscribed to the release feed.
+Once you are happy with the release notes, publish the release. This will send a notification to all users who are subscribed to the docs release feed.
 
 [docs_repo]: https://github.com/dimagi/open-chat-studio-docs
 
 ## API Documentation
 
-The OCS REST API is primarily documented via its OpenAPI schema. The schema is created using [drf-spectacular](https://drf-spectacular.readthedocs.io/en/latest/).
-
-The current production schema is available at https://chatbots.dimagi.com/api/schema/. It is also kept in the code repository in the `api-schema.yml` file. This file serves two purposes:
-
-1. Provide an easy way to visually inspect changes to the schema.
-2. Provide a reference for generating API documentation in the docs repo (see below).
-
-The schema can be generated locally by running:
-
-```bash
-inv schema
-# OR
-python manage.py spectacular --file api-schema.yml --validate
-```
-
-### API Schema updates
-
-Whenever changes are made that impact the API schema, the `api-schema.yml` file must also be updated. This is enforced by a test which will fail if the schema file is out of date. Ensuring that this file is up to date also allows us to it as a trigger for updating the API docs in the docs repo:
-
-1. `api-schema.yml` file changes in the `main` branch.
-2. `api-schema-dispatch.yml` GitHub action runs which sends a dispatch event to the OCS docs repo.
-3. A GitHub action in the OCS docs repo runs and creates a PR with any updated API docs.
+See the [API Documentation guide](api_documentation.md) for information on how the OCS REST API is documented, how to generate the schema locally, and what to do when your changes affect the API schema.

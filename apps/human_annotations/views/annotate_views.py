@@ -57,6 +57,7 @@ def _get_item_display_content(item):
         session = item.session
         return {
             "type": "session",
+            "session_url": session.get_absolute_url(),
             "messages": [
                 {"role": role, "content": content, "created_at": created_at}
                 for role, content, created_at in chat_messages

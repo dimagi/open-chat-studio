@@ -7,10 +7,21 @@ class IndexConfigurationException(Exception):
 
 
 class ZipCreationError(Exception):
-    """Raised when a file cannot be processed during ZIP archive creation.
+    """Raised on transient file read failures during ZIP creation.
 
-    Causes the Celery task to fail and be retried. After max_retries the
-    task is marked as FAILURE and the frontend error panel is shown.
+    Triggers Celery autoretry. After max_retries the task is marked
+    FAILURE and the frontend error panel is shown.
+    """
+
+    pass
+
+
+class ZipIntegrityError(ZipCreationError):
+    """Raised when a file's byte count does not match its recorded content_size.
+
+    This is a permanent data-integrity failure — retrying will not change the
+    stored metadata, so the task decorator excludes this from autoretry via
+    dont_autoretry_for.
     """
 
     pass

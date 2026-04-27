@@ -58,3 +58,8 @@ class TestChatMessage:
 
         assert chat_message1.tags.first().name == "v1"
         assert chat_message2.tags.first().name == "v1-unreleased"
+
+    def test_rating_unsaved_instance_returns_none(self):
+        """ChatMessage.rating() must return None (not raise) when the instance has no pk."""
+        message = ChatMessage(message_type=ChatMessageType.AI, content="Hi")
+        assert message.rating() is None

@@ -1,0 +1,9 @@
+{% if record.session %}
+  {% if perms.chat.view_chat %}
+    <a href="{{ record.session.get_absolute_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-soft btn-secondary">{{ record.session.external_id }}</a>
+  {% else %}
+    <span>{{ record.session.external_id }}</span>
+  {% endif %}
+{% else %}
+  <span>—</span>
+{% endif %}

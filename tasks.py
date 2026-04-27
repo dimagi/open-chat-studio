@@ -175,7 +175,7 @@ def _get_portless_name(c: Context) -> str:
     return name
 
 
-@task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
+@task(aliases=["django", "dev"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
     has_portless = c.run("which portless", hide=True, warn=True).ok

@@ -6,7 +6,7 @@ create-database = "docker exec postgres psql -U postgres -c 'CREATE DATABASE {{ 
 
 [post-start]
 compile-styles = "npm run dev"
-migrate-and-bootstrap = "uv run python manage.py migrate && uv run python manage.py bootstrap_data --email dev@gmail.com --password letmein --superuser"
+migrate-and-bootstrap = "uv run python manage.py migrate && uv run python manage.py bootstrap_data --email test@example.com --password letmein --superuser"
 
 [pre-remove]
 db-remove = "docker exec postgres psql -U postgres -c \"DROP DATABASE IF EXISTS \\\"{{ branch | sanitize_db }}\\\" WITH (FORCE)\""

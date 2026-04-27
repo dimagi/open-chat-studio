@@ -21,17 +21,27 @@ from django.views.generic import CreateView, DetailView, TemplateView, UpdateVie
 from django_tables2 import LazyPaginator, SingleTableView
 from waffle import flag_is_active
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage
-from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
+from apps.experiments.filters import get_filter_context_data
 from apps.experiments.models import ExperimentSession
 from apps.filters.models import FilterSet
+from apps.human_annotations.filters import AnnotationItemFilter, AnnotationSessionFilter
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 from ..forms import AnnotationQueueForm, ImportFromDatasetForm
-from ..models import Annotation, AnnotationItem, AnnotationItemType, AnnotationQueue, AnnotationStatus, QueueStatus
+from ..models import (
+    Annotation,
+    AnnotationItem,
+    AnnotationItemStatus,
+    AnnotationItemType,
+    AnnotationQueue,
+    AnnotationStatus,
+    QueueStatus,
+)
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
 User = get_user_model()
@@ -138,13 +148,24 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         queue = self.object
         context["active_tab"] = "annotation_queues"
         context["progress"] = queue.get_progress()
-        context["items_table_url"] = reverse(
+        items_table_url = reverse(
             "human_annotations:queue_items_table",
             args=[self.request.team.slug, queue.pk],
         )
+        context["items_table_url"] = items_table_url
 
         aggregate = getattr(queue, "aggregate", None)
         context["aggregates"] = aggregate.aggregates if aggregate else {}
+
+        filter_context = get_filter_context_data(
+            self.request.team,
+            columns=AnnotationItemFilter.columns(self.request.team),
+            filter_class=AnnotationItemFilter,
+            table_url=items_table_url,
+            table_container_id="items-table",
+            table_type=FilterSet.TableType.ANNOTATION_ITEMS,
+        )
+        context.update(filter_context)
 
         return context
 
@@ -156,12 +177,12 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
     permission_required = "human_annotations.view_annotationqueue"
 
     def get_queryset(self):
-        return (
+        queryset = (
             AnnotationItem.objects.filter(
                 queue_id=self.kwargs["pk"],
                 queue__in=AnnotationQueue.objects.visible_to(self.request.user, self.request.team),
             )
-            .select_related("session", "message", "queue")
+            .select_related("session__experiment", "message", "queue")
             .prefetch_related(
                 Prefetch(
                     "annotations",
@@ -170,6 +191,10 @@ class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequire
                 ),
             )
         )
+        timezone = self.request.session.get("detected_tz", None)
+        filter_set = AnnotationItemFilter()
+        queryset = filter_set.apply(queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone)
+        return queryset
 
 
 def _get_base_session_queryset(request, filter_params=None):
@@ -177,8 +202,8 @@ def _get_base_session_queryset(request, filter_params=None):
     timezone = request.session.get("detected_tz", None)
     if filter_params is None:
         filter_params = FilterParams.from_request(request)
-    queryset = ExperimentSession.objects.filter(team=request.team)
-    session_filter = ExperimentSessionFilter()
+    queryset = ExperimentSession.objects.filter(team=request.team).exclude(platform=ChannelPlatform.EVALUATIONS)
+    session_filter = AnnotationSessionFilter()
     return session_filter.apply(queryset, filter_params=filter_params, timezone=timezone)
 
 
@@ -237,8 +262,8 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         sessions_json_url = reverse("human_annotations:queue_sessions_json", args=[team_slug, pk])
         filter_context = get_filter_context_data(
             request.team,
-            columns=ExperimentSessionFilter.columns(request.team),
-            filter_class=ExperimentSessionFilter,
+            columns=AnnotationSessionFilter.columns(request.team),
+            filter_class=AnnotationSessionFilter,
             table_url=table_url,
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.SESSIONS,
@@ -475,18 +500,50 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         annotations = Annotation.objects.filter(
             item__queue=queue,
             status=AnnotationStatus.SUBMITTED,
-        ).select_related("item", "item__session", "item__message", "reviewer")
+        ).select_related(
+            "item",
+            "item__session",
+            "item__message",
+            "item__message__chat__experiment_session",
+        )
+        flagged_items = AnnotationItem.objects.filter(queue=queue, status=AnnotationItemStatus.FLAGGED).select_related(
+            "session", "message", "message__chat__experiment_session"
+        )
 
         if export_format == "jsonl":
-            return self._export_jsonl(queue, annotations)
-        return self._export_csv(queue, annotations)
+            return self._export_jsonl(queue, annotations, flagged_items)
+        return self._export_csv(queue, annotations, flagged_items)
 
-    def _export_csv(self, queue, annotations):
+    def _get_session_external_id(self, item):
+        if item.session_id:
+            return str(item.session.external_id)
+        if item.message_id:
+            return str(item.message.chat.experiment_session.external_id)
+        return ""
+
+    def _build_flagged_row(self, item):
+        return {
+            "item_id": item.pk,
+            "item_type": item.item_type,
+            "session_id": self._get_session_external_id(item),
+            "annotated_at": "",
+            "flagged": True,
+            "flags": item.flags,
+        }
+
+    def _export_csv(self, queue, annotations, flagged_items):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
         schema_fields = list(queue.schema.keys())
-        fieldnames = ["item_id", "item_type", "reviewer", "annotated_at"] + schema_fields
+        fieldnames = [
+            "item_id",
+            "item_type",
+            "session_id",
+            "annotated_at",
+            "flagged",
+            "flags",
+        ] + schema_fields
 
         writer = csv.DictWriter(response, fieldnames=fieldnames)
         writer.writeheader()
@@ -495,25 +552,42 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             row = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
-                "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
+                "session_id": self._get_session_external_id(ann.item),
                 "annotated_at": ann.created_at.isoformat(),
+                "flagged": False,
+                "flags": json.dumps(ann.item.flags),
             }
             for field in schema_fields:
                 row[field] = ann.data.get(field, "")
             writer.writerow(row)
 
+        for item in flagged_items:
+            row = self._build_flagged_row(item)
+            row["flags"] = json.dumps(row["flags"])
+            for field in schema_fields:
+                row[field] = ""
+            writer.writerow(row)
+
         return response
 
-    def _export_jsonl(self, queue, annotations):
+    def _export_jsonl(self, queue, annotations, flagged_items):
         lines = []
         for ann in annotations:
             record = {
                 "item_id": ann.item_id,
                 "item_type": ann.item.item_type,
-                "reviewer": ann.reviewer.get_full_name() or ann.reviewer.username,
+                "session_id": self._get_session_external_id(ann.item),
                 "annotated_at": ann.created_at.isoformat(),
+                "flagged": False,
+                "flags": ann.item.flags,
                 "annotation": ann.data,
             }
+            lines.append(json.dumps(record))
+
+        for item in flagged_items:
+            record = self._build_flagged_row(item)
+            # Flagged items have no annotation data; emit an empty dict so every record has the same shape.
+            record["annotation"] = {}
             lines.append(json.dumps(record))
 
         content = "\n".join(lines)

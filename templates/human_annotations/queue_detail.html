@@ -117,11 +117,11 @@
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body">
       <h3 class="card-title text-sm">Items</h3>
-      <div id="items-table"
-           hx-get="{{ items_table_url }}"
-           hx-trigger="load"
-           hx-swap="innerHTML">
-        <span class="loading loading-spinner loading-md"></span>
+      <div class="my-2">
+        {% include "experiments/filters.html" %}
+      </div>
+      <div id="items-table">
+        {% include "table/table_placeholder.html" %}
       </div>
     </div>
   </div>

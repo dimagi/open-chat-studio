@@ -46,7 +46,7 @@
   "ui:can_add": true,
   "ui:can_delete": true,
   "ui:deprecated": false,
-  "ui:documentation_link": "/concepts/pipelines/nodes/#extract-structured-data",
+  "ui:documentation_link": "/concepts/pipelines/nodes/#extract-structured-data-node",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-database",
   "ui:label": "Extract Structured Data"

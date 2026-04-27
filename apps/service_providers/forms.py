@@ -127,6 +127,19 @@ class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class IntronVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["intron_api_key"]
+
+    intron_api_key = forms.CharField(
+        label=_("API Key"),
+        help_text=render_help_with_link(
+            "Get your API key from the intron.io dashboard. Voices are seeded automatically on provider creation.",
+            "https://docs.voice.intron.io/docs/tts/tts-queue",
+            link_text="Intron TTS documentation",
+        ),
+    )
+
+
 class AzureOpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["openai_api_key"]
 
