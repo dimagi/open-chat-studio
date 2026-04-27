@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import Literal
 
 import phonenumbers
+from mailparser_reply import EmailReplyParser
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
@@ -284,10 +285,6 @@ class EmailMessage(BaseMessage):
 
     @staticmethod
     def parse(inbound) -> "EmailMessage":
-        from mailparser_reply import (  # noqa: PLC0415 - optional dependency only needed for email channels
-            EmailReplyParser,
-        )
-
         body = inbound.text or ""
         reply = EmailReplyParser(languages=["en", "de", "fr", "es", "pt", "it", "nl", "pl", "sv", "da", "no"]).read(
             body

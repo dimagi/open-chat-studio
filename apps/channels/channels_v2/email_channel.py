@@ -6,9 +6,8 @@ from dataclasses import dataclass, field
 from email.utils import make_msgid
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.core.mail import EmailMessage as DjangoEmailMessage
-from django.db import IntegrityError  # noqa: F811 - used at runtime in except clause
+from django.db import IntegrityError
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
@@ -46,7 +45,7 @@ class EmailThreadContext:
             subject = f"Re: {subject}"
 
         references = list(message.references)
-        if message.message_id:
+        if message.message_id and message.message_id not in references:
             references.append(message.message_id)
         if len(references) > _MAX_REFERENCES:
             references = [references[0], *references[-(_MAX_REFERENCES - 1) :]]
@@ -70,7 +69,7 @@ def get_email_experiment_channel(
     Priority chain (first match wins):
     1. In-Reply-To / References -> existing session lookup (with sender verification)
     2. To-address -> ExperimentChannel.extra_data["email_address"]
-    3. Default fallback -> extra_data["is_default"] == True (requires team)
+    3. Default fallback -> extra_data["is_default"] == True (global, cross-team)
     4. No match -> (None, None)
     """
     # Priority 1: Thread continuity via In-Reply-To
@@ -103,19 +102,17 @@ def get_email_experiment_channel(
     if channel:
         return channel, None
 
-    # Priority 3: Default fallback (only if team is known)
-    if team:
-        default = (
-            ExperimentChannel.objects.filter(
-                **base_filters,
-                extra_data__contains={"is_default": True},
-                team=team,
-            )
-            .select_related("experiment", "team")
-            .first()
+    # Priority 3: Default fallback (global — not scoped to team)
+    default = (
+        ExperimentChannel.objects.filter(
+            **base_filters,
+            extra_data__contains={"is_default": True},
         )
-        if default:
-            return default, None
+        .select_related("experiment", "team")
+        .first()
+    )
+    if default:
+        return default, None
 
     # Priority 4: No match
     return None, None
@@ -149,6 +146,13 @@ def _lookup_session(message_id: str, sender_address: str | None = None) -> Exper
 def _has_email_message_id(external_id) -> bool:
     """Check if an external_id is an RFC 5322 Message-ID (angle-bracket-delimited)."""
     return str(external_id).startswith("<")
+
+
+def _domain_from_address(email_address: str) -> str:
+    """Extract the domain part from an email address."""
+    if "@" in email_address:
+        return email_address.rsplit("@", 1)[1]
+    return email_address
 
 
 class EmailSender(ChannelSender):
@@ -208,16 +212,17 @@ class EmailChannel(ChannelBase):
 
     def _get_sender(self) -> EmailSender:
         extra = self.experiment_channel.extra_data
+        email_address = extra.get("email_address", "")
         self._sender_instance = EmailSender(
-            from_address=extra.get("from_address") or settings.DEFAULT_FROM_EMAIL,
-            domain=settings.EMAIL_CHANNEL_DOMAIN,
+            from_address=extra.get("from_address") or email_address,
+            domain=_domain_from_address(email_address),
             thread_context=self.thread_context,
         )
         return self._sender_instance
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
-            supports_voice_replies=False,
+            supports_voice_replies=self.voice_replies_supported,
             supports_files=False,
             supports_conversational_consent=False,
             supports_static_triggers=True,
@@ -251,6 +256,11 @@ def email_inbound_handler(sender, message, event, **kwargs):
 
     Parses the email and enqueues a Celery task for async processing.
     Returns immediately so the ESP gets a fast 200 OK.
+
+    The pre-filter here is intentionally lenient — it only checks whether
+    any email channel exists that could plausibly handle this message.
+    The full routing logic lives in get_email_experiment_channel (called
+    by the Celery task).
     """
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.tasks import handle_email_message  # noqa: PLC0415
@@ -266,47 +276,27 @@ def email_inbound_handler(sender, message, event, **kwargs):
         logger.exception("Failed to parse inbound email")
         return
 
-    team_id = None
-    can_route = False
+    # Best-effort pre-filter: enqueue if any email channel could handle this.
+    # Check thread continuity (In-Reply-To or References), to-address, or default.
+    has_existing_session = False
+    message_ids_to_check = []
+    if email_msg.in_reply_to:
+        message_ids_to_check.append(email_msg.in_reply_to)
+    message_ids_to_check.extend(email_msg.references)
 
-    # Priority check 1: specific channel match by to-address
-    channel = (
-        ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMAIL,
-            extra_data__contains={"email_address": email_msg.to_address},
-            deleted=False,
-        )
-        .only("team_id")
-        .first()
-    )
-    if channel:
-        can_route = True
-        team_id = channel.team_id
-
-    # Priority check 2: thread continuity via In-Reply-To
-    if not can_route and email_msg.in_reply_to:
-        can_route = ExperimentSession.objects.filter(
-            external_id=email_msg.in_reply_to,
+    if message_ids_to_check:
+        has_existing_session = ExperimentSession.objects.filter(
+            external_id__in=message_ids_to_check,
             experiment_channel__platform=ChannelPlatform.EMAIL,
         ).exists()
 
-    # Priority check 3: default fallback channel
-    if not can_route:
-        default = (
-            ExperimentChannel.objects.filter(
-                platform=ChannelPlatform.EMAIL,
-                extra_data__contains={"is_default": True},
-                deleted=False,
-            )
-            .only("team_id")
-            .first()
-        )
-        if default:
-            can_route = True
-            team_id = default.team_id
+    if not has_existing_session:
+        has_channel = ExperimentChannel.objects.filter(
+            platform=ChannelPlatform.EMAIL,
+            deleted=False,
+        ).exists()
+        if not has_channel:
+            logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
+            return
 
-    if not can_route:
-        logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
-        return
-
-    handle_email_message.delay(email_data=email_msg.model_dump(), team_id=team_id)
+    handle_email_message.delay(email_data=email_msg.model_dump())

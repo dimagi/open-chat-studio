@@ -681,11 +681,10 @@ class EmailChannelForm(ExtraFormBase):
             existing = ExperimentChannel.objects.filter(
                 platform=ChannelPlatform.EMAIL,
                 extra_data__contains={"is_default": True},
-                team=self.experiment.team,
                 deleted=False,
             )
             if self.channel:
                 existing = existing.exclude(pk=self.channel.pk)
             if existing.exists():
-                self.add_error("is_default", "Another email channel is already set as the default for this team.")
+                self.add_error("is_default", "Another email channel is already set as the default.")
         return cleaned_data

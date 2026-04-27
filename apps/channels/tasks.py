@@ -224,20 +224,21 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def handle_email_message(self, email_data: dict, team_id: int | None = None):
+def handle_email_message(self, email_data: dict):
+    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415
+        EmailChannel,
+        EmailThreadContext,
+        get_email_experiment_channel,
+    )
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
-    from apps.channels.email import EmailChannel, EmailThreadContext, get_email_experiment_channel  # noqa: PLC0415
-    from apps.teams.models import Team  # noqa: PLC0415
 
     message = EmailMessageDatamodel(**email_data)
-    team = Team.objects.filter(id=team_id).first() if team_id else None
 
     experiment_channel, session = get_email_experiment_channel(
         in_reply_to=message.in_reply_to,
         references=message.references,
         to_address=message.to_address,
         sender_address=message.from_address,
-        team=team,
     )
     if not experiment_channel:
         log.info("No email channel found for to=%s, ignoring", message.to_address)

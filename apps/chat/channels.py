@@ -343,7 +343,7 @@ class ChannelBase(ABC):
         elif platform == "commcare_connect":
             channel_cls = CommCareConnectChannel
         elif platform == "email":
-            from apps.channels.email import EmailChannel  # noqa: PLC0415
+            from apps.channels.channels_v2.email_channel import EmailChannel  # noqa: PLC0415
 
             channel_cls = EmailChannel
         # elif platform == "evaluations":

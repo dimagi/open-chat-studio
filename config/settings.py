@@ -401,11 +401,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Email setup
 
 # use in development
-EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 # use in production
 # see https://github.com/anymail/django-anymail for more details/examples
 # EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
-EMAIL_CHANNEL_DOMAIN = env("EMAIL_CHANNEL_DOMAIN", default="chat.openchatstudio.com")
 ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default=None)
 
 # Django sites

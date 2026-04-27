@@ -6,14 +6,14 @@ from django.db import IntegrityError  # noqa: F811 - used at runtime in test
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.datamodels import EmailMessage
-from apps.channels.email import (
+from apps.channels.channels_v2.email_channel import (
     EmailChannel,
     EmailSender,
     EmailThreadContext,
     email_inbound_handler,
     get_email_experiment_channel,
 )
+from apps.channels.datamodels import EmailMessage
 from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
@@ -290,17 +290,17 @@ class TestEmailRouting:
         assert result_channel is None
         assert result_session is None
 
-    def test_no_default_fallback_without_team(self, team_with_users):
+    def test_default_fallback_is_global(self, team_with_users):
+        """Default fallback channel is found regardless of team parameter."""
         team = team_with_users
-        _make_email_channel(team, is_default=True)
+        channel = _make_email_channel(team, is_default=True)
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
             references=[],
             to_address="unknown@chat.openchatstudio.com",
-            team=None,
         )
-        assert result_channel is None
+        assert result_channel == channel
         assert result_session is None
 
 
@@ -449,7 +449,7 @@ class TestHandleEmailMessageTask:
             "references": [],
         }
 
-        with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data)
             MockEmailChannel.assert_called_once()
@@ -488,7 +488,6 @@ class TestEmailInboundHandler:
             mock_task.delay.assert_called_once()
             call_kwargs = mock_task.delay.call_args[1]
             assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
-            assert call_kwargs["team_id"] == team.id
 
     def test_thread_reply_allowed_through(self, team_with_users):
         """Reply via In-Reply-To is enqueued even when to-address doesn't match a channel."""
@@ -505,11 +504,9 @@ class TestEmailInboundHandler:
             mock_task.delay = MagicMock()
             email_inbound_handler(sender=None, message=inbound, event=MagicMock())
             mock_task.delay.assert_called_once()
-            call_kwargs = mock_task.delay.call_args[1]
-            assert call_kwargs["team_id"] is None
 
     def test_default_channel_allowed_through(self, team_with_users):
-        """Email to unknown address is enqueued when a default channel exists."""
+        """Email to unknown address is enqueued when any email channel exists."""
         team = team_with_users
         _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
 
@@ -519,8 +516,6 @@ class TestEmailInboundHandler:
             mock_task.delay = MagicMock()
             email_inbound_handler(sender=None, message=inbound, event=MagicMock())
             mock_task.delay.assert_called_once()
-            call_kwargs = mock_task.delay.call_args[1]
-            assert call_kwargs["team_id"] == team.id
 
     def test_no_channel_silently_ignored(self):
         """Unmatched email is silently ignored (no bounce loop)."""
@@ -646,7 +641,7 @@ class TestEmailEndToEnd:
             "references": [],
         }
 
-        with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data)
 
@@ -675,7 +670,7 @@ class TestEmailEndToEnd:
             "references": ["<outbound-1@chat.openchatstudio.com>"],
         }
 
-        with patch("apps.channels.email.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data)
 
