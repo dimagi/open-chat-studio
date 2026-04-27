@@ -111,6 +111,67 @@ def _get_export_header(translation_language=None):
     return header
 
 
+def _build_session_cache_entry(session) -> dict:
+    """Compute and return the per-session values used in every export row for that session."""
+    return {
+        "platform": session.get_platform_name(),
+        "session_tags": _format_tags(session.chat.tags.all()),
+        "session_comments": _format_comments(session.chat.comments.all()),
+        "external_id": session.external_id,
+        "state": json.dumps(session.state),
+        "participant_name": session.participant.name,
+        "participant_identifier": session.participant.identifier,
+        "participant_public_id": session.participant.public_id,
+    }
+
+
+def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list | None:
+    """Return an export row list for *message*, or None if the message is absent."""
+    if message is None:
+        return None
+    content = get_message_content(message, translation_language) if translation_language else message.content
+    row = [
+        message.id,
+        message.created_at,
+        message.message_type,
+        content,
+        sc["platform"],
+        sc["session_tags"],
+        sc["session_comments"],
+        sc["external_id"],
+        sc["state"],
+        experiment.public_id,
+        experiment.name,
+        sc["participant_name"],
+        sc["participant_identifier"],
+        sc["participant_public_id"],
+        _format_tags(message.tags.all()),
+        _format_comments(message.comments.all()),
+        trace_id,
+        json.dumps(participant_data),
+    ]
+    if translation_language:
+        row.append(translation_language)
+        row.append(message.content)
+    return row
+
+
+def _yield_rows_for_trace(trace, session_cache, experiment, translation_language) -> Generator[list, None, None]:
+    """Yield one export row per message (input + output) for a single trace."""
+    start_data, end_data = _get_participant_data_for_trace(trace)
+    trace_id = _get_trace_id_for_export(trace.input_message)
+    session = trace.session
+
+    if session.id not in session_cache:
+        session_cache[session.id] = _build_session_cache_entry(session)
+    sc = session_cache[session.id]
+
+    for message, participant_data in [(trace.input_message, start_data), (trace.output_message, end_data)]:
+        row = _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language)
+        if row is not None:
+            yield row
+
+
 def generate_export_rows(
     experiment, sessions_queryset, translation_language=None
 ) -> Generator[list, None, None]:
@@ -126,9 +187,8 @@ def generate_export_rows(
 
     base_qs = _build_trace_queryset(sessions_queryset)
     last_pk = 0
-    # Cache computed per-session values to avoid redundant work across many traces
-    # from the same session.  The cache stores plain strings/dicts, not ORM objects,
-    # so its memory footprint is small even for experiments with many sessions.
+    # Cache stores plain strings/dicts (not ORM objects) so its footprint is small
+    # even for experiments with many sessions.
     session_cache: dict[int, dict] = {}
 
     while True:
@@ -137,57 +197,7 @@ def generate_export_rows(
             break
 
         for trace in chunk:
-            start_data, end_data = _get_participant_data_for_trace(trace)
-            trace_id = _get_trace_id_for_export(trace.input_message)
-            session = trace.session
-
-            if session.id not in session_cache:
-                session_cache[session.id] = {
-                    "platform": session.get_platform_name(),
-                    "session_tags": _format_tags(session.chat.tags.all()),
-                    "session_comments": _format_comments(session.chat.comments.all()),
-                    "external_id": session.external_id,
-                    "state": json.dumps(session.state),
-                    "participant_name": session.participant.name,
-                    "participant_identifier": session.participant.identifier,
-                    "participant_public_id": session.participant.public_id,
-                }
-            sc = session_cache[session.id]
-
-            for message, participant_data in [
-                (trace.input_message, start_data),
-                (trace.output_message, end_data),
-            ]:
-                if message is None:
-                    continue
-
-                content = (
-                    get_message_content(message, translation_language) if translation_language else message.content
-                )
-                row = [
-                    message.id,
-                    message.created_at,
-                    message.message_type,
-                    content,
-                    sc["platform"],
-                    sc["session_tags"],
-                    sc["session_comments"],
-                    sc["external_id"],
-                    sc["state"],
-                    experiment.public_id,
-                    experiment.name,
-                    sc["participant_name"],
-                    sc["participant_identifier"],
-                    sc["participant_public_id"],
-                    _format_tags(message.tags.all()),
-                    _format_comments(message.comments.all()),
-                    trace_id,
-                    json.dumps(participant_data),
-                ]
-                if translation_language:
-                    row.append(translation_language)
-                    row.append(message.content)
-                yield row
+            yield from _yield_rows_for_trace(trace, session_cache, experiment, translation_language)
 
         last_pk = chunk[-1].pk
         if len(chunk) < EXPORT_CHUNK_SIZE:
