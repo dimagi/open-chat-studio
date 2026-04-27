@@ -285,6 +285,40 @@ def delete_document_source_task(self, document_source_id: int):
         document_source.delete()
 
 
+def _resolve_filename(name: str, used_filenames: dict[str, int]) -> str:
+    if name in used_filenames:
+        used_filenames[name] += 1
+        parts = name.rsplit(".", 1)
+        if len(parts) == 2:
+            return f"{parts[0]}_{used_filenames[name]}.{parts[1]}"
+        return f"{name}_{used_filenames[name]}"
+    used_filenames[name] = 0
+    return name
+
+
+def _read_file_content(file, collection_id: int, log_level: int, retry_count: int) -> bytes:
+    try:
+        with file.file.open("rb") as f:
+            content = f.read()
+    except (ClientError, BotoCoreError, ConnectionError, TimeoutError) as exc:
+        logger.log(
+            log_level,
+            "Transient error reading file while building ZIP archive",
+            extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+            exc_info=True,
+        )
+        raise ZipCreationError(f"Could not read file {file.id} for collection {collection_id}") from exc
+
+    if file.content_size and len(content) != file.content_size:
+        logger.error(
+            "File integrity check failed while building ZIP archive",
+            extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
+        )
+        raise ZipIntegrityError(f"File {file.id} returned {len(content)} bytes but expected {file.content_size}")
+
+    return content
+
+
 @shared_task(
     bind=True,
     base=TaskbadgerTask,
@@ -306,7 +340,6 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
         logger.error(f"Collection {collection_id} not found")
         return None
 
-    # Get all manually uploaded files (excluding document source files)
     collection_files = CollectionFile.objects.filter(
         collection=collection, document_source__isnull=True
     ).select_related("file")
@@ -317,63 +350,23 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
         logger.warning(f"No manually uploaded files found in collection {collection_id}")
         return None
 
+    retry_count = self.request.retries
+    log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
     zip_buffer = BytesIO()
-
     skipped_files: list[str] = []
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        # Track filenames to handle duplicates
         used_filenames: dict[str, int] = {}
-        retry_count = self.request.retries
-        log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
 
         for idx, collection_file in enumerate(collection_files, start=1):
             file = collection_file.file
-            filename = file.name
-
-            # Handle duplicate filenames
-            if filename in used_filenames:
-                used_filenames[filename] += 1
-                name_parts = filename.rsplit(".", 1)
-                if len(name_parts) == 2:
-                    filename = f"{name_parts[0]}_{used_filenames[filename]}.{name_parts[1]}"
-                else:
-                    filename = f"{filename}_{used_filenames[filename]}"
-            else:
-                used_filenames[filename] = 0
+            filename = _resolve_filename(file.name, used_filenames)
 
             try:
-                with file.file.open("rb") as f:
-                    content = f.read()
-
-                if file.content_size and len(content) != file.content_size:
-                    logger.error(
-                        "File integrity check failed while building ZIP archive",
-                        extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
-                    )
-                    raise ZipIntegrityError(
-                        f"File {file.id} returned {len(content)} bytes but expected {file.content_size}"
-                    )
-
-                zip_file.writestr(filename, content)
-
-            except ZipIntegrityError:
+                content = _read_file_content(file, collection_id, log_level, retry_count)
+            except (ZipCreationError, ZipIntegrityError):
                 raise
-
-            except (ClientError, BotoCoreError, ConnectionError, TimeoutError) as exc:
-                # Transient storage/network error — retry the whole task
-                logger.log(
-                    log_level,
-                    "Transient error reading file while building ZIP archive",
-                    extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
-                    exc_info=True,
-                )
-                raise ZipCreationError(
-                    f"Could not read file {file.id} for collection {collection_id}"
-                ) from exc
-
             except Exception:
-                # Permanent per-file error — skip and record in manifest
                 logger.warning(
                     "Skipping unreadable file while building ZIP archive",
                     extra={"collection_id": collection_id, "file_id": file.id},
@@ -382,6 +375,7 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
                 skipped_files.append(f"{filename} (file id: {file.id})")
                 continue
 
+            zip_file.writestr(filename, content)
             progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
 
         if skipped_files:
@@ -394,14 +388,12 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
     timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
     zip_filename = f"{slugify(collection.name)}_files_{timestamp}.zip"
 
-    expiry_date = timezone.now() + timedelta(hours=24)
-
     zip_file_obj = File.objects.create(
         team_id=team_id,
         name=zip_filename,
         file=ContentFile(zip_buffer.getvalue(), name=zip_filename),
         content_type="application/zip",
-        expiry_date=expiry_date,
+        expiry_date=timezone.now() + timedelta(hours=24),
         purpose=FilePurpose.DATA_EXPORT,
     )
 

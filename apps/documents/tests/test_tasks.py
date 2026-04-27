@@ -228,31 +228,21 @@ def _make_open_mock(exc: Exception):
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_s3_client_error_raises_and_creates_no_file(progress_recorder_mock):
-    """S3 ClientError during file read aborts task and creates no File object."""
-    collection = CollectionFactory.create(name="s3-error-collection")
+@pytest.mark.parametrize(
+    "error",
+    [
+        ClientError({"Error": {"Code": "404", "Message": "NoSuchKey"}}, "GetObject"),
+        EndpointConnectionError(endpoint_url="https://s3.amazonaws.com"),
+    ],
+    ids=["s3_client_error", "endpoint_connection_error"],
+)
+def test_create_collection_zip_task_transient_error_raises_and_creates_no_file(progress_recorder_mock, error):
+    """Transient S3 errors during file read abort the task and create no File object."""
+    collection = CollectionFactory.create(name="transient-error-collection")
     team = collection.team
     file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
     CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
 
-    error = ClientError({"Error": {"Code": "404", "Message": "NoSuchKey"}}, "GetObject")
-    with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
-        with pytest.raises(ZipCreationError):
-            create_collection_zip_task(collection.id, team.id)
-
-    assert File.objects.filter(purpose=FilePurpose.DATA_EXPORT).count() == 0
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.tasks.ProgressRecorder")
-def test_create_collection_zip_task_endpoint_connection_error_raises_zip_creation_error(progress_recorder_mock):
-    """S3 EndpointConnectionError aborts task and creates no File object."""
-    collection = CollectionFactory.create(name="connection-error-collection")
-    team = collection.team
-    file1 = FileFactory.create(team=team, name="file1.txt", file=ContentFile(b"data", name="file1.txt"))
-    CollectionFile.objects.create(file=file1, collection=collection, document_source=None)
-
-    error = EndpointConnectionError(endpoint_url="https://s3.amazonaws.com")
     with patch("django.db.models.fields.files.FieldFile.open", _make_open_mock(error)):
         with pytest.raises(ZipCreationError):
             create_collection_zip_task(collection.id, team.id)
