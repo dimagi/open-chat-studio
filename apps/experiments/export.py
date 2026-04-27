@@ -1,6 +1,8 @@
 import csv
 import io
 import json
+import tempfile
+from typing import Generator, Iterator
 
 import dictdiffer
 
@@ -11,6 +13,8 @@ from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.trace.models import Trace
 from apps.web.dynamic_filters.datastructures import FilterParams
+
+EXPORT_CHUNK_SIZE = 1000
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -50,13 +54,9 @@ def _get_participant_data_for_trace(trace):
     return start_data, end_data
 
 
-def filtered_export_to_csv(experiment, sessions_queryset, translation_language=None):
-    csv_in_memory = io.StringIO()
-    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-
-    # NOTE: This export is trace-driven rather than message-driven. Each trace produces two rows
-    # (input + output). Messages not associated with a trace will not appear in the export.
-    traces = (
+def _build_trace_queryset(sessions_queryset):
+    """Return the base Trace queryset for export, ordered by pk for keyset pagination."""
+    return (
         Trace.objects.filter(
             session__in=sessions_queryset,
             input_message__isnull=False,
@@ -67,6 +67,7 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
             "session",
             "session__participant",
             "session__experiment_channel",
+            "session__chat",  # OneToOneField: explicit JOIN beats implicit prefetch
         )
         .prefetch_related(
             "input_message__tags",
@@ -79,9 +80,11 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
             "session__chat__comments",
             "session__chat__comments__user",
         )
-        .order_by("timestamp")
+        .order_by("pk")
     )
 
+
+def _get_export_header(translation_language=None):
     header = [
         "Message ID",
         "Message Date",
@@ -105,49 +108,135 @@ def filtered_export_to_csv(experiment, sessions_queryset, translation_language=N
     if translation_language:
         header.append("Message Language")
         header.append("Original Message")
+    return header
 
-    writer.writerow(header)
 
-    for trace in traces:
-        start_data, end_data = _get_participant_data_for_trace(trace)
-        trace_id = _get_trace_id_for_export(trace.input_message)  # safe: filtered out NULLs above
-        session = trace.session
+def generate_export_rows(
+    experiment, sessions_queryset, translation_language=None
+) -> Generator[list, None, None]:
+    """Yield the header row, then one data row per message across all matching traces.
 
-        for message, participant_data in [
-            (trace.input_message, start_data),
-            (trace.output_message, end_data),
-        ]:
-            if message is None:
-                continue
+    Traces are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
+    that memory usage stays bounded regardless of dataset size.  Session-level values
+    (platform name, state JSON, participant fields, chat tags/comments) are cached the
+    first time each session is encountered so they are serialised only once no matter
+    how many traces belong to that session.
+    """
+    yield _get_export_header(translation_language)
 
-            if translation_language:
-                content = get_message_content(message, translation_language)
-            else:
-                content = message.content
-            row = [
-                message.id,
-                message.created_at,
-                message.message_type,
-                content,
-                session.get_platform_name(),
-                _format_tags(session.chat.tags.all()),
-                _format_comments(session.chat.comments.all()),
-                session.external_id,
-                json.dumps(session.state),
-                experiment.public_id,
-                experiment.name,
-                session.participant.name,
-                session.participant.identifier,
-                session.participant.public_id,
-                _format_tags(message.tags.all()),
-                _format_comments(message.comments.all()),
-                trace_id,
-                json.dumps(participant_data),
-            ]
-            if translation_language:
-                row.append(translation_language)
-                row.append(message.content)
-            writer.writerow(row)
+    base_qs = _build_trace_queryset(sessions_queryset)
+    last_pk = 0
+    # Cache computed per-session values to avoid redundant work across many traces
+    # from the same session.  The cache stores plain strings/dicts, not ORM objects,
+    # so its memory footprint is small even for experiments with many sessions.
+    session_cache: dict[int, dict] = {}
+
+    while True:
+        chunk = list(base_qs.filter(pk__gt=last_pk)[:EXPORT_CHUNK_SIZE])
+        if not chunk:
+            break
+
+        for trace in chunk:
+            start_data, end_data = _get_participant_data_for_trace(trace)
+            trace_id = _get_trace_id_for_export(trace.input_message)
+            session = trace.session
+
+            if session.id not in session_cache:
+                session_cache[session.id] = {
+                    "platform": session.get_platform_name(),
+                    "session_tags": _format_tags(session.chat.tags.all()),
+                    "session_comments": _format_comments(session.chat.comments.all()),
+                    "external_id": session.external_id,
+                    "state": json.dumps(session.state),
+                    "participant_name": session.participant.name,
+                    "participant_identifier": session.participant.identifier,
+                    "participant_public_id": session.participant.public_id,
+                }
+            sc = session_cache[session.id]
+
+            for message, participant_data in [
+                (trace.input_message, start_data),
+                (trace.output_message, end_data),
+            ]:
+                if message is None:
+                    continue
+
+                content = (
+                    get_message_content(message, translation_language) if translation_language else message.content
+                )
+                row = [
+                    message.id,
+                    message.created_at,
+                    message.message_type,
+                    content,
+                    sc["platform"],
+                    sc["session_tags"],
+                    sc["session_comments"],
+                    sc["external_id"],
+                    sc["state"],
+                    experiment.public_id,
+                    experiment.name,
+                    sc["participant_name"],
+                    sc["participant_identifier"],
+                    sc["participant_public_id"],
+                    _format_tags(message.tags.all()),
+                    _format_comments(message.comments.all()),
+                    trace_id,
+                    json.dumps(participant_data),
+                ]
+                if translation_language:
+                    row.append(translation_language)
+                    row.append(message.content)
+                yield row
+
+        last_pk = chunk[-1].pk
+        if len(chunk) < EXPORT_CHUNK_SIZE:
+            # Partial chunk means we've reached the end; skip the extra query.
+            break
+
+
+def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str, None, None]:
+    """Convert an iterable of row lists into a stream of CSV-formatted strings.
+
+    Each yielded string is one complete CSV line.  Suitable for use with
+    Django's StreamingHttpResponse so the response is sent to the client
+    incrementally rather than buffered entirely in memory.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    for row in rows:
+        writer.writerow(row)
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+
+def export_to_tempfile(experiment, sessions_queryset, translation_language=None) -> tempfile.SpooledTemporaryFile:
+    """Write the CSV export to a spooled temporary file and return it, seeked to 0.
+
+    The caller is responsible for closing the file.  Using a spooled file means
+    small exports stay in memory while large ones spill to disk automatically,
+    avoiding a single large in-memory allocation.
+    """
+    tmp = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024, mode="w+", encoding="utf-8", newline="")
+    writer = csv.writer(tmp, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    for row in generate_export_rows(experiment, sessions_queryset, translation_language):
+        writer.writerow(row)
+    tmp.seek(0)
+    return tmp
+
+
+def filtered_export_to_csv(experiment, sessions_queryset, translation_language=None):
+    """Build a complete CSV in a StringIO buffer and return it.
+
+    For large datasets prefer generate_export_rows() + export_rows_to_csv_stream()
+    to avoid buffering the entire export in memory.  This function is retained for
+    backward compatibility with callers that expect a StringIO return value.
+    """
+    csv_in_memory = io.StringIO()
+    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    for row in generate_export_rows(experiment, sessions_queryset, translation_language):
+        writer.writerow(row)
     return csv_in_memory
 
 
