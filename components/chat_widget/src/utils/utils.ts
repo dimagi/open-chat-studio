@@ -5,20 +5,20 @@
  * @param defaultValue The default value if the CSS value is neither a percentage nor a pixel value.
  */
 export const varToPixels = (value: string, maxValue: number, defaultValue: number) => {
-  value = value.trim()
-  if (value.includes("%")) {
-      const percent = percentToFloat(value);
-      if (!isNaN(percent)) {
-        return maxValue * percent;
-      }
-    } else if (value.includes("px")) {
-      const pixels = parseFloat(value);
-      if (!isNaN(pixels)) {
-        return pixels;
-      }
+  value = value.trim();
+  if (value.includes('%')) {
+    const percent = percentToFloat(value);
+    if (!isNaN(percent)) {
+      return maxValue * percent;
     }
-    return defaultValue;
-}
+  } else if (value.includes('px')) {
+    const pixels = parseFloat(value);
+    if (!isNaN(pixels)) {
+      return pixels;
+    }
+  }
+  return defaultValue;
+};
 
 const percentToFloat = (percentageString: string) => {
   const numericValue = parseFloat(percentageString);

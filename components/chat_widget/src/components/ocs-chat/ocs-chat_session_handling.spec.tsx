@@ -1,5 +1,5 @@
-import {newSpecPage} from '@stencil/core/testing';
-import {OcsChat} from './ocs-chat';
+import { newSpecPage } from '@stencil/core/testing';
+import { OcsChat } from './ocs-chat';
 
 // Create mock functions at the module level
 const mockStartSession = jest.fn();
@@ -27,20 +27,22 @@ function setupFetchMock(sessionId = 'test-session-id', taskId = 'test-task-id') 
     if (url.includes('/api/chat/start/')) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({
-          session_id: sessionId,
-          chatbot: {},
-          participant: {},
-        }),
+        json: () =>
+          Promise.resolve({
+            session_id: sessionId,
+            chatbot: {},
+            participant: {},
+          }),
       } as Response);
     }
     if (url.includes('/api/chat/send/')) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({
-          task_id: taskId,
-          status: 'processing',
-        }),
+        json: () =>
+          Promise.resolve({
+            task_id: taskId,
+            status: 'processing',
+          }),
       } as Response);
     }
     return Promise.reject(new Error('Unexpected fetch call'));
@@ -456,10 +458,10 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockStartSession.mockResolvedValue({session_id: 'test-session-id'});
-    mockSendMessage.mockResolvedValue({status: 'success', task_id: 'test-task-id'});
-    mockPollTask.mockReturnValue({cancel: jest.fn()});
-    mockStartMessagePolling.mockReturnValue({stop: jest.fn()});
+    mockStartSession.mockResolvedValue({ session_id: 'test-session-id' });
+    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'test-task-id' });
+    mockPollTask.mockReturnValue({ cancel: jest.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
 
     global.fetch = setupFetchMock();
 
@@ -525,9 +527,11 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
   });
 
   it('does not throw during componentWillLoad when localStorage is blocked', async () => {
-    await expect(newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true" persistent-session="true"></open-chat-studio-widget>',
-    })).resolves.toBeDefined();
+    await expect(
+      newSpecPage({
+        components: [OcsChat],
+        html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true" persistent-session="true"></open-chat-studio-widget>',
+      }),
+    ).resolves.toBeDefined();
   });
 });

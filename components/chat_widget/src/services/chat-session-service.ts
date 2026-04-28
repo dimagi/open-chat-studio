@@ -207,10 +207,7 @@ export class ChatSessionService {
     return response.json() as Promise<ChatPollResponse>;
   }
 
-  startMessagePolling(
-    sessionId: string,
-    callbacks: MessagePollingCallbacks,
-  ): MessagePollingHandle {
+  startMessagePolling(sessionId: string, callbacks: MessagePollingCallbacks): MessagePollingHandle {
     const poll = async () => {
       try {
         const since = callbacks.getSince();
@@ -246,7 +243,7 @@ export class ChatSessionService {
 
   private getJsonHeaders(): Record<string, string> {
     const headers = this.getCommonHeaders();
-    headers['Content-Type'] = 'application/json'
+    headers['Content-Type'] = 'application/json';
 
     const csrfToken = this.csrfTokenProvider(this.apiBaseUrl);
     if (csrfToken) {

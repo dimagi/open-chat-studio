@@ -207,28 +207,12 @@
     --success-text-color: #10b981; /* Complementary green to existing blue palette */
 
     /* Markdown code variables */
-    --code-bg-user-color: color-mix(
-      in srgb,
-      var(--message-user-bg-color) 80%,
-      white 20%
-    );
+    --code-bg-user-color: color-mix(in srgb, var(--message-user-bg-color) 80%, white 20%);
     --code-text-user-color: var(--message-user-text-color);
-    --code-border-user-color: color-mix(
-      in srgb,
-      var(--message-user-bg-color) 90%,
-      black 10%
-    );
-    --code-bg-assistant-color: color-mix(
-      in srgb,
-      var(--message-assistant-bg-color) 50%,
-      white 50%
-    );
+    --code-border-user-color: color-mix(in srgb, var(--message-user-bg-color) 90%, black 10%);
+    --code-bg-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 50%, white 50%);
     --code-text-assistant-color: var(--message-assistant-text-color);
-    --code-border-assistant-color: color-mix(
-      in srgb,
-      var(--message-assistant-bg-color) 90%,
-      black 10%
-    );
+    --code-border-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 90%, black 10%);
 
     --confirmation-overlay-bg-color: rgba(0, 0, 0, 0.5);
     --confirmation-dialog-bg-color: var(--chat-window-bg-color);
@@ -247,15 +231,9 @@
 
     /* File upload variables */
     --file-attachment-button-bg-color: transparent;
-    --file-attachment-button-bg-hover-color: var(
-      --header-button-bg-hover-color
-    ); /* #f3f4f6 */
-    --file-attachment-button-text-color: var(
-      --header-button-text-color
-    ); /* #6b7280 */
-    --file-attachment-button-text-disabled-color: var(
-      --send-button-text-disabled-color
-    ); /* #6b7280 */
+    --file-attachment-button-bg-hover-color: var(--header-button-bg-hover-color); /* #f3f4f6 */
+    --file-attachment-button-text-color: var(--header-button-text-color); /* #6b7280 */
+    --file-attachment-button-text-disabled-color: var(--send-button-text-disabled-color); /* #6b7280 */
 
     /* Selected files variables */
     --selected-files-bg-color: var(--chat-window-bg-color); /* transparent */
@@ -266,9 +244,7 @@
 
     /* Selected file text variables */
     --selected-file-font-size: var(--chat-window-font-size-sm);
-    --selected-file-name-color: var(
-      --message-assistant-text-color
-    ); /* #1f2937 */
+    --selected-file-name-color: var(--message-assistant-text-color); /* #1f2937 */
     --selected-file-size-color: var(--input-placeholder-color); /* #6b7280 */
 
     /* Selected file icon variables */
@@ -285,7 +261,7 @@
     bottom: 30px;
   }
 
-  :host([mode="kiosk"]) {
+  :host([mode='kiosk']) {
     position: absolute;
     inset: 0;
     right: auto;

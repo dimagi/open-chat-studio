@@ -1,5 +1,4 @@
-import Cookies from "js-cookie";
-
+import Cookies from 'js-cookie';
 
 /**
  * Get CSRF token from cookies if the current domain matches the API base URL
@@ -9,7 +8,7 @@ export function getCSRFToken(apiBaseUrl: string): string | undefined {
     return undefined;
   }
 
-  return Cookies.get('csrftoken')
+  return Cookies.get('csrftoken');
 }
 
 function currentDomainMatchesApiBaseUrl(apiBaseUrl: string): boolean {
