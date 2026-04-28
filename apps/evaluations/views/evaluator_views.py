@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.annotations.models import Tag
 from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
@@ -63,6 +64,11 @@ class EvaluatorFormsetMixin:
         context = super().get_context_data(**kwargs)
         if "tag_rule_formset" not in context:
             context["tag_rule_formset"] = self._build_tag_rule_formset(context.get("object"))
+        context["available_tags"] = list(
+            Tag.objects.filter(team=self.request.team, is_system_tag=False)
+            .order_by("name")
+            .values_list("name", flat=True)
+        )
         return context
 
     def post(self, request, *args, **kwargs):

@@ -9,10 +9,15 @@
   {% endif %}
   <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
     <div>
-      <label for="{{ form.tag_name.id_for_label }}" class="label text-sm"><span>{% translate "Tag name" %}</span></label>
-      <input type="text" id="{{ form.tag_name.id_for_label }}" name="{{ form.tag_name.html_name }}" maxlength="100"
-             value="{{ form.tag_name.value|default_if_none:'' }}"
-             class="input input-bordered w-full input-sm">
+      <label for="{{ form.tag_name.id_for_label }}" class="label text-sm"><span>{% translate "Tag" %}</span></label>
+      {% with current=form.tag_name.value|default_if_none:'' %}
+        <select id="{{ form.tag_name.id_for_label }}" name="{{ form.tag_name.html_name }}"
+                class="tag-rule-select" data-current="{{ current }}"
+                placeholder='{% translate "Select or create a tag..." %}' autocomplete="off">
+          <option value=""></option>
+          {% if current %}<option value="{{ current }}" selected>{{ current }}</option>{% endif %}
+        </select>
+      {% endwith %}
       {{ form.tag_name.errors }}
     </div>
     <div>

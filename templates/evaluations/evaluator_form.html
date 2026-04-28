@@ -492,6 +492,7 @@
               class="btn btn-outline btn-primary btn-sm mt-3">
         <i class="fa fa-plus"></i> {% translate "Add tag rule" %}
       </button>
+      {{ available_tags|json_script:"tag-rule-available-tags" }}
       <p class="text-xs text-gray-500 mt-1" x-show="!hasAnyUsableField()">
         {% translate "Define at least one output field (choice with choices, int, float, or string) before adding tag rules." %}
       </p>
@@ -503,6 +504,8 @@
 {% block page_js %}
   {{ block.super }}
   <script src="{% load static %}{% static 'js/editors-bundle.js' %}"></script>
+  <script src="{% static 'js/tagRuleSelect-bundle.js' %}"
+          onload="SiteJS.tagRuleSelect.bootstrapTagRuleSelects();"></script>
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
@@ -870,6 +873,9 @@
           totalInput.value = index + 1;
           if (window.Alpine && newRow) {
             window.Alpine.initTree(newRow);
+          }
+          if (window.SiteJS && window.SiteJS.tagRuleSelect && newRow) {
+            window.SiteJS.tagRuleSelect.setupTagRuleSelects(newRow);
           }
         }
       }));
