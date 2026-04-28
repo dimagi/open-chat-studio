@@ -22,7 +22,13 @@ def get_message_task_response(experiment, task_id: str):
     if skip_render:
         return {}
 
-    message_details = {"message": None, "error_msg": False, "complete": is_complete, "attachments": []}
+    message_details = {
+        "message": None,
+        "error_msg": False,
+        "user_facing_error": False,
+        "complete": is_complete,
+        "attachments": [],
+    }
     if is_complete and is_success:
         result = progress["result"]
         if message_id := result.get("message_id"):
@@ -30,7 +36,10 @@ def get_message_task_response(experiment, task_id: str):
         elif response := result.get("response"):
             message_details["message"] = ChatMessage(content=response, message_type=ChatMessageType.AI)
         if error := result.get("error"):
-            if not experiment.debug_mode_enabled:
+            if result.get("user_facing_error"):
+                message_details["error_msg"] = error
+                message_details["user_facing_error"] = True
+            elif not experiment.debug_mode_enabled:
                 if "Invalid parameter" in error:  # TODO: temporary
                     message_details["error_msg"] = CUSTOM_ERROR_MESSAGE
                 else:
