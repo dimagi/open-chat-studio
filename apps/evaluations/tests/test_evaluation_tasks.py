@@ -5,7 +5,6 @@ import pytest
 import time_machine
 from django.utils import timezone
 
-from apps.annotations.models import TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import (
@@ -292,7 +291,7 @@ def test_evaluate_single_message_applies_tag_rules(
 
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
     assert result.output == {"result": {"sentiment": "negative"}}
-    assert expected_output.tags.filter(pk=tag.pk, category=TagCategories.EVALUATIONS).exists()
+    assert expected_output.tags.filter(pk=tag.pk).exists()
     assert AppliedTag.objects.filter(rule=rule, evaluation_result=result).count() == 1
 
 

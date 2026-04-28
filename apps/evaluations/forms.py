@@ -9,7 +9,7 @@ from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
-from apps.annotations.models import Tag, TagCategories
+from apps.annotations.models import Tag
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
@@ -463,7 +463,7 @@ class EvaluatorTagRuleForm(forms.ModelForm):
                 team=self.team,
                 name=self._resolved_tag_name,
                 is_system_tag=False,
-                category=TagCategories.EVALUATIONS,
+                category="",
             )
         return super().save(commit=commit)
 

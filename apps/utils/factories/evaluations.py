@@ -1,7 +1,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.annotations.models import Tag, TagCategories
+from apps.annotations.models import Tag
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import (
     AppliedTag,
@@ -49,7 +49,7 @@ class EvaluatorFactory(DjangoModelFactory):
 
 
 class EvaluationTagFactory(DjangoModelFactory):
-    """Factory for EVALUATIONS-category tags used by tag rules."""
+    """Factory for plain user tags used by evaluator tag rules."""
 
     class Meta:
         model = Tag
@@ -58,7 +58,7 @@ class EvaluationTagFactory(DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"eval-tag-{n}")
     is_system_tag = False
-    category = TagCategories.EVALUATIONS
+    category = ""
 
 
 class EvaluatorTagRuleFactory(DjangoModelFactory):

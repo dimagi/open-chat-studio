@@ -15,7 +15,6 @@ from django.db import models
 from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
-from apps.annotations.models import TagCategories
 from apps.evaluations.field_definitions import (
     ChoiceFieldDefinition,
     FieldDefinition,
@@ -172,7 +171,7 @@ def _validate_range_condition(condition_value: dict, field_definition: FieldDefi
 
 
 def validate_tag_compatibility(tag: Tag, evaluator: Evaluator) -> None:
-    """Ensure the tag is compatible with this evaluator (team, category).
+    """Ensure the tag is compatible with this evaluator (team, not a system tag).
 
     The team check is defensive: the form/factory paths already set
     `tag.team == evaluator.team`, but admin/shell/ORM callers can create
@@ -180,5 +179,5 @@ def validate_tag_compatibility(tag: Tag, evaluator: Evaluator) -> None:
     """
     if tag.team_id != evaluator.team_id:
         raise ValidationError({"tag": "Tag must belong to the same team as the evaluator."})
-    if tag.category != TagCategories.EVALUATIONS:
-        raise ValidationError({"tag": f"Tag must be in the '{TagCategories.EVALUATIONS}' category."})
+    if tag.is_system_tag:
+        raise ValidationError({"tag": "Tag must not be a system tag."})

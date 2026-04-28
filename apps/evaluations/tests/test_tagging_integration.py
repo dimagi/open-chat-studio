@@ -6,7 +6,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import (
     AppliedTag,
@@ -48,12 +48,12 @@ def session_evaluator(team):
 
 
 class TestEvaluatorTagRuleClean:
-    def test_wrong_category_rejected(self, team, message_evaluator):
-        user_tag = Tag.objects.create(team=team, name="foo", is_system_tag=False, category="")
+    def test_system_tag_rejected(self, team, message_evaluator):
+        system_tag = Tag.objects.create(team=team, name="experiment_version_x", is_system_tag=True, category="")
         rule = EvaluatorTagRule(
             team=team,
             evaluator=message_evaluator,
-            tag=user_tag,
+            tag=system_tag,
             field_name="sentiment",
             condition_type=ConditionType.EQUALS,
             condition_value={"value": "negative"},
@@ -434,7 +434,7 @@ class TestEvaluatorTagRuleFormset:
         assert len(rules) == 1
         rule = rules[0]
         assert rule.tag.name == "unacceptable"
-        assert rule.tag.category == TagCategories.EVALUATIONS.value
+        assert rule.tag.category == ""
         assert rule.tag.is_system_tag is False
         assert rule.condition_value == {"value": "negative"}
         assert rule.evaluator_id == message_evaluator.id
