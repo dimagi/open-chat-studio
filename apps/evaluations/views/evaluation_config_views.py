@@ -391,26 +391,32 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
                     verbose_name="Links",
                     actions=[
                         actions.chip_action(
-                            label="Source",
+                            label_factory=lambda _r, _v: "",
+                            icon_class="fa-regular fa-comments",
+                            title="Source session",
                             url_factory=source_session_url_factory,
                             enabled_condition=source_session_enabled_condition,
                             open_url_in_new_tab=True,
                         ),
                         actions.chip_action(
-                            label="Generated",
+                            label_factory=lambda _r, _v: "",
+                            icon_class="fa-solid fa-code-fork",
+                            title="Generated session",
                             url_factory=generated_session_url_factory,
                             enabled_condition=generated_session_enabled_condition,
                             open_url_in_new_tab=True,
                         ),
                         actions.chip_action(
-                            label="Message",
+                            label_factory=lambda _r, _v: "",
+                            icon_class="fa-regular fa-comment",
+                            title="Dataset message",
                             url_factory=dataset_url_factory,
                             enabled_condition=dataset_enabled_condition,
                             open_url_in_new_tab=True,
                         ),
                     ],
                     align="right",
-                    extra_context={"join_class": "join join-vertical"},
+                    extra_context={"join_class": "join"},
                 )
             case "message_id" | "source_session" | "source_experiment_id":
                 # Carried in row data for the Links column's url factories; not rendered as columns.
