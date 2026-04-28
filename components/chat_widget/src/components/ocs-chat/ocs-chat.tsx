@@ -1,23 +1,21 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import {Component, Host, h, Prop, State, Element, Watch, Env} from '@stencil/core';
+import { Component, Host, h, Prop, State, Element, Watch, Env } from '@stencil/core';
 import {
   XMarkIcon,
-  GripDotsVerticalIcon, PlusWithCircleIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon,
-  PaperClipIcon, CheckDocumentIcon, XIcon, OcsWidgetAvatar
+  GripDotsVerticalIcon,
+  PlusWithCircleIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
+  PaperClipIcon,
+  CheckDocumentIcon,
+  XIcon,
+  OcsWidgetAvatar,
 } from './icons';
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
-import {TranslationStrings, TranslationManager, defaultTranslations} from '../../utils/translations';
-import {
-  ChatSessionService,
-  ChatMessage,
-  MessagePollingHandle,
-  TaskPollingHandle
-} from '../../services/chat-session-service';
-import {
-  FileAttachmentManager,
-  SelectedFile
-} from '../../services/file-attachment-manager';
+import { TranslationStrings, TranslationManager, defaultTranslations } from '../../utils/translations';
+import { ChatSessionService, ChatMessage, MessagePollingHandle, TaskPollingHandle } from '../../services/chat-session-service';
+import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
 interface PointerEvent {
   clientX: number;
@@ -35,7 +33,6 @@ interface SessionStorageData {
   shadow: true,
 })
 export class OcsChat {
-
   private static readonly TASK_POLLING_MAX_ATTEMPTS = 120;
   private static readonly TASK_POLLING_INTERVAL_MS = 1000;
   private static readonly MESSAGE_POLLING_INTERVAL_MS = 30000;
@@ -50,9 +47,41 @@ export class OcsChat {
 
   private static readonly MAX_FILE_SIZE_MB = 50;
   private static readonly MAX_TOTAL_SIZE_MB = 50;
-  private static readonly SUPPORTED_FILE_EXTENSIONS = ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.jpg',
-    '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.mov', '.avi', '.mp3', '.wav', '.html', '.htm', '.css',
-    '.js', '.xml', '.md', '.ics', '.vcf', '.rtf', '.tsv', '.yaml', '.yml', '.py', '.c'];
+  private static readonly SUPPORTED_FILE_EXTENSIONS = [
+    '.txt',
+    '.pdf',
+    '.doc',
+    '.docx',
+    '.xls',
+    '.xlsx',
+    '.csv',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.bmp',
+    '.webp',
+    '.svg',
+    '.mp4',
+    '.mov',
+    '.avi',
+    '.mp3',
+    '.wav',
+    '.html',
+    '.htm',
+    '.css',
+    '.js',
+    '.xml',
+    '.md',
+    '.ics',
+    '.vcf',
+    '.rtf',
+    '.tsv',
+    '.yaml',
+    '.yml',
+    '.py',
+    '.c',
+  ];
 
   /**
    * The ID of the chatbot to connect to.
@@ -62,7 +91,7 @@ export class OcsChat {
   /**
    * The base URL for the API.
    */
-  @Prop() apiBaseUrl?: string = "https://www.openchatstudio.com";
+  @Prop() apiBaseUrl?: string = 'https://www.openchatstudio.com';
 
   /**
    * The text to display on the button.
@@ -129,7 +158,7 @@ export class OcsChat {
   @Prop() starterQuestions?: string;
 
   /**
-  * Used to associate chat sessions with a specific user across multiple visits/sessions
+   * Used to associate chat sessions with a specific user across multiple visits/sessions
    */
   @Prop() userId?: string;
   /**
@@ -177,18 +206,26 @@ export class OcsChat {
   /**
    * @internal
    * Optional version number of the chatbot to use. Requires authentication.
-   * This is for internal use only and is not intended for public-facing widgets.
+   * Intentionally declared as @Prop() so the Django host page can pass it as
+   * an HTML attribute; it is not part of the public widget API and should not
+   * be used by third-party embedders.
    */
   @Prop() versionNumber?: number;
 
-  @State() error: string = "";
+  /**
+   * Maximum number of characters allowed in a single message (derived from the model's token limit).
+   * When set, a live counter is shown and the send button is disabled when exceeded.
+   */
+  @Prop() maxCharLimit?: number;
+
+  @State() error: string = '';
   @State() messages: ChatMessage[] = [];
   @State() sessionId?: string;
   @State() isLoading: boolean = false;
   @State() isTyping: boolean = false;
   @State() typingProgressMessage: string = '';
-  @State() messageInput: string = "";
-  @State() currentPollTaskId: string = "";
+  @State() messageInput: string = '';
+  @State() currentPollTaskId: string = '';
   @State() isDragging: boolean = false;
   @State() dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   @State() windowPosition: { x: number; y: number } = { x: 0, y: 0 };
@@ -232,7 +269,6 @@ export class OcsChat {
   private internalPageContext?: Record<string, any>;
   private sessionEpoch: number = 0;
   @Element() host: HTMLElement;
-
 
   async componentWillLoad() {
     if (!this.chatbotId) {
@@ -321,7 +357,7 @@ export class OcsChat {
       created_at: new Date().toISOString(),
       role: 'system',
       content: `**Error:** ${errorText}\nPlease try again.`,
-      attachments: []
+      attachments: [],
     };
 
     this.messages = [...this.messages, errorMessage];
@@ -368,7 +404,7 @@ export class OcsChat {
     let customTranslationsObj: Partial<TranslationStrings> | undefined;
 
     if (this.translationsUrl) {
-        customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
+      customTranslationsObj = await this.loadTranslationsFromUrl(this.translationsUrl);
     }
     this.translationManager = new TranslationManager(this.language, customTranslationsObj);
   }
@@ -379,7 +415,7 @@ export class OcsChat {
     }
 
     if (typeof this.pageContext !== 'object' || Array.isArray(this.pageContext)) {
-      console.error("pageContext is expected to be a plain JavaScript object.");
+      console.error('pageContext is expected to be a plain JavaScript object.');
       return;
     }
 
@@ -396,7 +432,7 @@ export class OcsChat {
       return translations as Partial<TranslationStrings>;
     } catch (error) {
       console.error('Error loading translations from URL:', error);
-      return defaultTranslations
+      return defaultTranslations;
     }
   }
 
@@ -420,9 +456,9 @@ export class OcsChat {
         chatbot_id: this.chatbotId,
         session_data: {
           source: 'widget',
-          page_url: window.location.href
+          page_url: window.location.href,
         },
-        participant_remote_id: userId
+        participant_remote_id: userId,
       };
 
       if (this.userName) {
@@ -467,8 +503,17 @@ export class OcsChat {
     }
   }
 
+  private get messageTooLong(): boolean {
+    return this.maxCharLimit != null && this.messageInput.length > this.maxCharLimit;
+  }
+
+  private get messageNearLimit(): boolean {
+    return this.maxCharLimit != null && this.messageInput.length > this.maxCharLimit * 0.8;
+  }
+
   private async sendMessage(message: string): Promise<void> {
     if (!message.trim()) return;
+    if (this.messageTooLong) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -507,7 +552,7 @@ export class OcsChat {
           created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
           role: 'assistant' as const,
           content: welcomeMsg,
-          attachments: []
+          attachments: [],
         }));
         this.messages = [...this.messages, ...welcomeMessages];
       }
@@ -517,13 +562,15 @@ export class OcsChat {
         created_at: new Date().toISOString(),
         role: 'user',
         content: message.trim(),
-        attachments: this.allowAttachments ? this.selectedFiles
-          .filter(sf => !sf.error && sf.uploaded)
-          .map(sf => ({
-            name: sf.file.name,
-            content_type: sf.file.type,
-            size: sf.file.size,
-          })) : []
+        attachments: this.allowAttachments
+          ? this.selectedFiles
+              .filter(sf => !sf.error && sf.uploaded)
+              .map(sf => ({
+                name: sf.file.name,
+                content_type: sf.file.type,
+                size: sf.file.size,
+              }))
+          : [],
       };
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
@@ -569,7 +616,7 @@ export class OcsChat {
    * @param forceEnd When `false`, scroll the top of the last message into view.
    *    When `true`, scroll all the way to the end of the last message.
    */
-  private scrollToBottom(forceEnd: boolean =false): void {
+  private scrollToBottom(forceEnd: boolean = false): void {
     setTimeout(() => {
       if (this.messageListRef) {
         const lastChild = this.messageListRef.lastElementChild;
@@ -579,10 +626,10 @@ export class OcsChat {
           const childRect = lastChild.getBoundingClientRect();
           const currentScrollTop = this.messageListRef.scrollTop;
           const childTopRelativeToParent = childRect.top - parentRect.top;
-          const targetScroll = currentScrollTop + childTopRelativeToParent - (parentRect.height / 2);
+          const targetScroll = currentScrollTop + childTopRelativeToParent - parentRect.height / 2;
           this.messageListRef.scrollTo({
-              top: targetScroll,
-              behavior: 'smooth'
+            top: targetScroll,
+            behavior: 'smooth',
           });
         } else {
           this.messageListRef.scrollTop = this.messageListRef.scrollHeight;
@@ -631,9 +678,9 @@ export class OcsChat {
 
     if (bytes < k * k) {
       // Less than 1MB, show in KB
-      return Math.round(bytes / k * 100) / 100 + ' KB';
+      return Math.round((bytes / k) * 100) / 100 + ' KB';
     } else {
-      return Math.round(bytes / (k * k) * 100) / 100 + ' MB';
+      return Math.round((bytes / (k * k)) * 100) / 100 + ' MB';
     }
   }
 
@@ -653,7 +700,7 @@ export class OcsChat {
    */
   @Watch('pageContext')
   pageContextHandler() {
-    this.loadInternalPageContext()
+    this.loadInternalPageContext();
   }
 
   @Watch('chatbotId')
@@ -710,7 +757,7 @@ export class OcsChat {
     }
 
     this.taskPollingHandle = this.getChatService().pollTask(this.sessionId, taskId, {
-      onMessage: (message) => {
+      onMessage: message => {
         this.messages = [...this.messages, message];
         this.saveSessionToStorage();
         this.scrollToBottom();
@@ -721,7 +768,7 @@ export class OcsChat {
         this.startMessagePolling();
         this.focusInput();
       },
-      onProgress: (message) => {
+      onProgress: message => {
         this.typingProgressMessage = message;
       },
       onTimeout: () => {
@@ -729,7 +776,7 @@ export class OcsChat {
           created_at: new Date().toISOString(),
           role: 'system',
           content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
-          attachments: []
+          attachments: [],
         };
         this.messages = [...this.messages, timeoutMessage];
         this.saveSessionToStorage();
@@ -741,12 +788,12 @@ export class OcsChat {
         this.startMessagePolling();
         this.focusInput();
       },
-      onError: (error) => {
+      onError: error => {
         this.typingProgressMessage = '';
         this.handleError(error.message);
         this.taskPollingHandle = undefined;
         this.startMessagePolling();
-      }
+      },
     });
   }
 
@@ -760,8 +807,8 @@ export class OcsChat {
     }
 
     this.messagePollingHandle = this.getChatService().startMessagePolling(this.sessionId, {
-      getSince: () => this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined,
-      onMessages: (messages) => {
+      getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
+      onMessages: messages => {
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];
         this.saveSessionToStorage();
@@ -770,7 +817,7 @@ export class OcsChat {
       },
       onError: () => {
         // Silently ignore polling errors to match previous behaviour
-      }
+      },
     });
   }
 
@@ -849,19 +896,19 @@ export class OcsChat {
       case 'left':
         this.windowPosition = {
           x: OcsChat.WINDOW_MARGIN,
-          y: windowHeight - this.chatWindowHeight - OcsChat.WINDOW_MARGIN
+          y: windowHeight - this.chatWindowHeight - OcsChat.WINDOW_MARGIN,
         };
         break;
       case 'right':
         this.windowPosition = {
           x: windowWidth - chatWidth - OcsChat.WINDOW_MARGIN,
-          y: windowHeight - this.chatWindowHeight - OcsChat.WINDOW_MARGIN
+          y: windowHeight - this.chatWindowHeight - OcsChat.WINDOW_MARGIN,
         };
         break;
       case 'center':
         this.windowPosition = {
           x: (windowWidth - chatWidth) / 2,
-          y: (windowHeight - this.chatWindowHeight) / 2
+          y: (windowHeight - this.chatWindowHeight) / 2,
         };
         break;
     }
@@ -886,13 +933,13 @@ export class OcsChat {
       // For fullscreen, track relative to current position
       this.dragOffset = {
         x: pointer.clientX,
-        y: pointer.clientY
+        y: pointer.clientY,
       };
     } else {
       const rect = this.chatWindowRef.getBoundingClientRect();
       this.dragOffset = {
         x: pointer.clientX - rect.left,
-        y: pointer.clientY - rect.top
+        y: pointer.clientY - rect.top,
       };
     }
   }
@@ -906,7 +953,7 @@ export class OcsChat {
 
       const deltaX = pointer.clientX - this.dragOffset.x;
       this.fullscreenPosition = {
-        x: Math.max(-maxOffset, Math.min(maxOffset, deltaX))
+        x: Math.max(-maxOffset, Math.min(maxOffset, deltaX)),
       };
     } else {
       const newX = pointer.clientX - this.dragOffset.x;
@@ -920,7 +967,7 @@ export class OcsChat {
 
       this.windowPosition = {
         x: Math.max(0, Math.min(newX, windowWidth - chatWidth)),
-        y: Math.max(0, Math.min(newY, windowHeight - chatHeight))
+        y: Math.max(0, Math.min(newY, windowHeight - chatHeight)),
       };
     }
   }
@@ -1006,7 +1053,7 @@ export class OcsChat {
 
       this.buttonPosition = {
         x: Math.max(minPadding, Math.min(this.buttonPosition.x, windowWidth - buttonWidth - minPadding)),
-        y: Math.max(minPadding, Math.min(this.buttonPosition.y, windowHeight - buttonHeight - minPadding))
+        y: Math.max(minPadding, Math.min(this.buttonPosition.y, windowHeight - buttonHeight - minPadding)),
       };
 
       this.updateHostPosition();
@@ -1048,7 +1095,7 @@ export class OcsChat {
 
     this.buttonPosition = {
       x: horizontalValue,
-      y: verticalValue
+      y: verticalValue,
     };
 
     // Apply the position to the host
@@ -1093,7 +1140,7 @@ export class OcsChat {
     const rect = this.host.getBoundingClientRect();
     this.buttonDragOffset = {
       x: pointer.clientX - rect.left,
-      y: pointer.clientY - rect.top
+      y: pointer.clientY - rect.top,
     };
 
     this.addButtonEventListeners();
@@ -1113,7 +1160,7 @@ export class OcsChat {
     const rect = this.host.getBoundingClientRect();
     this.buttonDragOffset = {
       x: pointer.clientX - rect.left,
-      y: pointer.clientY - rect.top
+      y: pointer.clientY - rect.top,
     };
 
     this.addButtonEventListeners();
@@ -1158,12 +1205,8 @@ export class OcsChat {
     const constrainedLeft = Math.max(minLeft, Math.min(candidateLeft, maxLeft));
     const constrainedTop = Math.max(minTop, Math.min(candidateTop, maxTop));
 
-    const newHorizontalValue = this.buttonHorizontalSide === 'left'
-      ? constrainedLeft
-      : Math.max(minPadding, windowWidth - (constrainedLeft + buttonWidth));
-    const newVerticalValue = this.buttonVerticalSide === 'top'
-      ? constrainedTop
-      : Math.max(minPadding, windowHeight - (constrainedTop + buttonHeight));
+    const newHorizontalValue = this.buttonHorizontalSide === 'left' ? constrainedLeft : Math.max(minPadding, windowWidth - (constrainedLeft + buttonWidth));
+    const newVerticalValue = this.buttonVerticalSide === 'top' ? constrainedTop : Math.max(minPadding, windowHeight - (constrainedTop + buttonHeight));
 
     if (newHorizontalValue !== this.buttonPosition.x || newVerticalValue !== this.buttonPosition.y) {
       this.buttonWasDragged = true;
@@ -1263,17 +1306,13 @@ export class OcsChat {
   }
 
   private getWelcomeMessages(): string[] {
-    const translated = this.translationManager.getArray("content.welcomeMessages");
-    return translated && translated.length > 0
-      ? translated
-      : this.parsedWelcomeMessages;
+    const translated = this.translationManager.getArray('content.welcomeMessages');
+    return translated && translated.length > 0 ? translated : this.parsedWelcomeMessages;
   }
 
   private getStarterQuestions(): string[] {
-    const translated = this.translationManager.getArray("content.starterQuestions");
-    return translated && translated.length > 0
-      ? translated
-      : this.parsedStarterQuestions;
+    const translated = this.translationManager.getArray('content.starterQuestions');
+    return translated && translated.length > 0 ? translated : this.parsedStarterQuestions;
   }
 
   private getButtonClasses(): string {
@@ -1298,23 +1337,25 @@ export class OcsChat {
 
     // Only show drag cursor if button is draggable
     const isDraggable = this.isButtonDraggable();
-    const buttonStyle = isDraggable ? {
-      cursor: this.isButtonDragging ? 'grabbing' : 'grab',
-    } : {};
+    const buttonStyle = isDraggable
+      ? {
+          cursor: this.isButtonDragging ? 'grabbing' : 'grab',
+        }
+      : {};
 
     if (hasText) {
       return (
         <button
-          ref={(el) => this.buttonRef = el}
+          ref={el => (this.buttonRef = el)}
           class={buttonClasses}
           aria-label={buttonAriaLabel}
           title={finalButtonText || openLabel}
           style={buttonStyle}
           onClick={() => this.handleButtonClick()}
-          onMouseDown={(e) => this.handleButtonMouseDown(e)}
-          onTouchStart={(e) => this.handleButtonTouchStart(e)}
+          onMouseDown={e => this.handleButtonMouseDown(e)}
+          onTouchStart={e => this.handleButtonTouchStart(e)}
           aria-grabbed={this.isButtonDragging}
-          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
+          aria-describedby={isDraggable ? 'chat-button-drag-hint' : undefined}
         >
           {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           <span>{finalButtonText}</span>
@@ -1328,16 +1369,16 @@ export class OcsChat {
     } else {
       return (
         <button
-          ref={(el) => this.buttonRef = el}
+          ref={el => (this.buttonRef = el)}
           class={buttonClasses}
           aria-label={openLabel}
           title={openLabel}
           style={buttonStyle}
           onClick={() => this.handleButtonClick()}
-          onMouseDown={(e) => this.handleButtonMouseDown(e)}
-          onTouchStart={(e) => this.handleButtonTouchStart(e)}
+          onMouseDown={e => this.handleButtonMouseDown(e)}
+          onTouchStart={e => this.handleButtonTouchStart(e)}
           aria-grabbed={this.isButtonDragging}
-          aria-describedby={isDraggable ? "chat-button-drag-hint" : undefined}
+          aria-describedby={isDraggable ? 'chat-button-drag-hint' : undefined}
         >
           {hasCustomIcon ? <img src={this.iconUrl} alt="" /> : <OcsWidgetAvatar />}
           {isDraggable && (
@@ -1355,13 +1396,13 @@ export class OcsChat {
       sessionId: `ocs-chat-session-${this.chatbotId}`,
       messages: `ocs-chat-messages-${this.chatbotId}`,
       lastActivity: `ocs-chat-activity-${this.chatbotId}`,
-      visible: `ocs-chat-visible-${this.chatbotId}`
+      visible: `ocs-chat-visible-${this.chatbotId}`,
     };
   }
 
   private saveSessionToStorage(): void {
     if (!this.persistentSession) {
-      return
+      return;
     }
     const keys = this.getStorageKeys();
     try {
@@ -1385,7 +1426,7 @@ export class OcsChat {
           const minutesSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
           if (minutesSinceActivity > this.persistentSessionExpire) {
             this.clearSessionStorage();
-            return {messages: []};
+            return { messages: [] };
           }
         }
       }
@@ -1437,7 +1478,9 @@ export class OcsChat {
 
     const array = new Uint8Array(9);
     window.crypto.getRandomValues(array);
-    const randomString = Array.from(array, byte => byte.toString(36)).join('').substr(0, 9);
+    const randomString = Array.from(array, byte => byte.toString(36))
+      .join('')
+      .substr(0, 9);
     const newUserId = `ocs:${Date.now()}_${randomString}`;
     this.generatedUserId = newUserId;
     try {
@@ -1547,12 +1590,7 @@ export class OcsChat {
       <Host>
         {this.renderButton()}
         {this.visible && (
-          <div
-            ref={(el) => this.chatWindowRef = el}
-            id="ocs-chat-window"
-            class={this.getPositionClasses()}
-            style={this.getPositionStyles()}
-          >
+          <div ref={el => (this.chatWindowRef = el)} id="ocs-chat-window" class={this.getPositionClasses()} style={this.getPositionStyles()}>
             {/* Header — hidden in kiosk mode */}
             {!this.isKioskMode() && (
               <div
@@ -1563,7 +1601,7 @@ export class OcsChat {
                 {/* Drag indicator */}
                 <div class="drag-indicator">
                   <div class="drag-dots header-button">
-                    <GripDotsVerticalIcon/>
+                    <GripDotsVerticalIcon />
                   </div>
                 </div>
                 <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
@@ -1576,25 +1614,23 @@ export class OcsChat {
                       title={this.translationManager.get('window.newChat')}
                       aria-label={this.translationManager.get('window.newChat')}
                     >
-                      <PlusWithCircleIcon/>
+                      <PlusWithCircleIcon />
                     </button>
                   )}
                   {/* Fullscreen toggle button */}
-                  {this.allowFullScreen && <button
-                    class="header-button fullscreen-button"
-                    onClick={() => this.toggleFullscreen()}
-                    title={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
-                    aria-label={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
-                  >
-                    {this.isFullscreen ? <ArrowsPointingInIcon/> : <ArrowsPointingOutIcon/>}
-                  </button>}
+                  {this.allowFullScreen && (
+                    <button
+                      class="header-button fullscreen-button"
+                      onClick={() => this.toggleFullscreen()}
+                      title={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
+                      aria-label={this.isFullscreen ? this.translationManager.get('window.exitFullscreen') : this.translationManager.get('window.fullscreen')}
+                    >
+                      {this.isFullscreen ? <ArrowsPointingInIcon /> : <ArrowsPointingOutIcon />}
+                    </button>
+                  )}
 
-                  <button
-                    class="header-button"
-                    onClick={() => this.visible = false}
-                    aria-label={this.translationManager.get('window.close')}
-                  >
-                    <XMarkIcon/>
+                  <button class="header-button" onClick={() => (this.visible = false)} aria-label={this.translationManager.get('window.close')}>
+                    <XMarkIcon />
                   </button>
                 </div>
               </div>
@@ -1605,20 +1641,12 @@ export class OcsChat {
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
                     <h3 class="confirmation-title">{this.translationManager.get('modal.newChatTitle')}</h3>
-                    <p class="confirmation-message">
-                      {this.translationManager.get('modal.newChatBody', this.newChatConfirmationMessage)}
-                    </p>
+                    <p class="confirmation-message">{this.translationManager.get('modal.newChatBody', this.newChatConfirmationMessage)}</p>
                     <div class="confirmation-buttons">
-                      <button
-                        class="confirmation-button confirmation-button-cancel"
-                        onClick={() => this.hideConfirmationDialog()}
-                      >
+                      <button class="confirmation-button confirmation-button-cancel" onClick={() => this.hideConfirmationDialog()}>
                         {this.translationManager.get('modal.cancel')}
                       </button>
-                      <button
-                        class="confirmation-button confirmation-button-confirm"
-                        onClick={() => this.confirmNewChat()}
-                      >
+                      <button class="confirmation-button confirmation-button-confirm" onClick={() => this.confirmNewChat()}>
                         {this.translationManager.get('modal.confirm')}
                       </button>
                     </div>
@@ -1638,20 +1666,14 @@ export class OcsChat {
               )}
 
               {/* Messages */}
-              {(
-                <div
-                  ref={(el) => this.messageListRef = el}
-                  class="messages-container"
-                >
+              {
+                <div ref={el => (this.messageListRef = el)} class="messages-container">
                   {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
                           <div class="message-bubble message-bubble-assistant">
-                            <div
-                              class="chat-markdown"
-                              innerHTML={renderMarkdownComplete(message)}
-                            ></div>
+                            <div class="chat-markdown" innerHTML={renderMarkdownComplete(message)}></div>
                           </div>
                         </div>
                       ))}
@@ -1659,25 +1681,13 @@ export class OcsChat {
                   )}
                   {/* Regular Chat Messages */}
                   {this.messages.map((message, index) => (
-                    <div
-                      key={index}
-                      class={`message-row ${
-                        message.role === 'user' ? 'message-row-user' : 'message-row-assistant'
-                      }`}
-                    >
+                    <div key={index} class={`message-row ${message.role === 'user' ? 'message-row-user' : 'message-row-assistant'}`}>
                       <div
                         class={`message-bubble ${
-                          message.role === 'user'
-                            ? 'message-bubble-user'
-                            : message.role === 'assistant'
-                            ? 'message-bubble-assistant'
-                            : 'message-bubble-system'
+                          message.role === 'user' ? 'message-bubble-user' : message.role === 'assistant' ? 'message-bubble-assistant' : 'message-bubble-system'
                         }`}
                       >
-                        <div
-                          class="chat-markdown"
-                          innerHTML={renderMarkdownComplete(message.content)}
-                        ></div>
+                        <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
@@ -1690,9 +1700,7 @@ export class OcsChat {
                             ))}
                           </div>
                         )}
-                        <div class="message-timestamp">
-                          {this.formatTime(message.created_at)}
-                        </div>
+                        <div class="message-timestamp">{this.formatTime(message.created_at)}</div>
                       </div>
                     </div>
                   ))}
@@ -1709,17 +1717,14 @@ export class OcsChat {
                     </div>
                   )}
                 </div>
-              )}
+              }
 
               {/* Starter Questions */}
               {this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
-                      <button
-                        class="starter-question"
-                        onClick={() => this.handleStarterQuestionClick(question)}
-                      >
+                      <button class="starter-question" onClick={() => this.handleStarterQuestionClick(question)}>
                         {question}
                       </button>
                     </div>
@@ -1735,22 +1740,19 @@ export class OcsChat {
                       <div key={index} class="selected-file-item">
                         <div class="flex items-center gap-[0.5em]">
                           <span class="selected-file-icon">
-                            <PaperClipIcon/>
+                            <PaperClipIcon />
                           </span>
                           <span>{selectedFile.file.name}</span>
                           <span class="selected-file-size">({this.formatFileSize(selectedFile.file.size)})</span>
-                          {selectedFile.error && (
-                            <span class="selected-file-error">{selectedFile.error}</span>
-                          )}
+                          {selectedFile.error && <span class="selected-file-error">{selectedFile.error}</span>}
                           {selectedFile.uploaded && (
-                            <span class="selected-file-success-icon"><CheckDocumentIcon /></span>
+                            <span class="selected-file-success-icon">
+                              <CheckDocumentIcon />
+                            </span>
                           )}
                         </div>
-                        <button
-                          onClick={() => this.removeSelectedFile(index)}
-                          class="selected-file-remove-button"
-                          aria-label={this.translationManager.get('attach.remove')}
-                        ><XIcon />
+                        <button onClick={() => this.removeSelectedFile(index)} class="selected-file-remove-button" aria-label={this.translationManager.get('attach.remove')}>
+                          <XIcon />
                         </button>
                       </div>
                     ))}
@@ -1762,57 +1764,67 @@ export class OcsChat {
               <div class="input-area">
                 <div class="input-container">
                   <textarea
-                    ref={(el) => this.textareaRef = el}
-                    class="message-textarea"
+                    ref={el => (this.textareaRef = el)}
+                    class={`message-textarea${this.messageTooLong ? ' message-textarea-error' : ''}`}
                     rows={1}
                     placeholder={this.translationManager.get('composer.placeholder')}
                     value={this.messageInput}
-                    onInput={(e) => this.handleInputChange(e)}
-                    onKeyPress={(e) => this.handleKeyPress(e)}
+                    onInput={e => this.handleInputChange(e)}
+                    onKeyPress={e => this.handleKeyPress(e)}
                     disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
                   ></textarea>
-                    {/* File Upload Button */}
-                    {this.allowAttachments && (
-                      <input
-                        ref={(el) => {
-                            // Unclear why but after removing all attachments this is being set to `null`.
-                            if (el) {this.fileInputRef = el}
-                          }
+                  {/* File Upload Button */}
+                  {this.allowAttachments && (
+                    <input
+                      ref={el => {
+                        // Unclear why but after removing all attachments this is being set to `null`.
+                        if (el) {
+                          this.fileInputRef = el;
                         }
-                        id="ocs-file-input"
-                        type="file"
-                        multiple
-                        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
-                        onChange={(e) => this.handleFileSelect(e)}
-                        class="hidden"
-                      />
-                    )}
-                    {this.allowAttachments && (
-                      <button
-                        class="file-attachment-button"
-                        onClick={() => this.fileInputRef?.click()}
-                        disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
-                        title={this.translationManager.get('attach.add')}
-                        aria-label={this.translationManager.get('attach.add')}
-                      >
-                        <PaperClipIcon />
-                      </button>
-                    )}
+                      }}
+                      id="ocs-file-input"
+                      type="file"
+                      multiple
+                      accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
+                      onChange={e => this.handleFileSelect(e)}
+                      class="hidden"
+                    />
+                  )}
+                  {this.allowAttachments && (
                     <button
-                      class={`send-button ${
-                        !this.isTyping && !this.isLoading && !!this.messageInput.trim()
-                          ? 'send-button-enabled'
-                          : 'send-button-disabled'
-                      }`}
-                      onClick={() => this.sendMessage(this.messageInput)}
-                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim()}
+                      class="file-attachment-button"
+                      onClick={() => this.fileInputRef?.click()}
+                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                      title={this.translationManager.get('attach.add')}
+                      aria-label={this.translationManager.get('attach.add')}
                     >
-                      {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
+                      <PaperClipIcon />
                     </button>
-                  </div>
+                  )}
+                  <button
+                    class={`send-button ${
+                      !this.isTyping && !this.isLoading && !!this.messageInput.trim() && !this.messageTooLong ? 'send-button-enabled' : 'send-button-disabled'
+                    }`}
+                    onClick={() => this.sendMessage(this.messageInput)}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim() || this.messageTooLong}
+                    title={this.messageTooLong ? this.translationManager.get('composer.messageTooLong') : undefined}
+                  >
+                    {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
+                  </button>
                 </div>
+                {this.maxCharLimit != null && (
+                  <div class={`char-counter${this.messageTooLong ? ' char-counter-error' : this.messageNearLimit ? ' char-counter-warning' : ''}`}>
+                    {this.messageInput.length} / {this.maxCharLimit}
+                  </div>
+                )}
+              </div>
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
-                <p>{this.translationManager.get('branding.poweredBy')}{' '} <a class="underline" href="https://www.dimagi.com" target="_blank">Dimagi</a></p>
+                <p>
+                  {this.translationManager.get('branding.poweredBy')}{' '}
+                  <a class="underline" href="https://www.dimagi.com" target="_blank">
+                    Dimagi
+                  </a>
+                </p>
               </div>
             </div>
           </div>

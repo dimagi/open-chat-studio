@@ -16,6 +16,7 @@
   "modal.confirm": "Confirm",
   "composer.placeholder": "Type a message...",
   "composer.send": "Send message",
+  "composer.messageTooLong": "Message is too long",
   "error.fileTooLarge": "File too large",
   "error.totalTooLarge": "Total file size too large",
   "error.unsupportedType": "Unsupported file type",
