@@ -421,28 +421,34 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         field_schema = self.output_schema.get(cleaned.get("field_name") or "", {}) or {}
         field_type = field_schema.get("type")
         if condition_type == ConditionType.EQUALS:
-            value = cleaned.get("condition_value_single")
-            if not value:
-                self.add_error("condition_value_single", "Value is required for 'equals'.")
-                return
-            try:
-                coerced = ConditionType.coerce_value(value, field_type)
-            except (TypeError, ValueError):
-                msg = "Value must be an integer." if field_type == "int" else "Value must be numeric."
-                self.add_error("condition_value_single", msg)
-                return
-            if not self.errors:
-                cleaned["condition_value"] = {"value": coerced}
+            self._clean_equals_value(cleaned, field_type)
         elif condition_type == ConditionType.RANGE:
-            lo = cleaned.get("condition_value_min")
-            hi = cleaned.get("condition_value_max")
-            if lo in (None, "") or hi in (None, ""):
-                self.add_error("condition_value_min", "Min and max are required for 'range'.")
-                return
-            try:
-                cleaned["condition_value"] = {"min": float(lo), "max": float(hi)}
-            except (TypeError, ValueError):
-                self.add_error("condition_value_min", "Min/max must be numeric.")
+            self._clean_range_value(cleaned)
+
+    def _clean_equals_value(self, cleaned: dict, field_type: str | None) -> None:
+        value = cleaned.get("condition_value_single")
+        if not value:
+            self.add_error("condition_value_single", "Value is required for 'equals'.")
+            return
+        try:
+            coerced = ConditionType.coerce_value(value, field_type)
+        except (TypeError, ValueError):
+            msg = "Value must be an integer." if field_type == "int" else "Value must be numeric."
+            self.add_error("condition_value_single", msg)
+            return
+        if not self.errors:
+            cleaned["condition_value"] = {"value": coerced}
+
+    def _clean_range_value(self, cleaned: dict) -> None:
+        lo = cleaned.get("condition_value_min")
+        hi = cleaned.get("condition_value_max")
+        if lo in (None, "") or hi in (None, ""):
+            self.add_error("condition_value_min", "Min and max are required for 'range'.")
+            return
+        try:
+            cleaned["condition_value"] = {"min": float(lo), "max": float(hi)}
+        except (TypeError, ValueError):
+            self.add_error("condition_value_min", "Min/max must be numeric.")
 
     def _validate_against_schema(self, cleaned: dict) -> bool:
         """Run schema-level validation; return False when errors were added."""
