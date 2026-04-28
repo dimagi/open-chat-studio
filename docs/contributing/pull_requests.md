@@ -4,21 +4,20 @@ Open Chat Studio is an open-source project, and you can contribute to its code d
 
 ## General Rules for a Good Pull Request
 
-* Fork the repository and use your fork to create PRs. Avoid creating change branches in the main repository.
-* Choose an appropriate branch for your work and create your own branch based on it.
+* Fork the repository and create branches in your fork (never in the main repository). Base your branch on an appropriate default branch (e.g., `main`).
 * Give your branches, commits, and Pull Requests meaningful names and descriptions. This helps track changes later. If your changes cover a particular component, indicate it in the PR name as a prefix, for example: `[DOCS] PR name`.
 * Keep your PRs small—each PR should address one issue. Remove all unrelated changes.
 * [Link your Pull Request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) if applicable.
-* Document your contribution! If your changes impact how users interact with Open Chat Studio, update the relevant documentation. You can do this yourself or collaborate with documentation contributors.
+* [Document your contribution](#documentation-policy) if your changes are user-facing. [AI automation](../developer_guides/user_docs.md#guidelines) can help draft documentation and changelog entries.
 * For work in progress or early test results, use a Draft PR.
 
 ## Ensure Change Quality
 
-Your pull request will automatically be tested and marked as "green" when it is ready for merging. If any builds fail ("red" status), you need to fix the issues listed in the console logs. Any change to the PR branch will automatically trigger the checks, so you don't need to recreate the PR—just wait for the updated results.
+Your pull request will automatically be tested. Changes to the PR branch trigger new checks, so you don't need to recreate the PR if tests fail—just fix the issues and push updates.
 
 Regardless of automated tests, ensure the quality of your changes:
 
-* Test your changes locally:
+* [Test](#test-policy) your changes locally:
   * Double-check your code.
   * Run tests locally to identify and fix potential issues.
 * Before creating a PR, ensure your branch is up to date with the base branch (e.g. `git fetch upstream && git merge upstream/main`).
@@ -45,15 +44,13 @@ Regardless of automated tests, ensure the quality of your changes:
 
 ## Documentation Policy
 
-User-facing changes should be accompanied by documentation updates in the [docs repo](https://github.com/dimagi/open-chat-studio-docs/). See the [user docs guide](../developer_guides/user_docs.md) for more details, including the changelog process.
-
-If your changes affect the REST API schema, you must also update the `api-schema.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
+* **User-facing changes** follow these [guidelines](../developer_guides/user_docs.md)
+* **API changes**: If your changes affect the REST API schema, update the `api-schema.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
 
 ## Communication
 
-We use GitHub issues for most work and have a GitHub project where we prioritize and plan work: [GitHub Project](https://github.com/orgs/dimagi/projects/3/views/1).
-
-General questions and discussions can be posted in the [GitHub Discussions](https://github.com/dimagi/open-chat-studio/discussions) section.
+* We use GitHub issues for most work and have a GitHub project where we prioritize and plan work: [GitHub Project](https://github.com/orgs/dimagi/projects/3/views/1).
+* General questions and discussions can be posted in the [GitHub Discussions](https://github.com/dimagi/open-chat-studio/discussions) section.
 
 ## Additional Resources
 

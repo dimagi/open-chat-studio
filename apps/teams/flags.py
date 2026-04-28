@@ -56,6 +56,8 @@ class Flags(FlagInfo, Enum):
 
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
+    EMAIL_CHANNEL = ("flag_email_channel", "Email messaging channel for chatbots", "", [], True)
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
