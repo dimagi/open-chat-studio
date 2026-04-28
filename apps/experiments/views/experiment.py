@@ -431,7 +431,7 @@ def get_export_download_link(request, team_slug: str, experiment_id: str, task_i
     context: dict[str, object] = {"experiment": experiment}
     if info["complete"] and info["success"]:
         file_id = info["result"]["file_id"]
-        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id})
+        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
         context["export_download_url"] = download_url
     else:
         context["task_id"] = task_id
