@@ -252,6 +252,16 @@ class TestJSONCollectionSourceConfig:
         # acceptable
         cfg = JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=60)
         assert cfg.request_timeout == 60
+        # exact lower boundary (5 must be accepted, 4 rejected)
+        cfg = JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=5)
+        assert cfg.request_timeout == 5
+        with pytest.raises(ValidationError):
+            JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=4)
+        # exact upper boundary (300 must be accepted, 301 rejected)
+        cfg = JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=300)
+        assert cfg.request_timeout == 300
+        with pytest.raises(ValidationError):
+            JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=301)
 
     def test_document_source_config_accepts_json_collection(self):
         wrapper = DocumentSourceConfig(
