@@ -48,8 +48,8 @@ export class FileAttachmentManager {
 
     for (const file of fileArray) {
       const extension = this.getFileExtension(file.name);
-      const contentType = file.type.split("/")[0];
-      if (contentType != "text" && !this.supportedExtensions.includes(extension)) {
+      const contentType = file.type.split('/')[0];
+      if (contentType != 'text' && !this.supportedExtensions.includes(extension)) {
         newSelected.push({ file, error: `File type ${extension} not supported` });
         continue;
       }
@@ -86,18 +86,13 @@ export class FileAttachmentManager {
     });
   }
 
-  async uploadPendingFiles(
-    existingFiles: SelectedFile[],
-    context: UploadContext
-  ): Promise<UploadResult> {
+  async uploadPendingFiles(existingFiles: SelectedFile[], context: UploadContext): Promise<UploadResult> {
     if (existingFiles.length === 0) {
       return { selectedFiles: existingFiles, uploadedIds: [] };
     }
 
     const uploadCandidates = existingFiles.filter(file => !file.error && !file.uploaded);
-    const uploadedIds: number[] = existingFiles
-      .filter(file => file.uploaded)
-      .map(file => file.uploaded!.id);
+    const uploadedIds: number[] = existingFiles.filter(file => file.uploaded).map(file => file.uploaded!.id);
 
     if (uploadCandidates.length === 0) {
       return { selectedFiles: existingFiles, uploadedIds };
@@ -120,9 +115,7 @@ export class FileAttachmentManager {
 
       if (!response.ok) {
         const errorData = await this.safeJson(response);
-        const errorMessage =
-          (errorData && typeof errorData === 'object' && 'error' in errorData && (errorData as { error?: string }).error) ||
-          'Failed to upload files';
+        const errorMessage = (errorData && typeof errorData === 'object' && 'error' in errorData && (errorData as { error?: string }).error) || 'Failed to upload files';
         return {
           selectedFiles: this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
