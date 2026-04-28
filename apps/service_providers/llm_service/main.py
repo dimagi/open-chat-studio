@@ -470,6 +470,26 @@ class GoogleLlmService(LlmService):
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
 
 
+class VoyageAILlmService(LlmService):
+    voyage_api_key: str
+
+    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
+
+    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
+        raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
+
+    def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
+        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
+            VoyageAILocalIndexManager,
+        )
+
+        return VoyageAILocalIndexManager(api_key=self.voyage_api_key, embedding_model_name=embedding_model_name)
+
+
 class GoogleVertexAILlmService(LlmService):
     credentials_json: dict
     location: str = "global"

@@ -3,12 +3,14 @@ from unittest.mock import patch
 import pytest
 
 from apps.service_providers.llm_service.default_models import (
+    DEFAULT_EMBEDDING_PROVIDER_MODELS,
     DEFAULT_LLM_PROVIDER_MODELS,
     Model,
     get_default_model,
+    update_embedding_provider_models,
     update_llm_provider_models,
 )
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
@@ -77,6 +79,14 @@ def test_converts_custom_models_to_global_models_pipelines():
     assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == global_model.id
     node_data = [node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt"]
     assert node_data[0]["data"]["params"]["llm_provider_model_id"] == global_model.id
+
+
+@pytest.mark.django_db()
+def test_voyage_embedding_models_are_seeded():
+    update_embedding_provider_models()
+
+    for model_name in DEFAULT_EMBEDDING_PROVIDER_MODELS["voyage"]:
+        assert EmbeddingProviderModel.objects.filter(team=None, type="voyage", name=model_name).exists()
 
 
 def test_model_replacement_defaults_to_none():
