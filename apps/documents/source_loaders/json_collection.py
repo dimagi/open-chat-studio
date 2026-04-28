@@ -1,17 +1,22 @@
+import json
 import logging
 from collections.abc import Iterator
 from io import BytesIO
 from typing import Any, Self
 
 import httpx
+from django.conf import settings
 from langchain_core.documents import Document
 
 from apps.documents.datamodels import JSONCollectionSourceConfig
 from apps.documents.models import Collection, DocumentSource
 from apps.documents.readers import markitdown_read
 from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 logger = logging.getLogger(__name__)
+
+MAX_RESPONSE_BYTES = 50 * 1024 * 1024  # 50 MB cap on JSON feed and per-attachment download
 
 
 class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
@@ -28,13 +33,12 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             yield from self._process_item(item)
 
     def _fetch_json_list(self) -> list[dict[str, Any]]:
-        response = httpx.get(
-            str(self.config.json_url),
-            timeout=self.config.request_timeout,
-            follow_redirects=True,
-        )
-        response.raise_for_status()
-        data = response.json()
+        try:
+            validate_user_input_url(str(self.config.json_url), strict=not settings.DEBUG)
+        except InvalidURL as exc:
+            raise ValueError(f"Refusing to fetch JSON URL: {exc}") from exc
+        content = self._read_with_size_limit(str(self.config.json_url))
+        data = json.loads(content)
         if not isinstance(data, list):
             raise ValueError(f"expected a JSON list at the top level, got {type(data).__name__}")
         return data
@@ -124,14 +128,31 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             yield Document(page_content=text, metadata=metadata)
 
     def _fetch_and_extract(self, url: str) -> str:
-        response = httpx.get(
+        try:
+            validate_user_input_url(url, strict=not settings.DEBUG)
+        except InvalidURL as exc:
+            raise ValueError(f"Refusing to fetch attachment URL: {exc}") from exc
+        content = self._read_with_size_limit(url)
+        doc = markitdown_read(BytesIO(content))
+        return doc.get_contents_as_string()
+
+    def _read_with_size_limit(self, url: str) -> bytes:
+        """GET `url` and return the body, raising ValueError if it exceeds the size cap."""
+        with httpx.stream(
+            "GET",
             url,
             timeout=self.config.request_timeout,
             follow_redirects=True,
-        )
-        response.raise_for_status()
-        doc = markitdown_read(BytesIO(response.content))
-        return doc.get_contents_as_string()
+        ) as response:
+            response.raise_for_status()
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_bytes():
+                total += len(chunk)
+                if total > MAX_RESPONSE_BYTES:
+                    raise ValueError(f"Response from {url} exceeds {MAX_RESPONSE_BYTES} byte cap")
+                chunks.append(chunk)
+            return b"".join(chunks)
 
     def get_document_identifier(self, document: Document) -> str:
         link = document.metadata.get("link")

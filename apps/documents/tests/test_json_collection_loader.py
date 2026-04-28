@@ -13,8 +13,10 @@ from apps.documents.datamodels import (
 from apps.documents.models import SourceType
 from apps.documents.readers import Document as ReaderDocument
 from apps.documents.readers import DocumentPart
+from apps.documents.source_loaders import json_collection as jc
 from apps.documents.source_loaders.json_collection import JSONCollectionLoader
 from apps.documents.source_loaders.registry import LOADERS
+from apps.utils.urlvalidate import InvalidURL
 
 
 @pytest.fixture()
@@ -343,3 +345,50 @@ class TestShouldUpdateDocument:
         existing = self._make_existing_file({})
         # base class returns True (always update)
         assert loader.should_update_document(new_doc, existing) is True
+
+
+class TestSSRFAndSizeLimits:
+    def test_attachment_with_private_ip_is_skipped(self, json_config, httpx_mock, caplog):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [
+                    {"file_type": "pdf", "title": "ssrf", "link": "https://example.com/internal.pdf"},
+                ],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+
+        def fake_validate(url, strict):
+            if "internal.pdf" in url:
+                raise InvalidURL("Unsafe IP address")
+
+        loader = _make_loader(json_config)
+        with (
+            mock.patch(
+                "apps.documents.source_loaders.json_collection.validate_user_input_url",
+                side_effect=fake_validate,
+            ),
+            caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"),
+        ):
+            docs = list(loader.load_documents())
+        assert docs == []
+        assert any("internal.pdf" in record.message for record in caplog.records)
+
+    def test_json_url_with_private_ip_aborts_sync(self, json_config):
+        loader = _make_loader(json_config)
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.validate_user_input_url",
+            side_effect=InvalidURL("Unsafe IP address"),
+        ):
+            with pytest.raises(ValueError, match="Refusing to fetch JSON URL"):
+                list(loader.load_documents())
+
+    def test_oversized_response_raises(self, json_config, httpx_mock):
+        big_payload = b"x" * 1024  # 1 KB, but cap is going to be smaller
+        httpx_mock.add_response(url="https://example.com/feed.json", content=big_payload)
+        loader = _make_loader(json_config)
+        with mock.patch.object(jc, "MAX_RESPONSE_BYTES", 100):
+            with pytest.raises(ValueError, match="exceeds .* byte cap"):
+                list(loader.load_documents())
