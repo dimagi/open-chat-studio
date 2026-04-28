@@ -1,0 +1,1991 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/plans/channels_refactor_testing_plan/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Channel Refactor Testing Plan - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#channel-refactor-testing-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Channel Refactor Testing Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      Context
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-test-landscape-for-reference-not-modification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Existing Test Landscape (for reference, not modification)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#new-architecture-components-from-refactor-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      New Architecture Components (from refactor example)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test File Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conftestpy-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      conftest.py Design
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="conftest.py Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#testnewsender-captures-outbound-messages-for-assertions" class="md-nav__link">
+    <span class="md-ellipsis">
+      TestNewSender — captures outbound messages for assertions
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testnewcallbacks-records-callback-invocations" class="md-nav__link">
+    <span class="md-ellipsis">
+      TestNewCallbacks — records callback invocations
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testnewchannel-minimal-concrete-channel-for-integration-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      TestNewChannel — minimal concrete channel for integration tests
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#make_context-builds-minimal-messageprocessingcontext-for-stage-unit-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      make_context() — builds minimal MessageProcessingContext for stage unit tests
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-1-integration-tests-test_pipeline_integrationpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 1: Integration Tests (test_pipeline_integration.py)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-2-pipeline-orchestrator-tests-test_pipeline_orchestratorpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 2: Pipeline Orchestrator Tests (test_pipeline_orchestrator.py)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-3-stage-unit-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 3: Stage Unit Tests
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 3: Stage Unit Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#participantvalidationstage" class="md-nav__link">
+    <span class="md-ellipsis">
+      ParticipantValidationStage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sessionresolutionstage-pytestmarkdjango_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      SessionResolutionStage (@pytest.mark.django_db)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#messagetypevalidationstage" class="md-nav__link">
+    <span class="md-ellipsis">
+      MessageTypeValidationStage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sessionactivationstage" class="md-nav__link">
+    <span class="md-ellipsis">
+      SessionActivationStage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#consentflowstage-pytestmarkdjango_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      ConsentFlowStage (@pytest.mark.django_db)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queryextractionstage" class="md-nav__link">
+    <span class="md-ellipsis">
+      QueryExtractionStage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chatmessagecreationstage-pytestmarkdjango_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      ChatMessageCreationStage (@pytest.mark.django_db)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#botinteractionstage" class="md-nav__link">
+    <span class="md-ellipsis">
+      BotInteractionStage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#responseformattingstage" class="md-nav__link">
+    <span class="md-ellipsis">
+      ResponseFormattingStage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#responsesendingstage-terminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      ResponseSendingStage (terminal)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sendingerrorhandlerstage-terminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      SendingErrorHandlerStage (terminal)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#persistencestage-terminal-pytestmarkdjango_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistenceStage (terminal) (@pytest.mark.django_db)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#activitytrackingstage-terminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      ActivityTrackingStage (terminal)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-4-sender-callbacks-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 4: Sender &amp; Callbacks Tests
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 4: Sender &amp; Callbacks Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#telegramsender-mock-telegram_bot-at-constructor" class="md-nav__link">
+    <span class="md-ellipsis">
+      TelegramSender (mock telegram_bot at constructor)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whatsappsender-mock-messaging_service" class="md-nav__link">
+    <span class="md-ellipsis">
+      WhatsappSender (mock messaging_service)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#telegramcallbacks-mock-telegramsender-telegram_bot" class="md-nav__link">
+    <span class="md-ellipsis">
+      TelegramCallbacks (mock TelegramSender + telegram_bot)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whatsappcallbacks" class="md-nav__link">
+    <span class="md-ellipsis">
+      WhatsappCallbacks
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-5-concrete-channel-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Layer 5: Concrete Channel Tests
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 5: Concrete Channel Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#telegramchannel-mostly-no-db-use-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      TelegramChannel (mostly no DB — use .build())
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whatsappchannel" class="md-nav__link">
+    <span class="md-ellipsis">
+      WhatsappChannel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apichannel" class="md-nav__link">
+    <span class="md-ellipsis">
+      ApiChannel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#webchannel" class="md-nav__link">
+    <span class="md-ellipsis">
+      WebChannel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#evaluationchannel" class="md-nav__link">
+    <span class="md-ellipsis">
+      EvaluationChannel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commcareconnectchannel" class="md-nav__link">
+    <span class="md-ellipsis">
+      CommCareConnectChannel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#channelbase-utility-methods-not-pipeline-stay-as-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      ChannelBase utility methods (not pipeline, stay as-is)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reusable-existing-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reusable Existing Infrastructure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mock-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Mock Strategy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-location" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implementation Location
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Verification
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="channel-refactor-testing-plan">Channel Refactor Testing Plan</h1>
+<h2 id="context">Context</h2>
+<p>We are refactoring <code>apps/chat/channels.py</code> into a new stage-based pipeline architecture (reference: <code>docs/plans/channels_refactor_example.py</code>). The new implementation lives inside the <code>apps/channels/</code> app (not in <code>apps/chat/</code>). New tests are written from scratch — existing tests are not touched.</p>
+<p>Once all new tests pass, we do a cold-turkey switchover: delete old <code>apps/chat/channels.py</code>, update imports to point to <code>apps/channels/</code>, and delete old test files.</p>
+<p><strong>Goal here:</strong> Define the full test suite for the new architecture before writing a line of implementation.</p>
+<hr />
+<h2 id="existing-test-landscape-for-reference-not-modification">Existing Test Landscape (for reference, not modification)</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it tests</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apps/channels/tests/test_base_channel_behavior.py</code></td>
+<td>995 lines — the behavioral contract we must replicate</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_slack_channel.py</code></td>
+<td>SlackChannel message routing + file handling</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_web_channel.py</code></td>
+<td>WebChannel session creation + versioning</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_evaluation_channel.py</code></td>
+<td>EvaluationChannel init + tracing</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_whatsapp_integration.py</code></td>
+<td>WhatsApp message parsing + handling</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_connect_integration.py</code></td>
+<td>CommCareConnect encrypted messaging</td>
+</tr>
+<tr>
+<td><code>apps/chat/tests/test_channel_format_reference_section.py</code></td>
+<td>Isolated unit test for reference section formatting</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration boundaries</strong> (where channels are instantiated in production):
+- <code>apps/channels/tasks.py</code> — all webhook handlers call <code>channel.new_user_message(message)</code></p>
+<hr />
+<h2 id="new-architecture-components-from-refactor-example">New Architecture Components (from refactor example)</h2>
+<p><strong>Data / exceptions:</strong>
+- <code>ChannelCapabilities</code> — frozen dataclass (voice, files, consent, static_triggers, message types, <code>can_send_file</code> callable)
+- <code>MessageProcessingContext</code> — mutable dataclass carrying all pipeline state (includes <code>sending_exceptions</code>, <code>channel_context</code>)
+- <code>EarlyExitResponse(Exception)</code> — raised by core stages to short-circuit</p>
+<p><strong>Protocols:</strong>
+- <code>ChannelCallbacks</code> — no-op base hooks (transcription_started, echo_transcript, submit_input_to_llm, get_message_audio)
+- <code>ChannelSender(ABC)</code> — send_text, send_voice, send_file (send_file takes session_id as extra param)</p>
+<p><strong>Pipeline:</strong>
+- <code>ProcessingStage(ABC)</code> — <code>should_run(ctx)</code> + <code>process(ctx)</code>; callable via <code>__call__</code>
+- <code>MessageProcessingPipeline</code> — runs core stages, catches <code>EarlyExitResponse</code> + unexpected exceptions (catch-all generates error message via EventBot, re-raises after terminal stages), always runs terminal stages</p>
+<p><strong>Core stages</strong> (can raise <code>EarlyExitResponse</code>):
+<code>ParticipantValidationStage</code> → <code>SessionResolutionStage</code> → <code>MessageTypeValidationStage</code> → <code>SessionActivationStage</code> → <code>ConsentFlowStage</code> → <code>QueryExtractionStage</code> → <code>ChatMessageCreationStage</code> → <code>BotInteractionStage</code> → <code>ResponseFormattingStage</code></p>
+<p><strong>Terminal stages</strong> (always run, in order):
+<code>ResponseSendingStage</code> → <code>SendingErrorHandlerStage</code> → <code>PersistenceStage</code> → <code>ActivityTrackingStage</code></p>
+<p><strong>Channel-specific stages:</strong>
+- <code>CommCareConsentCheckStage</code> — platform-specific consent check (inserted after SessionResolutionStage)
+- <code>EvalsBotInteractionStage</code> — uses EvalsBot instead of get_bot() (replaces BotInteractionStage)</p>
+<hr />
+<h2 id="test-file-structure">Test File Structure</h2>
+<p>All new tests live under <code>apps/channels/tests/new_arch/</code> — sibling to existing test files so pytest finds them without config changes.</p>
+<div class="highlight"><pre><span></span><code>apps/channels/tests/new_arch/
+    __init__.py
+    conftest.py                          # TestNewChannel, TestNewSender, TestNewCallbacks, make_context()
+    test_pipeline_integration.py         # End-to-end bounding box (replaces test_base_channel_behavior.py)
+    test_pipeline_orchestrator.py        # MessageProcessingPipeline unit tests (mock stages)
+    stages/
+        __init__.py
+        test_participant_validation.py
+        test_session_resolution.py
+        test_message_type_validation.py
+        test_session_activation.py       # SessionActivationStage
+        test_consent_flow.py
+        test_query_extraction.py
+        test_chat_message_creation.py
+        test_bot_interaction.py
+        test_response_formatting.py
+        test_response_sending.py         # ResponseSendingStage (terminal)
+        test_sending_error_handler.py    # SendingErrorHandlerStage (terminal)
+        test_persistence.py             # PersistenceStage (terminal)
+        test_activity_tracking.py        # ActivityTrackingStage (terminal)
+    senders/
+        __init__.py
+        test_telegram_sender.py
+        test_whatsapp_sender.py
+    callbacks/
+        __init__.py
+        test_telegram_callbacks.py
+        test_whatsapp_callbacks.py
+    concrete/
+        __init__.py
+        test_telegram_channel.py
+        test_whatsapp_channel.py
+        test_api_channel.py
+        test_web_channel.py
+        test_evaluation_channel.py
+        test_commcare_channel.py
+</code></pre></div>
+<hr />
+<h2 id="conftestpy-design"><code>conftest.py</code> Design</h2>
+<p>This is the linchpin. It provides the stubs used across all test layers.</p>
+<h3 id="testnewsender-captures-outbound-messages-for-assertions"><code>TestNewSender</code> — captures outbound messages for assertions</h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">TestNewSender</span><span class="p">(</span><span class="n">ChannelSender</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">text_messages</span> <span class="o">=</span> <span class="p">[]</span>   <span class="c1"># list of (text, recipient)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">voice_messages</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># list of (audio, recipient)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">files_sent</span> <span class="o">=</span> <span class="p">[]</span>      <span class="c1"># list of (file, recipient, session_id)</span>
+
+    <span class="k">def</span> <span class="nf">send_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">recipient</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">text_messages</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">text</span><span class="p">,</span> <span class="n">recipient</span><span class="p">))</span>
+    <span class="k">def</span> <span class="nf">send_voice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio</span><span class="p">,</span> <span class="n">recipient</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">voice_messages</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">audio</span><span class="p">,</span> <span class="n">recipient</span><span class="p">))</span>
+    <span class="k">def</span> <span class="nf">send_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">recipient</span><span class="p">,</span> <span class="n">session_id</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">files_sent</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">file</span><span class="p">,</span> <span class="n">recipient</span><span class="p">,</span> <span class="n">session_id</span><span class="p">))</span>
+</code></pre></div>
+<h3 id="testnewcallbacks-records-callback-invocations"><code>TestNewCallbacks</code> — records callback invocations</h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">TestNewCallbacks</span><span class="p">(</span><span class="n">ChannelCallbacks</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transcription_started_calls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">echo_transcript_calls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">submit_input_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">def</span> <span class="nf">transcription_started</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recipient</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">transcription_started_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">recipient</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">echo_transcript</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recipient</span><span class="p">,</span> <span class="n">transcript</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">echo_transcript_calls</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">recipient</span><span class="p">,</span> <span class="n">transcript</span><span class="p">))</span>
+    <span class="k">def</span> <span class="nf">submit_input_to_llm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recipient</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">submit_input_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">recipient</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">get_message_audio</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span> <span class="k">return</span> <span class="n">BytesIO</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;fake_audio&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="testnewchannel-minimal-concrete-channel-for-integration-tests"><code>TestNewChannel</code> — minimal concrete channel for integration tests</h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">TestNewChannel</span><span class="p">(</span><span class="n">ChannelBase</span><span class="p">):</span>
+    <span class="n">voice_replies_supported</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">supported_message_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">MESSAGE_TYPES</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="n">MESSAGE_TYPES</span><span class="o">.</span><span class="n">VOICE</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">capabilities</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sender</span> <span class="o">=</span> <span class="n">TestNewSender</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_callbacks</span> <span class="o">=</span> <span class="n">TestNewCallbacks</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_override_capabilities</span> <span class="o">=</span> <span class="n">capabilities</span>
+
+    <span class="k">def</span> <span class="nf">_get_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sender</span>
+    <span class="k">def</span> <span class="nf">_get_callbacks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_callbacks</span>
+    <span class="k">def</span> <span class="nf">_get_capabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_override_capabilities</span> <span class="ow">or</span> <span class="n">ChannelCapabilities</span><span class="p">(</span>
+            <span class="n">supports_voice_replies</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">supports_files</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">supports_conversational_consent</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">supports_static_triggers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">supported_message_types</span><span class="o">=</span><span class="p">[</span><span class="n">MESSAGE_TYPES</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span> <span class="n">MESSAGE_TYPES</span><span class="o">.</span><span class="n">VOICE</span><span class="p">],</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Convenience for assertions</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">text_sent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sender</span><span class="o">.</span><span class="n">text_messages</span><span class="p">]</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">voice_sent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="p">[</span><span class="n">a</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sender</span><span class="o">.</span><span class="n">voice_messages</span><span class="p">]</span>
+</code></pre></div>
+<h3 id="make_context-builds-minimal-messageprocessingcontext-for-stage-unit-tests"><code>make_context()</code> — builds minimal <code>MessageProcessingContext</code> for stage unit tests</h3>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">make_context</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">experiment</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">experiment_channel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">experiment_session</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">callbacks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">capabilities</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">participant_identifier</span><span class="o">=</span><span class="s2">&quot;test_user_123&quot;</span><span class="p">,</span>
+                 <span class="n">participant_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">user_query</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bot_response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">early_exit_response</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sending_exceptions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">channel_context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">extra</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">MessageProcessingContext</span><span class="p">(</span>
+        <span class="n">message</span><span class="o">=</span><span class="n">message</span> <span class="ow">or</span> <span class="n">text_message</span><span class="p">(),</span>  <span class="c1"># from base_messages</span>
+        <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span> <span class="ow">or</span> <span class="n">ExperimentFactory</span><span class="o">.</span><span class="n">build</span><span class="p">(),</span>
+        <span class="n">experiment_channel</span><span class="o">=</span><span class="n">experiment_channel</span> <span class="ow">or</span> <span class="n">ExperimentChannelFactory</span><span class="o">.</span><span class="n">build</span><span class="p">(),</span>
+        <span class="n">callbacks</span><span class="o">=</span><span class="n">callbacks</span> <span class="ow">or</span> <span class="n">TestNewCallbacks</span><span class="p">(),</span>
+        <span class="n">sender</span><span class="o">=</span><span class="n">sender</span> <span class="ow">or</span> <span class="n">TestNewSender</span><span class="p">(),</span>
+        <span class="n">capabilities</span><span class="o">=</span><span class="n">capabilities</span> <span class="ow">or</span> <span class="n">make_capabilities</span><span class="p">(),</span>
+        <span class="n">trace_service</span><span class="o">=</span><span class="n">make_trace_service</span><span class="p">(),</span>  <span class="c1"># MagicMock with context manager support</span>
+        <span class="n">experiment_session</span><span class="o">=</span><span class="n">experiment_session</span><span class="p">,</span>
+        <span class="n">participant_identifier</span><span class="o">=</span><span class="n">participant_identifier</span><span class="p">,</span>
+        <span class="n">participant_allowed</span><span class="o">=</span><span class="n">participant_allowed</span><span class="p">,</span>
+        <span class="n">user_query</span><span class="o">=</span><span class="n">user_query</span><span class="p">,</span>
+        <span class="n">bot_response</span><span class="o">=</span><span class="n">bot_response</span><span class="p">,</span>
+        <span class="n">early_exit_response</span><span class="o">=</span><span class="n">early_exit_response</span><span class="p">,</span>
+        <span class="n">sending_exceptions</span><span class="o">=</span><span class="n">sending_exceptions</span> <span class="ow">or</span> <span class="p">[],</span>
+        <span class="n">channel_context</span><span class="o">=</span><span class="n">channel_context</span> <span class="ow">or</span> <span class="p">{},</span>
+        <span class="o">**</span><span class="n">extra</span><span class="p">,</span>
+    <span class="p">)</span>
+</code></pre></div>
+<p><strong>Key design:</strong> <code>make_context()</code> uses <code>.build()</code> (no DB) by default. Tests needing DB use real factories and <code>@pytest.mark.django_db()</code>.</p>
+<hr />
+<h2 id="layer-1-integration-tests-test_pipeline_integrationpy">Layer 1: Integration Tests (<code>test_pipeline_integration.py</code>)</h2>
+<p><strong>Purpose:</strong> Bounding box. Validates <code>TestNewChannel.new_user_message()</code> behavioral parity with the old architecture.</p>
+<p><strong>Standard mock:</strong> <code>@patch("apps.chat.bots.PipelineBot.process_input", return_value=ChatMessage(content="OK"))</code></p>
+<p><strong>Scenarios to cover</strong> (mapped from existing <code>test_base_channel_behavior.py</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Old test</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>First message creates session linked to channel</td>
+<td><code>test_incoming_message_adds_channel_info</code></td>
+</tr>
+<tr>
+<td>Second message from same participant reuses session</td>
+<td><code>test_incoming_message_uses_existing_experiment_session</code></td>
+</tr>
+<tr>
+<td>Ended sessions not reused; new session created</td>
+<td><code>test_non_active_sessions_are_not_reused</code></td>
+</tr>
+<tr>
+<td>Different participants get separate sessions</td>
+<td><code>test_different_sessions_created_for_different_users</code></td>
+</tr>
+<tr>
+<td>Same participant across teams → separate Participant records</td>
+<td><code>test_different_participants_created_for_same_user_in_different_teams</code></td>
+</tr>
+<tr>
+<td>Same participant across experiments → reused Participant</td>
+<td><code>test_participant_reused_across_experiments</code></td>
+</tr>
+<tr>
+<td><code>/reset</code> with prior engagement → new session</td>
+<td><code>test_reset_command_creates_new_experiment_session</code></td>
+</tr>
+<tr>
+<td><code>/reset</code> with no engagement → no new session</td>
+<td><code>test_reset_conversation_does_not_create_new_session</code></td>
+</tr>
+<tr>
+<td>Full consent flow: SETUP → PENDING → PENDING_PRE_SURVEY → ACTIVE</td>
+<td><code>test_pre_conversation_flow</code></td>
+</tr>
+<tr>
+<td>Unsupported message type → AI-generated refusal</td>
+<td><code>test_unsupported_message_type_*</code></td>
+</tr>
+<tr>
+<td>Voice ALWAYS → voice reply</td>
+<td><code>test_voice_response_behaviour</code></td>
+</tr>
+<tr>
+<td>Voice NEVER → text reply</td>
+<td>parameterized</td>
+</tr>
+<tr>
+<td>Voice RECIPROCAL + voice input → voice; + text input → text</td>
+<td>parameterized</td>
+</tr>
+<tr>
+<td>Voice reply with URLs → voice + URL text fallback</td>
+<td><code>test_voice_response_with_urls</code></td>
+</tr>
+<tr>
+<td>Voice message → <code>voice</code> tag on ChatMessage (via PersistenceStage)</td>
+<td><code>test_voice_tag_created_on_message</code></td>
+</tr>
+<tr>
+<td>Voice synthesis failure → notification + text fallback (in ResponseFormattingStage)</td>
+<td><code>TestNotifications.*</code></td>
+</tr>
+<tr>
+<td>No synthetic voice → text reply</td>
+<td><code>test_reply_with_text_when_synthetic_voice_not_specified</code></td>
+</tr>
+<tr>
+<td>Non-allowlisted participant → refusal, no session</td>
+<td><code>test_participant_authorization</code></td>
+</tr>
+<tr>
+<td>Versioned experiment → version tracked on session after each message</td>
+<td><code>test_incoming_message_adds_version_on_session</code></td>
+</tr>
+<tr>
+<td>New sessions link to working experiment (not a version)</td>
+<td><code>test_new_sessions_are_linked_to_the_working_experiment</code></td>
+</tr>
+<tr>
+<td>Supported attachments sent directly; unsupported appended as links</td>
+<td><code>test_supported_and_unsupported_attachments</code></td>
+</tr>
+<tr>
+<td><code>GenerationCancelled</code> → empty ChatMessage, no exception</td>
+<td><code>test_chat_message_returned_for_cancelled_generate</code></td>
+</tr>
+<tr>
+<td>Failed transcription → user informed</td>
+<td><code>test_failed_transcription_informs_the_user</code></td>
+</tr>
+<tr>
+<td>Bot error → catch-all generates error message via EventBot, user informed, exception re-raised</td>
+<td>(new)</td>
+</tr>
+<tr>
+<td>Bot error + EventBot fails → DEFAULT_ERROR_RESPONSE_TEXT used</td>
+<td>(new)</td>
+</tr>
+<tr>
+<td>ChatException → specific error prompt via EventBot</td>
+<td>(new)</td>
+</tr>
+<tr>
+<td>Audio synthesis failure → notification + text fallback</td>
+<td><code>TestNotifications.*</code></td>
+</tr>
+<tr>
+<td>File delivery failure → notification + download link sent</td>
+<td><code>TestNotifications.*</code></td>
+</tr>
+<tr>
+<td>Transcription failure → notification triggered</td>
+<td><code>TestNotifications.*</code></td>
+</tr>
+<tr>
+<td>Pre-existing session on context → SessionResolution is no-op (Web/Slack)</td>
+<td>new</td>
+</tr>
+<tr>
+<td>EarlyExitResponse from any core stage → terminal stages still run</td>
+<td>new</td>
+</tr>
+<tr>
+<td>Unexpected exception from core stage → terminal stages run, then re-raised</td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>ResponseSendingStage</code> is the ONLY place <em>responses</em> reach the user (callbacks may send indicators/echoes mid-pipeline)</td>
+<td>new</td>
+</tr>
+<tr>
+<td>Send failure → <code>ctx.sending_exceptions</code> populated, <code>SendingErrorHandlerStage</code> runs</td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>NEW_HUMAN_MESSAGE</code> trigger fires after chat message creation (gated by <code>supports_static_triggers</code>)</td>
+<td>new</td>
+</tr>
+<tr>
+<td>Ad hoc bot message (<code>send_message_to_user</code>) → mini pipeline runs formatting + sending</td>
+<td><code>test_ad_hoc_bot_message</code></td>
+</tr>
+<tr>
+<td>Ad hoc bot message with voice config → voice/text decision applies</td>
+<td>new</td>
+</tr>
+<tr>
+<td>Ad hoc bot message with files → supported sent directly, unsupported as links</td>
+<td>new</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="layer-2-pipeline-orchestrator-tests-test_pipeline_orchestratorpy">Layer 2: Pipeline Orchestrator Tests (<code>test_pipeline_orchestrator.py</code>)</h2>
+<p>No DB needed. All stages are <code>MagicMock</code> instances.</p>
+<ul>
+<li>All core stages run in order on happy path; terminal stages follow.</li>
+<li>Core stage N raises <code>EarlyExitResponse</code> → stages N+1..M skipped; <code>ctx.early_exit_response</code> set.</li>
+<li>Core stage raises unexpected exception → <code>_generate_error_message</code> called, <code>ctx.early_exit_response</code> set, terminal stages run, exception re-raised.</li>
+<li><code>_generate_error_message</code> with <code>ChatException</code> → specific prompt used.</li>
+<li><code>_generate_error_message</code> with EventBot failure → <code>DEFAULT_ERROR_RESPONSE_TEXT</code> used.</li>
+<li>ALL terminal stages run regardless of early exit or unexpected exception.</li>
+<li><code>stage.should_run(ctx)</code> returning <code>False</code> → <code>process(ctx)</code> not called.</li>
+<li><code>None</code> entries in stage lists are filtered out by constructor.</li>
+<li>Returns the final <code>MessageProcessingContext</code>.</li>
+</ul>
+<hr />
+<h2 id="layer-3-stage-unit-tests">Layer 3: Stage Unit Tests</h2>
+<p><strong>Pattern:</strong> <code>make_context()</code> with only the fields the stage needs → <code>stage(ctx)</code> → assert on <code>ctx</code> mutations or raised <code>EarlyExitResponse</code>.</p>
+<h3 id="participantvalidationstage"><code>ParticipantValidationStage</code></h3>
+<ul>
+<li>Public experiment → <code>participant_allowed=True</code>, no exception.</li>
+<li>Private + in allowlist → <code>participant_allowed=True</code>.</li>
+<li>Private + not in allowlist → raises <code>EarlyExitResponse</code>.</li>
+<li><code>ctx.participant_identifier</code> set from <code>message.participant_id</code> in all cases.</li>
+<li>Mock: <code>experiment.is_public</code>, <code>experiment.is_participant_allowed()</code> as MagicMock attrs.</li>
+</ul>
+<h3 id="sessionresolutionstage-pytestmarkdjango_db"><code>SessionResolutionStage</code> (<code>@pytest.mark.django_db</code>)</h3>
+<ul>
+<li><code>participant_allowed=False</code> → <code>should_run()</code> returns False.</li>
+<li>Pre-set session on ctx → no-op (no DB queries for session).</li>
+<li>No existing session → new session created.</li>
+<li>Active session exists → reused.</li>
+<li>Completed session → excluded by query → new session created.</li>
+<li><code>/reset</code> text (case-insensitive, stripped) + no session → new session + <code>EarlyExitResponse("Conversation reset")</code>.</li>
+<li><code>/reset</code> + existing session where <code>user_already_engaged()=True</code> → session ended + new session + <code>EarlyExitResponse</code>.</li>
+<li><code>/reset</code> + existing session where <code>user_already_engaged()=False</code> → no reset.</li>
+<li>New session always links to <code>experiment.get_working_version()</code>.</li>
+</ul>
+<h3 id="messagetypevalidationstage"><code>MessageTypeValidationStage</code></h3>
+<ul>
+<li>Supported type → no exception, ctx unchanged.</li>
+<li>Unsupported type → raises <code>EarlyExitResponse</code> with bot-generated or fallback text.</li>
+<li><code>EventBot.get_user_message</code> fails → fallback string, <code>ctx.processing_errors</code> updated.</li>
+</ul>
+<h3 id="sessionactivationstage"><code>SessionActivationStage</code></h3>
+<ul>
+<li><code>experiment_session is None</code> → <code>should_run()</code> False.</li>
+<li>Consent disabled → activates session to ACTIVE.</li>
+<li>No consent form → activates session to ACTIVE.</li>
+<li>Consent enabled with form → <code>should_run()</code> False (skips).</li>
+</ul>
+<h3 id="consentflowstage-pytestmarkdjango_db"><code>ConsentFlowStage</code> (<code>@pytest.mark.django_db</code>)</h3>
+<ul>
+<li><code>supports_conversational_consent=False</code> → <code>should_run()</code> False.</li>
+<li>Consent not enabled → <code>should_run()</code> False.</li>
+<li>No consent form → <code>should_run()</code> False.</li>
+<li>Session already ACTIVE → <code>should_run()</code> False.</li>
+<li>SETUP → PENDING + raises <code>EarlyExitResponse</code> with consent text.</li>
+<li>PENDING + non-consent input → repeat consent prompt.</li>
+<li>PENDING + <code>"1"</code> + no pre-survey → ACTIVE, no early exit (or seed message early exit).</li>
+<li>PENDING + <code>"1"</code> + pre-survey → PENDING_PRE_SURVEY + survey prompt.</li>
+<li>PENDING_PRE_SURVEY + non-consent → repeat survey.</li>
+<li>PENDING_PRE_SURVEY + <code>"1"</code> → ACTIVE, seed message processed if present.</li>
+<li><code>ctx.bot</code> lazily created once and reused.</li>
+</ul>
+<h3 id="queryextractionstage"><code>QueryExtractionStage</code></h3>
+<ul>
+<li>Text message → <code>ctx.user_query = message.message_text</code>, no callbacks called.</li>
+<li>Voice message → <code>transcription_started()</code> called → <code>get_message_audio()</code> → transcription → <code>ctx.user_query</code> set.</li>
+<li><code>echo_transcript=True</code> → <code>echo_transcript()</code> called; <code>False</code> → not called.</li>
+<li>Transcription failure → <code>audio_transcription_failure_notification</code> called, exception re-raised.</li>
+<li>No voice provider → <code>UserReportableError</code> raised.</li>
+</ul>
+<h3 id="chatmessagecreationstage-pytestmarkdjango_db"><code>ChatMessageCreationStage</code> (<code>@pytest.mark.django_db</code>)</h3>
+<ul>
+<li><code>user_query is None</code> → <code>should_run()</code> False.</li>
+<li>Text message → <code>ChatMessage(HUMAN)</code> created, no voice tag.</li>
+<li>Voice + <code>cached_media_data</code> → <code>File</code> created, attached to chat, in <code>metadata["ocs_attachment_file_ids"]</code>.</li>
+<li>Voice message → HUMAN message gets <code>voice</code> tag.</li>
+<li><code>ctx.human_message</code> set; <code>trace_service.set_input_message_id()</code> called.</li>
+<li>Attachments → IDs in metadata.</li>
+<li><code>supports_static_triggers=True</code> → <code>enqueue_static_triggers(NEW_HUMAN_MESSAGE)</code> called.</li>
+<li><code>supports_static_triggers=False</code> → <code>enqueue_static_triggers</code> NOT called.</li>
+</ul>
+<h3 id="botinteractionstage"><code>BotInteractionStage</code></h3>
+<ul>
+<li><code>user_query is None</code> → <code>should_run()</code> False.</li>
+<li><code>submit_input_to_llm()</code> called before bot.</li>
+<li><code>ctx.bot</code> is None → bot created lazily; already set → reused.</li>
+<li>Successful call → <code>ctx.bot_response</code> and <code>ctx.files_to_send</code> set.</li>
+<li>Exceptions propagate (caught by pipeline catch-all, NOT by the stage).</li>
+</ul>
+<h3 id="responseformattingstage"><code>ResponseFormattingStage</code></h3>
+<ul>
+<li><code>bot_response is None</code> → <code>should_run()</code> False.</li>
+<li>Voice ALWAYS + voice provider → <code>ctx.voice_audio</code> set, URLs in <code>ctx.additional_text_message</code>.</li>
+<li>Voice NEVER → text path, <code>ctx.voice_audio</code> is None.</li>
+<li>Voice RECIPROCAL: voice input → voice; text input → text.</li>
+<li><code>AudioSynthesizeException</code> → fallback to text, notification created, <code>ctx.voice_audio</code> set to None.</li>
+<li><code>supports_files=False</code> → all files in <code>unsupported_files</code>.</li>
+<li><code>supports_files=True</code> → files split via <code>can_send_file</code>.</li>
+<li>Unsupported files appended as links to <code>ctx.formatted_message</code> (text path).</li>
+<li>Voice path + unsupported files → in <code>ctx.additional_text_message</code>.</li>
+</ul>
+<h3 id="responsesendingstage-terminal"><code>ResponseSendingStage</code> (terminal)</h3>
+<ul>
+<li>Both <code>formatted_message</code> and <code>early_exit_response</code> are None → <code>should_run()</code> False.</li>
+<li>Early exit path → <code>sender.send_text(early_exit_response)</code>, no voice/file sends.</li>
+<li>Normal text path → <code>sender.send_text(formatted_message)</code>.</li>
+<li>Normal voice path → <code>sender.send_voice()</code>; <code>additional_text_message</code> present → <code>sender.send_text()</code> too.</li>
+<li>Text/voice send fails → <code>MessageDeliveryFailure</code> appended to <code>ctx.sending_exceptions</code>.</li>
+<li>Files in <code>files_to_send</code> → <code>sender.send_file(file, recipient, session_id)</code> per file.</li>
+<li>File send fails → <code>FileDeliveryFailure</code> appended to <code>ctx.sending_exceptions</code> + download link sent as fallback; other files still attempted.</li>
+<li>Download link fallback also fails → <code>MessageDeliveryFailure</code> propagates to outer catch (fails hard).</li>
+</ul>
+<h3 id="sendingerrorhandlerstage-terminal"><code>SendingErrorHandlerStage</code> (terminal)</h3>
+<ul>
+<li>Empty <code>sending_exceptions</code> → <code>should_run()</code> False.</li>
+<li><code>MessageDeliveryFailure</code> in list → <code>message_delivery_failure_notification</code> called, no re-raise.</li>
+<li><code>FileDeliveryFailure</code> in list → <code>file_delivery_failure_notification</code> called.</li>
+<li>Telegram <code>ApiTelegramException(403, "bot was blocked")</code> → participant consent revoked via <code>ParticipantData.update_consent(False)</code>.</li>
+<li>Telegram 403 + <code>ParticipantData.DoesNotExist</code> → error appended to <code>ctx.processing_errors</code>.</li>
+<li>Unknown exception → re-raised (task fails).</li>
+</ul>
+<h3 id="persistencestage-terminal-pytestmarkdjango_db"><code>PersistenceStage</code> (terminal) (<code>@pytest.mark.django_db</code>)</h3>
+<ul>
+<li>Both <code>early_exit_response</code> and <code>voice_audio</code> are None → <code>should_run()</code> False.</li>
+<li><code>experiment_session is None</code> → no persistence (early return).</li>
+<li>Early exit present + session → <code>ChatMessage(AI, content=early_exit_response)</code> created.</li>
+<li>Early exit persists even when <code>sending_exceptions</code> is non-empty (audit trail).</li>
+<li>Voice audio present + bot_response → bot_response tagged "voice" + audio saved as File attachment.</li>
+<li>Voice audio present but bot_response is None → no voice persistence (no-op).</li>
+</ul>
+<h3 id="activitytrackingstage-terminal"><code>ActivityTrackingStage</code> (terminal)</h3>
+<ul>
+<li><code>experiment_session is None</code> → <code>should_run()</code> False.</li>
+<li><code>session.last_activity_at</code> updated.</li>
+<li><code>is_a_version=True</code> + version not in list → appended; already in list → no duplicate.</li>
+<li><code>is_a_version=False</code> → <code>experiment_versions</code> not touched.</li>
+<li><code>session.save(update_fields=[...])</code> called with correct fields.</li>
+</ul>
+<hr />
+<h2 id="layer-4-sender-callbacks-tests">Layer 4: Sender &amp; Callbacks Tests</h2>
+<h3 id="telegramsender-mock-telegram_bot-at-constructor"><code>TelegramSender</code> (mock <code>telegram_bot</code> at constructor)</h3>
+<ul>
+<li>Short text → <code>antiflood(send_message)</code> called once.</li>
+<li>Long text → multiple chunks → called multiple times.</li>
+<li><code>ApiTelegramException</code> → propagates (NOT caught by sender — caught by ResponseSendingStage).</li>
+<li>Voice send → <code>antiflood(send_voice, audio, duration)</code>.</li>
+<li>File (<code>send_file(file, recipient, session_id)</code>): image→<code>send_photo</code>, video→<code>send_video</code>, audio→<code>send_audio</code>, other→<code>send_document</code>.</li>
+</ul>
+<h3 id="whatsappsender-mock-messaging_service"><code>WhatsappSender</code> (mock <code>messaging_service</code>)</h3>
+<ul>
+<li><code>send_text()</code> → <code>service.send_text_message(platform=WHATSAPP)</code>.</li>
+<li><code>send_voice()</code> → <code>service.send_voice_message()</code>.</li>
+<li><code>send_file(file, recipient, session_id)</code> → <code>service.send_file_to_user(platform=WHATSAPP, download_link=file.download_link(session_id))</code>.</li>
+</ul>
+<h3 id="telegramcallbacks-mock-telegramsender-telegram_bot"><code>TelegramCallbacks</code> (mock <code>TelegramSender</code> + <code>telegram_bot</code>)</h3>
+<ul>
+<li><code>transcription_started()</code> → <code>send_chat_action(action="upload_voice")</code> via raw bot.</li>
+<li><code>submit_input_to_llm()</code> → <code>send_chat_action(action="typing")</code> via raw bot.</li>
+<li><code>echo_transcript()</code> → <code>sender.send_text()</code> with <code>"I heard: {transcript}"</code>.</li>
+<li><code>get_message_audio()</code> → mocked <code>httpx.get</code> + <code>audio.convert_audio()</code> (OGG→WAV).</li>
+</ul>
+<h3 id="whatsappcallbacks"><code>WhatsappCallbacks</code></h3>
+<ul>
+<li><code>echo_transcript()</code> → delegates to <code>sender.send_text("I heard: ...")</code>.</li>
+</ul>
+<hr />
+<h2 id="layer-5-concrete-channel-tests">Layer 5: Concrete Channel Tests</h2>
+<h3 id="telegramchannel-mostly-no-db-use-build"><code>TelegramChannel</code> (mostly no DB — use <code>.build()</code>)</h3>
+<ul>
+<li><code>__init__()</code> instantiates <code>TeleBot</code> with <code>extra_data["bot_token"]</code>.</li>
+<li><code>_get_callbacks()</code> returns <code>TelegramCallbacks</code>.</li>
+<li><code>_get_sender()</code> returns <code>TelegramSender</code>.</li>
+<li><code>_get_capabilities()</code> → <code>supports_voice_replies=True, supports_files=True, supports_static_triggers=True, [TEXT, VOICE]</code>.</li>
+<li><code>_can_send_file()</code>: image &lt;10MB→True; image &gt;10MB→False; video &lt;50MB→True; unknown MIME→False.</li>
+<li><code>_build_pipeline()</code> → default pipeline with correct stage types and count.</li>
+</ul>
+<h3 id="whatsappchannel"><code>WhatsappChannel</code></h3>
+<ul>
+<li><code>messaging_service</code> lazily resolved and cached.</li>
+<li><code>_get_capabilities()</code> delegates all fields from messaging service.</li>
+<li><code>_get_sender()</code> uses <code>extra_data["number"]</code> as <code>from_number</code>.</li>
+<li><code>_get_callbacks()</code> wraps the sender.</li>
+</ul>
+<h3 id="apichannel"><code>ApiChannel</code></h3>
+<ul>
+<li><code>_build_pipeline()</code> omits <code>ResponseSendingStage</code> and <code>SendingErrorHandlerStage</code>.</li>
+<li><code>_get_sender()</code> returns <code>NoOpSender</code>.</li>
+<li><code>_get_capabilities()</code> → text only, no voice/files.</li>
+</ul>
+<h3 id="webchannel"><code>WebChannel</code></h3>
+<ul>
+<li>Requires pre-existing session (raises if not provided).</li>
+<li><code>_build_pipeline()</code> omits <code>SessionResolutionStage</code>, <code>ConsentFlowStage</code>, <code>ResponseSendingStage</code>, <code>SendingErrorHandlerStage</code>.</li>
+<li><code>_get_capabilities()</code> → <code>supports_conversational_consent=False</code>.</li>
+<li><code>start_new_session()</code> and <code>check_and_process_seed_message()</code> class methods unchanged.</li>
+</ul>
+<h3 id="evaluationchannel"><code>EvaluationChannel</code></h3>
+<ul>
+<li>Requires pre-existing session.</li>
+<li><code>_create_context()</code> sets <code>channel_context={"participant_data": ...}</code>.</li>
+<li><code>_build_pipeline()</code> uses <code>EvalsBotInteractionStage</code> instead of <code>BotInteractionStage</code>, omits sending stages.</li>
+<li><code>_get_capabilities()</code> → <code>supports_static_triggers=False</code>.</li>
+</ul>
+<h3 id="commcareconnectchannel"><code>CommCareConnectChannel</code></h3>
+<ul>
+<li><code>_build_pipeline()</code> inserts <code>CommCareConsentCheckStage</code> after <code>SessionResolutionStage</code>.</li>
+<li><code>CommCareConsentCheckStage</code>: no consent in <code>ParticipantData.system_metadata</code> → raises <code>EarlyExitResponse</code>.</li>
+<li><code>CommCareConsentCheckStage</code>: <code>ParticipantData.DoesNotExist</code> → raises <code>EarlyExitResponse</code>.</li>
+</ul>
+<h3 id="channelbase-utility-methods-not-pipeline-stay-as-is"><code>ChannelBase</code> utility methods (not pipeline, stay as-is)</h3>
+<ul>
+<li><code>from_experiment_session()</code> → returns correct channel subclass for each platform.</li>
+<li><code>from_experiment_session()</code> with unsupported platform → raises exception.</li>
+<li><code>get_channel_class_for_platform()</code> → maps platform strings to channel classes.</li>
+<li><code>start_new_session()</code> with working experiment → session created.</li>
+<li><code>start_new_session()</code> with versioned experiment → raises <code>VersionedExperimentSessionsNotAllowedException</code>.</li>
+<li><code>ensure_session_exists_for_participant()</code> → loads or creates session for identifier.</li>
+<li><code>ensure_session_exists_for_participant(new_session=True)</code> → ends existing session, creates new.</li>
+<li><code>ensure_session_exists_for_participant()</code> with mismatched identifier → raises <code>ChannelException</code>.</li>
+</ul>
+<hr />
+<h2 id="reusable-existing-infrastructure">Reusable Existing Infrastructure</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ExperimentFactory</code>, <code>ExperimentSessionFactory</code>, <code>ExperimentChannelFactory</code></td>
+<td><code>apps/utils/factories/experiment.py</code></td>
+</tr>
+<tr>
+<td><code>TeamWithUsersFactory</code>, <code>MembershipFactory</code></td>
+<td><code>apps/utils/factories/</code></td>
+</tr>
+<tr>
+<td><code>MessagingProviderFactory</code></td>
+<td><code>apps/utils/factories/service_provider_factories.py</code></td>
+</tr>
+<tr>
+<td><code>twilio_provider</code>, <code>turn_io_provider</code>, <code>slack_provider</code> fixtures</td>
+<td><code>apps/channels/tests/conftest.py</code> (inherited by pytest)</td>
+</tr>
+<tr>
+<td><code>base_messages.text_message()</code>, <code>base_messages.audio_message()</code></td>
+<td><code>apps/channels/tests/message_examples/base_messages.py</code></td>
+</tr>
+<tr>
+<td><code>telegram_messages.*</code></td>
+<td><code>apps/channels/tests/message_examples/telegram_messages.py</code></td>
+</tr>
+<tr>
+<td>Global <code>experiment</code> fixture</td>
+<td><code>apps/conftest.py</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="mock-strategy">Mock Strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bot processing</td>
+<td><code>@patch("apps.chat.bots.PipelineBot.process_input")</code></td>
+</tr>
+<tr>
+<td>EventBot error messages</td>
+<td><code>@patch("apps.chat.bots.EventBot.get_user_message")</code></td>
+</tr>
+<tr>
+<td>Voice transcription</td>
+<td><code>@patch</code> on speech service or override <code>TestNewCallbacks.get_message_audio</code></td>
+</tr>
+<tr>
+<td>Voice synthesis</td>
+<td><code>@patch("apps.service_providers.models.VoiceProvider.get_speech_service")</code></td>
+</tr>
+<tr>
+<td>Telegram bot API</td>
+<td><code>MagicMock</code> passed to <code>TelegramSender</code>/<code>Callbacks</code> constructors</td>
+</tr>
+<tr>
+<td>WhatsApp messaging service</td>
+<td><code>MagicMock</code> passed to <code>WhatsappSender</code> constructor</td>
+</tr>
+<tr>
+<td>Trace service</td>
+<td><code>make_trace_service()</code> — MagicMock with context manager</td>
+</tr>
+<tr>
+<td>Notifications</td>
+<td><code>@patch("apps.ocs_notifications.notifications.&lt;func&gt;")</code></td>
+</tr>
+<tr>
+<td>Static triggers</td>
+<td><code>@patch("apps.events.tasks.enqueue_static_triggers")</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="implementation-location">Implementation Location</h2>
+<p>The new implementation lives inside the <code>apps/channels/</code> app. At switchover time, delete <code>apps/chat/channels.py</code> and update all <code>from apps.chat.channels import ...</code> statements to import from <code>apps/channels/</code> instead.</p>
+<hr />
+<h2 id="verification">Verification</h2>
+<p>Run the full new test suite in isolation:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/new_arch/<span class="w"> </span>-v
+</code></pre></div></p>
+<p>Run alongside existing tests to confirm no interference:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/<span class="w"> </span>-v
+</code></pre></div></p>
+<p>Lint and type-check the new test files:
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/channels/tests/new_arch/<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/channels/tests/new_arch/
+</code></pre></div></p>
+<p><strong>Per-channel gate:</strong> Each channel is migrated in its own PR. The PR adds the new channel + tests and removes the old channel + tests. All tests (new and remaining old) must pass before merge. See the <strong>Incremental Rollout Plan</strong> section in <code>docs/plans/channels_refactor.md</code> for the full PR sequence.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

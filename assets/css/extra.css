@@ -1,0 +1,4 @@
+:root > * {
+  --md-primary-fg-color: rgba(82, 9, 36, 0.67);
+  --md-primary-bg-color: rgba(255, 255, 255, 0.75);;
+}
