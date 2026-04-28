@@ -132,3 +132,16 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
         response.raise_for_status()
         doc = markitdown_read(BytesIO(response.content))
         return doc.get_contents_as_string()
+
+    def get_document_identifier(self, document: Document) -> str:
+        link = document.metadata.get("link")
+        if link:
+            return link
+        return super().get_document_identifier(document)
+
+    def should_update_document(self, document: Document, existing_file) -> bool:
+        new_date = document.metadata.get("date")
+        old_date = existing_file.file.metadata.get("date") if existing_file.file else None
+        if new_date and old_date:
+            return new_date != old_date
+        return super().should_update_document(document, existing_file)

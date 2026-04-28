@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+from langchain_core.documents import Document as LCDocument
 
 from apps.documents.datamodels import (
     DocumentSourceConfig,
@@ -300,3 +301,45 @@ class TestLoadDocumentsAttachmentFailures:
         loader = _make_loader(json_config)
         docs = list(loader.load_documents())
         assert docs == []
+
+
+class TestGetDocumentIdentifier:
+    def test_attachment_doc_identifier_is_link(self, json_config):
+        loader = _make_loader(json_config)
+        doc = LCDocument(
+            page_content="x",
+            metadata={"link": "https://example.com/file.pdf", "source": "https://example.com/file.pdf"},
+        )
+        assert loader.get_document_identifier(doc) == "https://example.com/file.pdf"
+
+    def test_fallback_doc_identifier_is_source(self, json_config):
+        loader = _make_loader(json_config)
+        doc = LCDocument(page_content="t", metadata={"source": "https://example.com/page"})
+        assert loader.get_document_identifier(doc) == "https://example.com/page"
+
+
+class TestShouldUpdateDocument:
+    def _make_existing_file(self, metadata):
+        existing = Mock()
+        existing.file = Mock()
+        existing.file.metadata = metadata
+        return existing
+
+    def test_same_date_means_no_update(self, json_config):
+        loader = _make_loader(json_config)
+        new_doc = LCDocument(page_content="x", metadata={"date": "01/01/2025"})
+        existing = self._make_existing_file({"date": "01/01/2025"})
+        assert loader.should_update_document(new_doc, existing) is False
+
+    def test_different_date_means_update(self, json_config):
+        loader = _make_loader(json_config)
+        new_doc = LCDocument(page_content="x", metadata={"date": "02/01/2025"})
+        existing = self._make_existing_file({"date": "01/01/2025"})
+        assert loader.should_update_document(new_doc, existing) is True
+
+    def test_missing_date_defers_to_base(self, json_config):
+        loader = _make_loader(json_config)
+        new_doc = LCDocument(page_content="x", metadata={})
+        existing = self._make_existing_file({})
+        # base class returns True (always update)
+        assert loader.should_update_document(new_doc, existing) is True
