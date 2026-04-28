@@ -1796,7 +1796,7 @@ export class OcsChat {
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>
                   {this.translationManager.get('branding.poweredBy')}{' '}
-                  <a class="underline" href="https://www.dimagi.com" target="_blank">
+                  <a class="underline" href="https://www.dimagi.com" target="_blank" rel="noopener noreferrer">
                     Dimagi
                   </a>
                 </p>
