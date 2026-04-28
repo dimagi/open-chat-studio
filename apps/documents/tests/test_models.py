@@ -2,7 +2,9 @@ from unittest import mock
 
 import pytest
 from django.conf import settings
+from pydantic import ValidationError
 
+from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
@@ -224,3 +226,37 @@ class TestCollection:
         else:
             create_remote_index.assert_not_called()
             assert collection.openai_vector_store_id == openai_id
+
+
+class TestJSONCollectionSourceConfig:
+    def test_valid_config(self):
+        config = JSONCollectionSourceConfig(json_url="https://example.com/feed.json")
+        assert str(config.json_url) == "https://example.com/feed.json"
+        assert config.request_timeout == 30
+
+    def test_str_representation(self):
+        config = JSONCollectionSourceConfig(json_url="https://example.com/feed.json")
+        assert str(config) == "https://example.com/feed.json"
+
+    def test_invalid_url(self):
+        with pytest.raises(ValidationError):
+            JSONCollectionSourceConfig(json_url="not-a-url")
+
+    def test_request_timeout_bounds(self):
+        # too small
+        with pytest.raises(ValidationError):
+            JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=1)
+        # too large
+        with pytest.raises(ValidationError):
+            JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=999)
+        # acceptable
+        cfg = JSONCollectionSourceConfig(json_url="https://example.com/x", request_timeout=60)
+        assert cfg.request_timeout == 60
+
+    def test_document_source_config_accepts_json_collection(self):
+        wrapper = DocumentSourceConfig(
+            json_collection=JSONCollectionSourceConfig(json_url="https://example.com/feed.json"),
+        )
+        assert wrapper.json_collection is not None
+        assert wrapper.github is None
+        assert wrapper.confluence is None

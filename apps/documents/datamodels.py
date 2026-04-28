@@ -1,3 +1,5 @@
+from typing import Any
+
 import pydantic
 from pydantic import HttpUrl, field_validator
 
@@ -69,9 +71,9 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
 
         return self
 
-    def get_loader_kwargs(self) -> dict:
+    def get_loader_kwargs(self) -> dict[str, Any]:
         """Get the appropriate kwargs for ConfluenceLoader based on the specified option"""
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "url": self.base_url,
             "max_pages": self.max_pages,
         }
@@ -104,8 +106,24 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
         return self.base_url
 
 
+class JSONCollectionSourceConfig(pydantic.BaseModel):
+    json_url: HttpUrl = pydantic.Field(description="URL of the JSON feed")
+    request_timeout: int = pydantic.Field(
+        default=30,
+        ge=5,
+        le=300,
+        description="HTTP request timeout in seconds, applied to JSON fetch and each attachment download",
+    )
+
+    def __str__(self) -> str:
+        return str(self.json_url)
+
+
 class DocumentSourceConfig(pydantic.BaseModel):
     github: GitHubSourceConfig | None = pydantic.Field(default=None, description="GitHub source configuration")
     confluence: ConfluenceSourceConfig | None = pydantic.Field(
         default=None, description="Confluence source configuration"
+    )
+    json_collection: JSONCollectionSourceConfig | None = pydantic.Field(
+        default=None, description="JSON collection source configuration"
     )
