@@ -277,6 +277,9 @@ class EvaluatorForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+        # Set by the view before is_valid() so the schema-drift check can
+        # ignore rules the user is deleting in the same submit.
+        self.pending_deleted_rule_pks: set[int] = set()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -314,20 +317,29 @@ class EvaluatorForm(forms.ModelForm):
         return cleaned_data
 
     def _validate_existing_tag_rules_against_schema(self, params):
-        """Block save when an existing tag rule no longer matches the new output_schema."""
+        """Block save when an existing tag rule no longer matches the new output_schema.
+
+        Skips rules the formset is deleting in the same submit so users aren't
+        stuck having to delete the rule and update the schema in two trips.
+        Surfaces all incompatible rules at once instead of stopping at the first.
+        """
         if not (self.instance and self.instance.pk):
             return
 
         output_schema = (params or {}).get("output_schema") or {}
-        for rule in self.instance.tag_rules.all():
+        rules = self.instance.tag_rules.exclude(pk__in=self.pending_deleted_rule_pks)
+        errors = []
+        for rule in rules:
             try:
                 field_def = validate_field_in_schema(rule.field_name, output_schema)
                 validate_condition(rule.condition_type, rule.condition_value, field_def)
             except DjangoValidationError as err:
-                raise forms.ValidationError(
+                errors.append(
                     f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
                     f"output schema: {err.messages[0] if err.messages else err}"
-                ) from err
+                )
+        if errors:
+            raise forms.ValidationError(errors)
 
 
 class EvaluatorTagRuleForm(forms.ModelForm):
@@ -346,11 +358,7 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         model = EvaluatorTagRule
         fields = ("field_name", "condition_type")
         widgets = {
-            "field_name": forms.TextInput(attrs={"class": "input input-bordered w-full input-sm"}),
-            "condition_type": forms.Select(
-                attrs={"class": "select select-bordered w-full select-sm"},
-                choices=ConditionType.choices,
-            ),
+            "condition_type": forms.Select(choices=ConditionType.choices),
         }
 
     def __init__(self, *args, team=None, output_schema=None, **kwargs):

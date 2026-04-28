@@ -56,7 +56,7 @@ def evaluate_rules(rules: list[EvaluatorTagRule], result_output: dict) -> list[E
         try:
             if matches(rule.condition_type, rule.condition_value or {}, field_value):
                 matched.append(rule)
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError, KeyError) as exc:
             logger.warning("Skipping tag rule %s due to evaluation error: %s", rule.pk, exc)
     return matched
 
@@ -85,7 +85,10 @@ def apply_rules_to_result(
     Caller is responsible for running this inside a transaction.atomic() block along
     with the EvaluationResult.create() it corresponds to.
     """
-    rules = list(evaluator.tag_rules.all())
+    rules = getattr(evaluator, "_tag_rules_cache", None)
+    if rules is None:
+        rules = list(evaluator.tag_rules.all())
+        evaluator._tag_rules_cache = rules
     if not rules:
         return
 

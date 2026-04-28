@@ -59,9 +59,11 @@ class ConditionType(models.TextChoices):
         if self == ConditionType.RANGE:
             try:
                 numeric = float(field_value)
+                lo = float(condition_value.get("min"))
+                hi = float(condition_value.get("max"))
             except (TypeError, ValueError):
                 return False
-            return float(condition_value["min"]) <= numeric <= float(condition_value["max"])
+            return lo <= numeric <= hi
         raise ValueError(f"Unknown condition type: {self}")
 
 

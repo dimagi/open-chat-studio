@@ -9,15 +9,15 @@
   {% endif %}
   <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
     <div>
-      <label class="label text-sm"><span>{% translate "Tag name" %}</span></label>
-      <input type="text" name="{{ form.tag_name.html_name }}" maxlength="100"
+      <label for="{{ form.tag_name.id_for_label }}" class="label text-sm"><span>{% translate "Tag name" %}</span></label>
+      <input type="text" id="{{ form.tag_name.id_for_label }}" name="{{ form.tag_name.html_name }}" maxlength="100"
              value="{{ form.tag_name.value|default_if_none:'' }}"
              class="input input-bordered w-full input-sm">
       {{ form.tag_name.errors }}
     </div>
     <div>
-      <label class="label text-sm"><span>{% translate "Field" %}</span></label>
-      <select name="{{ form.field_name.html_name }}"
+      <label for="{{ form.field_name.id_for_label }}" class="label text-sm"><span>{% translate "Field" %}</span></label>
+      <select id="{{ form.field_name.id_for_label }}" name="{{ form.field_name.html_name }}"
               x-effect="if (schemaFieldNames().includes(fieldName) && $el.value !== fieldName) { $nextTick(() => { $el.value = fieldName }) }"
               @change="fieldName = $event.target.value"
               class="select select-bordered w-full select-sm">
@@ -30,8 +30,8 @@
       {{ form.field_name.errors }}
     </div>
     <div>
-      <label class="label text-sm"><span>{% translate "Condition" %}</span></label>
-      <select name="{{ form.condition_type.html_name }}"
+      <label for="{{ form.condition_type.id_for_label }}" class="label text-sm"><span>{% translate "Condition" %}</span></label>
+      <select id="{{ form.condition_type.id_for_label }}" name="{{ form.condition_type.html_name }}"
               x-effect="conditionType = (fieldName && schemaFieldNames().includes(fieldName) && !allowedConditionsForField(fieldName).includes(conditionType)) ? (allowedConditionsForField(fieldName)[0] || '') : conditionType; if ($el.value !== conditionType) { $nextTick(() => { $el.value = conditionType }) }"
               @change="conditionType = $event.target.value"
               :disabled="!fieldName || allowedConditionsForField(fieldName).length === 0"
@@ -63,9 +63,9 @@
   </div>
   <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3" x-show="fieldName && conditionType">
     <div x-show="conditionType === 'equals'">
-      <label class="label text-sm"><span>{% translate "Value" %}</span></label>
+      <label for="{{ form.condition_value_single.id_for_label }}" class="label text-sm"><span>{% translate "Value" %}</span></label>
       <template x-if="fieldType(fieldName) === 'choice'">
-        <select name="{{ form.condition_value_single.html_name }}"
+        <select id="{{ form.condition_value_single.id_for_label }}" name="{{ form.condition_value_single.html_name }}"
                 class="select select-bordered w-full select-sm">
           <option value="">{% translate "Select a choice..." %}</option>
           <template x-for="choice in fieldChoices(fieldName)" :key="choice">
@@ -77,6 +77,7 @@
       <template x-if="fieldType(fieldName) !== 'choice'">
         <input :type="['int','float'].includes(fieldType(fieldName)) ? 'number' : 'text'"
                step="any"
+               id="{{ form.condition_value_single.id_for_label }}"
                name="{{ form.condition_value_single.html_name }}"
                value="{{ form.condition_value_single.value|default_if_none:'' }}"
                class="input input-bordered w-full input-sm">
@@ -86,15 +87,15 @@
     <div x-show="conditionType === 'range'"
          class="grid grid-cols-2 gap-2">
       <div>
-        <label class="label text-sm"><span>{% translate "Min" %}</span></label>
-        <input type="number" step="any" name="{{ form.condition_value_min.html_name }}"
+        <label for="{{ form.condition_value_min.id_for_label }}" class="label text-sm"><span>{% translate "Min" %}</span></label>
+        <input type="number" step="any" id="{{ form.condition_value_min.id_for_label }}" name="{{ form.condition_value_min.html_name }}"
                value="{{ form.condition_value_min.value|default_if_none:'' }}"
                class="input input-bordered w-full input-sm">
         {{ form.condition_value_min.errors }}
       </div>
       <div>
-        <label class="label text-sm"><span>{% translate "Max" %}</span></label>
-        <input type="number" step="any" name="{{ form.condition_value_max.html_name }}"
+        <label for="{{ form.condition_value_max.id_for_label }}" class="label text-sm"><span>{% translate "Max" %}</span></label>
+        <input type="number" step="any" id="{{ form.condition_value_max.id_for_label }}" name="{{ form.condition_value_max.html_name }}"
                value="{{ form.condition_value_max.value|default_if_none:'' }}"
                class="input input-bordered w-full input-sm">
         {{ form.condition_value_max.errors }}

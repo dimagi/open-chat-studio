@@ -1,4 +1,5 @@
 import inspect
+import json
 from functools import lru_cache
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -66,8 +67,13 @@ class EvaluatorFormsetMixin:
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object_or_none()
+
+        initial_instance = self.object or Evaluator(team=request.team)
+        initial_formset = self._build_tag_rule_formset(initial_instance, data=request.POST)
+        pending_deleted_pks = _extract_pending_deleted_rule_pks(request.POST, initial_formset.prefix)
+
         form = self.get_form()
-        formset = self._build_tag_rule_formset(self.object or Evaluator(team=request.team), data=request.POST)
+        form.pending_deleted_rule_pks = pending_deleted_pks
 
         if form.is_valid():
             evaluator = form.save(commit=False)
@@ -86,6 +92,14 @@ class EvaluatorFormsetMixin:
                     formset.save()
                 return redirect(self.get_success_url())
         else:
+            # Rebuild against the user's submitted output_schema (best effort) so
+            # per-row tag-rule errors reference the new schema, not the stored one.
+            formset = EvaluatorTagRuleFormSet(
+                data=request.POST,
+                instance=initial_instance,
+                team=request.team,
+                output_schema=_submitted_output_schema(form, initial_instance),
+            )
             formset.is_valid()  # surface errors in the template
 
         return self.render_to_response(self.get_context_data(form=form, tag_rule_formset=formset))
@@ -169,6 +183,46 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Delete
         self.object = self.get_object()
         self.object.delete()
         return HttpResponse(status=200)
+
+
+def _extract_pending_deleted_rule_pks(post_data, prefix: str) -> set[int]:
+    """Return existing-rule pks that the formset POST has marked DELETE."""
+    try:
+        total = int(post_data.get(f"{prefix}-TOTAL_FORMS", 0))
+    except (TypeError, ValueError):
+        return set()
+    pks: set[int] = set()
+    for i in range(total):
+        if not post_data.get(f"{prefix}-{i}-DELETE"):
+            continue
+        raw_pk = post_data.get(f"{prefix}-{i}-id")
+        if not raw_pk:
+            continue
+        try:
+            pks.add(int(raw_pk))
+        except (TypeError, ValueError):
+            continue
+    return pks
+
+
+def _submitted_output_schema(form, instance) -> dict:
+    """Best-effort extraction of output_schema from the submitted form params.
+
+    Falls back to the instance's stored output_schema when params can't be parsed.
+    """
+    params = form.cleaned_data.get("params") if hasattr(form, "cleaned_data") else None
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            params = None
+    if isinstance(params, dict):
+        schema = params.get("output_schema")
+        if isinstance(schema, dict):
+            return schema
+    if instance and instance.pk:
+        return (instance.params or {}).get("output_schema", {}) or {}
+    return {}
 
 
 @lru_cache(maxsize=1)

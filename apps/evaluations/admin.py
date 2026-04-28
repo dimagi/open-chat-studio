@@ -63,7 +63,7 @@ class EvaluationMessageAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     search_fields = ("id",)
 
 
-class EvaluatorTagRuleInline(admin.TabularInline):
+class EvaluatorTagRuleInline(ReadonlyAdminMixin, admin.TabularInline):
     model = EvaluatorTagRule
     extra = 0
     fields = ("tag", "field_name", "condition_type", "condition_value")
@@ -71,7 +71,7 @@ class EvaluatorTagRuleInline(admin.TabularInline):
 
 
 @admin.register(EvaluatorTagRule)
-class EvaluatorTagRuleAdmin(admin.ModelAdmin):
+class EvaluatorTagRuleAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("id", "evaluator", "tag", "field_name", "condition_type", "team")
     list_filter = ("team", "condition_type")
     search_fields = ("field_name", "evaluator__name", "tag__name")
