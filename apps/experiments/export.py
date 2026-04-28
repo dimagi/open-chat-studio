@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 from collections.abc import Generator, Iterator
+from typing import BinaryIO
 
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
@@ -226,7 +227,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str, None, None
 
 def export_to_tempfile(
     experiment, sessions_queryset, translation_language=None, compress=False
-) -> tempfile.SpooledTemporaryFile | tempfile.TemporaryFile:
+) -> BinaryIO:
     """Write the CSV export to a temporary file and return it, seeked to 0.
 
     Use as a context manager (``with export_to_tempfile(...) as tmp:``) so that
