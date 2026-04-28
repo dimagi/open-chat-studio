@@ -192,10 +192,9 @@ DEFAULT_EMBEDDING_PROVIDER_MODELS = {
         "voyage-4-large",
         "voyage-4",
         "voyage-4-lite",
-        "voyage-3-large",
-        "voyage-3.5",
-        "voyage-3.5-lite",
         "voyage-code-3",
+        "voyage-finance-2",
+        "voyage-law-2",
     ],
 }
 
