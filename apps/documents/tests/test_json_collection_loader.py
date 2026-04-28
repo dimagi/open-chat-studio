@@ -219,7 +219,7 @@ class TestLoadDocumentsFallback:
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
         loader = _make_loader(json_config)
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
             docs = list(loader.load_documents())
 
         assert len(docs) == 1
