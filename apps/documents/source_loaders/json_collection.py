@@ -112,14 +112,15 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
                     exc,
                 )
                 continue
-            metadata = {
-                **item_metadata,
-                "file_type": attachment.get("file_type"),
-                "file_size": attachment.get("file_size"),
-                "attachment_title": attachment.get("title"),
-                "link": link,
-                "source": link,
-            }
+            attachment_metadata: dict[str, Any] = {"link": link, "source": link}
+            for src_key, dst_key in (
+                ("file_type", "file_type"),
+                ("file_size", "file_size"),
+                ("title", "attachment_title"),
+            ):
+                if src_key in attachment:
+                    attachment_metadata[dst_key] = attachment[src_key]
+            metadata = {**item_metadata, **attachment_metadata}
             yield Document(page_content=text, metadata=metadata)
 
     def _fetch_and_extract(self, url: str) -> str:
