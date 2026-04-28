@@ -2,7 +2,7 @@ from functools import cached_property
 
 from django.conf import settings
 from django.contrib import messages
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -11,7 +11,7 @@ from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefre
 from django_tables2 import RequestConfig, SingleTableView
 
 from apps.chatbots.tables import ChatbotSessionsTable
-from apps.experiments.export import filtered_export_to_csv
+from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -153,11 +153,10 @@ def download_analysis_results(request, team_slug, pk):
 def export_sessions(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
     sessions = analysis.sessions.all()
-    csv_content = filtered_export_to_csv(
+    rows = generate_export_rows(
         analysis.experiment, sessions, translation_language=analysis.translation_language
     )
-
-    response = HttpResponse(csv_content.getvalue(), content_type="text/csv")
+    response = StreamingHttpResponse(export_rows_to_csv_stream(rows), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{analysis.name}_sessions_export.csv"'
     return response
 

@@ -1,7 +1,7 @@
 import csv
 import io
 import json
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -297,10 +297,15 @@ def test_trace_id_export():
 
     experiment = Mock(public_id="exp123", name="Test Experiment")
 
-    mock_traces_qs = Mock()
+    # Build a chainable mock queryset that supports the keyset-pagination pattern:
+    # Trace.objects.filter(...).select_related(...).prefetch_related(...).order_by("pk")
+    # then base_qs.filter(pk__gt=last_pk)[:CHUNK_SIZE] → [trace1, trace2]
+    mock_traces_qs = MagicMock()
     mock_traces_qs.select_related.return_value = mock_traces_qs
     mock_traces_qs.prefetch_related.return_value = mock_traces_qs
-    mock_traces_qs.order_by.return_value = [trace1, trace2]
+    mock_traces_qs.order_by.return_value = mock_traces_qs
+    # .filter(pk__gt=...) returns a sliceable mock; [:chunk_size] yields the two traces
+    mock_traces_qs.filter.return_value.__getitem__ = Mock(return_value=[trace1, trace2])
 
     with patch("apps.experiments.export.Trace.objects.filter", return_value=mock_traces_qs):
         csv_in_memory = filtered_export_to_csv(experiment, Mock())
