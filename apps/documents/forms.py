@@ -4,7 +4,12 @@ from django.conf import settings
 from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
-from apps.documents.datamodels import ConfluenceSourceConfig, DocumentSourceConfig, GitHubSourceConfig
+from apps.documents.datamodels import (
+    ConfluenceSourceConfig,
+    DocumentSourceConfig,
+    GitHubSourceConfig,
+    JSONCollectionSourceConfig,
+)
 from apps.documents.models import Collection, DocumentSource, SourceType
 from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
@@ -390,3 +395,53 @@ class CreateCollectionFromAssistantForm(forms.Form):
         collection_name = self.cleaned_data["collection_name"]
         if Collection.objects.filter(team=self.request.team, name=collection_name, is_version=False).exists():
             raise forms.ValidationError("A collection with this name already exists.")
+
+
+class JSONCollectionDocumentSourceForm(DocumentSourceForm):
+    requires_auth = False
+
+    json_url = forms.URLField(
+        label="JSON Feed URL",
+        help_text="URL of the JSON feed to ingest (must be a JSON list of items)",
+        widget=forms.URLInput(attrs={"placeholder": "https://example.com/feed.json"}),
+    )
+    request_timeout = forms.IntegerField(
+        initial=30,
+        min_value=5,
+        max_value=300,
+        label="Request Timeout (seconds)",
+        help_text="HTTP timeout applied to the JSON fetch and each attachment download",
+    )
+
+    def _get_config_from_instance(self, instance):
+        return instance.config.json_collection
+
+    def clean_json_url(self):
+        json_url = self.cleaned_data["json_url"]
+        try:
+            validate_user_input_url(json_url, strict=not settings.DEBUG)
+        except InvalidURL as e:
+            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+        return json_url
+
+    def clean_source_type(self):
+        source_type = self.cleaned_data.get("source_type")
+        if source_type != SourceType.JSON_COLLECTION:
+            raise forms.ValidationError(f"Expected JSON Collection source type, got {source_type}")
+        return source_type
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+
+        try:
+            json_collection_config = JSONCollectionSourceConfig(
+                json_url=cleaned_data["json_url"],
+                request_timeout=cleaned_data["request_timeout"],
+            )
+        except pydantic.ValidationError as e:
+            raise forms.ValidationError(f"Invalid config: {str(e)}") from None
+
+        cleaned_data["config"] = DocumentSourceConfig(json_collection=json_collection_config)
+        return cleaned_data
