@@ -1,7 +1,13 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from apps.service_providers.llm_service import AnthropicLlmService, AzureLlmService, OpenAILlmService
+from apps.service_providers.llm_service import (
+    AnthropicLlmService,
+    AzureLlmService,
+    OpenAILlmService,
+    VoyageAILlmService,
+)
+from apps.service_providers.llm_service.index_managers import VoyageAILocalIndexManager
 from apps.service_providers.llm_service.main import OpenAIGenericService
 from apps.service_providers.models import LlmProviderTypes
 
@@ -59,3 +65,16 @@ def test_generic_openai_service_does_not_use_responses_api(provider_type, config
     assert service._use_responses_api is False
     llm = service.get_chat_model("some-model")
     assert llm.use_responses_api is False
+
+
+def test_voyage_ai_service():
+    service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
+    assert isinstance(service, VoyageAILlmService)
+    assert not service.supports_transcription
+    assert not service.supports_assistants
+
+
+def test_voyage_ai_service_returns_local_index_manager():
+    service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
+    manager = service.get_local_index_manager("voyage-4-large")
+    assert isinstance(manager, VoyageAILocalIndexManager)
