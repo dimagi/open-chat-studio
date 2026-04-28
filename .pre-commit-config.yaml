@@ -46,6 +46,12 @@ repos:
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: 'v3.8.3'
+    hooks:
+      - id: prettier
+        files: ^components/chat_widget/src/.*\.(ts|tsx|css)$
+        types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version.
     rev: v0.0.32
