@@ -11,6 +11,7 @@ from langchain_core.callbacks.base import BaseCallbackHandler
 
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
+from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
@@ -37,6 +38,7 @@ class OCSTracer(Tracer):
         self.error_message: str = ""
         self.error_span_name: str = ""
         self.error_notification_config: SpanNotificationConfig | None = None
+        self.metrics_collector: MetricsCollector | None = None
 
     @property
     def ready(self) -> bool:
@@ -83,6 +85,7 @@ class OCSTracer(Tracer):
         )
 
         self.start_time = time.time()
+        self.metrics_collector = MetricsCollector(start_time=self.start_time)
 
         try:
             yield trace_context
@@ -106,8 +109,13 @@ class OCSTracer(Tracer):
                     else:
                         self.trace_record.status = TraceStatus.SUCCESS
 
-                    # Note: OCSTracer doesn't store trace outputs in database
-                    # but could access them via trace_context.outputs if needed
+                    if self.metrics_collector:
+                        metrics = self.metrics_collector.get_metrics()
+                        self.trace_record.n_turns = metrics.n_turns
+                        self.trace_record.n_toolcalls = metrics.n_toolcalls
+                        self.trace_record.n_total_tokens = metrics.n_total_tokens
+                        self.trace_record.time_to_first_token = metrics.time_to_first_token
+                        self.trace_record.time_to_last_token = metrics.time_to_last_token
 
                     self.trace_record.save()
 
@@ -146,6 +154,7 @@ class OCSTracer(Tracer):
             self.session = None
             self.error_span_name = ""
             self.error_notification_config = None
+            self.metrics_collector = None
 
     @contextmanager
     def span(
@@ -179,7 +188,7 @@ class OCSTracer(Tracer):
                     self.error_notification_config = span_context.notification_config
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
-        """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
+        """Return a callback handler for error capture and metrics collection."""
         return OCSCallbackHandler(tracer=self)
 
     def add_trace_tags(self, tags: list[str]) -> None:
@@ -249,6 +258,22 @@ class OCSCallbackHandler(BaseCallbackHandler):
             self.tracer.error_notification_config = SpanNotificationConfig(
                 permissions=["experiments.change_experiment"]
             )
+
+    def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_llm_start(serialized, prompts, **kwargs)
+
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_llm_new_token(token, **kwargs)
+
+    def on_llm_end(self, response: Any, **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_llm_end(response, **kwargs)
+
+    def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_tool_start(serialized, input_str, **kwargs)
 
     def on_llm_error(self, *args, **kwargs) -> None:
         error = kwargs.get("error") or (args[0] if args else None)
