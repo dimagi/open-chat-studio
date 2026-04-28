@@ -75,6 +75,15 @@ def resolve_target(evaluator: Evaluator, evaluation_message: EvaluationMessage) 
     return evaluation_message.expected_output_chat_message
 
 
+def _get_cached_tag_rules(evaluator: Evaluator) -> list[EvaluatorTagRule]:
+    """Cached fetch of the evaluator's tag rules to skip the query on repeat calls."""
+    rules = getattr(evaluator, "_tag_rules_cache", None)
+    if rules is None:
+        rules = list(evaluator.tag_rules.all())
+        evaluator._tag_rules_cache = rules
+    return rules
+
+
 def apply_rules_to_result(
     evaluation_result: EvaluationResult,
     evaluator: Evaluator,
@@ -85,10 +94,7 @@ def apply_rules_to_result(
     Caller is responsible for running this inside a transaction.atomic() block along
     with the EvaluationResult.create() it corresponds to.
     """
-    rules = getattr(evaluator, "_tag_rules_cache", None)
-    if rules is None:
-        rules = list(evaluator.tag_rules.all())
-        evaluator._tag_rules_cache = rules
+    rules = _get_cached_tag_rules(evaluator)
     if not rules:
         return
 

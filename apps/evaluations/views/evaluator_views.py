@@ -206,23 +206,26 @@ def _extract_pending_deleted_rule_pks(post_data, prefix: str) -> set[int]:
 
 
 def _submitted_output_schema(form, instance) -> dict:
-    """Best-effort extraction of output_schema from the submitted form params.
+    """Best-effort output_schema from submitted params, falling back to the stored schema."""
+    schema = _output_schema_from_form_params(form)
+    if isinstance(schema, dict):
+        return schema
+    if instance and instance.pk:
+        return (instance.params or {}).get("output_schema") or {}
+    return {}
 
-    Falls back to the instance's stored output_schema when params can't be parsed.
-    """
-    params = form.cleaned_data.get("params") if hasattr(form, "cleaned_data") else None
+
+def _output_schema_from_form_params(form):
+    """Return the submitted output_schema, or None when params can't be parsed."""
+    params = getattr(form, "cleaned_data", {}).get("params")
     if isinstance(params, str):
         try:
             params = json.loads(params)
         except (TypeError, ValueError, json.JSONDecodeError):
-            params = None
-    if isinstance(params, dict):
-        schema = params.get("output_schema")
-        if isinstance(schema, dict):
-            return schema
-    if instance and instance.pk:
-        return (instance.params or {}).get("output_schema", {}) or {}
-    return {}
+            return None
+    if not isinstance(params, dict):
+        return None
+    return params.get("output_schema")
 
 
 @lru_cache(maxsize=1)
