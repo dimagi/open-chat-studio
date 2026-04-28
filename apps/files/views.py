@@ -44,7 +44,7 @@ def _get_s3_presigned_url(file_field, filename, content_type, expires_in=3600):
     try:
         params = {
             "Bucket": storage.bucket.name,
-            "Key": file_field.name,
+            "Key": storage._normalize_name(file_field.name),
             "ResponseContentDisposition": f'attachment; filename="{filename}"',
         }
         if content_type:
