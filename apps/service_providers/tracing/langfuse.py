@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+from langfuse import propagate_attributes
 from langfuse._client.get_client import _create_client_from_instance
 from langfuse._client.resource_manager import LangfuseResourceManager
 from langfuse.langchain import CallbackHandler
@@ -20,7 +21,7 @@ from .const import SpanLevel
 if TYPE_CHECKING:
     from langchain_core.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
-    from langfuse.api.client import FernLangfuse
+    from langfuse.api.client import LangfuseAPI
 
     from apps.experiments.models import ExperimentSession
 
@@ -28,11 +29,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.tracing.langfuse")
 
 
-def get_langfuse_api_client(config: dict) -> FernLangfuse:
+def get_langfuse_api_client(config: dict) -> LangfuseAPI:
     """Create a Langfuse management API client for reading trace data."""
-    from langfuse.api.client import FernLangfuse  # noqa: PLC0415 - lazy: test mocks at source module level
+    from langfuse.api.client import LangfuseAPI  # noqa: PLC0415 - lazy: test mocks at source module level
 
-    return FernLangfuse(
+    return LangfuseAPI(
         base_url=config["host"],
         username=config["public_key"],
         password=config["secret_key"],
@@ -52,6 +53,7 @@ class LangFuseTracer(Tracer):
         super().__init__(type_, config)
         self.client = None
         self.trace_record = None
+        self._langfuse_trace_id: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -79,19 +81,19 @@ class LangFuseTracer(Tracer):
         # Get client and create trace
         self.client = client_manager.get(self.config)
         try:
-            with self.client.start_as_current_span(
-                name=trace_context.name,
-                input=inputs,
-                metadata=metadata,
-            ) as trace:
-                self.trace_record = trace
-                self.trace_record.update_trace(
-                    session_id=str(session.external_id),
-                    user_id=session.participant.identifier,
-                )
-
-                yield trace_context
-                self._update_span_from_context(trace, trace_context)
+            with propagate_attributes(
+                session_id=str(session.external_id),
+                user_id=session.participant.identifier,
+            ):
+                with self.client.start_as_current_observation(
+                    name=trace_context.name,
+                    input=inputs,
+                    metadata=metadata,
+                ) as trace:
+                    self.trace_record = trace
+                    self._langfuse_trace_id = self.client.get_current_trace_id()
+                    yield trace_context
+                    self._update_span_from_context(trace, trace_context)
         finally:
             if self.trace_record:
                 self.client.flush()
@@ -99,6 +101,7 @@ class LangFuseTracer(Tracer):
             # Reset state
             self.client = None
             self.trace_record = None
+            self._langfuse_trace_id = None
             self.session = None
 
     @contextmanager
@@ -117,7 +120,7 @@ class LangFuseTracer(Tracer):
             yield span_context
             return
 
-        with self.client.start_as_current_span(
+        with self.client.start_as_current_observation(
             name=span_context.name,
             input=inputs,
             metadata=metadata,
@@ -149,11 +152,19 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
+        # get_trace_url() does a blocking HTTP fetch for project_id; isolate failures
+        # so we still capture trace_id in the chat message metadata.
+        try:
+            trace_url = self.client.get_trace_url(trace_id=self._langfuse_trace_id)
+        except Exception:
+            logger.exception("Failed to fetch Langfuse trace URL for trace_id=%s", self._langfuse_trace_id)
+            trace_url = None
+
         return cast(
             dict[str, str],
             {
-                "trace_id": self.trace_record.trace_id,
-                "trace_url": self.client.get_trace_url(trace_id=self.trace_record.trace_id),
+                "trace_id": self._langfuse_trace_id,
+                "trace_url": trace_url,
                 "trace_provider": self.type,
             },
         )
@@ -161,7 +172,8 @@ class LangFuseTracer(Tracer):
     def add_trace_tags(self, tags: list[str]) -> None:
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
-        self.trace_record.update(tags=tags)
+        # span.update() no longer accepts tags in v4; use the ingestion API directly
+        self.client._create_trace_tags_via_ingestion(trace_id=self._langfuse_trace_id, tags=tags)
 
     def set_output_message_id(self, output_message_id: str) -> None:
         pass

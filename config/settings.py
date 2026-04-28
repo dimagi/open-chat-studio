@@ -84,6 +84,7 @@ THIRD_PARTY_APPS = [
     "template_partials",
     "silk",
     "oauth2_provider",
+    "anymail",
 ]
 
 PROJECT_APPS = [
@@ -400,10 +401,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Email setup
 
 # use in development
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 # use in production
 # see https://github.com/anymail/django-anymail for more details/examples
 # EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
+ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default=None)
 
 # Django sites
 
@@ -703,8 +705,8 @@ DOCUMENTATION_LINKS = {
     "node_llm": "/concepts/pipelines/nodes/#llm-node",
     "node_llm_router": "/concepts/pipelines/router_nodes/#llm-router-node",
     "node_static_router": "/concepts/pipelines/router_nodes/#static-router-node",
-    "node_assistant": "/concepts/pipelines/nodes/#assistant-as-a-node",
-    "node_code": "/concepts/pipelines/nodes/#python-code-node",
+    "node_assistant": "/concepts/pipelines/nodes/",
+    "node_code": "/concepts/pipelines/nodes/#python-node",
     "node_template": "/concepts/pipelines/nodes/#template",
     "node_email": "/concepts/pipelines/nodes/#email-node",
     "node_extract_structured_data": "/concepts/pipelines/nodes/#extract-structured-data-node",

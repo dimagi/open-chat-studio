@@ -7,9 +7,12 @@ import pytest
 from django.conf import settings
 from pydub import AudioSegment
 
+from apps.experiments.models import SyntheticVoice
+from apps.service_providers.models import VoiceProvider, VoiceProviderType
 from apps.service_providers.speech_service import (
     AWSSpeechService,
     AzureSpeechService,
+    IntronSpeechService,
     OpenAISpeechService,
 )
 from apps.utils.factories.experiment import SyntheticVoiceFactory
@@ -71,6 +74,15 @@ def azure_credentials():
         "subscription_key": subscription_key,
         "region": region,
     }
+
+
+@pytest.fixture()
+def intron_credentials():
+    """Get real intron.io credentials from environment using django-environ"""
+    api_key = env.str("INTRON_API_KEY", default=None)
+    if not api_key:
+        pytest.skip("INTRON_API_KEY not set")
+    return {"api_key": api_key}
 
 
 @pytest.mark.django_db()
@@ -203,3 +215,36 @@ def _test_transcription(service, audio_path=None):
     assert any(word in result_lower for word in ["ribby", "ribbie", "ribbey", "ruby"])
     assert any(word in result_lower for word in ["patty", "patty-pan"])
     assert any(word in result_lower for word in ["scalloped", "scallop"])
+
+
+@pytest.mark.django_db()
+class TestIntronSpeechIntegration:
+    """Integration tests for intron.io TTS with real API"""
+
+    def test_synthesize_voice_with_real_api(self, intron_credentials, team_with_users):
+        """Test synthesis with real intron.io API (enqueue -> poll -> download)."""
+
+        provider = VoiceProvider.objects.create(
+            team=team_with_users,
+            name="Intron Integration",
+            type=VoiceProviderType.intron,
+            config={"intron_api_key": intron_credentials["api_key"]},
+        )
+        provider.run_post_save_hook()
+        voice = provider.syntheticvoice_set.get(
+            service=SyntheticVoice.Intron,
+            name="yoruba",
+            gender="female",
+        )
+
+        service = IntronSpeechService(intron_api_key=intron_credentials["api_key"])
+
+        text = "Hello from the intron integration test."
+        result = service.synthesize_voice(text, voice)
+
+        assert result.format in ("mp3", "wav", "ogg")
+        assert result.duration > 0
+        assert len(result.audio.getvalue()) > 0
+
+        audio_segment = AudioSegment.from_file(result.audio, format=result.format)
+        assert len(audio_segment) > 0

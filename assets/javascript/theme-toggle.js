@@ -2,8 +2,24 @@ const darkTheme = 'dark';
 const lightTheme = 'light';
 const systemTheme = 'system';
 
+function readStoredTheme() {
+  try {
+    return localStorage.getItem('theme');
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredTheme(theme) {
+  try {
+    localStorage.setItem('theme', theme);
+  } catch {
+    // ignore
+  }
+}
+
 function syncDarkMode() {
-  const theme = localStorage.getItem('theme') || systemTheme;
+  const theme = readStoredTheme() || systemTheme;
   setTheme(theme);
 }
 
@@ -27,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementsByName("theme-dropdown").forEach((element) => {
     element.addEventListener('change', (event) => {
       const theme = event.target.value;
-      localStorage.setItem('theme', theme);
+      writeStoredTheme(theme);
       setTheme(theme);
     })
   })
