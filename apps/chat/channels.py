@@ -342,6 +342,10 @@ class ChannelBase(ABC):
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
             channel_cls = CommCareConnectChannel
+        elif platform == "email":
+            from apps.channels.channels_v2.email_channel import EmailChannel  # noqa: PLC0415
+
+            channel_cls = EmailChannel
         # elif platform == "evaluations":
         #  evals channel can't be called this way
         elif platform == "embedded_widget":

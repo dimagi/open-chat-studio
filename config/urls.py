@@ -87,6 +87,7 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path("channels/", include("apps.channels.urls", namespace="channels")),
+    path("anymail/", include("anymail.urls")),
     path("api/", include("apps.api.urls", namespace="api")),
     path("tz_detect/", include("tz_detect.urls")),
     path("__reload__/", include("django_browser_reload.urls")),

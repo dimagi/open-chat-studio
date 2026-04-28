@@ -2,6 +2,7 @@ import uuid
 
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from django.db import OperationalError  # noqa: F811 - used at runtime in task decorator
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
@@ -209,5 +210,49 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
 
     set_current_team(experiment_channel.team)
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
+    update_taskbadger_data(self, channel, message)
+    channel.new_user_message(message)
+
+
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    ignore_result=True,
+    autoretry_for=(OperationalError, ConnectionError),
+    max_retries=3,
+    retry_backoff=60,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def handle_email_message(self, email_data: dict):
+    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415
+        EmailChannel,
+        EmailThreadContext,
+        get_email_experiment_channel,
+    )
+    from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
+
+    message = EmailMessageDatamodel(**email_data)
+
+    experiment_channel, session = get_email_experiment_channel(
+        in_reply_to=message.in_reply_to,
+        references=message.references,
+        to_address=message.to_address,
+        sender_address=message.from_address,
+    )
+    if not experiment_channel:
+        log.info("No email channel found for to=%s, ignoring", message.to_address)
+        return
+
+    set_current_team(experiment_channel.team)
+
+    thread_context = EmailThreadContext.from_inbound(message)
+
+    channel = EmailChannel(
+        experiment=experiment_channel.experiment.default_version,
+        experiment_channel=experiment_channel,
+        experiment_session=session,
+        thread_context=thread_context,
+    )
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)

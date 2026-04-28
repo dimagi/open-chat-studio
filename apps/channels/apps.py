@@ -7,4 +7,9 @@ class BotChannelsAppConfig(AppConfig):
 
     def ready(self):
         # Register signal handlers
+        from anymail.signals import inbound  # noqa: PLC0415
+
         from . import signals  # noqa: F401, PLC0415
+        from .channels_v2.email_channel import email_inbound_handler  # noqa: PLC0415
+
+        inbound.connect(email_inbound_handler)

@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import Literal
 
 import phonenumbers
+from mailparser_reply import EmailReplyParser
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.channels.models import ChannelPlatform
@@ -270,3 +271,50 @@ class SlackMessage(BaseMessage):
     channel_id: str
     thread_ts: str
     message_text: str
+
+
+class EmailMessage(BaseMessage):
+    """Inbound email parsed from AnymailInboundMessage."""
+
+    from_address: str = Field(max_length=254)
+    to_address: str = Field(max_length=254)
+    subject: str = Field(max_length=1000)
+    message_id: str = Field(max_length=500)
+    in_reply_to: str | None = None
+    references: list[str] = Field(default=[])
+
+    @staticmethod
+    def parse(inbound) -> "EmailMessage":
+        body = inbound.text or ""
+        reply = EmailReplyParser(languages=["en", "de", "fr", "es", "pt", "it", "nl", "pl", "sv", "da", "no"]).read(
+            body
+        )
+        stripped_text = reply.latest_reply or body
+
+        return EmailMessage(
+            participant_id=inbound.from_email.addr_spec,
+            message_text=stripped_text,
+            from_address=inbound.from_email.addr_spec,
+            to_address=inbound.to[0].addr_spec if inbound.to else "",
+            subject=inbound.subject or "",
+            message_id=inbound.get("Message-ID", ""),
+            in_reply_to=inbound.get("In-Reply-To"),
+            references=_parse_references(inbound.get("References", "")),
+        )
+
+
+_MAX_REFERENCES = 50
+
+
+def _parse_references(refs: str) -> list[str]:
+    """Parse space-separated Message-ID list from References header.
+
+    Keeps the first reference (root message / session anchor) plus the
+    most recent ones to prevent unbounded growth in long email threads.
+    """
+    if not refs:
+        return []
+    parsed = [r.strip() for r in refs.split() if r.strip()]
+    if len(parsed) <= _MAX_REFERENCES:
+        return parsed
+    return [parsed[0], *parsed[-(_MAX_REFERENCES - 1) :]]
