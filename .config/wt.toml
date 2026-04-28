@@ -2,7 +2,7 @@
 bootstrap = ".claude/hooks/setup-env.sh"
 
 [[pre-start]]
-database-url = "sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{ branch | sanitize_db }}|' .env"
+database-url = "if grep -q '^DATABASE_URL=' .env; then sed -i.bak 's|^DATABASE_URL=.*|DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{ branch | sanitize_db }}|' .env && rm -f .env.bak; else echo 'DATABASE_URL=postgres://postgres:postgres@localhost:5432/{{ branch | sanitize_db }}' >> .env; fi"
 
 [[pre-start]]
 create-database = "PGPASSWORD=postgres psql -h localhost -U postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='{{ branch | sanitize_db }}'\" | grep -q 1 || PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE {{ branch | sanitize_db }}'"
