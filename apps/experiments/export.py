@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 from collections.abc import Generator, Iterator
+from typing import BinaryIO
 
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
@@ -226,40 +227,43 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str, None, None
 
 def export_to_tempfile(
     experiment, sessions_queryset, translation_language=None, compress=False
-) -> tempfile.SpooledTemporaryFile:
-    """Write the CSV export to a spooled temporary file and return it, seeked to 0.
+) -> BinaryIO:
+    """Write the CSV export to a temporary file and return it, seeked to 0.
 
     Use as a context manager (``with export_to_tempfile(...) as tmp:``) so that
-    the file is closed and any spilled data on disk is removed automatically.
-    Using a spooled file means small exports stay in memory while large ones spill
-    to disk automatically, avoiding a single large in-memory allocation.
+    the file is closed and any on-disk data is cleaned up automatically.
 
     The returned file is opened in binary mode (``mode="wb+"``); callers should
     read raw bytes from it (e.g. ``tmp.read()`` returns ``bytes``).
 
-    If ``compress=True``, the data is written as a gzip-compressed stream.  CSV
-    data compresses very well (typically 80–90% reduction), which significantly
-    reduces both storage and download time for large exports.
-    """
-    tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")
+    If ``compress=False`` (default), a SpooledTemporaryFile is used so small
+    exports stay in memory while large ones spill to disk automatically.
 
+    If ``compress=True``, the data is written as a gzip-compressed stream using a
+    regular TemporaryFile (always disk-backed).  CSV data compresses very well
+    (typically 80–90% reduction), which significantly reduces both S3 storage and
+    download time for large exports.  The gzip stream is finalised (trailer written)
+    before returning so the file is a valid, complete .gz archive.
+    """
     if compress:
-        # Write CSV rows through a GzipFile so the spooled file holds compressed
-        # bytes.  GzipFile must be explicitly closed to flush its trailer before
-        # we seek back to the start; detach the TextIOWrapper first so it doesn't
-        # try to close the GzipFile a second time on garbage collection.
-        gz = gzip.GzipFile(fileobj=tmp, mode="wb")
-        text_wrapper = io.TextIOWrapper(gz, encoding="utf-8", newline="")
-        writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row in generate_export_rows(experiment, sessions_queryset, translation_language):
-            writer.writerow(row)
-        text_wrapper.flush()
-        text_wrapper.detach()
-        gz.close()  # finalises the gzip stream and writes the trailing checksum
+        # Use a plain TemporaryFile rather than SpooledTemporaryFile.  The
+        # SpooledTemporaryFile + GzipFile combination has known edge cases around
+        # flushing and the gzip trailer.  For compressed exports the file is always
+        # large enough to justify disk storage anyway.
+        #
+        # gzip.open() used as a context manager closes the GzipFile (writing the
+        # gzip trailer) but does NOT close the underlying TemporaryFile because we
+        # passed a file object rather than a filename.  tmp stays open and seekable.
+        tmp = tempfile.TemporaryFile(mode="wb+")
+        with gzip.open(tmp, "wt", encoding="utf-8", newline="") as gz:
+            writer = csv.writer(gz, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            for row in generate_export_rows(experiment, sessions_queryset, translation_language):
+                writer.writerow(row)
     else:
         # Wrap in a TextIOWrapper so csv.writer receives a text-mode file object.
-        # detach=False: the wrapper does not close the underlying SpooledTemporaryFile
-        # when it is itself garbage-collected, preserving the caller's ability to seek/read.
+        # detach() releases the wrapper without closing the underlying SpooledTemporaryFile,
+        # preserving the caller's ability to seek/read.
+        tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")
         text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
         writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
         for row in generate_export_rows(experiment, sessions_queryset, translation_language):
