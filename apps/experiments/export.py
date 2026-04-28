@@ -4,9 +4,6 @@ import io
 import json
 import tempfile
 from collections.abc import Generator, Iterator
-from typing import BinaryIO
-
-_SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 import dictdiffer
 
@@ -17,6 +14,8 @@ from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.trace.models import Trace
 from apps.web.dynamic_filters.datastructures import FilterParams
+
+_SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
 
@@ -160,7 +159,7 @@ def _build_message_row(message, participant_data, sc, experiment, trace_id, tran
     return row
 
 
-def _yield_rows_for_trace(trace, session_cache, experiment, translation_language) -> Generator[list, None, None]:
+def _yield_rows_for_trace(trace, session_cache, experiment, translation_language) -> Generator[list]:
     """Yield one export row per message (input + output) for a single trace."""
     start_data, end_data = _get_participant_data_for_trace(trace)
     trace_id = _get_trace_id_for_export(trace.input_message)
@@ -176,9 +175,7 @@ def _yield_rows_for_trace(trace, session_cache, experiment, translation_language
             yield row
 
 
-def generate_export_rows(
-    experiment, sessions_queryset, translation_language=None
-) -> Generator[list, None, None]:
+def generate_export_rows(experiment, sessions_queryset, translation_language=None) -> Generator[list]:
     """Yield the header row, then one data row per message across all matching traces.
 
     Traces are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
@@ -209,7 +206,7 @@ def generate_export_rows(
             break
 
 
-def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str, None, None]:
+def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
     """Convert an iterable of row lists into a stream of CSV-formatted strings.
 
     Each yielded string is one complete CSV line.  Suitable for use with
@@ -227,7 +224,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str, None, None
 
 def export_to_tempfile(
     experiment, sessions_queryset, translation_language=None, compress=False
-) -> BinaryIO:
+) -> io.BufferedRandom | tempfile.SpooledTemporaryFile[bytes]:
     """Write the CSV export to a temporary file and return it, seeked to 0.
 
     Use as a context manager (``with export_to_tempfile(...) as tmp:``) so that
@@ -254,7 +251,7 @@ def export_to_tempfile(
         # gzip.open() used as a context manager closes the GzipFile (writing the
         # gzip trailer) but does NOT close the underlying TemporaryFile because we
         # passed a file object rather than a filename.  tmp stays open and seekable.
-        tmp = tempfile.TemporaryFile(mode="wb+")
+        tmp = tempfile.TemporaryFile(mode="wb+")  # noqa: SIM115
         with gzip.open(tmp, "wt", encoding="utf-8", newline="") as gz:
             writer = csv.writer(gz, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
             for row in generate_export_rows(experiment, sessions_queryset, translation_language):
@@ -263,7 +260,7 @@ def export_to_tempfile(
         # Wrap in a TextIOWrapper so csv.writer receives a text-mode file object.
         # detach() releases the wrapper without closing the underlying SpooledTemporaryFile,
         # preserving the caller's ability to seek/read.
-        tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")
+        tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")  # noqa: SIM115
         text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
         writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
         for row in generate_export_rows(experiment, sessions_queryset, translation_language):
