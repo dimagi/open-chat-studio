@@ -1,3 +1,4 @@
+import logging
 from unittest import mock
 from unittest.mock import Mock
 
@@ -131,3 +132,96 @@ class TestLoadDocumentsAttachments:
 
         assert docs[1].page_content == "text from pdf 2"
         assert docs[1].metadata["source"] == "https://example.com/a-2.pdf"
+
+
+class TestLoadDocumentsFallback:
+    def test_no_attachments_field_yields_fallback(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "date": "01/01/2025",
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+
+        loader = _make_loader(json_config)
+        docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].page_content == "T"
+        assert docs[0].metadata["source"] == "https://example.com/page"
+        assert docs[0].metadata["title"] == "T"
+        assert docs[0].metadata["URI"] == "https://example.com/page"
+        assert docs[0].metadata["citation_text"] == "T"
+        assert docs[0].metadata["citation_url"] == "https://example.com/page"
+        assert "link" not in docs[0].metadata
+
+    def test_empty_attachments_yields_fallback(self, json_config, httpx_mock):
+        feed = [{"title": "T", "URI": "https://example.com/page", "attachments": []}]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(json_config)
+        docs = list(loader.load_documents())
+        assert len(docs) == 1
+        assert docs[0].page_content == "T"
+
+    def test_attachments_without_links_yields_fallback(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [{"file_type": "pdf", "file_size": "?"}],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(json_config)
+        docs = list(loader.load_documents())
+        assert len(docs) == 1
+        assert docs[0].page_content == "T"
+
+    def test_optional_metadata_fields_propagate_when_present(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/p",
+                "authors": "Alice",
+                "publisher": "Pub",
+                "countries": ["US", "CA"],
+                "diseases": ["malaria"],
+                "tags": ["health"],
+                "regions": ["AFRO"],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(json_config)
+        docs = list(loader.load_documents())
+        meta = docs[0].metadata
+        for k, v in [
+            ("authors", "Alice"),
+            ("publisher", "Pub"),
+            ("countries", ["US", "CA"]),
+            ("diseases", ["malaria"]),
+            ("tags", ["health"]),
+            ("regions", ["AFRO"]),
+        ]:
+            assert meta[k] == v
+
+    def test_optional_metadata_fields_absent_when_missing(self, json_config, httpx_mock):
+        feed = [{"title": "T", "URI": "https://example.com/p"}]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(json_config)
+        meta = list(loader.load_documents())[0].metadata
+        for k in ("authors", "publisher", "countries", "diseases", "tags", "regions"):
+            assert k not in meta
+
+    def test_item_missing_title_and_uri_is_skipped(self, json_config, httpx_mock, caplog):
+        feed = [{"date": "01/01/2025"}, {"title": "OK", "URI": "https://example.com/p"}]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(json_config)
+
+        with caplog.at_level(logging.WARNING):
+            docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].metadata["title"] == "OK"
+        assert any("neither 'title' nor 'URI'" in record.message for record in caplog.records)
