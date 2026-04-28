@@ -225,3 +225,78 @@ class TestLoadDocumentsFallback:
         assert len(docs) == 1
         assert docs[0].metadata["title"] == "OK"
         assert any("neither 'title' nor 'URI'" in record.message for record in caplog.records)
+
+
+class TestLoadDocumentsAttachmentFailures:
+    def test_one_attachment_404_others_yielded(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [
+                    {"file_type": "pdf", "title": "bad", "link": "https://example.com/bad.pdf"},
+                    {"file_type": "pdf", "title": "good", "link": "https://example.com/good.pdf"},
+                ],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/bad.pdf", status_code=404, content=b"")
+        httpx_mock.add_response(url="https://example.com/good.pdf", content=b"PDF")
+
+        loader = _make_loader(json_config)
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            return_value=_stub_doc("good text"),
+        ):
+            docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].page_content == "good text"
+        assert docs[0].metadata["link"] == "https://example.com/good.pdf"
+
+    def test_extraction_error_skips_attachment(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [
+                    {"file_type": "pdf", "title": "broken", "link": "https://example.com/x.pdf"},
+                    {"file_type": "pdf", "title": "ok", "link": "https://example.com/y.pdf"},
+                ],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/x.pdf", content=b"junk")
+        httpx_mock.add_response(url="https://example.com/y.pdf", content=b"ok")
+
+        loader = _make_loader(json_config)
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            side_effect=[RuntimeError("boom"), _stub_doc("ok text")],
+        ):
+            docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].page_content == "ok text"
+        assert docs[0].metadata["link"] == "https://example.com/y.pdf"
+
+    def test_all_attachments_fail_yields_zero_documents_no_fallback(self, json_config, httpx_mock):
+        """Transient failures must NOT produce a URI-keyed fallback that races
+        against link-keyed Documents on subsequent syncs."""
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [
+                    {"file_type": "pdf", "title": "1", "link": "https://example.com/1.pdf"},
+                    {"file_type": "pdf", "title": "2", "link": "https://example.com/2.pdf"},
+                ],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/1.pdf", status_code=500, content=b"")
+        httpx_mock.add_response(url="https://example.com/2.pdf", status_code=500, content=b"")
+
+        loader = _make_loader(json_config)
+        docs = list(loader.load_documents())
+        assert docs == []
