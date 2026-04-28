@@ -133,6 +133,14 @@ Required only if you want users to connect Slack channels to their chatbots.
 | `TERMS_URL` | URL to your Terms of Service page (shown in the UI) |
 | `PRIVACY_POLICY_URL` | URL to your Privacy Policy page (shown in the UI) |
 
+## Zero Trust Access (optional)
+
+Required only when using [Cloudflare Tunnel](./cloudflare_tunnel.md) as the Zero Trust access layer. Not needed for standard reverse-proxy deployments.
+
+| Variable | Description |
+|----------|-------------|
+| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel token from the Cloudflare Zero Trust dashboard. See [Cloudflare Tunnel setup](./cloudflare_tunnel.md) for how to obtain this. |
+
 ## System Agent
 
 The System Agent is an internal AI assistant used for certain platform features. Configure the models it can use:
