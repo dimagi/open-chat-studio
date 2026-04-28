@@ -1,14 +1,18 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from apps.annotations.models import Tag
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import (
+    AppliedTag,
+    ConditionType,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationResult,
     EvaluationRun,
     Evaluator,
+    EvaluatorTagRule,
 )
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 from apps.utils.factories.team import TeamFactory
@@ -19,13 +23,68 @@ class EvaluatorFactory(DjangoModelFactory):
         model = Evaluator
 
     team = factory.SubFactory(TeamFactory)
-    type = "LLM"
+    type = "LlmEvaluator"
     name = factory.Sequence(lambda n: f"Test Evaluator {n}")
     evaluation_mode = "message"
-    params = {
-        "llm_prompt": "give me the sentiment of the user messages",
-        "output_schema": {"sentiment": "the sentiment"},
-    }
+    params = factory.LazyFunction(
+        lambda: {
+            "llm_prompt": "give me the sentiment of the user messages",
+            "output_schema": {
+                "sentiment": {
+                    "type": "choice",
+                    "description": "the sentiment",
+                    "choices": ["positive", "neutral", "negative"],
+                    "use_in_aggregations": True,
+                },
+                "score": {
+                    "type": "int",
+                    "description": "score from 1 to 10",
+                    "ge": 1,
+                    "le": 10,
+                    "use_in_aggregations": True,
+                },
+            },
+        }
+    )
+
+
+class EvaluationTagFactory(DjangoModelFactory):
+    """Factory for plain user tags used by evaluator tag rules."""
+
+    class Meta:
+        model = Tag
+        django_get_or_create = ("team", "name", "is_system_tag", "category")
+
+    team = factory.SubFactory(TeamFactory)
+    name = factory.Sequence(lambda n: f"eval-tag-{n}")
+    is_system_tag = False
+    category = ""
+
+
+class EvaluatorTagRuleFactory(DjangoModelFactory):
+    class Meta:
+        model = EvaluatorTagRule
+
+    team = factory.SubFactory(TeamFactory)
+    evaluator = factory.SubFactory(EvaluatorFactory, team=factory.SelfAttribute("..team"))
+    tag = factory.SubFactory(EvaluationTagFactory, team=factory.SelfAttribute("..team"))
+    field_name = "sentiment"
+    condition_type = ConditionType.EQUALS
+    condition_value = factory.LazyAttribute(lambda _: {"value": "negative"})
+
+
+class AppliedTagFactory(DjangoModelFactory):
+    class Meta:
+        model = AppliedTag
+
+    team = factory.SubFactory(TeamFactory)
+    rule = factory.SubFactory(EvaluatorTagRuleFactory, team=factory.SelfAttribute("..team"))
+    tag = factory.LazyAttribute(lambda obj: obj.rule.tag)
+    evaluation_result = factory.SubFactory(
+        "apps.utils.factories.evaluations.EvaluationResultFactory",
+        team=factory.SelfAttribute("..team"),
+        evaluator=factory.SelfAttribute("..rule.evaluator"),
+    )
 
 
 class EvaluationMessageFactory(DjangoModelFactory):

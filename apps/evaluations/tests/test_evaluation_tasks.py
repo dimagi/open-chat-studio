@@ -7,7 +7,13 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.evaluations.models import EvaluationResult, ExperimentVersionSelection
+from apps.evaluations.models import (
+    AppliedTag,
+    ConditionType,
+    EvaluationResult,
+    EvaluationRunType,
+    ExperimentVersionSelection,
+)
 from apps.evaluations.tasks import (
     EVAL_SESSIONS_TTL_DAYS,
     cleanup_old_evaluation_data,
@@ -22,9 +28,11 @@ from apps.utils.factories.evaluations import (
     EvaluationDatasetFactory,
     EvaluationMessageFactory,
     EvaluationRunFactory,
+    EvaluationTagFactory,
     EvaluatorFactory,
+    EvaluatorTagRuleFactory,
 )
-from apps.utils.factories.experiment import ChatbotFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatbotFactory, ChatFactory, ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.langchain import build_fake_llm_service
 
@@ -251,3 +259,71 @@ def test_cleanup_old_evaluation_data_does_not_delete_recent_sessions():
     assert ExperimentSession.objects.filter(id=session.id).exists()
     assert Chat.objects.filter(id=chat.id).exists()
     assert ChatMessage.objects.filter(chat_id=chat.id).count() == 1
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluate_single_message_applies_tag_rules(
+    evaluator_run_mock, evaluation_run, evaluation_message, team_with_users
+):
+    """End-to-end: matching tag rule tags the chat message, audit row is recorded,
+    and EvaluationResult is created."""
+    run, evaluator = evaluation_run
+    # Ensure the evaluation message has a chat message target for MESSAGE mode.
+    chat = ChatFactory.create(team=team_with_users)
+    expected_output = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Generated reply")
+    evaluation_message.expected_output_chat_message = expected_output
+    evaluation_message.save()
+
+    tag = EvaluationTagFactory.create(team=team_with_users, name="unacceptable")
+    rule = EvaluatorTagRuleFactory.create(
+        team=team_with_users,
+        evaluator=evaluator,
+        tag=tag,
+        field_name="sentiment",
+        condition_type=ConditionType.EQUALS,
+        condition_value={"value": "negative"},
+    )
+
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
+
+    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+
+    result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
+    assert result.output == {"result": {"sentiment": "negative"}}
+    assert expected_output.tags.filter(pk=tag.pk).exists()
+    assert AppliedTag.objects.filter(rule=rule, evaluation_result=result).count() == 1
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluate_single_message_skips_tagging_for_preview_run(
+    evaluator_run_mock, evaluation_run, evaluation_message, team_with_users
+):
+    """PREVIEW runs produce EvaluationResult rows but must not apply tag rules or record audit rows."""
+    run, evaluator = evaluation_run
+    run.type = EvaluationRunType.PREVIEW
+    run.save()
+
+    chat = ChatFactory.create(team=team_with_users)
+    expected_output = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Generated reply")
+    evaluation_message.expected_output_chat_message = expected_output
+    evaluation_message.save()
+
+    tag = EvaluationTagFactory.create(team=team_with_users, name="unacceptable")
+    EvaluatorTagRuleFactory.create(
+        team=team_with_users,
+        evaluator=evaluator,
+        tag=tag,
+        field_name="sentiment",
+        condition_type=ConditionType.EQUALS,
+        condition_value={"value": "negative"},
+    )
+
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
+
+    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+
+    assert EvaluationResult.objects.filter(message=evaluation_message, run=run, evaluator=evaluator).exists()
+    assert not expected_output.tags.filter(pk=tag.pk).exists()
+    assert AppliedTag.objects.count() == 0

@@ -16,6 +16,7 @@ const config = {
     trends: './assets/javascript/trends.js',
     dashboard: './assets/javascript/dashboard.js',  // dashboard analytics
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
+    'tagRuleSelect': './assets/javascript/tag-rule-select.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
     'editors': './assets/javascript/editors.js',
     'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',

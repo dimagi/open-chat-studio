@@ -6,6 +6,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -13,6 +14,12 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.rule_validation import (
+    ConditionType,
+    validate_condition,
+    validate_field_in_schema,
+    validate_tag_compatibility,
+)
 from apps.evaluations.utils import make_evaluation_messages_from_sessions
 from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
@@ -133,7 +140,6 @@ class EvaluationMessage(BaseModel):
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
     ) -> list[EvaluationMessage]:
-
         base_queryset = (
             ChatMessage.objects.filter(
                 chat__experiment_session__team=team,
@@ -369,8 +375,14 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        results = self.results.select_related("message", "evaluator", "session").order_by("created_at").all()
+        results = (
+            self.results.select_related("message__session__experiment", "evaluator", "session")
+            .prefetch_related("applied_tags__tag")
+            .order_by("created_at")
+            .all()
+        )
         table_by_message = defaultdict(dict)
+        tags_by_message = defaultdict(set)
         for result in results:
             context_columns = {
                 # exclude 'current_datetime'
@@ -381,6 +393,11 @@ class EvaluationRun(BaseTeamModel):
             # Build row data in order
             row_data = OrderedDict()
             row_data["session"] = result.session.external_id if result.session_id else ""
+            source_session = result.message.session if result.message.session_id else None
+            row_data["source_session"] = source_session.external_id if source_session else ""
+            row_data["source_experiment_id"] = (
+                str(source_session.experiment.public_id) if source_session and source_session.experiment_id else ""
+            )
             row_data["message_id"] = result.message.id
             row_data["Dataset Input"] = result.input_message
             row_data["Dataset Output"] = result.output_message
@@ -392,6 +409,9 @@ class EvaluationRun(BaseTeamModel):
 
             row_data.update(context_columns)
 
+            for applied_tag in result.applied_tags.all():
+                tags_by_message[result.message.id].add(applied_tag.tag.name)
+
             if result.output.get("error"):
                 row_data["error"] = result.output.get("error")
 
@@ -399,6 +419,10 @@ class EvaluationRun(BaseTeamModel):
                 row_data["id"] = result.message.id
 
             table_by_message[result.message.id] = row_data
+
+        for message_id, row_data in table_by_message.items():
+            tags = tags_by_message.get(message_id)
+            row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
 
         return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
 
@@ -445,3 +469,52 @@ class EvaluationRunAggregate(BaseModel):
 
     class Meta:
         unique_together = ("run", "evaluator")
+
+
+class EvaluatorTagRule(BaseTeamModel):
+    """A rule that applies a tag to the eval target when an evaluator output field matches a condition."""
+
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE, related_name="tag_rules")
+    tag = models.ForeignKey("annotations.Tag", on_delete=models.PROTECT, related_name="evaluator_tag_rules")
+    field_name = models.CharField(max_length=255)
+    condition_type = models.CharField(max_length=20, choices=ConditionType.choices)
+    condition_value = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"{self.evaluator.name}: {self.field_name} {self.condition_type} {self.condition_value}"
+
+    def clean(self):
+        super().clean()
+
+        if self.evaluator_id and self.team_id and self.evaluator.team_id != self.team_id:
+            raise ValidationError({"team": "Rule team must match evaluator team."})
+
+        if self.tag_id and self.evaluator_id:
+            validate_tag_compatibility(self.tag, self.evaluator)
+
+        if self.evaluator_id:
+            output_schema = self.evaluator.params.get("output_schema", {}) or {}
+            field_def = validate_field_in_schema(self.field_name, output_schema)
+            validate_condition(self.condition_type, self.condition_value, field_def)
+
+
+class AppliedTag(BaseTeamModel):
+    """Audit row recording that a specific rule applied a tag against a specific evaluation result."""
+
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name="applied_tags")
+    rule = models.ForeignKey(EvaluatorTagRule, on_delete=models.CASCADE, related_name="applications")
+    tag = models.ForeignKey("annotations.Tag", on_delete=models.PROTECT)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evaluation_result", "rule", "tag"],
+                name="unique_applied_tag_per_result_rule",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["rule"]),
+        ]
+
+    def __str__(self):
+        return f"AppliedTag(result={self.evaluation_result_id}, rule={self.rule_id}, tag={self.tag_id})"
