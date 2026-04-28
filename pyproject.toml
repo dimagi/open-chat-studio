@@ -151,6 +151,7 @@ banned-module-level-imports = [
     "langchain_google_genai",
     "langchain_anthropic",
     "langchain_openai",
+    "langchain_voyageai",
     "boto3",
 ]
 
