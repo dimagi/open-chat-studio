@@ -324,14 +324,14 @@ def _read_file_content(file, collection_id: int, log_level: int, retry_count: in
             extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
             exc_info=True,
         )
-        raise ZipCreationError(f"Could not read file {file.id} for collection {collection_id}") from exc
+        raise ZipCreationError(f"Could not read file '{file.name}' ({file.id})") from exc
 
     if file.content_size and len(content) != file.content_size:
         logger.error(
             "File integrity check failed while building ZIP archive",
             extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
         )
-        raise ZipIntegrityError(f"File {file.id} returned {len(content)} bytes but expected {file.content_size}")
+        raise ZipIntegrityError(f"File '{file.name}' ({file.id}) returned {len(content)} bytes but expected {file.content_size}")
 
     return content
 
