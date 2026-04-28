@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 from waffle.testutils import override_flag
 
+from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
 from apps.documents.models import (
     Collection,
     CollectionFile,
@@ -441,3 +442,27 @@ class TestJSONCollectionSourceCreation:
             },
         )
         assert response.status_code == 404
+
+    @override_flag("flag_json_collection_loader", active=False)
+    def test_edit_existing_json_source_accessible_when_flag_off(self, collection, client):
+        """Edit page for an existing JSON collection source must still load
+        when the flag is off — the flag controls creation, not edit/sync."""
+
+        document_source = DocumentSourceFactory.create(
+            collection=collection,
+            team=collection.team,
+            source_type=SourceType.JSON_COLLECTION,
+            config=DocumentSourceConfig(
+                json_collection=JSONCollectionSourceConfig(
+                    json_url="https://example.com/feed.json",
+                ),
+            ),
+        )
+        client.force_login(collection.team.members.first())
+        url = reverse(
+            "documents:edit_document_source",
+            args=[collection.team.slug, collection.id, document_source.id],
+        )
+        response = client.get(url)
+        # The edit page must be reachable; flag should not block edit.
+        assert response.status_code == 200

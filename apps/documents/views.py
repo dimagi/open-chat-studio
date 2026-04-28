@@ -236,10 +236,6 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
         if not self.collection.is_index:
             messages.error(request, "Document sources can only be configured for indexed collections.")
             return redirect("documents:single_collection_home", team_slug=self.team_slug, pk=self.collection_id)
-        if self.source_type == SourceType.JSON_COLLECTION and not flag_is_active(
-            request, Flags.JSON_COLLECTION_LOADER.slug
-        ):
-            raise Http404("JSON Collection source is not enabled for this team.")
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
@@ -267,6 +263,13 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
 
 class CreateDocumentSource(BaseDocumentSourceView, CreateView):
     permission_required = "documents.add_documentsource"
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.source_type == SourceType.JSON_COLLECTION and not flag_is_active(
+            request, Flags.JSON_COLLECTION_LOADER.slug
+        ):
+            raise Http404("JSON Collection source is not enabled for this team.")
+        return super().dispatch(request, *args, **kwargs)
 
     @property
     def source_type(self):
