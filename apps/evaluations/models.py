@@ -376,7 +376,7 @@ class EvaluationRun(BaseTeamModel):
 
     def get_table_data(self, include_ids: bool = False):
         results = (
-            self.results.select_related("message", "evaluator", "session")
+            self.results.select_related("message__session__experiment", "evaluator", "session")
             .prefetch_related("applied_tags__tag")
             .order_by("created_at")
             .all()
@@ -393,6 +393,11 @@ class EvaluationRun(BaseTeamModel):
             # Build row data in order
             row_data = OrderedDict()
             row_data["session"] = result.session.external_id if result.session_id else ""
+            source_session = result.message.session if result.message.session_id else None
+            row_data["source_session"] = source_session.external_id if source_session else ""
+            row_data["source_experiment_id"] = (
+                str(source_session.experiment.public_id) if source_session and source_session.experiment_id else ""
+            )
             row_data["message_id"] = result.message.id
             row_data["Dataset Input"] = result.input_message
             row_data["Dataset Output"] = result.output_message

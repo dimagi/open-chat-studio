@@ -4,6 +4,7 @@ import logging
 from datetime import timedelta
 from functools import cached_property
 from io import StringIO
+from typing import Any
 
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
@@ -202,7 +203,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         title = (
             "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
         )
-        context = {
+        context: dict[str, Any] = {
             "active_tab": "evaluations",
             "title": title,
             "page_title": title,
@@ -333,7 +334,7 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
     def get_column(self, key):
-        def session_url_factory(_, __, record, value):
+        def generated_session_url_factory(_, __, record, value):
             if not value or not self.evaluation_run.generation_experiment_id:
                 return "#"  # Return placeholder URL to ensure button is rendered
             return reverse(
@@ -341,9 +342,21 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
                 args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
             )
 
-        def session_enabled_condition(_, record):
-            # Check if session value exists (not empty string)
+        def generated_session_enabled_condition(_, record):
             return bool(record.get("session"))
+
+        def source_session_url_factory(_, __, record, ___):
+            external_id = record.get("source_session")
+            experiment_id = record.get("source_experiment_id")
+            if not external_id or not experiment_id:
+                return "#"
+            return reverse(
+                "chatbots:chatbot_session_view",
+                args=[self.kwargs["team_slug"], experiment_id, external_id],
+            )
+
+        def source_session_enabled_condition(_, record):
+            return bool(record.get("source_session") and record.get("source_experiment_id"))
 
         def dataset_url_factory(_, __, record, value):
             if not value:
@@ -378,9 +391,16 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
                     verbose_name="Links",
                     actions=[
                         actions.chip_action(
-                            label="Session",
-                            url_factory=session_url_factory,
-                            enabled_condition=session_enabled_condition,
+                            label="Source",
+                            url_factory=source_session_url_factory,
+                            enabled_condition=source_session_enabled_condition,
+                            open_url_in_new_tab=True,
+                        ),
+                        actions.chip_action(
+                            label="Generated",
+                            url_factory=generated_session_url_factory,
+                            enabled_condition=generated_session_enabled_condition,
+                            open_url_in_new_tab=True,
                         ),
                         actions.chip_action(
                             label="Message",
@@ -392,8 +412,8 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
                     align="right",
                     extra_context={"join_class": "join join-vertical"},
                 )
-            case "message_id":
-                # Skip rendering message_id as a separate column since it's now in session column
+            case "message_id" | "source_session" | "source_experiment_id":
+                # Carried in row data for the Links column's url factories; not rendered as columns.
                 return None
         return columns.Column(verbose_name=header)
 
