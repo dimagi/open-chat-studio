@@ -58,8 +58,8 @@ class ExperimentFilter(ChoiceColumnFilter):
 class StatusFilter(ChoiceColumnFilter):
     column: str = "status"
     label: str = "Status"
-    options: list[str] = SessionStatus.for_chatbots()
-    description: str = "Filter by session status (e.g. active, complete)"
+    options: list[str | dict] = [{"id": value, "label": label} for value, label in SessionStatus.choices]
+    description: str = "Filter by session status (e.g. active, complete, pending-review)"
 
 
 class RemoteIdFilter(ChoiceColumnFilter):
