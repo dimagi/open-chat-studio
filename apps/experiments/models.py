@@ -1376,10 +1376,6 @@ class SessionStatus(models.TextChoices):
     # CANCELLED = "cancelled", gettext("Cancelled")  # not used anywhere yet
     UNKNOWN = "unknown", gettext("Unknown")
 
-    @classmethod
-    def for_chatbots(cls):
-        return [cls.ACTIVE.value, cls.COMPLETE.value]
-
 
 class ExperimentSessionQuerySet(models.QuerySet):
     def annotate_with_message_count(self):
