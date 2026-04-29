@@ -76,13 +76,25 @@ jobs:
         echo "DJANGO_STACK_NAME=$APP_NAME-${{ env.DEPLOY_ENV }}-$AWS_REGION-django-stack" >> "$GITHUB_ENV"
 
     - name: Create GitHub deployment
-      uses: chrnorm/deployment-action@v2
       id: deployment
-      with:
-        token: '${{ github.token }}'
-        environment: "aws-${{ env.DEPLOY_ENV }}"
-        production-environment: ${{ env.DEPLOY_ENV == 'prod' }}
-        description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
+      env:
+        GH_TOKEN: ${{ github.token }}
+        DEPLOY_REF: ${{ github.head_ref || github.ref }}
+      run: |
+        DEPLOYMENT_ID=$(gh api -X POST \
+          "/repos/${{ github.repository }}/deployments" \
+          -f ref="${{ github.sha }}" \
+          -f environment="aws-${{ env.DEPLOY_ENV }}" \
+          -F production_environment=${{ env.DEPLOY_ENV == 'prod' }} \
+          -f description="Deploying $DEPLOY_REF to AWS ${{ env.DEPLOY_ENV }}" \
+          -f task=deploy \
+          -F auto_merge=false \
+          -f required_contexts='[]' \
+          --jq '.id')
+        echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+        gh api -X POST \
+          "/repos/${{ github.repository }}/deployments/$DEPLOYMENT_ID/statuses" \
+          -f state=in_progress >/dev/null
 
     - name: configure aws credentials
       uses: aws-actions/configure-aws-credentials@v6.0.0
@@ -301,13 +313,14 @@ jobs:
           exit $rc
 
     - name: Update deployment status
-      if: always()
-      uses: chrnorm/deployment-status@v2
-      with:
-        token: '${{ github.token }}'
-        environment-url: ${{ steps.deployment.outputs.environment_url }}
-        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
-        state: ${{ job.status == 'success' && 'success' || 'failure' }}
+      if: always() && steps.deployment.outputs.deployment_id != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        STATE="${{ job.status == 'success' && 'success' || 'failure' }}"
+        gh api -X POST \
+          "/repos/${{ github.repository }}/deployments/${{ steps.deployment.outputs.deployment_id }}/statuses" \
+          -f state="$STATE" >/dev/null
 
     - name: Create Sentry release
       if: success()
