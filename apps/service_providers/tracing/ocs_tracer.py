@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
 
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
@@ -282,7 +283,7 @@ class OCSCallbackHandler(BaseCallbackHandler):
         if self.tracer.metrics_collector:
             self.tracer.metrics_collector.on_llm_new_token(token, **kwargs)
 
-    def on_llm_end(self, response: Any, **kwargs: Any) -> None:
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         if self.tracer.metrics_collector:
             self.tracer.metrics_collector.on_llm_end(response, **kwargs)
 
