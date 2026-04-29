@@ -81,16 +81,13 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         DEPLOY_REF: ${{ github.head_ref || github.ref }}
       run: |
-        DEPLOYMENT_ID=$(gh api -X POST \
-          "/repos/${{ github.repository }}/deployments" \
-          -f ref="${{ github.sha }}" \
-          -f environment="aws-${{ env.DEPLOY_ENV }}" \
-          -F production_environment=${{ env.DEPLOY_ENV == 'prod' }} \
-          -f description="Deploying $DEPLOY_REF to AWS ${{ env.DEPLOY_ENV }}" \
-          -f task=deploy \
-          -F auto_merge=false \
-          -f required_contexts='[]' \
-          --jq '.id')
+        DEPLOYMENT_ID=$(jq -n \
+          --arg ref "${{ github.sha }}" \
+          --arg environment "aws-${{ env.DEPLOY_ENV }}" \
+          --argjson production_environment ${{ env.DEPLOY_ENV == 'prod' && 'true' || 'false' }} \
+          --arg description "Deploying $DEPLOY_REF to AWS ${{ env.DEPLOY_ENV }}" \
+          '{ref: $ref, environment: $environment, production_environment: $production_environment, description: $description, task: "deploy", auto_merge: false, required_contexts: []}' \
+          | gh api -X POST "/repos/${{ github.repository }}/deployments" --input - --jq '.id')
         echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
         gh api -X POST \
           "/repos/${{ github.repository }}/deployments/$DEPLOYMENT_ID/statuses" \
