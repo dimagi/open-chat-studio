@@ -16,6 +16,8 @@ class TraceMetrics:
     n_turns: int | None = None
     n_toolcalls: int | None = None
     n_total_tokens: int | None = None
+    n_prompt_tokens: int | None = None
+    n_completion_tokens: int | None = None
     time_to_first_token: int | None = None
     time_to_last_token: int | None = None
 
@@ -38,6 +40,8 @@ class MetricsCollector(BaseCallbackHandler):
         self._turns = 0
         self._toolcalls = 0
         self._total_tokens = 0
+        self._prompt_tokens = 0
+        self._completion_tokens = 0
         self._first_token_time: float | None = None
         self._last_token_time: float | None = None
         self._first_token_recorded = False
@@ -64,6 +68,8 @@ class MetricsCollector(BaseCallbackHandler):
 
         with self._lock:
             self._total_tokens += prompt_tokens + completion_tokens
+            self._prompt_tokens += prompt_tokens
+            self._completion_tokens += completion_tokens
 
     def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> None:
         with self._lock:
@@ -80,6 +86,8 @@ class MetricsCollector(BaseCallbackHandler):
                 n_turns=self._turns or None,
                 n_toolcalls=self._toolcalls or None,
                 n_total_tokens=self._total_tokens or None,
+                n_prompt_tokens=self._prompt_tokens or None,
+                n_completion_tokens=self._completion_tokens or None,
                 time_to_first_token=(
                     int((self._first_token_time - self._start_time) * 1000)
                     if self._first_token_time is not None
