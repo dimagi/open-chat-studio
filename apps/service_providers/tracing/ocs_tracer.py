@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
 
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
+from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
@@ -37,6 +39,7 @@ class OCSTracer(Tracer):
         self.error_message: str = ""
         self.error_span_name: str = ""
         self.error_notification_config: SpanNotificationConfig | None = None
+        self.metrics_collector: MetricsCollector | None = None
 
     @property
     def ready(self) -> bool:
@@ -83,6 +86,7 @@ class OCSTracer(Tracer):
         )
 
         self.start_time = time.time()
+        self.metrics_collector = MetricsCollector(start_time=self.start_time)
 
         try:
             yield trace_context
@@ -91,61 +95,80 @@ class OCSTracer(Tracer):
             self.error_message = str(e)
             raise
         finally:
-            # Guaranteed cleanup - update trace duration and status
-            if self.trace_record and self.start_time:
-                self.error_detected = self.error_detected or trace_context.has_error()
-                try:
-                    end_time = time.time()
-                    duration = end_time - self.start_time
-                    duration_ms = int(duration * 1000)
+            self._finalize_trace(trace_context)
+            self._fire_error_notification_if_needed()
+            self._reset_trace_state()
 
-                    self.trace_record.duration = duration_ms
-                    if self.error_detected:
-                        self.trace_record.status = TraceStatus.ERROR
-                        self.trace_record.error = self.error_message or trace_context.error or "Unknown error occurred"
-                    else:
-                        self.trace_record.status = TraceStatus.SUCCESS
+    def _finalize_trace(self, trace_context: TraceContext) -> None:
+        """Update trace record with duration, status, and metrics."""
+        if not self.trace_record or not self.start_time:
+            return
 
-                    # Note: OCSTracer doesn't store trace outputs in database
-                    # but could access them via trace_context.outputs if needed
+        self.error_detected = self.error_detected or trace_context.has_error()
+        try:
+            end_time = time.time()
+            duration_ms = int((end_time - self.start_time) * 1000)
 
-                    self.trace_record.save()
+            self.trace_record.duration = duration_ms
+            if self.error_detected:
+                self.trace_record.status = TraceStatus.ERROR
+                self.trace_record.error = self.error_message or trace_context.error or "Unknown error occurred"
+            else:
+                self.trace_record.status = TraceStatus.SUCCESS
 
-                    logger.debug(
-                        "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
-                        self.experiment.id,
-                        session.id,
-                        duration_ms,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
-                        self.experiment.id,
-                        session.id,
-                        self.trace_record.output_message_id,
-                    )
+            self._update_trace_metrics()
+            self.trace_record.save()
 
-            # Fire notification if a span declared one and the trace errored
-            try:
-                if (
-                    self.error_detected
-                    and self.error_span_name
-                    and self.error_notification_config is not None
-                    and not self.experiment.is_working_version
-                ):
-                    self._fire_trace_error_notification()
-            except Exception:
-                logger.exception("Error firing trace error notification for trace %s", self.trace_id)
+            logger.debug(
+                "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
+                self.experiment.id,
+                self.session.id,
+                duration_ms,
+            )
+        except Exception:
+            logger.exception(
+                "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
+                self.experiment.id,
+                self.session.id,
+                self.trace_record.output_message_id,
+            )
 
-            # Reset state
-            self.trace_record = None
-            self.error_detected = False
-            self.error_message = ""
-            self.trace_name = None
-            self.trace_id = None
-            self.session = None
-            self.error_span_name = ""
-            self.error_notification_config = None
+    def _update_trace_metrics(self) -> None:
+        """Update trace record with collected metrics."""
+        if not self.metrics_collector or not self.trace_record:
+            return
+
+        metrics = self.metrics_collector.get_metrics()
+        self.trace_record.n_turns = metrics.n_turns
+        self.trace_record.n_toolcalls = metrics.n_toolcalls
+        self.trace_record.n_total_tokens = metrics.n_total_tokens
+        self.trace_record.n_prompt_tokens = metrics.n_prompt_tokens
+        self.trace_record.n_completion_tokens = metrics.n_completion_tokens
+
+    def _fire_error_notification_if_needed(self) -> None:
+        """Fire notification if a span declared one and the trace errored."""
+        try:
+            if (
+                self.error_detected
+                and self.error_span_name
+                and self.error_notification_config is not None
+                and not self.experiment.is_working_version
+            ):
+                self._fire_trace_error_notification()
+        except Exception:
+            logger.exception("Error firing trace error notification for trace %s", self.trace_id)
+
+    def _reset_trace_state(self) -> None:
+        """Reset all trace-scoped state."""
+        self.trace_record = None
+        self.error_detected = False
+        self.error_message = ""
+        self.trace_name = None
+        self.trace_id = None
+        self.session = None
+        self.error_span_name = ""
+        self.error_notification_config = None
+        self.metrics_collector = None
 
     @contextmanager
     def span(
@@ -179,7 +202,7 @@ class OCSTracer(Tracer):
                     self.error_notification_config = span_context.notification_config
 
     def get_langchain_callback(self) -> BaseCallbackHandler:
-        """Return a mock callback handler since OCS tracer doesn't need LangChain integration."""
+        """Return a callback handler for error capture and metrics collection."""
         return OCSCallbackHandler(tracer=self)
 
     def add_trace_tags(self, tags: list[str]) -> None:
@@ -249,6 +272,18 @@ class OCSCallbackHandler(BaseCallbackHandler):
             self.tracer.error_notification_config = SpanNotificationConfig(
                 permissions=["experiments.change_experiment"]
             )
+
+    def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_llm_start(serialized, prompts, **kwargs)
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_llm_end(response, **kwargs)
+
+    def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> None:
+        if self.tracer.metrics_collector:
+            self.tracer.metrics_collector.on_tool_start(serialized, input_str, **kwargs)
 
     def on_llm_error(self, *args, **kwargs) -> None:
         error = kwargs.get("error") or (args[0] if args else None)
