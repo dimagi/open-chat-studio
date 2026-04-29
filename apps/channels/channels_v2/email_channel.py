@@ -251,7 +251,8 @@ class EmailChannel(ChannelBase):
         return response
 
 
-def email_inbound_handler(sender, message, event, **kwargs):
+def email_inbound_handler(sender, event, **kwargs):
+    message = event.message
     """Handle inbound email from anymail's inbound signal.
 
     Parses the email and enqueues a Celery task for async processing.
