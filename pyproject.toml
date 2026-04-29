@@ -42,6 +42,7 @@ dependencies = [
     "langchain-anthropic",
     "langchain-openai>=1.1.14",
     "langchain_google_genai",
+    "langchain-voyageai",
     "langchain-community>=0.3",
     "langfuse>=4.5.0",
     "langgraph>=0.2.20",
@@ -150,6 +151,7 @@ banned-module-level-imports = [
     "langchain_google_genai",
     "langchain_anthropic",
     "langchain_openai",
+    "langchain_voyageai",
     "boto3",
 ]
 

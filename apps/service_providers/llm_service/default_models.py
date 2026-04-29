@@ -188,6 +188,14 @@ DELETED_MODELS = [
 DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
     "google": ["gemini-embedding-001"],
+    "voyage": [
+        "voyage-4-large",
+        "voyage-4",
+        "voyage-4-lite",
+        "voyage-code-3",
+        "voyage-finance-2",
+        "voyage-law-2",
+    ],
 }
 
 
@@ -224,13 +232,11 @@ def get_default_translation_models_by_provider() -> dict:
 
 @transaction.atomic()
 def update_llm_provider_models():
-
     _update_llm_provider_models(LlmProviderModel)
 
 
 @transaction.atomic()
 def update_embedding_provider_models():
-
     _update_embedding_provider_models(EmbeddingProviderModel)
 
 
