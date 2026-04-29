@@ -70,9 +70,9 @@
         </div>
       </div>
     </div>
-    {% if trace.n_turns is not None or trace.n_toolcalls is not None or trace.n_total_tokens is not None or trace.time_to_first_token is not None or trace.time_to_last_token is not None %}
+    {% if trace.n_turns is not None or trace.n_toolcalls is not None or trace.n_total_tokens is not None or trace.n_prompt_tokens is not None or trace.n_completion_tokens is not None or trace.time_to_first_token is not None or trace.time_to_last_token is not None %}
       <!-- Performance Metrics -->
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6 px-4">
+      <div class="grid grid-cols-2 md:grid-cols-7 gap-4 mt-6 px-4">
         <div class="text-center">
           <div class="font-bold">{% if trace.n_turns is not None %}{{ trace.n_turns }}{% else %}—{% endif %}</div>
           <div class="text-sm pg-text-muted font-medium">LLM Turns</div>
@@ -84,6 +84,14 @@
         <div class="text-center">
           <div class="font-bold">{% if trace.n_total_tokens is not None %}{{ trace.n_total_tokens|intcomma }}{% else %}—{% endif %}</div>
           <div class="text-sm pg-text-muted font-medium">Total Tokens</div>
+        </div>
+        <div class="text-center">
+          <div class="font-bold">{% if trace.n_prompt_tokens is not None %}{{ trace.n_prompt_tokens|intcomma }}{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">Input Tokens</div>
+        </div>
+        <div class="text-center">
+          <div class="font-bold">{% if trace.n_completion_tokens is not None %}{{ trace.n_completion_tokens|intcomma }}{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">Output Tokens</div>
         </div>
         <div class="text-center">
           <div class="font-bold">{% if trace.time_to_first_token is not None %}{{ trace.time_to_first_token }}ms{% else %}—{% endif %}</div>
