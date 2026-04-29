@@ -1,0 +1,31 @@
+{
+  "usage": "Persist this file inside your repositories as .codescene/custom-quality-gates.json",
+  "rule_sets": [
+    {
+      "quality_gates": {
+        "hotspot_decline": false,
+        "critical_health_rules": false,
+        "advisory_health_rules": false,
+        "new_code_health": false,
+        "refactoring_goals": false,
+        "supervise_goals": false,
+        "codeowners_for_critical_code": false
+      },
+      "matching_content_path": "**/tests/**",
+      "matching_content_path_doc": "No gates on test files — large methods and duplication are expected in tests."
+    },
+    {
+      "quality_gates": {
+        "hotspot_decline": true,
+        "critical_health_rules": true,
+        "advisory_health_rules": true,
+        "new_code_health": false,
+        "refactoring_goals": false,
+        "supervise_goals": false,
+        "codeowners_for_critical_code": false
+      },
+      "matching_content_path": "*/**",
+      "matching_content_path_doc": "Production code: enforce critical + advisory rules (thresholds tuned in code-health-rules.json) and hotspot decline. Disable new_code_health (10.0 requirement is too strict for an established codebase)."
+    }
+  ]
+}
