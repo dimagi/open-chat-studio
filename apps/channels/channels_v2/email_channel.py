@@ -251,7 +251,7 @@ class EmailChannel(ChannelBase):
         return response
 
 
-def email_inbound_handler(sender, message, event, **kwargs):
+def email_inbound_handler(sender, event, **kwargs):
     """Handle inbound email from anymail's inbound signal.
 
     Parses the email and enqueues a Celery task for async processing.
@@ -264,6 +264,8 @@ def email_inbound_handler(sender, message, event, **kwargs):
     """
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.tasks import handle_email_message  # noqa: PLC0415
+
+    message = event.message
 
     # Check ESP spam verdict before processing
     if getattr(message, "spam_detected", None) is True:

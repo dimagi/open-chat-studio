@@ -484,7 +484,7 @@ class TestEmailInboundHandler:
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_called_once()
             call_kwargs = mock_task.delay.call_args[1]
             assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
@@ -502,7 +502,7 @@ class TestEmailInboundHandler:
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_called_once()
 
     def test_default_channel_allowed_through(self, team_with_users):
@@ -514,7 +514,7 @@ class TestEmailInboundHandler:
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_called_once()
 
     def test_no_channel_silently_ignored(self):
@@ -523,7 +523,7 @@ class TestEmailInboundHandler:
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_not_called()
 
     def test_spam_detected_discarded(self):
@@ -531,7 +531,7 @@ class TestEmailInboundHandler:
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_not_called()
 
     def test_parse_failure_does_not_raise(self):
@@ -541,7 +541,7 @@ class TestEmailInboundHandler:
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
-            email_inbound_handler(sender=None, message=inbound, event=MagicMock())
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_not_called()
 
 
