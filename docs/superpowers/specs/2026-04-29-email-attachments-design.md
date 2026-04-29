@@ -56,7 +56,7 @@ CELERY TASK
               ├─ ParticipantValidationStage
               ├─ SessionResolutionStage           (creates session if needed)
               ├─ SessionActivationStage
-              ├─ EmailAttachmentHydrationStage    ← NEW; converts file IDs → Attachment objects
+              ├─ AttachmentHydrationStage         ← NEW (generic); file IDs → Attachment objects
               ├─ MessageTypeValidationStage
               ├─ QueryExtractionStage
               ├─ ChatMessageCreationStage         (now sees message.attachments)
@@ -81,10 +81,20 @@ OUTBOUND
 
 ### Data model — `apps/channels/datamodels.py`
 
-No DB changes. Two new pydantic fields and one transient attribute on `EmailMessage`:
+No DB changes. One new field on `BaseMessage`, plus email-specific fields and a transient attribute on `EmailMessage`:
 
 ```python
 from pydantic import PrivateAttr
+
+
+class BaseMessage(BaseModel):
+    # existing fields...
+    attachments: list[Attachment] = Field(default=[])
+    attachment_file_ids: list[int] = Field(default=[])
+    """File IDs for attachments persisted by the channel's inbound handler.
+    Hydrated into `attachments` by AttachmentHydrationStage once a session
+    exists. Channels that don't pre-persist files leave this empty."""
+
 
 class SkippedAttachment(BaseModel):
     name: str
@@ -93,13 +103,14 @@ class SkippedAttachment(BaseModel):
 
 
 class EmailMessage(BaseMessage):
-    # existing fields...
-    attachment_file_ids: list[int] = Field(default=[])
+    # existing email-specific fields...
     skipped_attachments: list[SkippedAttachment] = Field(default=[])
 
     # transient — populated by parse(), consumed by handler; never serialized
     _raw_attachments: list["RawAttachment"] = PrivateAttr(default_factory=list)
 ```
+
+`attachment_file_ids` is generic — channels that v2-migrate after this work and want to pre-persist inbound files can populate it without further plumbing. `skipped_attachments` stays on `EmailMessage` because the "rejected for size/type" concept is currently specific to the email channel's intake rules.
 
 `RawAttachment` is a private `@dataclass` defined in the same module — name, content_type, content_bytes — used only in-process between `parse()` and `_persist_inbound_attachments()`. Using `PrivateAttr` so pydantic v2 ignores it during dump/load (it would be dropped from a leading-underscore class field anyway, but `PrivateAttr` makes the intent explicit and gives a per-instance default).
 
@@ -252,23 +263,26 @@ def handle_email_message(self, email_data: dict, channel_id: int, session_id: in
 
 Backwards compat: `channel_id` is a new required arg. Existing in-flight tasks (queued before deploy) won't have it. The task signature accepts the legacy form (no `channel_id`) and falls back to the old routing logic for one release cycle, after which the fallback is removed.
 
-### `EmailAttachmentHydrationStage` — new pipeline stage
+### `AttachmentHydrationStage` — new pipeline stage in core
 
-Hydrates `EmailMessage.attachment_file_ids` into `BaseMessage.attachments`. Runs after `SessionActivationStage` (so `ctx.experiment_session` exists) and before `ChatMessageCreationStage` (which consumes `message.attachments`).
+Generic stage that hydrates `BaseMessage.attachment_file_ids` into `BaseMessage.attachments`. Lives in `apps/channels/channels_v2/stages/core.py` and is wired into the default pipeline in `ChannelBase._build_pipeline()` between `SessionActivationStage` and `MessageTypeValidationStage`. Runs after session resolution (so `ctx.experiment_session` exists) and before `ChatMessageCreationStage` (which consumes `message.attachments`).
 
 ```python
-class EmailAttachmentHydrationStage(ProcessingStage):
+class AttachmentHydrationStage(ProcessingStage):
     """Hydrate Attachment objects from file IDs once a session exists.
 
-    Defers Attachment construction until session resolution so the
-    download_link URL cached on each Attachment references a real session.
+    Channels that pre-persist inbound files in their webhook handler
+    (e.g. EmailChannel) populate ctx.message.attachment_file_ids; this
+    stage converts those IDs into Attachment objects with download_links
+    that reference a real session. No-op for channels that don't use
+    this pattern.
     """
 
     def should_run(self, ctx) -> bool:
-        msg = ctx.message
-        return (
-            getattr(msg, "attachment_file_ids", None)
-            and not msg.attachments
+        return bool(
+            ctx.message
+            and getattr(ctx.message, "attachment_file_ids", None)
+            and not ctx.message.attachments
             and ctx.experiment_session is not None
         )
 
@@ -284,7 +298,7 @@ class EmailAttachmentHydrationStage(ProcessingStage):
         ]
 ```
 
-`EmailChannel._build_pipeline()` overrides the base to insert this stage between `SessionActivationStage` and `MessageTypeValidationStage`. All other stages remain unchanged.
+`EmailChannel` does not override `_build_pipeline()` — it inherits the default which now includes this stage.
 
 ### `ChannelSender.flush()` — new no-op default
 
@@ -433,10 +447,11 @@ All in `apps/channels/tests/test_email_channel.py` unless noted.
 - `test_task_uses_channel_id_when_provided`
 - `test_task_legacy_payload_falls_back_to_routing` — covers the one-release-cycle fallback path.
 
-**`TestEmailAttachmentHydrationStage` (new)**
+**`TestAttachmentHydrationStage` (new, `apps/channels/tests/channels/stages/test_attachment_hydration.py`)**
 - `test_hydrates_attachments_from_file_ids` — `attachment_file_ids` set, session exists; after stage runs `message.attachments` is populated and each carries a download_link with the real session id.
-- `test_skips_when_no_file_ids`
+- `test_skips_when_no_file_ids` — `should_run` returns False for a `BaseMessage` without `attachment_file_ids`; no-op for non-email channels.
 - `test_skips_when_session_missing` — `should_run` returns False; no DB query.
+- `test_skips_when_attachments_already_populated` — idempotent; doesn't double-hydrate.
 
 **`TestEmailSender` (extend)**
 - `test_send_text_alone_sends_one_email`
@@ -458,8 +473,10 @@ All in `apps/channels/tests/test_email_channel.py` unless noted.
 
 | File | Change |
 |---|---|
-| `apps/channels/datamodels.py` | Add `SkippedAttachment`, `RawAttachment`, new fields on `EmailMessage`; extend `EmailMessage.parse()` to capture raw attachments. |
-| `apps/channels/channels_v2/email_channel.py` | Promote `email_inbound_handler` to full router; add `_persist_inbound_attachments`; make `EmailSender` stateful with `flush()`; flip `supports_files=True` and wire `can_send_file`; add `EmailAttachmentHydrationStage` and override `_build_pipeline()` to include it. |
+| `apps/channels/datamodels.py` | Add `attachment_file_ids` field to `BaseMessage`; add `SkippedAttachment`, `RawAttachment`, new fields on `EmailMessage`; extend `EmailMessage.parse()` to capture raw attachments. |
+| `apps/channels/channels_v2/stages/core.py` | Add generic `AttachmentHydrationStage`. |
+| `apps/channels/channels_v2/channel_base.py` | Insert `AttachmentHydrationStage` into the default pipeline. |
+| `apps/channels/channels_v2/email_channel.py` | Promote `email_inbound_handler` to full router; add `_persist_inbound_attachments`; make `EmailSender` stateful with `flush()`; flip `supports_files=True` and wire `can_send_file`. |
 | `apps/channels/channels_v2/sender.py` | Add `ChannelSender.flush()` no-op default. |
 | `apps/channels/channels_v2/stages/terminal.py` | `ResponseSendingStage.process()` calls `ctx.sender.flush()` after the file loop, inside the existing try block. |
 | `apps/channels/tasks.py` | `handle_email_message` accepts `channel_id`/`session_id` and uses them directly (no re-routing). Legacy fallback path retained for one release cycle. Attachment hydration is deferred to the pipeline stage. |
