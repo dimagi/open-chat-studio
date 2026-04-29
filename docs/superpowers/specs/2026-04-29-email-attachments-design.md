@@ -161,6 +161,26 @@ EMAIL_BLOCKED_CONTENT_TYPES: frozenset[str] = frozenset({
     "application/x-msi",
     "application/java-archive",
 })
+
+# Application-namespaced types that are actually textual. Magic typically
+# returns text/plain for these, so a text/* detection should not be flagged
+# as a mismatch when the claimed type is one of these. Deliberately excludes
+# script types (application/javascript, application/x-sh, ...) — those are
+# textual but executable, and we want lies of the form "I'm a CSV but
+# actually a shell script" to fail the mismatch check.
+EMAIL_TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset({
+    "application/json",
+    "application/ld+json",
+    "application/manifest+json",
+    "application/xml",
+    "application/atom+xml",
+    "application/rss+xml",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+    "application/x-toml",
+    "application/x-ndjson",
+})
 ```
 
 ### `_persist_inbound_attachments` — new helper in `apps/channels/channels_v2/email_channel.py`
@@ -174,6 +194,7 @@ from apps.service_providers.file_limits import (
     EMAIL_MAX_ATTACHMENT_BYTES,
     EMAIL_BLOCKED_EXTENSIONS,
     EMAIL_BLOCKED_CONTENT_TYPES,
+    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
 )
 
 
@@ -187,6 +208,17 @@ def _detect_content_type(content: bytes, fallback: str = "") -> str:
     return fallback or "application/octet-stream"
 
 
+def _category(content_type: str) -> str:
+    """Top-level category for mismatch comparison.
+
+    Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
+    since magic typically returns text/plain for them.
+    """
+    if content_type in EMAIL_TEXT_LIKE_APPLICATION_TYPES:
+        return "text"
+    return content_type.split("/", 1)[0]
+
+
 def _is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | None:
     """Returns a rejection reason if blocked, else None."""
     if extension in EMAIL_BLOCKED_EXTENSIONS:
@@ -195,6 +227,17 @@ def _is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | 
         return f"file type not allowed (detected: {detected_type})"
     if claimed_type in EMAIL_BLOCKED_CONTENT_TYPES:
         return f"file type not allowed (claimed: {claimed_type})"
+    # Cross-category lie detection: header claims one major type, magic
+    # detects another. Exempt application/octet-stream on either side
+    # (sender or magic indicating "unknown"); exempt textual application/*
+    # types via _category().
+    if (
+        claimed_type
+        and claimed_type != "application/octet-stream"
+        and detected_type != "application/octet-stream"
+        and _category(claimed_type) != _category(detected_type)
+    ):
+        return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
     return None
 
 
@@ -437,6 +480,13 @@ All in `apps/channels/tests/test_email_channel.py` unless noted.
 - `test_rejects_when_magic_detects_executable_with_innocent_filename` — bytes are an ELF binary but filename is `report.pdf` and claimed type is `application/pdf`; rejected on detected type.
 - `test_canonical_content_type_is_magic_detected` — accepted file's saved `content_type` matches magic, not the (lying) header.
 - `test_storage_error_isolated` — patch `File.create` to raise on the second of three attachments; first and third saved, second skipped.
+- `test_rejects_cross_category_mismatch` — claimed `image/jpeg`, detected `application/pdf` → rejected on category mismatch.
+- `test_allows_octet_stream_claim_with_specific_detection` — claimed `application/octet-stream`, detected `application/pdf` → accepted (sender didn't know).
+- `test_allows_octet_stream_detection_with_specific_claim` — claimed `application/pdf`, detected `application/octet-stream` → accepted (magic uncertain).
+- `test_allows_json_claim_with_plaintext_detection` — claimed `application/json`, detected `text/plain` → accepted via text-like allowlist.
+- `test_allows_xml_claim_with_plaintext_detection` — same for `application/xml`.
+- `test_rejects_csv_claim_with_javascript_detection` — claimed `text/csv`, detected `application/javascript` → rejected (mismatch; `application/javascript` is **not** in the text-like allowlist).
+- `test_allows_csv_claim_with_plaintext_detection` — claimed `text/csv`, detected `text/plain` → accepted (same `text` category).
 
 **`TestEmailInboundHandler` (extend)**
 - `test_handler_persists_files_before_enqueue`
@@ -480,7 +530,7 @@ All in `apps/channels/tests/test_email_channel.py` unless noted.
 | `apps/channels/channels_v2/sender.py` | Add `ChannelSender.flush()` no-op default. |
 | `apps/channels/channels_v2/stages/terminal.py` | `ResponseSendingStage.process()` calls `ctx.sender.flush()` after the file loop, inside the existing try block. |
 | `apps/channels/tasks.py` | `handle_email_message` accepts `channel_id`/`session_id` and uses them directly (no re-routing). Legacy fallback path retained for one release cycle. Attachment hydration is deferred to the pipeline stage. |
-| `apps/service_providers/file_limits.py` | Add `EMAIL_MAX_ATTACHMENT_BYTES`, `EMAIL_BLOCKED_EXTENSIONS`, `EMAIL_BLOCKED_CONTENT_TYPES`, `can_send_on_email`; register in `FILE_SENDABILITY_CHECKERS`. |
+| `apps/service_providers/file_limits.py` | Add `EMAIL_MAX_ATTACHMENT_BYTES`, `EMAIL_BLOCKED_EXTENSIONS`, `EMAIL_BLOCKED_CONTENT_TYPES`, `EMAIL_TEXT_LIKE_APPLICATION_TYPES`, `can_send_on_email`; register in `FILE_SENDABILITY_CHECKERS`. |
 | `apps/channels/tests/test_email_channel.py` | New + extended test classes (see Testing). |
 | `apps/service_providers/tests/test_file_limits.py` | New `TestCanSendOnEmail`. |
 | `apps/channels/tests/channels/stages/test_response_sending.py` | Tests for flush wiring. |
