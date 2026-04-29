@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load chat_tags json_tags %}
+{% load chat_tags humanize json_tags %}
 {% block page_head %}
   {{ block.super }}
   <style>{% pygments_json_css %}</style>
@@ -70,6 +70,31 @@
         </div>
       </div>
     </div>
+    {% if trace.n_turns is not None or trace.n_toolcalls is not None or trace.n_total_tokens is not None or trace.time_to_first_token is not None or trace.time_to_last_token is not None %}
+      <!-- Performance Metrics -->
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6 px-4">
+        <div class="text-center">
+          <div class="font-bold">{% if trace.n_turns is not None %}{{ trace.n_turns }}{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">LLM Turns</div>
+        </div>
+        <div class="text-center">
+          <div class="font-bold">{% if trace.n_toolcalls is not None %}{{ trace.n_toolcalls }}{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">Tool Calls</div>
+        </div>
+        <div class="text-center">
+          <div class="font-bold">{% if trace.n_total_tokens is not None %}{{ trace.n_total_tokens|intcomma }}{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">Total Tokens</div>
+        </div>
+        <div class="text-center">
+          <div class="font-bold">{% if trace.time_to_first_token is not None %}{{ trace.time_to_first_token }}ms{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">First Token</div>
+        </div>
+        <div class="text-center">
+          <div class="font-bold">{% if trace.time_to_last_token is not None %}{{ trace.time_to_last_token }}ms{% else %}—{% endif %}</div>
+          <div class="text-sm pg-text-muted font-medium">Last Token</div>
+        </div>
+      </div>
+    {% endif %}
     <div class="border-t border-base-200 mt-2 pt-4">
       {% if trace.error %}
         <!-- Error Message -->
