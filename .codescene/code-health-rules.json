@@ -6,13 +6,13 @@
       "matching_content_path_doc": "Relaxed rules for test files. Long test methods and setup duplication are normal.",
       "thresholds": [
         {"name": "function_lines_of_code_warning", "value": 150},
-        {"name": "function_max_arguments", "value": 6},
         {"name": "unit_test_consecutive_asserts_for_large_block", "value": 10},
         {"name": "unit_test_suite_number_of_large_assertion_blocks", "value": 8},
         {"name": "function_duplication_min_lines_of_code_for_check", "value": 25}
       ],
+      "thresholds_doc": "Defaults: function_lines_of_code_warning=70, unit_test_consecutive_asserts_for_large_block=4, unit_test_suite_number_of_large_assertion_blocks=4, function_duplication_min_lines_of_code_for_check=10",
       "rules": [
-        {"name": "Code Duplication", "weight": 0.0},
+        {"name": "Code Duplication", "weight": 0.1},
         {"name": "Large Method", "weight": 0.5}
       ]
     },
@@ -24,7 +24,8 @@
         {"name": "function_bumpy_road_bumps_for_warning", "value": 3},
         {"name": "function_cyclomatic_complexity_warning", "value": 11},
         {"name": "function_lines_of_code_warning", "value": 80}
-      ]
+      ],
+      "thresholds_doc": "Defaults: function_max_arguments=4, function_bumpy_road_bumps_for_warning=2, function_cyclomatic_complexity_warning=9, function_lines_of_code_warning=70"
     }
   ]
 }
