@@ -24,7 +24,12 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
 
     @classmethod
     def for_document_source(cls, collection: Collection, document_source: DocumentSource) -> Self:
-        return cls(collection, document_source.config.json_collection, auth_provider=None)
+        return cls(collection, document_source.config.json_collection, auth_provider=document_source.auth_provider)
+
+    def _get_auth_headers(self) -> dict[str, str]:
+        if self.auth_provider is None:
+            return {}
+        return self.auth_provider.get_auth_service().get_auth_headers()
 
     def load_documents(self) -> Iterator[Document]:
         """Load documents from a JSON indexed-collections feed."""
@@ -137,12 +142,16 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
         return doc.get_contents_as_string()
 
     def _read_with_size_limit(self, url: str) -> bytes:
-        """GET `url` and return the body, raising ValueError if it exceeds the size cap."""
+        """GET `url` and return the body, raising ValueError if it exceeds the size cap.
+
+        Auth headers from the configured AuthProvider (if any) are applied to every request.
+        """
         with httpx.stream(
             "GET",
             url,
             timeout=self.config.request_timeout,
             follow_redirects=True,
+            headers=self._get_auth_headers(),
         ) as response:
             response.raise_for_status()
             chunks: list[bytes] = []

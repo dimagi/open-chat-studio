@@ -26,7 +26,7 @@ Some knowledge sources (e.g. ESPEN's document library) expose their content as a
 ### Out of scope
 
 - **Configurable field mapping.** Format is hard-coded for v1.
-- **Authentication.** No auth on the JSON URL or attachment URLs.
+- ~~**Authentication.** No auth on the JSON URL or attachment URLs.~~ **Updated 2026-04-29:** Optional `AuthProvider` (bearer / basic / api_key) is wired through the form and applied to both the JSON fetch and every attachment download. CommCare auth is excluded. Public feeds remain supported by leaving the field blank.
 - **Pagination.** The JSON response must contain the full list at the top level.
 - **Nested or non-list root structures.** Loader raises if the root is not a JSON list.
 - **Storing original attachment binaries.** Only extracted text is persisted, matching existing loaders.
@@ -188,12 +188,17 @@ Raises on any HTTP, timeout, or extraction error; the caller catches, logs, and 
 
 ### `JSONCollectionDocumentSourceForm`
 
-- `requires_auth = False` (no `auth_provider` field rendered).
+- `requires_auth = True` with `allowed_auth_types = [bearer, basic, api_key]` (CommCare excluded). The `auth_provider` field is rendered but **not required** — public feeds work with the field left blank.
+- `auth_provider_help` notes that the same credentials are sent to the JSON feed and every attachment download.
 - `json_url: URLField` with `validate_user_input_url(strict=not settings.DEBUG)` in `clean_json_url`.
 - `request_timeout: IntegerField` (default 30, min 5, max 300).
 - `clean_source_type` asserts `SourceType.JSON_COLLECTION`.
 - `clean()` builds `JSONCollectionSourceConfig` and wraps in `DocumentSourceConfig(json_collection=...)`.
 - `_get_config_from_instance(instance)` returns `instance.config.json_collection`.
+
+### Auth header propagation
+
+When `document_source.auth_provider` is set, the loader's `_get_auth_headers()` returns `auth_provider.get_auth_service().get_auth_headers()` and merges those headers into every `httpx.stream` call (both the JSON feed and each attachment download). When no auth provider is configured, the helper returns an empty dict and requests go out anonymously. This applies the same credentials to cross-host attachment URLs — users who need different scopes per request must split into separate document sources or stage data behind a proxy.
 
 ### Views
 

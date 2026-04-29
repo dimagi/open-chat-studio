@@ -48,6 +48,17 @@ class TestJSONCollectionLoaderConstruction:
         assert loader.config is json_config
         assert loader.auth_provider is None
 
+    def test_for_document_source_forwards_auth_provider(self, json_config):
+        collection = Mock()
+        document_source = Mock()
+        document_source.config = DocumentSourceConfig(json_collection=json_config)
+        auth_provider = Mock()
+        document_source.auth_provider = auth_provider
+
+        loader = JSONCollectionLoader.for_document_source(collection, document_source)
+
+        assert loader.auth_provider is auth_provider
+
     def test_loader_registered(self):
         assert LOADERS[SourceType.JSON_COLLECTION] is JSONCollectionLoader
 
@@ -392,3 +403,62 @@ class TestSSRFAndSizeLimits:
         with mock.patch.object(jc, "MAX_RESPONSE_BYTES", 100):
             with pytest.raises(ValueError, match="exceeds .* byte cap"):
                 list(loader.load_documents())
+
+
+def _loader_with_fake_auth(json_config, header_name="Authorization", header_value="Bearer secret"):
+    auth_provider = Mock()
+    auth_service = Mock()
+    auth_service.get_auth_headers.return_value = {header_name: header_value}
+    auth_provider.get_auth_service.return_value = auth_service
+    collection = Mock()
+    collection.id = 42
+    return JSONCollectionLoader(collection=collection, config=json_config, auth_provider=auth_provider)
+
+
+class TestAuthHeadersPropagation:
+    def test_no_auth_provider_means_no_auth_headers(self, json_config):
+        loader = _make_loader(json_config)
+        assert loader._get_auth_headers() == {}
+
+    def test_auth_headers_pulled_from_auth_provider(self, json_config):
+        loader = _loader_with_fake_auth(json_config, "Authorization", "Bearer secret")
+        assert loader._get_auth_headers() == {"Authorization": "Bearer secret"}
+
+    def test_auth_headers_applied_to_json_fetch(self, json_config, httpx_mock):
+        httpx_mock.add_response(
+            url="https://example.com/feed.json",
+            json=[],
+            match_headers={"Authorization": "Bearer secret"},
+        )
+        loader = _loader_with_fake_auth(json_config)
+        # If the headers don't match, httpx_mock will raise; reaching this assertion means they did.
+        assert list(loader.load_documents()) == []
+
+    def test_auth_headers_applied_to_attachment_fetch(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [
+                    {"file_type": "pdf", "title": "f", "link": "https://example.com/file.pdf"},
+                ],
+            }
+        ]
+        httpx_mock.add_response(
+            url="https://example.com/feed.json",
+            json=feed,
+            match_headers={"Authorization": "Bearer secret"},
+        )
+        httpx_mock.add_response(
+            url="https://example.com/file.pdf",
+            content=b"PDF",
+            match_headers={"Authorization": "Bearer secret"},
+        )
+        loader = _loader_with_fake_auth(json_config)
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            return_value=_stub_doc("body"),
+        ):
+            docs = list(loader.load_documents())
+        assert len(docs) == 1
+        assert docs[0].page_content == "body"

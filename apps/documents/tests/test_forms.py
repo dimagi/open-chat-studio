@@ -5,9 +5,13 @@ from django.db.models import Q
 
 from apps.documents.forms import CollectionForm, JSONCollectionDocumentSourceForm
 from apps.documents.models import SourceType
-from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.models import AuthProviderType, LlmProviderTypes
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
+from apps.utils.factories.service_provider_factories import (
+    AuthProviderFactory,
+    EmbeddingProviderModelFactory,
+    LlmProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 
 
@@ -161,6 +165,52 @@ class TestJSONCollectionDocumentSourceForm:
         assert not form.is_valid()
         assert "request_timeout" in form.errors
 
-    def test_no_auth_field_rendered(self, collection):
+    def test_auth_field_is_optional(self, collection):
         form = JSONCollectionDocumentSourceForm(collection=collection)
-        assert "auth_provider" not in form.fields
+        assert "auth_provider" in form.fields
+        assert form.fields["auth_provider"].required is False
+
+    def test_form_valid_without_auth_provider(self, collection):
+        form = JSONCollectionDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.JSON_COLLECTION,
+                "auto_sync_enabled": False,
+                "json_url": "https://example.com/feed.json",
+                "request_timeout": 30,
+            },
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["auth_provider"] is None
+
+    def test_auth_provider_queryset_excludes_commcare(self, collection):
+        bearer = AuthProviderFactory.create(team=collection.team, type=AuthProviderType.bearer, config={"token": "t"})
+        basic = AuthProviderFactory.create(
+            team=collection.team, type=AuthProviderType.basic, config={"username": "u", "password": "p"}
+        )
+        api_key = AuthProviderFactory.create(
+            team=collection.team, type=AuthProviderType.api_key, config={"key": "k", "value": "v"}
+        )
+        commcare = AuthProviderFactory.create(team=collection.team, type=AuthProviderType.commcare)
+
+        form = JSONCollectionDocumentSourceForm(collection=collection)
+        ids = list(form.fields["auth_provider"].queryset.values_list("id", flat=True))
+        assert set(ids) == {bearer.id, basic.id, api_key.id}
+        assert commcare.id not in ids
+
+    def test_form_valid_with_bearer_auth_provider(self, collection):
+        provider = AuthProviderFactory.create(
+            team=collection.team, type=AuthProviderType.bearer, config={"token": "secret"}
+        )
+        form = JSONCollectionDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.JSON_COLLECTION,
+                "auto_sync_enabled": False,
+                "json_url": "https://example.com/feed.json",
+                "request_timeout": 30,
+                "auth_provider": provider.id,
+            },
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["auth_provider"] == provider

@@ -398,7 +398,12 @@ class CreateCollectionFromAssistantForm(forms.Form):
 
 
 class JSONCollectionDocumentSourceForm(DocumentSourceForm):
-    requires_auth = False
+    requires_auth = True
+    allowed_auth_types = [AuthProviderType.bearer, AuthProviderType.basic, AuthProviderType.api_key]
+    auth_provider_help = (
+        "Optional. The same credentials are sent with the JSON feed request and every attachment download. "
+        "Leave blank for public feeds."
+    )
 
     json_url = forms.URLField(
         label="JSON Feed URL",
