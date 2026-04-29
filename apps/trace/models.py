@@ -54,12 +54,8 @@ class Trace(models.Model):
     n_toolcalls = models.IntegerField(null=True, blank=True, help_text="Number of tool invocations across all turns")
     n_total_tokens = models.IntegerField(null=True, blank=True, help_text="Total tokens (prompt + completion) consumed")
     n_prompt_tokens = models.IntegerField(null=True, blank=True, help_text="Total input/prompt tokens consumed")
-    n_completion_tokens = models.IntegerField(null=True, blank=True, help_text="Total output/completion tokens consumed")
-    time_to_first_token = models.IntegerField(
-        null=True, blank=True, help_text="Time from pipeline start to first LLM token in milliseconds"
-    )
-    time_to_last_token = models.IntegerField(
-        null=True, blank=True, help_text="Time from pipeline start to last LLM token in milliseconds"
+    n_completion_tokens = models.IntegerField(
+        null=True, blank=True, help_text="Total output/completion tokens consumed"
     )
 
     def __str__(self):

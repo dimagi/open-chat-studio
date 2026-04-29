@@ -74,45 +74,6 @@ class TestMetricsCollectorTokens:
         assert metrics.n_total_tokens is None
 
 
-class TestMetricsCollectorTiming:
-    def test_first_and_last_token_timing(self):
-        # Use an integer start_time to avoid floating-point precision issues
-        start = 1000.0
-        collector = MetricsCollector(start_time=start)
-
-        collector._first_token_time = start + 0.1
-        collector._first_token_recorded = True
-        collector._last_token_time = start + 0.5
-
-        metrics = collector.get_metrics()
-        assert metrics.time_to_first_token == 100
-        assert metrics.time_to_last_token == 500
-
-    def test_on_llm_new_token_records_first_token(self):
-        start = time.time()
-        collector = MetricsCollector(start_time=start)
-
-        collector.on_llm_new_token("Hello")
-        first_time = collector._first_token_time
-        assert first_time is not None
-
-        collector.on_llm_new_token(" world")
-        # First token time should not change
-        assert collector._first_token_time == first_time
-        # Last token time should be updated
-        assert collector._last_token_time is not None
-        assert collector._last_token_time >= first_time
-
-    def test_no_streaming_returns_none(self):
-        collector = MetricsCollector(start_time=time.time())
-        collector.on_llm_start({}, ["prompt"])
-        collector.on_llm_end(LLMResult(generations=[], llm_output=None))
-
-        metrics = collector.get_metrics()
-        assert metrics.time_to_first_token is None
-        assert metrics.time_to_last_token is None
-
-
 class TestMetricsCollectorThreadSafety:
     def test_concurrent_increments(self):
         collector = MetricsCollector(start_time=time.time())
@@ -147,8 +108,6 @@ class TestMetricsCollectorZeroToNone:
         assert metrics.n_turns is None
         assert metrics.n_toolcalls is None
         assert metrics.n_total_tokens is None
-        assert metrics.time_to_first_token is None
-        assert metrics.time_to_last_token is None
 
     def test_turns_present_but_no_tokens(self):
         """LLM called but no token_usage reported — n_turns is set, n_total_tokens is None."""

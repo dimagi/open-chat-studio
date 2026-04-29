@@ -62,8 +62,6 @@ class TestOCSTracerMetrics:
         assert trace.n_turns is None
         assert trace.n_toolcalls is None
         assert trace.n_total_tokens is None
-        assert trace.time_to_first_token is None
-        assert trace.time_to_last_token is None
 
     def test_metrics_persisted_on_error(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
@@ -100,15 +98,6 @@ class TestOCSCallbackHandlerMetricsDelegation:
 
         assert tracer.metrics_collector._turns == 1
 
-    def test_on_llm_new_token_delegates_to_collector(self):
-        tracer = OCSTracer(Mock(id=1), team_id=1)
-        tracer.metrics_collector = MetricsCollector(start_time=0.0)
-
-        handler = OCSCallbackHandler(tracer=tracer)
-        handler.on_llm_new_token("Hello")
-
-        assert tracer.metrics_collector._first_token_recorded is True
-
     def test_on_llm_end_delegates_to_collector(self):
         tracer = OCSTracer(Mock(id=1), team_id=1)
         tracer.metrics_collector = MetricsCollector(start_time=0.0)
@@ -140,7 +129,6 @@ class TestOCSCallbackHandlerMetricsDelegation:
         handler = OCSCallbackHandler(tracer=tracer)
         # None of these should raise
         handler.on_llm_start({}, ["prompt"])
-        handler.on_llm_new_token("token")
         handler.on_llm_end(LLMResult(generations=[]))
         handler.on_tool_start({}, "input")
 

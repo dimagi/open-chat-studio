@@ -144,8 +144,6 @@ class OCSTracer(Tracer):
         self.trace_record.n_total_tokens = metrics.n_total_tokens
         self.trace_record.n_prompt_tokens = metrics.n_prompt_tokens
         self.trace_record.n_completion_tokens = metrics.n_completion_tokens
-        self.trace_record.time_to_first_token = metrics.time_to_first_token
-        self.trace_record.time_to_last_token = metrics.time_to_last_token
 
     def _fire_error_notification_if_needed(self) -> None:
         """Fire notification if a span declared one and the trace errored."""
@@ -278,10 +276,6 @@ class OCSCallbackHandler(BaseCallbackHandler):
     def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], **kwargs: Any) -> None:
         if self.tracer.metrics_collector:
             self.tracer.metrics_collector.on_llm_start(serialized, prompts, **kwargs)
-
-    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        if self.tracer.metrics_collector:
-            self.tracer.metrics_collector.on_llm_new_token(token, **kwargs)
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         if self.tracer.metrics_collector:

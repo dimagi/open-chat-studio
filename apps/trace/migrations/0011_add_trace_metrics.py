@@ -35,14 +35,4 @@ class Migration(migrations.Migration):
             name='n_turns',
             field=models.IntegerField(blank=True, help_text='Number of LLM calls during pipeline execution', null=True),
         ),
-        migrations.AddField(
-            model_name='trace',
-            name='time_to_first_token',
-            field=models.IntegerField(blank=True, help_text='Time from pipeline start to first LLM token in milliseconds', null=True),
-        ),
-        migrations.AddField(
-            model_name='trace',
-            name='time_to_last_token',
-            field=models.IntegerField(blank=True, help_text='Time from pipeline start to last LLM token in milliseconds', null=True),
-        ),
     ]
