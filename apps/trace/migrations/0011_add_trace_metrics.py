@@ -22,6 +22,16 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name='trace',
+            name='n_prompt_tokens',
+            field=models.IntegerField(blank=True, help_text='Total input/prompt tokens consumed', null=True),
+        ),
+        migrations.AddField(
+            model_name='trace',
+            name='n_completion_tokens',
+            field=models.IntegerField(blank=True, help_text='Total output/completion tokens consumed', null=True),
+        ),
+        migrations.AddField(
+            model_name='trace',
             name='n_turns',
             field=models.IntegerField(blank=True, help_text='Number of LLM calls during pipeline execution', null=True),
         ),
