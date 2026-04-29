@@ -406,6 +406,8 @@ EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.c
 # see https://github.com/anymail/django-anymail for more details/examples
 # EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
 ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default=None)
+if ANYMAIL_WEBHOOK_SECRET:
+    ANYMAIL_WEBHOOK_SECRET = f"anymail:{ANYMAIL_WEBHOOK_SECRET}"
 
 # Django sites
 
