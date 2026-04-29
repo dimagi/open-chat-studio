@@ -39,7 +39,7 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 # Your email config goes here.
 # see https://github.com/anymail/django-anymail for more details / examples
 EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="anymail.backends.mailgun.EmailBackend")
-_ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default=None)
+_ANYMAIL_WEBHOOK_SECRET = f"anymail:{env('ANYMAIL_WEBHOOK_SECRET', default='')}"
 match EMAIL_BACKEND:
     case "anymail.backends.mailgun.EmailBackend":
         ANYMAIL = {
