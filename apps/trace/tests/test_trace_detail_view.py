@@ -60,10 +60,10 @@ class TestTraceDetailView:
         response = anon_client.get(_detail_url(team, trace))
         body = response.content.decode()
 
-        assert "TOTAL LATENCY" in body
-        assert "TOKENS" in body
-        assert "LLM TURNS" in body
-        assert "TOOL CALLS" in body
+        assert "Total latency" in body
+        assert "Tokens" in body
+        assert "LLM turns" in body
+        assert "Tool calls" in body
         assert "3.09s" in body
         assert "146" in body
         assert "30 in" in body
@@ -87,7 +87,7 @@ class TestTraceDetailView:
         response = anon_client.get(_detail_url(team, trace))
         body = response.content.decode()
 
-        assert "TOKENS" in body
+        assert "Tokens" in body
         assert "bg-primary/30" not in body
 
     def test_null_turns_renders_emdash_not_zero(self, anon_client, team, user, experiment, session, participant):
@@ -105,11 +105,11 @@ class TestTraceDetailView:
         response = anon_client.get(_detail_url(team, trace))
         body = response.content.decode()
 
-        # The card has both LLM TURNS ("—" because null) and TOOL CALLS ("0" because zero).
-        # Find the LLM TURNS section and assert it contains the em-dash.
-        llm_turns_idx = body.index("LLM TURNS")
-        tool_calls_idx = body.index("TOOL CALLS")
-        # LLM TURNS comes before TOOL CALLS in the card
+        # The card has both LLM turns ("—" because null) and Tool calls ("0" because zero).
+        # Find the LLM turns section and assert it contains the em-dash.
+        llm_turns_idx = body.index("LLM turns")
+        tool_calls_idx = body.index("Tool calls")
+        # LLM turns comes before Tool calls in the card
         assert llm_turns_idx < tool_calls_idx
         llm_turns_section = body[llm_turns_idx:tool_calls_idx]
         assert "—" in llm_turns_section
@@ -155,10 +155,10 @@ class TestTraceDetailView:
         response = anon_client.get(_detail_url(team, trace))
         body = response.content.decode()
 
-        latency_idx = body.index("TOTAL LATENCY")
-        tokens_idx = body.index("TOKENS")
-        # Status badge ("Success") must appear inside the TOTAL LATENCY card,
-        # i.e. between the TOTAL LATENCY label and the next card's TOKENS label.
+        latency_idx = body.index("Total latency")
+        tokens_idx = body.index("Tokens")
+        # Status badge ("Success") must appear inside the Total latency card,
+        # i.e. between the Total latency label and the next card's Tokens label.
         latency_card = body[latency_idx:tokens_idx]
         assert "Success" in latency_card
         assert "badge-success" in latency_card
