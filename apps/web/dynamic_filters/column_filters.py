@@ -55,7 +55,7 @@ class ExperimentFilter(ChoiceColumnFilter):
         return queryset.exclude(self._get_filter_clause(value))
 
 
-class StatusFilter(ChoiceColumnFilter):
+class SessionStatusFilter(ChoiceColumnFilter):
     column: str = "status"
     label: str = "Status"
     options: list[str | dict] = [{"id": value, "label": label} for value, label in SessionStatus.choices]
