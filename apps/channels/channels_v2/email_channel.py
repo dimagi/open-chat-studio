@@ -318,18 +318,17 @@ class EmailChannel(ChannelBase):
         # After pipeline: capture outbound Message-ID for thread continuity.
         # The session's external_id defaults to a UUID. If the sender produced
         # a Message-ID, store it so future In-Reply-To lookups find this session.
-        session = self.experiment_session
-        if session and self._sender_instance:
+        if self.experiment_session and self._sender_instance:
             msg_id = self._sender_instance.last_message_id
-            if msg_id and not _has_email_message_id(session.external_id):
-                session.external_id = str(msg_id)  # ty: ignore[invalid-assignment]
+            if msg_id and not _has_email_message_id(self.experiment_session.external_id):
+                self.experiment_session.external_id = msg_id  # ty: ignore[invalid-assignment]
                 try:
-                    session.save(update_fields=["external_id"])
+                    self.experiment_session.save(update_fields=["external_id"])
                 except IntegrityError:
                     logger.warning(
                         "Could not save Message-ID %s as external_id for session %s (duplicate)",
                         msg_id,
-                        session.id,
+                        self.experiment_session.id,
                     )
 
         return response
