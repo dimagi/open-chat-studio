@@ -6,15 +6,14 @@
 
 ## Problem
 
-On teams with substantial data, three list views are slow:
+On teams with substantial data, four list views are slow:
 
 - **Trace list** (`TraceTableView`) — `pg_stat_statements` shows the main `SELECT trace_trace … ORDER BY timestamp DESC` averaging ~2.8s; the sorted/filtered variant with `SELECT DISTINCT` averages ~10s, and its `COUNT(*)` over `SELECT DISTINCT` averages ~9s.
 - **Session list** (`ChatbotSessionsTableView`, `AllSessionsHome`) — pagination `COUNT(*)` averages 350ms with a `LEFT OUTER JOIN channels_experimentchannel` that the view does not appear to need; the `customtaggeditem` prefetch returns ~10M rows over 632 calls (~16K rows per page load).
 - **Chatbot list** (`ChatbotExperimentTableView`) — averages ~250ms; four correlated subqueries per row plus a 24h trend query. Smaller hit, but visible.
+- **Annotation queue sessions** (`AnnotationQueueSessionsTableView` and its `_json` sibling, `apps/human_annotations/views/queue_views.py:218`) — same shape as the session list, same bottlenecks.
 
 Scale at the largest team: ~500K traces, ~50K sessions, ~1K experiments (including versions).
-
-A fourth view shares the same machinery: `AnnotationQueueSessionsTableView` (`apps/human_annotations/views/queue_views.py:218`) and its `_json` sibling.
 
 ## Goals & non-goals
 
@@ -158,7 +157,7 @@ After each step: re-pull `pg_stat_statements` and the Sentry route metrics for `
 |---|---|
 | `CONCURRENTLY` index creation fails or is slow | Use `AddIndexConcurrently` with `Migration.atomic = False`. Monitor `pg_stat_progress_create_index`. Roll back via `DROP INDEX CONCURRENTLY`. |
 | Removing global `.distinct()` exposes duplicate rows | Per-filter unit test asserting no duplicates with multi-tag/multi-message fixtures. SQL-shape assertion that emitted query lacks `DISTINCT`. |
-| `EXISTS` rewrites change result set in subtle ways | Same per-filter tests, including the previously-passing fixture cases for each operator (`any of`, `all of`, `excludes`). |
+| `EXISTS` rewrites change result set in subtle ways | Run the existing tests for each filter operator (`any of`, `all of`, `excludes`) and add new ones covering multi-tag and multi-message fixtures. |
 | Partial-index condition drift if a new `TraceStatus` is added | Comment on the index and a regression test exercising non-pending statuses. |
 | Planner picks a bad plan | `EXPLAIN ANALYZE` after each migration; `ANALYZE trace_trace;` if needed. `pg_hint_plan` only as last resort — not expected at 500K rows. |
 | Slicing in `get_table_data` interacts badly with django-tables2 ordering / sort headers | Test sort-by-each-column on a seeded staging dataset. The chatbot list already uses this pattern, so confidence is high. |
