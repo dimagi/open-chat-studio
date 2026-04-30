@@ -149,14 +149,19 @@ class LangFuseTracer(Tracer):
                 self._update_span_from_context(span, span_context)
 
     def _update_span_from_context(self, span, context: TraceContext):
-        if output := context.outputs:
-            span.update(output=output.copy())
+        # Best-effort: this is called from `finally` blocks, so a failure here would
+        # replace any in-flight application exception and hide the real failure.
+        try:
+            if output := context.outputs:
+                span.update(output=output.copy())
 
-        if exc := context.exception:
-            span.update(level="ERROR", status_message=str(exc))
+            if exc := context.exception:
+                span.update(level="ERROR", status_message=str(exc))
 
-        if error := context.error:
-            span.update(level="ERROR", status_message=error)
+            if error := context.error:
+                span.update(level="ERROR", status_message=error)
+        except Exception:
+            logger.exception("Failed to update Langfuse span state for span %s", context.name)
 
     def get_langchain_callback(self) -> BaseCallbackHandler | None:  # ty: ignore[invalid-method-override]
         if not self.ready:

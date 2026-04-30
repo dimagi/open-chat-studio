@@ -146,3 +146,21 @@ def test_trace_marks_level_error_when_exception_propagates(patched_tracer, mock_
 
     mock_langfuse_client._test_span.update.assert_any_call(level="ERROR", status_message=mock.ANY)
     assert trace_context.exception is not None
+
+
+def test_span_update_failure_does_not_mask_application_error(
+    patched_tracer, mock_langfuse_client, mock_session, caplog
+):
+    """If span.update() itself raises while syncing state in finally, the original application
+    exception must still propagate — Langfuse update failures are best-effort and logged.
+    """
+    mock_langfuse_client._test_span.update.side_effect = RuntimeError("langfuse blew up")
+    trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
+    span_context = TraceContext(id=mock.sentinel.span_id, name="failing-span")
+
+    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+        with pytest.raises(ValueError, match="real error"):
+            with patched_tracer.span(span_context=span_context, inputs={}):
+                raise ValueError("real error")
+
+    assert "Failed to update Langfuse span state" in caplog.text
