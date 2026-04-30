@@ -1,12 +1,13 @@
 import base64
 import logging
+from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
 from typing import Literal
 
 import phonenumbers
 from mailparser_reply import EmailReplyParser
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
@@ -277,6 +278,25 @@ class SlackMessage(BaseMessage):
     message_text: str
 
 
+@dataclass
+class RawAttachment:
+    """In-memory carrier for an inbound email attachment between parse() and
+    the persistence helper. Never serialized; lives only in handler scope."""
+
+    filename: str
+    content_type: str
+    content_bytes: bytes
+
+
+class SkippedAttachment(BaseModel):
+    """Inbound attachment that was rejected at intake. Reported to the LLM
+    via injected notes in the user's message_text."""
+
+    name: str
+    reason: str
+    size: int = 0
+
+
 class EmailMessage(BaseMessage):
     """Inbound email parsed from AnymailInboundMessage."""
 
@@ -286,6 +306,9 @@ class EmailMessage(BaseMessage):
     message_id: str = Field(max_length=500)
     in_reply_to: str | None = None
     references: list[str] = Field(default=[])
+    skipped_attachments: list[SkippedAttachment] = Field(default=[])
+
+    _raw_attachments: list[RawAttachment] = PrivateAttr(default_factory=list)
 
     @staticmethod
     def parse(inbound) -> "EmailMessage":
@@ -295,7 +318,7 @@ class EmailMessage(BaseMessage):
         )
         stripped_text = reply.latest_reply or body
 
-        return EmailMessage(
+        message = EmailMessage(
             participant_id=inbound.from_email.addr_spec,
             message_text=stripped_text,
             from_address=inbound.from_email.addr_spec,
@@ -305,6 +328,27 @@ class EmailMessage(BaseMessage):
             in_reply_to=inbound.get("In-Reply-To"),
             references=_parse_references(inbound.get("References", "")),
         )
+        message._raw_attachments = _extract_raw_attachments(inbound)
+        return message
+
+
+def _extract_raw_attachments(inbound) -> list[RawAttachment]:
+    """Pull MIMEPart objects from the inbound message into in-memory RawAttachment records.
+    AnymailInboundMessage.attachments already excludes inlines."""
+    raw = []
+    for part in getattr(inbound, "attachments", None) or []:
+        try:
+            content_type = (part.get_content_type() or "application/octet-stream").split(";")[0].strip().lower()
+            raw.append(
+                RawAttachment(
+                    filename=part.get_filename() or "attachment",
+                    content_type=content_type,
+                    content_bytes=part.get_content_bytes(),
+                )
+            )
+        except Exception:
+            logger.exception("Failed to read inbound email attachment part")
+    return raw
 
 
 _MAX_REFERENCES = 50

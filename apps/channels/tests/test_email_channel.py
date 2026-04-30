@@ -52,6 +52,20 @@ def _make_inbound_message(
     return msg
 
 
+def _make_inbound_with_attachments(parts, **kwargs):
+    msg = _make_inbound_message(**kwargs)
+    msg.attachments = parts
+    return msg
+
+
+def _mime_part(filename="file.bin", content_type="application/octet-stream", content=b"bytes"):
+    part = MagicMock()
+    part.get_filename.return_value = filename
+    part.get_content_type.return_value = content_type
+    part.get_content_bytes.return_value = content
+    return part
+
+
 def _make_email_channel(team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
     """Helper to create an email ExperimentChannel."""
     if experiment is None:
@@ -138,6 +152,36 @@ class TestEmailMessageParse:
         inbound = _make_inbound_message(text="Just a simple message")
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
+
+    def test_parse_extracts_attachments(self):
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-")
+        csv = _mime_part(filename="data.csv", content_type="text/csv", content=b"a,b,c")
+        inbound = _make_inbound_with_attachments([pdf, csv])
+
+        result = EmailMessage.parse(inbound)
+
+        assert len(result._raw_attachments) == 2
+        assert result._raw_attachments[0].filename == "report.pdf"
+        assert result._raw_attachments[0].content_type == "application/pdf"
+        assert result._raw_attachments[0].content_bytes == b"%PDF-"
+        assert result._raw_attachments[1].filename == "data.csv"
+
+    def test_parse_no_attachments(self):
+        inbound = _make_inbound_with_attachments([])
+        result = EmailMessage.parse(inbound)
+        assert result._raw_attachments == []
+
+    def test_parse_strips_content_type_params(self):
+        part = _mime_part(content_type="text/csv; charset=utf-8")
+        inbound = _make_inbound_with_attachments([part])
+        result = EmailMessage.parse(inbound)
+        assert result._raw_attachments[0].content_type == "text/csv"
+
+    def test_parse_handles_missing_filename(self):
+        part = _mime_part(filename=None)
+        inbound = _make_inbound_with_attachments([part])
+        result = EmailMessage.parse(inbound)
+        assert result._raw_attachments[0].filename == "attachment"
 
 
 @pytest.mark.django_db()
