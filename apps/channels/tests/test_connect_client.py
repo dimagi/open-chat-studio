@@ -1,13 +1,59 @@
 import base64
 import json
 import os
+from unittest import mock
 from uuid import uuid4
 
+import httpx
+import pytest
 from Crypto.Cipher import AES
 from django.conf import settings
 from django.test import override_settings
+from tenacity import wait_none
 
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
+
+
+@pytest.fixture()
+def disable_retry_wait():
+    """Tenacity sleeps between attempts. Skip the wait so timeout/retry tests stay fast.
+
+    The @retry decorator binds the wait strategy at decoration time, so patching
+    `wait_exponential` in the module namespace has no effect — patch the bound
+    Retrying instance's `.wait` attribute directly instead.
+    """
+    with mock.patch.object(CommCareConnectClient._send_fcm.retry, "wait", wait_none()):
+        yield
+
+
+class TestConnectClientSendRetry:
+    """send_message_to_user retries transient httpx errors and reuses the same message_id
+    across retries so the server can dedupe if a previous attempt actually arrived."""
+
+    _send_url = f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/"
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_retries_on_read_timeout(self, httpx_mock, disable_retry_wait):
+        httpx_mock.add_exception(httpx.ReadTimeout("read timed out"), url=self._send_url)
+        httpx_mock.add_response(method="POST", url=self._send_url, status_code=200)
+
+        client = CommCareConnectClient()
+        client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 2
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_message_id_stable_across_retries(self, httpx_mock, disable_retry_wait):
+        httpx_mock.add_exception(httpx.ReadTimeout("read timed out"), url=self._send_url)
+        httpx_mock.add_response(method="POST", url=self._send_url, status_code=200)
+
+        client = CommCareConnectClient()
+        client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
+
+        requests = httpx_mock.get_requests()
+        ids = [json.loads(r.read())["message_id"] for r in requests]
+        assert ids[0] == ids[1], "message_id must be stable across retries for server-side dedupe"
 
 
 class TestConnectClient:

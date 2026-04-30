@@ -47,6 +47,13 @@ class LangFuseTracer(Tracer):
 
     The API is designed to be used with a single set of credentials whereas we need to provide
     different credentials per call. This is why we don't use the standard 'observe' decorator.
+
+    Error propagation: Langfuse's UI surfaces span failures via its own ``level`` field, which
+    is independent of OpenTelemetry status. The SDK only maps one direction (``level=ERROR``
+    sets OTel status), so a propagating exception leaves OTel status=ERROR but ``level``
+    unset — the span renders as successful. ``span()`` and ``trace()`` therefore catch the
+    exception, mark the ``TraceContext``, and run ``_update_span_from_context`` in a
+    ``finally`` so ``level=ERROR`` is set before the underlying observation closes.
     """
 
     def __init__(self, type_: str, config: dict):
@@ -92,8 +99,14 @@ class LangFuseTracer(Tracer):
                 ) as trace:
                     self.trace_record = trace
                     self._langfuse_trace_id = self.client.get_current_trace_id()
-                    yield trace_context
-                    self._update_span_from_context(trace, trace_context)
+                    try:
+                        yield trace_context
+                    except Exception as exc:
+                        if not trace_context.has_error():
+                            trace_context.mark_span_as_error(str(exc), exception=exc)
+                        raise
+                    finally:
+                        self._update_span_from_context(trace, trace_context)
         finally:
             if self.trace_record:
                 self.client.flush()
@@ -126,18 +139,29 @@ class LangFuseTracer(Tracer):
             metadata=metadata,
             level=level,
         ) as span:
-            yield span_context
-            self._update_span_from_context(span, span_context)
+            try:
+                yield span_context
+            except Exception as exc:
+                if not span_context.has_error():
+                    span_context.mark_span_as_error(str(exc), exception=exc)
+                raise
+            finally:
+                self._update_span_from_context(span, span_context)
 
     def _update_span_from_context(self, span, context: TraceContext):
-        if output := context.outputs:
-            span.update(output=output.copy())
+        # Best-effort: this is called from `finally` blocks, so a failure here would
+        # replace any in-flight application exception and hide the real failure.
+        try:
+            if output := context.outputs:
+                span.update(output=output.copy())
 
-        if exc := context.exception:
-            span.update(level="ERROR", status_message=str(exc))
+            if exc := context.exception:
+                span.update(level="ERROR", status_message=str(exc))
 
-        if error := context.error:
-            span.update(level="ERROR", status_message=error)
+            if error := context.error:
+                span.update(level="ERROR", status_message=error)
+        except Exception:
+            logger.exception("Failed to update Langfuse span state for span %s", context.name)
 
     def get_langchain_callback(self) -> BaseCallbackHandler | None:  # ty: ignore[invalid-method-override]
         if not self.ready:

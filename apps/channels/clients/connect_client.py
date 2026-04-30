@@ -63,13 +63,6 @@ class CommCareConnectClient:
 
         return decrypted_messages
 
-    @retry(
-        wait=wait_exponential(multiplier=1, min=1, max=5),
-        reraise=True,
-        retry=retry_if_exception_type(httpx.ConnectError),
-        stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger, logging.INFO),
-    )
     def send_message_to_user(self, channel_id: str, message: str, encryption_key: bytes):
         ciphertext, tag, nonce = self._encrypt_message(key=encryption_key, message=message)
 
@@ -82,7 +75,16 @@ class CommCareConnectClient:
             },
             "message_id": str(uuid4()),
         }
+        self._send_fcm(payload)
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+        reraise=True,
+        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.INFO),
+    )
+    def _send_fcm(self, payload: dict) -> None:
         url = f"{self._base_url}/messaging/send_fcm/"
         response = self.client.post(url, json=payload)
         response.raise_for_status()
