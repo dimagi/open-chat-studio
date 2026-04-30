@@ -1,7 +1,10 @@
 import pytest
 
 from apps.service_providers.file_limits import (
+    EMAIL_BLOCKED_CONTENT_TYPES,
+    EMAIL_BLOCKED_EXTENSIONS,
     EMAIL_MAX_ATTACHMENT_BYTES,
+    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
     FILE_SENDABILITY_CHECKERS,
     SendabilityResult,
     can_send_on_email,
@@ -179,11 +182,12 @@ class TestCanSendOnEmail:
     @pytest.mark.parametrize(
         ("content_type", "content_size"),
         [
+            ("", 1024),
             ("application/pdf", 0),
             ("application/pdf", -1),
         ],
     )
-    def test_missing_size_returns_unsupported(self, content_type, content_size):
+    def test_unknown_type_or_size(self, content_type, content_size):
         result = can_send_on_email(content_type, content_size)
         assert result.supported is False
         assert "unknown" in result.reason.lower()
@@ -195,6 +199,15 @@ class TestCanSendOnEmail:
 
     def test_registered_in_checkers(self):
         assert FILE_SENDABILITY_CHECKERS["email"] is can_send_on_email
+
+    def test_constants_exposed(self):
+        assert EMAIL_MAX_ATTACHMENT_BYTES == 20 * MB
+        assert "exe" in EMAIL_BLOCKED_EXTENSIONS
+        assert "application/x-msdownload" in EMAIL_BLOCKED_CONTENT_TYPES
+        assert "application/json" in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+        # Script types deliberately excluded from text-like allowlist
+        assert "application/javascript" not in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+        assert "application/x-sh" not in EMAIL_TEXT_LIKE_APPLICATION_TYPES
 
 
 class TestChannelChecksRegistry:

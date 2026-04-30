@@ -150,8 +150,8 @@ EMAIL_TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
 def can_send_on_email(content_type: str, content_size: int) -> SendabilityResult:
     """Email: 20 MB cap, executable/installer denylist applies."""
     content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if not content_size or content_size <= 0:
-        return SendabilityResult(False, "File size unknown")
+    if not content_type or not content_size or content_size <= 0:
+        return SendabilityResult(False, "File type or size unknown")
     if content_type in EMAIL_BLOCKED_CONTENT_TYPES:
         return SendabilityResult(False, f"File type '{content_type}' not allowed for email")
     if content_size > EMAIL_MAX_ATTACHMENT_BYTES:
