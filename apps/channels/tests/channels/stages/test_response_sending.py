@@ -185,4 +185,4 @@ class TestResponseSendingStage:
         self.stage(ctx)
 
         assert len(ctx.sending_exceptions) == 1
-        assert ctx.sending_exceptions[0] is error or isinstance(ctx.sending_exceptions[0], RuntimeError)
+        assert ctx.sending_exceptions[0] is error
