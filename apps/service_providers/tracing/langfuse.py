@@ -70,7 +70,7 @@ class LangFuseTracer(Tracer):
     def trace(
         self,
         trace_context: TraceContext,
-        session: ExperimentSession,
+        session: ExperimentSession | None,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Iterator[TraceContext]:
@@ -78,6 +78,11 @@ class LangFuseTracer(Tracer):
 
         Acquires a Langfuse client from ClientManager, creates a trace,
         and ensures the client is flushed on exit.
+
+        ``session`` may be None when the trace is opened before routing has
+        identified a session (e.g. inbound email). Langfuse cannot back-fill
+        ``session_id``/``user_id`` after the trace is sent, so they are
+        omitted in that case.
         """
         # Check for reentry
         if self.trace_record:
@@ -87,11 +92,12 @@ class LangFuseTracer(Tracer):
 
         # Get client and create trace
         self.client = client_manager.get(self.config)
+        propagate_kwargs: dict[str, str] = {}
+        if session is not None:
+            propagate_kwargs["session_id"] = str(session.external_id)
+            propagate_kwargs["user_id"] = session.participant.identifier
         try:
-            with propagate_attributes(
-                session_id=str(session.external_id),
-                user_id=session.participant.identifier,
-            ):
+            with propagate_attributes(**propagate_kwargs):
                 with self.client.start_as_current_observation(
                     name=trace_context.name,
                     input=inputs,
