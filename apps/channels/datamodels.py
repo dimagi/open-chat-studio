@@ -87,6 +87,10 @@ class BaseMessage(BaseModel):
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
+    attachment_file_ids: list[int] = Field(default=[])
+    """File IDs for attachments persisted by the channel's inbound handler.
+    Hydrated into `attachments` by AttachmentHydrationStage once a session
+    exists. Channels that don't pre-persist files leave this empty."""
 
     cached_media_data: MediaCache | None = Field(default=None, exclude=True)
 
