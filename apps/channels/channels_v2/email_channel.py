@@ -14,6 +14,7 @@ from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import is_email_domain_allowed
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
 
@@ -238,7 +239,7 @@ class EmailChannel(ChannelBase):
         if self.experiment_session and self._sender_instance:
             msg_id = self._sender_instance.last_message_id
             if msg_id and not _has_email_message_id(self.experiment_session.external_id):
-                self.experiment_session.external_id = msg_id
+                self.experiment_session.external_id = msg_id  # ty: ignore[invalid-assignment]
                 try:
                     self.experiment_session.save(update_fields=["external_id"])
                 except IntegrityError:
@@ -276,6 +277,13 @@ def email_inbound_handler(sender, event, **kwargs):
         email_msg = EmailMessageDatamodel.parse(message)
     except Exception:
         logger.exception("Failed to parse inbound email")
+        return
+
+    if not is_email_domain_allowed(email_msg.to_address):
+        logger.info(
+            "Rejecting inbound email: to-domain not allowed (to=%s)",
+            email_msg.to_address,
+        )
         return
 
     # Best-effort pre-filter: enqueue if any email channel could handle this.
