@@ -47,6 +47,13 @@ class LangFuseTracer(Tracer):
 
     The API is designed to be used with a single set of credentials whereas we need to provide
     different credentials per call. This is why we don't use the standard 'observe' decorator.
+
+    Error propagation: Langfuse's UI surfaces span failures via its own ``level`` field, which
+    is independent of OpenTelemetry status. The SDK only maps one direction (``level=ERROR``
+    sets OTel status), so a propagating exception leaves OTel status=ERROR but ``level``
+    unset — the span renders as successful. ``span()`` and ``trace()`` therefore catch the
+    exception, mark the ``TraceContext``, and run ``_update_span_from_context`` in a
+    ``finally`` so ``level=ERROR`` is set before the underlying observation closes.
     """
 
     def __init__(self, type_: str, config: dict):
