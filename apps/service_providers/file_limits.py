@@ -81,3 +81,82 @@ FILE_SENDABILITY_CHECKERS: dict[str, Callable[[str, int], SendabilityResult]] = 
     "telegram": can_send_on_telegram,
     "slack": can_send_on_slack,
 }
+
+EMAIL_MAX_ATTACHMENT_BYTES = 20 * MB
+
+EMAIL_BLOCKED_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        "exe",
+        "bat",
+        "cmd",
+        "com",
+        "scr",
+        "ps1",
+        "vbs",
+        "vbe",
+        "wsf",
+        "msi",
+        "app",
+        "dmg",
+        "jar",
+        "appimage",
+        "deb",
+        "rpm",
+        "iso",
+        "img",
+    }
+)
+
+EMAIL_BLOCKED_CONTENT_TYPES: frozenset[str] = frozenset(
+    {
+        "application/x-msdownload",
+        "application/x-msdos-program",
+        "application/x-bat",
+        "application/x-sh",
+        "application/x-executable",
+        "application/x-mach-binary",
+        "application/x-elf",
+        "application/x-iso9660-image",
+        "application/x-apple-diskimage",
+        "application/vnd.debian.binary-package",
+        "application/x-rpm",
+        "application/x-msi",
+        "application/java-archive",
+    }
+)
+
+# Application-namespaced types that are actually textual. Magic typically
+# returns text/plain for these, so a text/* detection should not be flagged
+# as a mismatch when the claimed type is one of these. Deliberately excludes
+# script types (application/javascript, application/x-sh, ...) — those are
+# textual but executable.
+EMAIL_TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
+    {
+        "application/json",
+        "application/ld+json",
+        "application/manifest+json",
+        "application/xml",
+        "application/atom+xml",
+        "application/rss+xml",
+        "application/yaml",
+        "application/x-yaml",
+        "application/toml",
+        "application/x-toml",
+        "application/x-ndjson",
+    }
+)
+
+
+def can_send_on_email(content_type: str, content_size: int) -> SendabilityResult:
+    """Email: 20 MB cap, executable/installer denylist applies."""
+    content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if not content_size or content_size <= 0:
+        return SendabilityResult(False, "File size unknown")
+    if content_type in EMAIL_BLOCKED_CONTENT_TYPES:
+        return SendabilityResult(False, f"File type '{content_type}' not allowed for email")
+    if content_size > EMAIL_MAX_ATTACHMENT_BYTES:
+        return SendabilityResult(False, "Exceeds 20MB email attachment limit")
+    return SendabilityResult(True, "")
+
+
+FILE_SENDABILITY_CHECKERS["email"] = can_send_on_email
