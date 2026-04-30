@@ -22,6 +22,8 @@ def mock_langfuse_client():
     client.start_as_current_observation.side_effect = start_observation
     client.get_current_trace_id.return_value = "trace-abc-123"
     client.get_trace_url.return_value = "https://langfuse.example/trace/trace-abc-123"
+    # Stash the span mock so tests can introspect calls made on it.
+    client._test_span = span
     return client
 
 
@@ -115,3 +117,32 @@ def test_trace_state_resets_on_exit(patched_tracer, mock_langfuse_client, mock_s
     assert patched_tracer.trace_record is None
     assert patched_tracer.client is None
     assert patched_tracer.session is None
+
+
+def test_span_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, mock_session):
+    """If user code under `with span(...)` raises, the span must surface as ERROR in Langfuse
+    instead of looking like a successful span — otherwise failures are invisible in the trace UI.
+    """
+    trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
+    span_context = TraceContext(id=mock.sentinel.span_id, name="failing-span")
+
+    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+        with pytest.raises(RuntimeError, match="boom"):
+            with patched_tracer.span(span_context=span_context, inputs={}):
+                raise RuntimeError("boom")
+
+    mock_langfuse_client._test_span.update.assert_any_call(level="ERROR", status_message=mock.ANY)
+    assert span_context.exception is not None
+    assert span_context.error is not None
+
+
+def test_trace_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, mock_session):
+    """Same guarantee at the trace level: a propagating exception must mark the trace as ERROR."""
+    trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+            raise RuntimeError("boom")
+
+    mock_langfuse_client._test_span.update.assert_any_call(level="ERROR", status_message=mock.ANY)
+    assert trace_context.exception is not None

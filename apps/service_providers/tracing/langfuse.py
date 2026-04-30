@@ -92,8 +92,14 @@ class LangFuseTracer(Tracer):
                 ) as trace:
                     self.trace_record = trace
                     self._langfuse_trace_id = self.client.get_current_trace_id()
-                    yield trace_context
-                    self._update_span_from_context(trace, trace_context)
+                    try:
+                        yield trace_context
+                    except Exception as exc:
+                        if not trace_context.has_error():
+                            trace_context.mark_span_as_error(str(exc), exception=exc)
+                        raise
+                    finally:
+                        self._update_span_from_context(trace, trace_context)
         finally:
             if self.trace_record:
                 self.client.flush()
@@ -126,8 +132,14 @@ class LangFuseTracer(Tracer):
             metadata=metadata,
             level=level,
         ) as span:
-            yield span_context
-            self._update_span_from_context(span, span_context)
+            try:
+                yield span_context
+            except Exception as exc:
+                if not span_context.has_error():
+                    span_context.mark_span_as_error(str(exc), exception=exc)
+                raise
+            finally:
+                self._update_span_from_context(span, span_context)
 
     def _update_span_from_context(self, span, context: TraceContext):
         if output := context.outputs:
