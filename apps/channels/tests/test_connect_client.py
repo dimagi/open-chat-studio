@@ -9,14 +9,20 @@ import pytest
 from Crypto.Cipher import AES
 from django.conf import settings
 from django.test import override_settings
+from tenacity import wait_none
 
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 
 
 @pytest.fixture()
 def disable_retry_wait():
-    """Tenacity sleeps between attempts. Skip the wait so timeout/retry tests stay fast."""
-    with mock.patch("apps.channels.clients.connect_client.wait_exponential", return_value=lambda _: 0):
+    """Tenacity sleeps between attempts. Skip the wait so timeout/retry tests stay fast.
+
+    The @retry decorator binds the wait strategy at decoration time, so patching
+    `wait_exponential` in the module namespace has no effect — patch the bound
+    Retrying instance's `.wait` attribute directly instead.
+    """
+    with mock.patch.object(CommCareConnectClient._send_fcm.retry, "wait", wait_none()):
         yield
 
 
