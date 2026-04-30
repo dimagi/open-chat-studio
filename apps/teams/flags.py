@@ -58,6 +58,14 @@ class Flags(FlagInfo, Enum):
 
     EMAIL_CHANNEL = ("flag_email_channel", "Email messaging channel for chatbots", "", [], True)
 
+    JSON_COLLECTION_LOADER = (
+        "flag_json_collection_loader",
+        "JSON Collection document source loader",
+        "",
+        [],
+        True,
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
