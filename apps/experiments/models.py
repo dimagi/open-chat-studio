@@ -1454,7 +1454,7 @@ class ExperimentSession(BaseTeamModel):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
         if not self.external_id:
-            self.external_id = str(uuid.uuid4())
+            self.external_id = str(uuid.uuid4())  # ty: ignore[invalid-assignment]
 
         super().save(*args, **kwargs)
 

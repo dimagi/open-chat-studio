@@ -11,7 +11,7 @@ from apps.utils.factories.service_provider_factories import LlmProviderModelFact
 
 
 def _make_pipeline_referencing(llm_provider_model):
-    pipeline: Pipeline = PipelineFactory()  # type: ignore[assignment]
+    pipeline: Pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
     pipeline.data["nodes"].append(
         {
             "id": "1",
