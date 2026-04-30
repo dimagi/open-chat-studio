@@ -1108,3 +1108,82 @@ class TestEmailInboundHandlerWithAttachments:
 
         delay.assert_called_once()
         assert delay.call_args.kwargs["session_id"] == session.id
+
+
+@pytest.mark.django_db()
+class TestEmailAttachmentsEndToEnd:
+    def test_inbound_attachment_persisted_and_visible_to_pipeline(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-test")
+        inbound = _make_inbound_with_attachments(
+            [pdf], to_email=channel.extra_data["email_address"], text="See attached"
+        )
+
+        captured: dict = {}
+
+        def fake_process_input(user_query, attachments=None, human_message=None):
+            captured["attachments"] = attachments
+            captured["query"] = user_query
+            from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
+
+            return ChatMessage(content="ack: got the file", message_type=ChatMessageType.AI)
+
+        # Patch get_bot in core.py so we don't need a real LLM provider.
+        # Run the Celery task synchronously by routing .delay() to the function body.
+        with (
+            patch("apps.channels.channels_v2.stages.core.get_bot") as mock_get_bot,
+            patch(
+                "apps.channels.tasks.handle_email_message.delay",
+                side_effect=lambda **kw: handle_email_message(**kw),
+            ),
+        ):
+            mock_bot = MagicMock()
+            mock_bot.process_input.side_effect = fake_process_input
+            mock_get_bot.return_value = mock_bot
+
+            email_inbound_handler(sender=None, message=inbound, event=None)
+
+        # File persisted
+        files = File.objects.filter(team_id=team.id, name="report.pdf")
+        assert files.count() == 1
+        # Bot saw the attachment
+        assert captured.get("attachments") is not None
+        assert len(captured["attachments"]) == 1
+        assert captured["attachments"][0].file_id == files.first().id
+        # Outbound email sent
+        assert len(mail.outbox) >= 1
+        # Find the outbound email body
+        outbound_bodies = [m.body for m in mail.outbox]
+        assert any("ack: got the file" in body for body in outbound_bodies)
+
+    def test_outbound_attachment_combined_with_text(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        session = _make_session(team, channel, external_id="<thread@chat.openchatstudio.com>")
+
+        outbound_file = File.create(
+            filename="result.csv",
+            file_obj=BytesIO(b"x,y\n1,2\n"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="text/csv",
+        )
+
+        before_count = len(mail.outbox)
+
+        with patch.object(EmailChannel, "_get_callbacks", return_value=ChannelCallbacks()):
+            email_channel = EmailChannel(
+                experiment=channel.experiment.default_version,
+                experiment_channel=channel,
+                experiment_session=session,
+                thread_context=EmailThreadContext(subject="Re: thread"),
+            )
+            email_channel.send_message_to_user("Here is your CSV.", files=[outbound_file])
+
+        assert len(mail.outbox) == before_count + 1
+        msg = mail.outbox[before_count]
+        assert msg.body == "Here is your CSV."
+        names = {a[0] for a in msg.attachments}
+        assert "result.csv" in names
