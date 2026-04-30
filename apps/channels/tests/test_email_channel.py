@@ -1,3 +1,4 @@
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -401,6 +402,7 @@ class TestEmailSender:
             domain="chat.openchatstudio.com",
         )
         sender.send_text("Hello!", "user@example.com")
+        sender.flush()
 
         assert len(mail.outbox) == 1
         sent = mail.outbox[0]
@@ -421,6 +423,7 @@ class TestEmailSender:
             thread_context=ctx,
         )
         sender.send_text("Here's the answer", "user@example.com")
+        sender.flush()
 
         assert len(mail.outbox) == 1
         sent = mail.outbox[0]
@@ -434,10 +437,93 @@ class TestEmailSender:
             domain="chat.openchatstudio.com",
         )
         sender.send_text("Test", "user@example.com")
+        sender.flush()
 
         assert sender.last_message_id is not None
         assert sender.last_message_id.startswith("<")
         assert sender.last_message_id.endswith(">")
+
+    def test_send_text_alone_requires_flush(self):
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=EmailThreadContext(subject="Re: Hi"),
+        )
+
+        sender.send_text("Hello", "user@example.com")
+        assert len(mail.outbox) == 0  # not sent yet
+
+        sender.flush()
+        assert len(mail.outbox) == 1
+        msg = mail.outbox[0]
+        assert msg.body == "Hello"
+        assert msg.to == ["user@example.com"]
+        assert msg.attachments == []
+
+    @pytest.mark.django_db()
+    def test_send_text_then_files_sends_one_combined_email(self, team_with_users):
+        team = team_with_users
+        file1 = File.create(
+            filename="a.pdf",
+            file_obj=BytesIO(b"%PDF-A"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="application/pdf",
+        )
+        file2 = File.create(
+            filename="b.csv",
+            file_obj=BytesIO(b"a,b\n1,2"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="text/csv",
+        )
+
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=EmailThreadContext(
+                subject="Re: docs",
+                in_reply_to="<orig@example.com>",
+                references=["<orig@example.com>"],
+            ),
+        )
+        sender.send_text("Here are the docs.", "user@example.com")
+        sender.send_file(file1, "user@example.com", session_id=1)
+        sender.send_file(file2, "user@example.com", session_id=1)
+        sender.flush()
+
+        assert len(mail.outbox) == 1
+        msg = mail.outbox[0]
+        assert msg.body == "Here are the docs."
+        assert msg.subject == "Re: docs"
+        assert msg.extra_headers.get("In-Reply-To") == "<orig@example.com>"
+        assert "<orig@example.com>" in msg.extra_headers.get("References", "")
+        names = {a[0] for a in msg.attachments}
+        assert names == {"a.pdf", "b.csv"}
+
+    def test_flush_with_nothing_queued_is_noop(self):
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+        )
+        before = len(mail.outbox)
+        sender.flush()
+        assert len(mail.outbox) == before
+
+    def test_flush_resets_state(self):
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=EmailThreadContext(subject="Re: ad-hoc"),
+        )
+        before = len(mail.outbox)
+        sender.send_text("First", "user@example.com")
+        sender.flush()
+        sender.send_text("Second", "user@example.com")
+        sender.flush()
+        assert len(mail.outbox) == before + 2
+        assert mail.outbox[before].body == "First"
+        assert mail.outbox[before + 1].body == "Second"
 
 
 class TestEmailChannel:
@@ -661,6 +747,7 @@ class TestEmailSessionThreading:
             domain="chat.openchatstudio.com",
         )
         sender.send_text("Hello!", "user@example.com")
+        sender.flush()
 
         assert sender.last_message_id is not None
         assert "@chat.openchatstudio.com>" in sender.last_message_id

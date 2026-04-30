@@ -240,7 +240,13 @@ def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tupl
 
 
 class EmailSender(ChannelSender):
-    """Sends threaded email replies via django.core.mail."""
+    """Sends threaded email replies via django.core.mail.
+
+    Buffers the body text and file attachments across send_text / send_file
+    calls and commits them as a single Django EmailMessage in flush().  This
+    ensures text + attachments arrive as one threaded reply instead of
+    separate messages.
+    """
 
     def __init__(
         self,
@@ -252,25 +258,53 @@ class EmailSender(ChannelSender):
         self.domain = domain
         self.thread_context = thread_context or EmailThreadContext()
         self.last_message_id: str | None = None
+        self._body: str = ""
+        self._recipient: str = ""
+        # Each entry is a (filename, content_bytes, mimetype) 3-tuple as
+        # accepted by Django's EmailMessage.attach().
+        self._attachments: list[tuple[str, bytes, str]] = []
 
     def send_text(self, text: str, recipient: str) -> None:
+        """Stage the body text.  The email is not sent until flush() is called."""
+        self._body = text
+        self._recipient = recipient
+
+    def send_file(self, file: File, recipient: str, session_id: int) -> None:
+        """Stage a file attachment.  The email is not sent until flush() is called."""
+        self._recipient = recipient
+        content = file.file.read()
+        self._attachments.append((file.name, content, file.content_type or "application/octet-stream"))
+
+    def flush(self) -> None:
+        """Build and send the buffered email, then reset internal state."""
+        if not self._body and not self._attachments:
+            return
+
         ctx = self.thread_context
+        msg_id = make_msgid(domain=self.domain)
+
         msg = DjangoEmailMessage(
             subject=ctx.subject or "New message",
-            body=text,
+            body=self._body,
             from_email=self.from_address,
-            to=[recipient],
+            to=[self._recipient],
         )
-
-        msg_id = make_msgid(domain=self.domain)
         msg.extra_headers = {"Message-ID": msg_id}
 
         if ctx.in_reply_to:
             msg.extra_headers["In-Reply-To"] = ctx.in_reply_to
             msg.extra_headers["References"] = " ".join(ctx.references)
 
+        for filename, content, mimetype in self._attachments:
+            msg.attach(filename, content, mimetype)
+
         msg.send()
         self.last_message_id = msg_id
+
+        # Reset buffer so subsequent flush() after more sends produces a new email.
+        self._body = ""
+        self._recipient = ""
+        self._attachments = []
 
 
 class EmailChannel(ChannelBase):
