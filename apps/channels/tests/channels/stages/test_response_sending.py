@@ -140,3 +140,52 @@ class TestResponseSendingStage:
         assert len(ctx.sending_exceptions) == 1
         assert isinstance(ctx.sending_exceptions[0], MessageDeliveryFailure)
         sender.send_file.assert_not_called()
+
+    def test_response_sending_stage_calls_flush(self):
+        sender = StubSender()
+        ctx = make_context(
+            sender=sender,
+            formatted_message="Hello",
+            participant_identifier="user1",
+        )
+
+        self.stage(ctx)
+
+        assert sender.flush_call_count == 1
+
+    def test_flush_is_called_after_files(self):
+        sender = StubSender()
+        file1 = MagicMock()
+        session = MagicMock()
+        session.id = 42
+        ctx = make_context(
+            sender=sender,
+            formatted_message="Hello",
+            participant_identifier="user1",
+            experiment_session=session,
+            files_to_send=[file1],
+        )
+
+        self.stage(ctx)
+
+        # flush must be called once, after both text and files were sent
+        assert sender.flush_call_count == 1
+        assert sender.call_order == ["send_text", "send_file", "flush"]
+
+    def test_flush_failure_recorded_as_message_delivery_failure(self):
+        sender = StubSender()
+        error = RuntimeError("flush failed")
+        sender.flush_side_effect = error
+        ctx = make_context(
+            sender=sender,
+            formatted_message="Hello",
+            participant_identifier="user1",
+        )
+
+        self.stage(ctx)
+
+        assert len(ctx.sending_exceptions) == 1
+        exc = ctx.sending_exceptions[0]
+        assert isinstance(exc, MessageDeliveryFailure)
+        assert exc.original_exc is error
+        assert exc.context == "flush"

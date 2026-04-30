@@ -1,3 +1,5 @@
+import json
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,17 +13,21 @@ from apps.channels.channels_v2.email_channel import (
     EmailChannel,
     EmailSender,
     EmailThreadContext,
+    _is_blocked,
+    _persist_inbound_attachments,
     email_inbound_handler,
     get_email_experiment_channel,
 )
-from apps.channels.datamodels import EmailMessage
+from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession, Participant
+from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.team import TeamFactory
 
 
 def _make_inbound_message(
@@ -50,6 +56,20 @@ def _make_inbound_message(
         }.get(key, default)
     )
     return msg
+
+
+def _make_inbound_with_attachments(parts, **kwargs):
+    msg = _make_inbound_message(**kwargs)
+    msg.attachments = parts
+    return msg
+
+
+def _mime_part(filename="file.bin", content_type="application/octet-stream", content=b"bytes"):
+    part = MagicMock()
+    part.get_filename.return_value = filename
+    part.get_content_type.return_value = content_type
+    part.get_content_bytes.return_value = content
+    return part
 
 
 def _make_email_channel(team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
@@ -139,13 +159,42 @@ class TestEmailMessageParse:
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
 
+    def test_parse_extracts_attachments(self):
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-")
+        csv = _mime_part(filename="data.csv", content_type="text/csv", content=b"a,b,c")
+        inbound = _make_inbound_with_attachments([pdf, csv])
+
+        result = EmailMessage.parse(inbound)
+
+        assert len(result._raw_attachments) == 2
+        assert result._raw_attachments[0].filename == "report.pdf"
+        assert result._raw_attachments[0].content_type == "application/pdf"
+        assert result._raw_attachments[0].content_bytes == b"%PDF-"
+        assert result._raw_attachments[1].filename == "data.csv"
+
+    def test_parse_no_attachments(self):
+        inbound = _make_inbound_with_attachments([])
+        result = EmailMessage.parse(inbound)
+        assert result._raw_attachments == []
+
+    def test_parse_strips_content_type_params(self):
+        part = _mime_part(content_type="text/csv; charset=utf-8")
+        inbound = _make_inbound_with_attachments([part])
+        result = EmailMessage.parse(inbound)
+        assert result._raw_attachments[0].content_type == "text/csv"
+
+    def test_parse_handles_missing_filename(self):
+        part = _mime_part(filename=None)
+        inbound = _make_inbound_with_attachments([part])
+        result = EmailMessage.parse(inbound)
+        assert result._raw_attachments[0].filename == "attachment"
+
     def test_model_dump_json_mode_serializes_enum_to_string(self):
         """model_dump(mode='json') must convert MESSAGE_TYPES enum to a plain string.
 
         Celery's JSON serializer cannot handle Python enum objects, so the inbound
         handler uses mode='json' before passing email_data to the task.
         """
-        import json
 
         inbound = _make_inbound_message()
         msg = EmailMessage.parse(inbound)
@@ -306,6 +355,7 @@ class TestEmailSender:
             domain="chat.openchatstudio.com",
         )
         sender.send_text("Hello!", "user@example.com")
+        sender.flush()
 
         assert len(mail.outbox) == 1
         sent = mail.outbox[0]
@@ -326,6 +376,7 @@ class TestEmailSender:
             thread_context=ctx,
         )
         sender.send_text("Here's the answer", "user@example.com")
+        sender.flush()
 
         assert len(mail.outbox) == 1
         sent = mail.outbox[0]
@@ -339,10 +390,93 @@ class TestEmailSender:
             domain="chat.openchatstudio.com",
         )
         sender.send_text("Test", "user@example.com")
+        sender.flush()
 
         assert sender.last_message_id is not None
         assert sender.last_message_id.startswith("<")
         assert sender.last_message_id.endswith(">")
+
+    def test_send_text_alone_requires_flush(self):
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=EmailThreadContext(subject="Re: Hi"),
+        )
+
+        sender.send_text("Hello", "user@example.com")
+        assert len(mail.outbox) == 0  # not sent yet
+
+        sender.flush()
+        assert len(mail.outbox) == 1
+        msg = mail.outbox[0]
+        assert msg.body == "Hello"
+        assert msg.to == ["user@example.com"]
+        assert msg.attachments == []
+
+    @pytest.mark.django_db()
+    def test_send_text_then_files_sends_one_combined_email(self, team_with_users):
+        team = team_with_users
+        file1 = File.create(
+            filename="a.pdf",
+            file_obj=BytesIO(b"%PDF-A"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="application/pdf",
+        )
+        file2 = File.create(
+            filename="b.csv",
+            file_obj=BytesIO(b"a,b\n1,2"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="text/csv",
+        )
+
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=EmailThreadContext(
+                subject="Re: docs",
+                in_reply_to="<orig@example.com>",
+                references=["<orig@example.com>"],
+            ),
+        )
+        sender.send_text("Here are the docs.", "user@example.com")
+        sender.send_file(file1, "user@example.com", session_id=1)
+        sender.send_file(file2, "user@example.com", session_id=1)
+        sender.flush()
+
+        assert len(mail.outbox) == 1
+        msg = mail.outbox[0]
+        assert msg.body == "Here are the docs."
+        assert msg.subject == "Re: docs"
+        assert msg.extra_headers.get("In-Reply-To") == "<orig@example.com>"
+        assert "<orig@example.com>" in msg.extra_headers.get("References", "")
+        names = {a[0] for a in msg.attachments}
+        assert names == {"a.pdf", "b.csv"}
+
+    def test_flush_with_nothing_queued_is_noop(self):
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+        )
+        before = len(mail.outbox)
+        sender.flush()
+        assert len(mail.outbox) == before
+
+    def test_flush_resets_state(self):
+        sender = EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=EmailThreadContext(subject="Re: ad-hoc"),
+        )
+        before = len(mail.outbox)
+        sender.send_text("First", "user@example.com")
+        sender.flush()
+        sender.send_text("Second", "user@example.com")
+        sender.flush()
+        assert len(mail.outbox) == before + 2
+        assert mail.outbox[before].body == "First"
+        assert mail.outbox[before + 1].body == "Second"
 
 
 class TestEmailChannel:
@@ -355,10 +489,43 @@ class TestEmailChannel:
         caps = email_channel._get_capabilities()
 
         assert caps.supports_voice_replies is False
-        assert caps.supports_files is False
+        assert caps.supports_files is True
         assert caps.supports_conversational_consent is False
         assert caps.supports_static_triggers is True
         assert MESSAGE_TYPES.TEXT in caps.supported_message_types
+
+    def test_can_send_file_normal_pdf(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        email_channel = EmailChannel(MagicMock(), channel_mock)
+
+        file = MagicMock()
+        file.content_type = "application/pdf"
+        file.content_size = 1024 * 1024  # 1 MB
+
+        assert email_channel._can_send_file(file) is True
+
+    def test_can_send_file_rejects_oversized(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        email_channel = EmailChannel(MagicMock(), channel_mock)
+
+        file = MagicMock()
+        file.content_type = "application/pdf"
+        file.content_size = 25 * 1024 * 1024  # 25 MB > 20 MB
+
+        assert email_channel._can_send_file(file) is False
+
+    def test_can_send_file_rejects_denylisted(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        email_channel = EmailChannel(MagicMock(), channel_mock)
+
+        file = MagicMock()
+        file.content_type = "application/x-msdownload"
+        file.content_size = 1024
+
+        assert email_channel._can_send_file(file) is False
 
     def test_get_sender_returns_email_sender(self):
         channel_mock = MagicMock()
@@ -422,6 +589,67 @@ class TestHandleEmailMessageTask:
         # Should not raise
         handle_email_message(email_data=email_data)
 
+    def test_task_uses_channel_id_when_provided(self, team_with_users):
+        team = team_with_users
+        experiment = ExperimentFactory(team=team)
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+
+        email_data = {
+            "participant_id": "sender@example.com",
+            "message_text": "Hello bot",
+            "from_address": "sender@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Test",
+            "message_id": "<msg1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+            "attachment_file_ids": [],
+            "skipped_attachments": [],
+        }
+
+        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            handle_email_message(email_data=email_data, channel_id=channel.id)
+            MockEmailChannel.assert_called_once()
+            ec_kwarg = MockEmailChannel.call_args.kwargs["experiment_channel"]
+            assert ec_kwarg.id == channel.id
+            mock_instance.new_user_message.assert_called_once()
+
+    def test_task_legacy_payload_falls_back_to_routing(self, team_with_users):
+        """Tasks queued before deploy won't carry channel_id; the task should
+        still resolve the channel via the existing routing chain."""
+        team = team_with_users
+        experiment = ExperimentFactory(team=team)
+        ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+
+        email_data = {
+            "participant_id": "sender@example.com",
+            "message_text": "Hello bot",
+            "from_address": "sender@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Test",
+            "message_id": "<msg1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+        }
+
+        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            # Call without channel_id (legacy form)
+            handle_email_message(email_data=email_data)
+            MockEmailChannel.assert_called_once()
+            mock_instance.new_user_message.assert_called_once()
+
 
 @pytest.mark.django_db()
 class TestEmailInboundHandler:
@@ -450,7 +678,6 @@ class TestEmailInboundHandler:
         Regression test for the EncodeError caused by model_dump() returning a raw
         MESSAGE_TYPES enum for content_type instead of its string value.
         """
-        import json
 
         team = team_with_users
         ExperimentChannelFactory(
@@ -478,6 +705,7 @@ class TestEmailInboundHandler:
         _make_session(team, channel, "<outbound-1@chat.openchatstudio.com>")
 
         inbound = _make_inbound_message(
+            from_email="user@example.com",  # must match session participant for sender verification
             to_email="different@chat.openchatstudio.com",
             in_reply_to="<outbound-1@chat.openchatstudio.com>",
         )
@@ -602,6 +830,7 @@ class TestEmailSessionThreading:
             domain="chat.openchatstudio.com",
         )
         sender.send_text("Hello!", "user@example.com")
+        sender.flush()
 
         assert sender.last_message_id is not None
         assert "@chat.openchatstudio.com>" in sender.last_message_id
@@ -728,3 +957,288 @@ class TestEmailEndToEnd:
             call_kwargs = MockEmailChannel.call_args[1]
             assert call_kwargs["experiment_session"] == session
             mock_instance.new_user_message.assert_called_once()
+
+
+@pytest.mark.django_db()
+class TestPersistInboundAttachments:
+    def _raw(self, filename, content_type, content):
+        return RawAttachment(filename=filename, content_type=content_type, content_bytes=content)
+
+    def test_accepts_normal_file(self):
+        team = TeamFactory()
+        raw = [self._raw("data.csv", "text/csv", b"a,b\n1,2\n")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert len(accepted) == 1
+        assert skipped == []
+        f = File.objects.get(id=accepted[0])
+        assert f.team_id == team.id
+        assert f.name == "data.csv"
+        assert f.purpose == "message_media"
+
+    def test_rejects_oversized(self):
+        team = TeamFactory()
+        big = b"x" * (21 * 1024 * 1024)
+        raw = [self._raw("big.pdf", "application/pdf", big)]
+
+        # Mock magic detection so the content-type checks pass and only the
+        # size check fires (magic sees b"x"*N as text/plain, causing a
+        # spurious mismatch against application/pdf before the size check).
+        with patch(
+            "apps.channels.channels_v2.email_channel._detect_content_type",
+            return_value="application/pdf",
+        ):
+            accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert len(skipped) == 1
+        assert "20" in skipped[0]["reason"]
+        assert skipped[0]["size"] == len(big)
+
+    def test_rejects_denylisted_extension(self):
+        team = TeamFactory()
+        raw = [self._raw("malware.exe", "application/octet-stream", b"MZ\x90\x00")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert len(skipped) == 1
+        assert ".exe" in skipped[0]["reason"]
+
+    def test_rejects_denylisted_content_type(self):
+        team = TeamFactory()
+        raw = [self._raw("noext", "application/x-msdownload", b"\x00\x00")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert "application/x-msdownload" in skipped[0]["reason"]
+
+    def test_rejects_when_magic_detects_executable_with_innocent_filename(self):
+        """When magic detects a denylisted type, the attachment is rejected
+        regardless of the (possibly spoofed) filename and claimed type."""
+        team = TeamFactory()
+        raw = [self._raw("report.pdf", "application/pdf", b"any bytes")]
+
+        # Force magic detection to return an executable type so we test the
+        # detection-based rejection branch without relying on real libmagic
+        # signatures (which can vary by version/platform).
+        with patch(
+            "apps.channels.channels_v2.email_channel._detect_content_type",
+            return_value="application/x-msdownload",
+        ):
+            accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert "detected" in skipped[0]["reason"].lower()
+        assert "application/x-msdownload" in skipped[0]["reason"]
+
+    def test_canonical_content_type_is_magic_detected(self):
+        team = TeamFactory()
+        # PNG magic bytes; sender claims image/png — magic should agree
+        png_bytes = b"\x89PNG\r\n\x1a\n" + (b"\x00" * 32)
+        raw = [self._raw("image.png", "image/png", png_bytes)]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert len(accepted) == 1
+        f = File.objects.get(id=accepted[0])
+        assert f.content_type.startswith("image/png")
+
+    def test_storage_error_isolated(self):
+        team = TeamFactory()
+        raw = [
+            self._raw("a.txt", "text/plain", b"hello"),
+            self._raw("b.txt", "text/plain", b"world"),
+            self._raw("c.txt", "text/plain", b"again"),
+        ]
+        original = File.create
+        call_count = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("simulated storage error")
+            return original(*args, **kwargs)
+
+        with patch.object(File, "create", side_effect=flaky):
+            accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert len(accepted) == 2
+        assert len(skipped) == 1
+        assert skipped[0]["reason"] == "storage error"
+        assert skipped[0]["name"] == "b.txt"
+
+    @pytest.mark.parametrize(
+        ("ext", "claimed", "detected", "should_block"),
+        [
+            ("pdf", "image/jpeg", "application/pdf", True),  # cross-category mismatch
+            ("pdf", "application/octet-stream", "application/pdf", False),  # claimed unknown
+            ("pdf", "application/pdf", "application/octet-stream", False),  # detected unknown
+            ("json", "application/json", "text/plain", False),  # text-like allowlist
+            ("xml", "application/xml", "text/plain", False),
+            ("csv", "text/csv", "application/javascript", True),  # script not allowlisted
+            ("csv", "text/csv", "text/plain", False),  # same text category
+        ],
+    )
+    def test_is_blocked_mismatch_matrix(self, ext, claimed, detected, should_block):
+        result = _is_blocked(ext, claimed, detected)
+        if should_block:
+            assert result is not None
+            assert "mismatch" in result.lower() or "not allowed" in result.lower()
+        else:
+            assert result is None
+
+
+@pytest.mark.django_db()
+class TestEmailInboundHandlerWithAttachments:
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_handler_persists_files_before_enqueue(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-...")
+        inbound = _make_inbound_with_attachments([pdf], to_email=channel.extra_data["email_address"])
+
+        with patch("apps.channels.tasks.handle_email_message.delay") as delay:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        assert File.objects.filter(team_id=team.id, name="report.pdf").count() == 1
+        delay.assert_called_once()
+        kwargs = delay.call_args.kwargs
+        assert kwargs["channel_id"] == channel.id
+        assert len(kwargs["email_data"]["attachment_file_ids"]) == 1
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com", "example.com"])
+    def test_handler_no_files_saved_when_no_channel_match(self, team_with_users):
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-")
+        inbound = _make_inbound_with_attachments([pdf], to_email="nobody@example.com")
+
+        with patch("apps.channels.tasks.handle_email_message.delay") as delay:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        assert File.objects.count() == 0
+        delay.assert_not_called()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_skipped_attachments_appended_to_message_text(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        big = b"x" * (21 * 1024 * 1024)
+        oversized = _mime_part(filename="huge.pdf", content_type="application/pdf", content=big)
+        inbound = _make_inbound_with_attachments(
+            [oversized], to_email=channel.extra_data["email_address"], text="Please process"
+        )
+
+        # Mock _detect_content_type so the oversized PDF doesn't trip the
+        # mismatch check (libmagic sees a long string of "x" as text/plain).
+        with (
+            patch("apps.channels.channels_v2.email_channel._detect_content_type", return_value="application/pdf"),
+            patch("apps.channels.tasks.handle_email_message.delay") as delay,
+        ):
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        delay.assert_called_once()
+        message_text = delay.call_args.kwargs["email_data"]["message_text"]
+        assert "Please process" in message_text
+        assert "huge.pdf" in message_text
+        assert "skipped" in message_text.lower()
+        assert File.objects.filter(team_id=team.id).count() == 0
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_handler_passes_session_id_when_thread_continuation(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        session = _make_session(team, channel, external_id="<thread-anchor@example.com>")
+        inbound = _make_inbound_message(
+            to_email=channel.extra_data["email_address"],
+            in_reply_to="<thread-anchor@example.com>",
+            from_email="user@example.com",
+        )
+        inbound.attachments = []
+
+        with patch("apps.channels.tasks.handle_email_message.delay") as delay:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        delay.assert_called_once()
+        assert delay.call_args.kwargs["session_id"] == session.id
+
+
+@pytest.mark.django_db()
+class TestEmailAttachmentsEndToEnd:
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_inbound_attachment_persisted_and_visible_to_pipeline(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-test")
+        inbound = _make_inbound_with_attachments(
+            [pdf], to_email=channel.extra_data["email_address"], text="See attached"
+        )
+
+        captured: dict = {}
+
+        def fake_process_input(user_query, attachments=None, human_message=None):
+            captured["attachments"] = attachments
+            captured["query"] = user_query
+            from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
+
+            return ChatMessage(content="ack: got the file", message_type=ChatMessageType.AI)
+
+        # Patch get_bot in core.py so we don't need a real LLM provider.
+        # Run the Celery task synchronously by routing .delay() to the function body.
+        with (
+            patch("apps.channels.channels_v2.stages.core.get_bot") as mock_get_bot,
+            patch(
+                "apps.channels.tasks.handle_email_message.delay",
+                side_effect=lambda **kw: handle_email_message(**kw),
+            ),
+        ):
+            mock_bot = MagicMock()
+            mock_bot.process_input.side_effect = fake_process_input
+            mock_get_bot.return_value = mock_bot
+
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        # File persisted
+        files = File.objects.filter(team_id=team.id, name="report.pdf")
+        assert files.count() == 1
+        # Bot saw the attachment
+        assert captured.get("attachments") is not None
+        assert len(captured["attachments"]) == 1
+        assert captured["attachments"][0].file_id == files.first().id
+        # Outbound email sent
+        assert len(mail.outbox) >= 1
+        # Find the outbound email body
+        outbound_bodies = [m.body for m in mail.outbox]
+        assert any("ack: got the file" in body for body in outbound_bodies)
+
+    def test_outbound_attachment_combined_with_text(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        session = _make_session(team, channel, external_id="<thread@chat.openchatstudio.com>")
+
+        outbound_file = File.create(
+            filename="result.csv",
+            file_obj=BytesIO(b"x,y\n1,2\n"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="text/csv",
+        )
+
+        before_count = len(mail.outbox)
+
+        with patch.object(EmailChannel, "_get_callbacks", return_value=ChannelCallbacks()):
+            email_channel = EmailChannel(
+                experiment=channel.experiment.default_version,
+                experiment_channel=channel,
+                experiment_session=session,
+                thread_context=EmailThreadContext(subject="Re: thread"),
+            )
+            email_channel.send_message_to_user("Here is your CSV.", files=[outbound_file])
+
+        assert len(mail.outbox) == before_count + 1
+        msg = mail.outbox[before_count]
+        assert msg.body == "Here is your CSV."
+        names = {a[0] for a in msg.attachments}
+        assert "result.csv" in names

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import pathlib
 import re
 from dataclasses import dataclass, field
 from email.utils import make_msgid
+from io import BytesIO
 from typing import TYPE_CHECKING
 
+import magic
 from django.core.mail import EmailMessage as DjangoEmailMessage
 from django.db import IntegrityError
 
@@ -13,18 +16,26 @@ from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import is_email_domain_allowed
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
+from apps.files.models import File, FilePurpose
+from apps.service_providers.file_limits import (
+    EMAIL_BLOCKED_CONTENT_TYPES,
+    EMAIL_BLOCKED_EXTENSIONS,
+    EMAIL_MAX_ATTACHMENT_BYTES,
+    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
+    can_send_on_email,
+)
+from apps.teams.utils import set_current_team
 
 if TYPE_CHECKING:
     from apps.experiments.models import Experiment
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.channels")
-
-_MAX_REFERENCES = 50
 
 # RFC 2822 reply prefixes across common languages
 _REPLY_PREFIX_RE = re.compile(r"^(re|aw|sv|fw|fwd)\s*:", re.IGNORECASE)
@@ -156,8 +167,86 @@ def _domain_from_address(email_address: str) -> str:
     return email_address
 
 
+def _detect_content_type(content: bytes, fallback: str = "") -> str:
+    try:
+        detected = magic.from_buffer(content[:2048], mime=True)
+        if detected and detected != "application/octet-stream":
+            return detected
+    except Exception:
+        logger.exception("magic content-type detection failed")
+    return fallback or "application/octet-stream"
+
+
+def _category(content_type: str) -> str:
+    """Top-level category for mismatch comparison.
+    Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
+    since magic typically returns text/plain for them.
+    """
+    if content_type in EMAIL_TEXT_LIKE_APPLICATION_TYPES:
+        return "text"
+    return content_type.split("/", 1)[0]
+
+
+def _is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | None:
+    """Returns a rejection reason if blocked, else None."""
+    if extension in EMAIL_BLOCKED_EXTENSIONS:
+        return f"file extension '.{extension}' not allowed"
+    if detected_type in EMAIL_BLOCKED_CONTENT_TYPES:
+        return f"file type not allowed (detected: {detected_type})"
+    if claimed_type in EMAIL_BLOCKED_CONTENT_TYPES:
+        return f"file type not allowed (claimed: {claimed_type})"
+    if (
+        claimed_type
+        and claimed_type != "application/octet-stream"
+        and detected_type != "application/octet-stream"
+        and _category(claimed_type) != _category(detected_type)
+    ):
+        return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
+    return None
+
+
+def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tuple[list[int], list[dict]]:
+    """Filter and save inbound email attachments, returning accepted File IDs
+    and skipped-attachment metadata for surfacing to the LLM."""
+    accepted_ids: list[int] = []
+    skipped: list[dict] = []
+    for att in raw:
+        size = len(att.content_bytes)
+        ext = pathlib.Path(att.filename or "").suffix.lstrip(".").lower()
+        detected = _detect_content_type(att.content_bytes, fallback=att.content_type)
+
+        if reason := _is_blocked(ext, att.content_type, detected):
+            skipped.append({"name": att.filename, "reason": reason, "size": size})
+            continue
+        if size > EMAIL_MAX_ATTACHMENT_BYTES:
+            skipped.append({"name": att.filename, "reason": "exceeds 20 MB limit", "size": size})
+            continue
+
+        try:
+            f = File.create(
+                filename=att.filename or "attachment",
+                file_obj=BytesIO(att.content_bytes),
+                team_id=team_id,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+                content_type=detected,
+            )
+        except Exception:
+            logger.exception("Failed to persist inbound email attachment %r", att.filename)
+            skipped.append({"name": att.filename, "reason": "storage error", "size": size})
+            continue
+        accepted_ids.append(f.id)
+
+    return accepted_ids, skipped
+
+
 class EmailSender(ChannelSender):
-    """Sends threaded email replies via django.core.mail."""
+    """Sends threaded email replies via django.core.mail.
+
+    Buffers the body text and file attachments across send_text / send_file
+    calls and commits them as a single Django EmailMessage in flush().  This
+    ensures text + attachments arrive as one threaded reply instead of
+    separate messages.
+    """
 
     def __init__(
         self,
@@ -169,25 +258,54 @@ class EmailSender(ChannelSender):
         self.domain = domain
         self.thread_context = thread_context or EmailThreadContext()
         self.last_message_id: str | None = None
+        self._body: str = ""
+        self._recipient: str = ""
+        # Each entry is a (filename, content_bytes, mimetype) 3-tuple as
+        # accepted by Django's EmailMessage.attach().
+        self._attachments: list[tuple[str, bytes, str]] = []
 
     def send_text(self, text: str, recipient: str) -> None:
+        """Stage the body text.  The email is not sent until flush() is called."""
+        self._body = text
+        self._recipient = recipient
+
+    def send_file(self, file: File, recipient: str, session_id: int) -> None:
+        """Stage a file attachment.  The email is not sent until flush() is called."""
+        self._recipient = recipient
+        with file.file.open("rb") as fh:
+            content = fh.read()
+        self._attachments.append((file.name, content, file.content_type or "application/octet-stream"))
+
+    def flush(self) -> None:
+        """Build and send the buffered email, then reset internal state."""
+        if not self._body and not self._attachments:
+            return
+
         ctx = self.thread_context
+        msg_id = make_msgid(domain=self.domain)
+
         msg = DjangoEmailMessage(
             subject=ctx.subject or "New message",
-            body=text,
+            body=self._body,
             from_email=self.from_address,
-            to=[recipient],
+            to=[self._recipient],
         )
-
-        msg_id = make_msgid(domain=self.domain)
         msg.extra_headers = {"Message-ID": msg_id}
 
         if ctx.in_reply_to:
             msg.extra_headers["In-Reply-To"] = ctx.in_reply_to
             msg.extra_headers["References"] = " ".join(ctx.references)
 
+        for filename, content, mimetype in self._attachments:
+            msg.attach(filename, content, mimetype)
+
         msg.send()
         self.last_message_id = msg_id
+
+        # Reset buffer so subsequent flush() after more sends produces a new email.
+        self._body = ""
+        self._recipient = ""
+        self._attachments = []
 
 
 class EmailChannel(ChannelBase):
@@ -224,11 +342,15 @@ class EmailChannel(ChannelBase):
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
             supports_voice_replies=self.voice_replies_supported,
-            supports_files=False,
+            supports_files=True,
             supports_conversational_consent=False,
             supports_static_triggers=True,
             supported_message_types=self.supported_message_types,
+            can_send_file=self._can_send_file,
         )
+
+    def _can_send_file(self, file) -> bool:
+        return can_send_on_email(file.content_type, file.content_size).supported
 
     def new_user_message(self, message):
         response = super().new_user_message(message)
@@ -255,20 +377,17 @@ class EmailChannel(ChannelBase):
 def email_inbound_handler(sender, event, **kwargs):
     """Handle inbound email from anymail's inbound signal.
 
-    Parses the email and enqueues a Celery task for async processing.
-    Returns immediately so the ESP gets a fast 200 OK.
+    Performs full routing here (not in the Celery task) so attachments
+    can be persisted to the team's File storage with team context known.
+    The Celery payload carries File IDs, never raw bytes.
 
-    The pre-filter here is intentionally lenient — it only checks whether
-    any email channel exists that could plausibly handle this message.
-    The full routing logic lives in get_email_experiment_channel (called
-    by the Celery task).
+    Returns immediately so the ESP gets a fast 200 OK.
     """
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.tasks import handle_email_message  # noqa: PLC0415
 
     message = event.message
 
-    # Check ESP spam verdict before processing
     if getattr(message, "spam_detected", None) is True:
         logger.info("Discarding spam email from %s", getattr(message, "from_email", "unknown"))
         return
@@ -287,27 +406,53 @@ def email_inbound_handler(sender, event, **kwargs):
         )
         return
 
-    # Best-effort pre-filter: enqueue if any email channel could handle this.
-    # Check thread continuity (In-Reply-To or References), to-address, or default.
-    has_existing_session = False
-    message_ids_to_check = []
-    if email_msg.in_reply_to:
-        message_ids_to_check.append(email_msg.in_reply_to)
-    message_ids_to_check.extend(email_msg.references)
+    channel, session = get_email_experiment_channel(
+        in_reply_to=email_msg.in_reply_to,
+        references=email_msg.references,
+        to_address=email_msg.to_address,
+        sender_address=email_msg.from_address,
+    )
+    if not channel:
+        logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
+        return
 
-    if message_ids_to_check:
-        has_existing_session = ExperimentSession.objects.filter(
-            external_id__in=message_ids_to_check,
-            experiment_channel__platform=ChannelPlatform.EMAIL,
-        ).exists()
+    set_current_team(channel.team)
 
-    if not has_existing_session:
-        has_channel = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMAIL,
-            deleted=False,
-        ).exists()
-        if not has_channel:
-            logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
-            return
+    accepted_ids: list[int] = []
+    skipped: list[dict] = []
+    try:
+        accepted_ids, skipped = _persist_inbound_attachments(email_msg._raw_attachments, team_id=channel.team_id)
+    except Exception:
+        logger.exception("Top-level failure persisting inbound attachments; proceeding with text only")
 
-    handle_email_message.delay(email_data=email_msg.model_dump(mode="json"))
+    email_msg.attachment_file_ids = accepted_ids
+    email_msg.skipped_attachments = [SkippedAttachment(**s) for s in skipped]
+    if skipped:
+        email_msg.message_text = _augment_with_skip_notes(email_msg.message_text, skipped)
+
+    handle_email_message.delay(
+        email_data=email_msg.model_dump(mode="json"),
+        channel_id=channel.id,
+        session_id=session.id if session else None,
+    )
+
+
+def _augment_with_skip_notes(message_text: str, skipped: list[dict]) -> str:
+    """Append one bracketed line per skipped attachment to message_text so
+    the LLM can surface the skip reasons to the user."""
+    if not skipped:
+        return message_text
+    lines = [f"[Attachment {s['name']!r} ({_human_size(s['size'])}) skipped — {s['reason']}]" for s in skipped]
+    suffix = "\n\n" + "\n".join(lines)
+    return (message_text or "").rstrip() + suffix
+
+
+def _human_size(num_bytes: int) -> str:
+    if num_bytes <= 0:
+        return "size unknown"
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"

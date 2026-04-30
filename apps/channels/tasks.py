@@ -224,7 +224,7 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     retry_backoff_max=300,
     retry_jitter=True,
 )
-def handle_email_message(self, email_data: dict):
+def handle_email_message(self, email_data: dict, channel_id: int | None = None, session_id: int | None = None):
     from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415
         EmailChannel,
         EmailThreadContext,
@@ -234,15 +234,35 @@ def handle_email_message(self, email_data: dict):
 
     message = EmailMessageDatamodel(**email_data)
 
-    experiment_channel, session = get_email_experiment_channel(
-        in_reply_to=message.in_reply_to,
-        references=message.references,
-        to_address=message.to_address,
-        sender_address=message.from_address,
-    )
-    if not experiment_channel:
-        log.info("No email channel found for to=%s, ignoring", message.to_address)
-        return
+    if channel_id is not None:
+        # Post-deploy payload: routing already happened in the webhook handler.
+        try:
+            experiment_channel = ExperimentChannel.objects.select_related("experiment", "team").get(id=channel_id)
+        except ExperimentChannel.DoesNotExist:
+            log.info("Email channel id=%s no longer exists, ignoring", channel_id)
+            return
+        session = None
+        if session_id is not None:
+            try:
+                session = ExperimentSession.objects.select_related("team", "participant", "experiment_channel").get(
+                    id=session_id
+                )
+            except ExperimentSession.DoesNotExist:
+                # Session was deleted between enqueue and dequeue; let the
+                # pipeline create a fresh one rather than dropping the message.
+                session = None
+    else:
+        # Legacy payload: in-flight tasks queued before this deploy don't
+        # carry channel_id. Resolve by routing as the previous version did.
+        experiment_channel, session = get_email_experiment_channel(
+            in_reply_to=message.in_reply_to,
+            references=message.references,
+            to_address=message.to_address,
+            sender_address=message.from_address,
+        )
+        if not experiment_channel:
+            log.info("No email channel found for to=%s, ignoring", message.to_address)
+            return
 
     set_current_team(experiment_channel.team)
 

@@ -27,3 +27,11 @@ class ChannelSender:
 
     def send_file(self, file: File, recipient: str, session_id: int) -> None:
         raise NotImplementedError
+
+    def flush(self) -> None:
+        """Called by ResponseSendingStage after all text/voice/file sends.
+
+        Default is no-op. Override in senders that buffer the response
+        (e.g. EmailSender batching text + attachments into a single email).
+        """
+        return None
