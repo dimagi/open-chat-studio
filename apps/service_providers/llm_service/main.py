@@ -172,7 +172,6 @@ class OpenAIGenericService(LlmService):
             model_kwargs.pop("temperature")
 
         model = ChatOpenAI(model=llm_model, **model_kwargs, use_responses_api=self._use_responses_api)
-        print(":::", model.stream_usage)
         try:
             model.get_num_tokens_from_messages([HumanMessage("Hello")])
         except Exception:
