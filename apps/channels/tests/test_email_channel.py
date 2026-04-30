@@ -544,14 +544,14 @@ class TestEmailInboundHandler:
         _make_session(team, channel, "<outbound-1@chat.openchatstudio.com>")
 
         inbound = _make_inbound_message(
+            from_email="user@example.com",  # must match session participant for sender verification
             to_email="different@chat.openchatstudio.com",
             in_reply_to="<outbound-1@chat.openchatstudio.com>",
         )
 
-        with patch("apps.channels.tasks.handle_email_message") as mock_task:
-            mock_task.delay = MagicMock()
+        with patch("apps.channels.tasks.handle_email_message.delay") as mock_delay:
             email_inbound_handler(sender=None, message=inbound, event=MagicMock())
-            mock_task.delay.assert_called_once()
+            mock_delay.assert_called_once()
 
     def test_default_channel_allowed_through(self, team_with_users):
         """Email to unknown address is enqueued when any email channel exists."""
@@ -858,3 +858,72 @@ class TestPersistInboundAttachments:
             assert "mismatch" in result.lower() or "not allowed" in result.lower()
         else:
             assert result is None
+
+
+@pytest.mark.django_db()
+class TestEmailInboundHandlerWithAttachments:
+    def test_handler_persists_files_before_enqueue(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-...")
+        inbound = _make_inbound_with_attachments([pdf], to_email=channel.extra_data["email_address"])
+
+        with patch("apps.channels.tasks.handle_email_message.delay") as delay:
+            email_inbound_handler(sender=None, message=inbound, event=None)
+
+        assert File.objects.filter(team_id=team.id, name="report.pdf").count() == 1
+        delay.assert_called_once()
+        kwargs = delay.call_args.kwargs
+        assert kwargs["channel_id"] == channel.id
+        assert len(kwargs["email_data"]["attachment_file_ids"]) == 1
+
+    def test_handler_no_files_saved_when_no_channel_match(self, team_with_users):
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-")
+        inbound = _make_inbound_with_attachments([pdf], to_email="nobody@example.com")
+
+        with patch("apps.channels.tasks.handle_email_message.delay") as delay:
+            email_inbound_handler(sender=None, message=inbound, event=None)
+
+        assert File.objects.count() == 0
+        delay.assert_not_called()
+
+    def test_skipped_attachments_appended_to_message_text(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        big = b"x" * (21 * 1024 * 1024)
+        oversized = _mime_part(filename="huge.pdf", content_type="application/pdf", content=big)
+        inbound = _make_inbound_with_attachments(
+            [oversized], to_email=channel.extra_data["email_address"], text="Please process"
+        )
+
+        # Mock _detect_content_type so the oversized PDF doesn't trip the
+        # mismatch check (libmagic sees a long string of "x" as text/plain).
+        with (
+            patch("apps.channels.channels_v2.email_channel._detect_content_type", return_value="application/pdf"),
+            patch("apps.channels.tasks.handle_email_message.delay") as delay,
+        ):
+            email_inbound_handler(sender=None, message=inbound, event=None)
+
+        delay.assert_called_once()
+        message_text = delay.call_args.kwargs["email_data"]["message_text"]
+        assert "Please process" in message_text
+        assert "huge.pdf" in message_text
+        assert "skipped" in message_text.lower()
+        assert File.objects.filter(team_id=team.id).count() == 0
+
+    def test_handler_passes_session_id_when_thread_continuation(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        session = _make_session(team, channel, external_id="<thread-anchor@example.com>")
+        inbound = _make_inbound_message(
+            to_email=channel.extra_data["email_address"],
+            in_reply_to="<thread-anchor@example.com>",
+            from_email="user@example.com",
+        )
+        inbound.attachments = []
+
+        with patch("apps.channels.tasks.handle_email_message.delay") as delay:
+            email_inbound_handler(sender=None, message=inbound, event=None)
+
+        delay.assert_called_once()
+        assert delay.call_args.kwargs["session_id"] == session.id

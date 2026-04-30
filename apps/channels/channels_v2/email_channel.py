@@ -16,7 +16,7 @@ from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
-from apps.channels.datamodels import RawAttachment
+from apps.channels.datamodels import RawAttachment, SkippedAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
@@ -27,6 +27,7 @@ from apps.service_providers.file_limits import (
     EMAIL_MAX_ATTACHMENT_BYTES,
     EMAIL_TEXT_LIKE_APPLICATION_TYPES,
 )
+from apps.teams.utils import set_current_team
 
 if TYPE_CHECKING:
     from apps.experiments.models import Experiment
@@ -337,18 +338,15 @@ class EmailChannel(ChannelBase):
 def email_inbound_handler(sender, message, event, **kwargs):
     """Handle inbound email from anymail's inbound signal.
 
-    Parses the email and enqueues a Celery task for async processing.
-    Returns immediately so the ESP gets a fast 200 OK.
+    Performs full routing here (not in the Celery task) so attachments
+    can be persisted to the team's File storage with team context known.
+    The Celery payload carries File IDs, never raw bytes.
 
-    The pre-filter here is intentionally lenient — it only checks whether
-    any email channel exists that could plausibly handle this message.
-    The full routing logic lives in get_email_experiment_channel (called
-    by the Celery task).
+    Returns immediately so the ESP gets a fast 200 OK.
     """
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.tasks import handle_email_message  # noqa: PLC0415
 
-    # Check ESP spam verdict before processing
     if getattr(message, "spam_detected", None) is True:
         logger.info("Discarding spam email from %s", getattr(message, "from_email", "unknown"))
         return
@@ -359,27 +357,53 @@ def email_inbound_handler(sender, message, event, **kwargs):
         logger.exception("Failed to parse inbound email")
         return
 
-    # Best-effort pre-filter: enqueue if any email channel could handle this.
-    # Check thread continuity (In-Reply-To or References), to-address, or default.
-    has_existing_session = False
-    message_ids_to_check = []
-    if email_msg.in_reply_to:
-        message_ids_to_check.append(email_msg.in_reply_to)
-    message_ids_to_check.extend(email_msg.references)
+    channel, session = get_email_experiment_channel(
+        in_reply_to=email_msg.in_reply_to,
+        references=email_msg.references,
+        to_address=email_msg.to_address,
+        sender_address=email_msg.from_address,
+    )
+    if not channel:
+        logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
+        return
 
-    if message_ids_to_check:
-        has_existing_session = ExperimentSession.objects.filter(
-            external_id__in=message_ids_to_check,
-            experiment_channel__platform=ChannelPlatform.EMAIL,
-        ).exists()
+    set_current_team(channel.team)
 
-    if not has_existing_session:
-        has_channel = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMAIL,
-            deleted=False,
-        ).exists()
-        if not has_channel:
-            logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
-            return
+    accepted_ids: list[int] = []
+    skipped: list[dict] = []
+    try:
+        accepted_ids, skipped = _persist_inbound_attachments(email_msg._raw_attachments, team_id=channel.team_id)
+    except Exception:
+        logger.exception("Top-level failure persisting inbound attachments; proceeding with text only")
 
-    handle_email_message.delay(email_data=email_msg.model_dump())
+    email_msg.attachment_file_ids = accepted_ids
+    email_msg.skipped_attachments = [SkippedAttachment(**s) for s in skipped]
+    if skipped:
+        email_msg.message_text = _augment_with_skip_notes(email_msg.message_text, skipped)
+
+    handle_email_message.delay(
+        email_data=email_msg.model_dump(),
+        channel_id=channel.id,
+        session_id=session.id if session else None,
+    )
+
+
+def _augment_with_skip_notes(message_text: str, skipped: list[dict]) -> str:
+    """Append one bracketed line per skipped attachment to message_text so
+    the LLM can surface the skip reasons to the user."""
+    if not skipped:
+        return message_text
+    lines = [f"[Attachment {s['name']!r} ({_human_size(s['size'])}) skipped — {s['reason']}]" for s in skipped]
+    suffix = "\n\n" + "\n".join(lines)
+    return (message_text or "").rstrip() + suffix
+
+
+def _human_size(num_bytes: int) -> str:
+    if num_bytes <= 0:
+        return "size unknown"
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
