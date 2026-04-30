@@ -155,7 +155,7 @@ Add to `apps/channels/tests/test_email_channel.py`:
 
 - `to_address` on an allowed domain → `delay` called once.
 - `to_address` matching a wildcard → `delay` called.
-- `to_address` on a non-allowed domain → `delay` not called; warning logged.
+- `to_address` on a non-allowed domain → `delay` not called; INFO log emitted.
 - `to_address` malformed (no `@`) → `delay` not called.
 - Reply on an existing thread (`In-Reply-To` set) to a disallowed
   `to_address` → still dropped (confirms the "applies to all inbound" decision).

@@ -62,7 +62,7 @@ EMAIL_CHANNEL_ALLOWED_DOMAINS = env.list("EMAIL_CHANNEL_ALLOWED_DOMAINS", defaul
 In `.env.example`, after line 58 (end of `## Production Email Config` block),
 append:
 
-```
+```env
 ## Inbound email channel
 ## Comma-separated list of domains the email channel will accept (inbound to_address
 ## and channel-form email_address/from_address). Supports wildcards like *.example.com.
