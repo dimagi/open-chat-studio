@@ -80,6 +80,7 @@ class ResponseSendingStage(ProcessingStage):
         try:
             if ctx.early_exit_response:
                 self._send_text(ctx, ctx.early_exit_response, ctx.participant_identifier)
+                ctx.sender.flush()
                 return
 
             # Normal path -- send formatted bot response
@@ -92,6 +93,8 @@ class ResponseSendingStage(ProcessingStage):
 
             for file in ctx.files_to_send:
                 self._send_file(ctx, file, ctx.participant_identifier)
+
+            ctx.sender.flush()
         except Exception as e:
             ctx.sending_exceptions.append(e)
             ctx.processing_errors.append(f"Send failed: {e}")
@@ -282,7 +285,7 @@ class ActivityTrackingStage(ProcessingStage):
             version_number = ctx.experiment.version_number
             current_versions = session.experiment_versions or []
             if version_number not in current_versions:
-                session.experiment_versions = current_versions + [version_number]
+                session.experiment_versions = current_versions + [version_number]  # ty: ignore[invalid-assignment]
                 update_fields.append("experiment_versions")
 
         session.save(update_fields=update_fields)

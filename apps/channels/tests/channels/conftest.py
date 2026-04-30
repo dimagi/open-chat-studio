@@ -19,15 +19,27 @@ class StubSender(ChannelSender):
         self.text_messages = []
         self.voice_messages = []
         self.files_sent = []
+        self.flush_call_count = 0
+        self.flush_side_effect: Exception | None = None
+        self.call_order: list[str] = []
 
     def send_text(self, text, recipient):
         self.text_messages.append((text, recipient))
+        self.call_order.append("send_text")
 
     def send_voice(self, audio, recipient):
         self.voice_messages.append((audio, recipient))
+        self.call_order.append("send_voice")
 
     def send_file(self, file, recipient, session_id):
         self.files_sent.append((file, recipient, session_id))
+        self.call_order.append("send_file")
+
+    def flush(self):
+        self.flush_call_count += 1
+        self.call_order.append("flush")
+        if self.flush_side_effect:
+            raise self.flush_side_effect
 
 
 class StubCallbacks(ChannelCallbacks):
