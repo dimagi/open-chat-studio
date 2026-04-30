@@ -431,7 +431,7 @@ def email_inbound_handler(sender, event, **kwargs):
         email_msg.message_text = _augment_with_skip_notes(email_msg.message_text, skipped)
 
     handle_email_message.delay(
-        email_data=email_msg.model_dump(),
+        email_data=email_msg.model_dump(mode="json"),
         channel_id=channel.id,
         session_id=session.id if session else None,
     )
