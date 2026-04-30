@@ -40,7 +40,7 @@ class TraceTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleT
     def get_queryset(self):
         queryset = (
             Trace.objects.select_related("participant", "experiment", "session")
-            .filter(team__slug=self.request.team.slug)
+            .filter(team=self.request.team)
             .exclude(status=TraceStatus.PENDING)
             .order_by("-timestamp")
         )
