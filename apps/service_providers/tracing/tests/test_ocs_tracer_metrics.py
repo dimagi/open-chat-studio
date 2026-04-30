@@ -2,13 +2,27 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
-from langchain_core.outputs import LLMResult
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 
 from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
+
+
+def _llm_result(input_tokens: int, output_tokens: int) -> LLMResult:
+    message = AIMessage(
+        content="response",
+        usage_metadata={
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        },
+        response_metadata={"model_name": "gpt-4.1-mini"},
+    )
+    return LLMResult(generations=[[ChatGeneration(message=message)]])
 
 
 @pytest.mark.django_db()
@@ -36,12 +50,7 @@ class TestOCSTracerMetrics:
             collector = tracer.metrics_collector
             # Simulate LLM calls
             collector.on_llm_start({}, ["prompt 1"])
-            collector.on_llm_end(
-                LLMResult(
-                    generations=[],
-                    llm_output={"token_usage": {"prompt_tokens": 100, "completion_tokens": 50}},
-                )
-            )
+            collector.on_llm_end(_llm_result(100, 50))
             collector.on_tool_start({"name": "search"}, "query")
 
         trace = Trace.objects.get(trace_id=trace_context.id)
@@ -71,12 +80,7 @@ class TestOCSTracerMetrics:
         def _run_trace_with_metrics_then_error():
             with tracer.trace(trace_context=trace_context, session=session):
                 tracer.metrics_collector.on_llm_start({}, ["prompt"])
-                tracer.metrics_collector.on_llm_end(
-                    LLMResult(
-                        generations=[],
-                        llm_output={"token_usage": {"prompt_tokens": 50, "completion_tokens": 20}},
-                    )
-                )
+                tracer.metrics_collector.on_llm_end(_llm_result(50, 20))
                 raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom"):
@@ -103,14 +107,9 @@ class TestOCSCallbackHandlerMetricsDelegation:
         tracer.metrics_collector = MetricsCollector(start_time=0.0)
 
         handler = OCSCallbackHandler(tracer=tracer)
-        handler.on_llm_end(
-            LLMResult(
-                generations=[],
-                llm_output={"token_usage": {"prompt_tokens": 10, "completion_tokens": 5}},
-            )
-        )
+        handler.on_llm_end(_llm_result(10, 5))
 
-        assert tracer.metrics_collector._total_tokens == 15
+        assert tracer.metrics_collector.get_metrics().n_total_tokens == 15
 
     def test_on_tool_start_delegates_to_collector(self):
         tracer = OCSTracer(Mock(id=1), team_id=1)
