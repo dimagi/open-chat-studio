@@ -16,7 +16,7 @@ from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
-from apps.channels.datamodels import RawAttachment, SkippedAttachment
+from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
@@ -35,8 +35,6 @@ if TYPE_CHECKING:
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.channels")
-
-_MAX_REFERENCES = 50
 
 # RFC 2822 reply prefixes across common languages
 _REPLY_PREFIX_RE = re.compile(r"^(re|aw|sv|fw|fwd)\s*:", re.IGNORECASE)
@@ -273,7 +271,8 @@ class EmailSender(ChannelSender):
     def send_file(self, file: File, recipient: str, session_id: int) -> None:
         """Stage a file attachment.  The email is not sent until flush() is called."""
         self._recipient = recipient
-        content = file.file.read()
+        with file.file.open("rb") as fh:
+            content = fh.read()
         self._attachments.append((file.name, content, file.content_type or "application/octet-stream"))
 
     def flush(self) -> None:

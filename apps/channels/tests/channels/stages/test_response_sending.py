@@ -185,4 +185,7 @@ class TestResponseSendingStage:
         self.stage(ctx)
 
         assert len(ctx.sending_exceptions) == 1
-        assert ctx.sending_exceptions[0] is error
+        exc = ctx.sending_exceptions[0]
+        assert isinstance(exc, MessageDeliveryFailure)
+        assert exc.original_exc is error
+        assert exc.context == "flush"

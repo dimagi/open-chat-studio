@@ -80,7 +80,7 @@ class ResponseSendingStage(ProcessingStage):
         try:
             if ctx.early_exit_response:
                 self._send_text(ctx, ctx.early_exit_response, ctx.participant_identifier)
-                ctx.sender.flush()
+                self._flush(ctx)
                 return
 
             # Normal path -- send formatted bot response
@@ -94,7 +94,7 @@ class ResponseSendingStage(ProcessingStage):
             for file in ctx.files_to_send:
                 self._send_file(ctx, file, ctx.participant_identifier)
 
-            ctx.sender.flush()
+            self._flush(ctx)
         except Exception as e:
             ctx.sending_exceptions.append(e)
             ctx.processing_errors.append(f"Send failed: {e}")
@@ -117,6 +117,16 @@ class ResponseSendingStage(ProcessingStage):
             raise MessageDeliveryFailure(
                 e,
                 context="voice message",
+            ) from e
+
+    def _flush(self, ctx: MessageProcessingContext) -> None:
+        try:
+            ctx.sender.flush()
+        except Exception as e:
+            logger.exception(e)
+            raise MessageDeliveryFailure(
+                e,
+                context="flush",
             ) from e
 
     def _send_file(self, ctx: MessageProcessingContext, file, recipient: str) -> None:
