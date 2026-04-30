@@ -281,8 +281,9 @@ def email_inbound_handler(sender, event, **kwargs):
 
     if not is_email_domain_allowed(email_msg.to_address):
         logger.info(
-            "Rejecting inbound email: to-domain not allowed (to=%s)",
+            "Rejecting inbound email: to-domain not allowed (to=%s, in_reply_to=%s)",
             email_msg.to_address,
+            email_msg.in_reply_to or "-",
         )
         return
 
