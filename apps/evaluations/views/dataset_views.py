@@ -406,9 +406,9 @@ def update_message(request, team_slug, message_id):
     # Update the message
     for attr, val in data.items():
         setattr(message, attr, val)
-    message.input_chat_message = None  # ty: ignore[invalid-assignment]
-    message.expected_output_chat_message = None  # ty: ignore[invalid-assignment]
-    message.session = None  # ty: ignore[invalid-assignment]
+    message.input_chat_message = None
+    message.expected_output_chat_message = None
+    message.session = None
     message.metadata = message.metadata or {}
     message.metadata["session_id"] = None
     message.metadata["experiment_id"] = None

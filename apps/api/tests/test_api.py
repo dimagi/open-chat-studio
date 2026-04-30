@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import uuid
+from typing import Any
 from unittest.mock import patch
 
 import httpx
@@ -585,7 +586,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method):
     api_user = experiment.team.members.first()
     client = ApiTestClient(api_user, experiment.team, auth_method=auth_method)
 
-    data = {
+    data: dict[str, Any] = {
         "identifier": connect_id,
         "platform": ChannelPlatform.COMMCARE_CONNECT,
         "experiment": str(experiment.public_id),

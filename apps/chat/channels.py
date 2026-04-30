@@ -994,7 +994,7 @@ class ChannelBase(ABC):
             version_number = self.experiment.version_number
             current_versions = cast(list[int], self.experiment_session.experiment_versions or [])
             if version_number not in current_versions:
-                self.experiment_session.experiment_versions = current_versions + [version_number]
+                self.experiment_session.experiment_versions = current_versions + [version_number]  # ty: ignore[invalid-assignment]
                 self.experiment_session.save(update_fields=["experiment_versions"])
 
 
