@@ -1,4 +1,3 @@
-import json
 import os
 
 import environ
@@ -13,6 +12,7 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     start_node,
 )
+from apps.service_providers.llm_service.credentials import get_provider_credentials_for_type
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.service_providers.tracing import TracingService
@@ -21,115 +21,59 @@ from apps.utils.factories.pipelines import PipelineFactory
 
 pytestmark = pytest.mark.integration
 
-# Load environment variables using django-environ
-env = environ.Env()
+# Load env file (.env.integration if present, else .env) so the credentials helper can read os.environ.
+_env_file = os.path.join(settings.BASE_DIR, ".env.integration")
+if not os.path.exists(_env_file):
+    _env_file = os.path.join(settings.BASE_DIR, ".env")
+environ.Env().read_env(_env_file)
 
-# Try to load .env.integration if it exists, otherwise use regular .env
-integration_env = os.path.join(settings.BASE_DIR, ".env.integration")
-if os.path.exists(integration_env):
-    env.read_env(integration_env)
-else:
-    env.read_env(os.path.join(settings.BASE_DIR, ".env"))
+
+def _credentials_or_skip(provider_type: LlmProviderTypes, missing_env: str) -> dict:
+    """Return the provider config from env, or skip the test if it isn't configured."""
+    creds = get_provider_credentials_for_type(provider_type)
+    if not creds:
+        pytest.skip(f"{missing_env} not set")
+    return creds.config
 
 
 @pytest.fixture()
 def openai_credentials():
-    """Get real OpenAI credentials from environment"""
-    api_key = env.str("OPENAI_API_KEY", default=None)
-    if not api_key:
-        pytest.skip("OPENAI_API_KEY not set")
-    return {
-        "openai_api_key": api_key,
-        "openai_api_base": env.str("OPENAI_API_BASE", default=None),
-        "openai_organization": env.str("OPENAI_ORGANIZATION", default=None),
-    }
+    return _credentials_or_skip(LlmProviderTypes.openai, "OPENAI_API_KEY")
 
 
 @pytest.fixture()
 def anthropic_credentials():
-    """Get real Anthropic credentials from environment"""
-    api_key = env.str("ANTHROPIC_API_KEY", default=None)
-    if not api_key:
-        pytest.skip("ANTHROPIC_API_KEY not set")
-    return {"anthropic_api_key": api_key, "anthropic_api_base": "https://api.anthropic.com"}
+    return _credentials_or_skip(LlmProviderTypes.anthropic, "ANTHROPIC_API_KEY")
 
 
 @pytest.fixture()
 def google_credentials():
-    """Get real Google Gemini credentials from environment"""
-    api_key = env.str("GOOGLE_API_KEY", default=None)
-    if not api_key:
-        pytest.skip("GOOGLE_API_KEY not set")
-    return {
-        "google_api_key": api_key,
-    }
+    return _credentials_or_skip(LlmProviderTypes.google, "GOOGLE_API_KEY")
 
 
 @pytest.fixture()
 def google_vertex_ai_credentials():
-    """Get real Google Vertex AI credentials from environment"""
-
-    credentials_json_str = env.str("GOOGLE_VERTEX_AI_CREDENTIALS_JSON", default=None)
-    if not credentials_json_str:
-        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON not set")
-
-    try:
-        credentials_json = json.loads(credentials_json_str)
-    except json.JSONDecodeError:
-        pytest.skip("GOOGLE_VERTEX_AI_CREDENTIALS_JSON is not valid JSON")
-
-    return {
-        "credentials_json": credentials_json,
-        "location": env.str("GOOGLE_VERTEX_AI_LOCATION", default="global"),
-        "api_transport": env.str("GOOGLE_VERTEX_AI_API_TRANSPORT", default="rest"),
-    }
+    return _credentials_or_skip(LlmProviderTypes.google_vertex_ai, "GOOGLE_VERTEX_AI_CREDENTIALS_JSON")
 
 
 @pytest.fixture()
 def deepseek_credentials():
-    """Get real DeepSeek credentials from environment"""
-    api_key = env.str("DEEPSEEK_API_KEY", default=None)
-    if not api_key:
-        pytest.skip("DEEPSEEK_API_KEY not set")
-    return {
-        "deepseek_api_key": api_key,
-    }
+    return _credentials_or_skip(LlmProviderTypes.deepseek, "DEEPSEEK_API_KEY")
 
 
 @pytest.fixture()
 def azure_credentials():
-    """Get real Azure OpenAI credentials from environment"""
-    api_key = env.str("AZURE_OPENAI_API_KEY", default=None)
-    endpoint = env.str("AZURE_OPENAI_ENDPOINT", default=None)
-    if not (api_key and endpoint):
-        pytest.skip("AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT not set")
-    return {
-        "openai_api_key": api_key,
-        "openai_api_base": endpoint,
-        "openai_api_version": env.str("AZURE_OPENAI_API_VERSION", default="2024-02-15-preview"),
-    }
+    return _credentials_or_skip(LlmProviderTypes.azure, "AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT")
 
 
 @pytest.fixture()
 def groq_credentials():
-    """Get real Groq credentials from environment"""
-    api_key = env.str("GROQ_API_KEY", default=None)
-    if not api_key:
-        pytest.skip("GROQ_API_KEY not set")
-    return {
-        "openai_api_key": api_key,
-    }
+    return _credentials_or_skip(LlmProviderTypes.groq, "GROQ_API_KEY")
 
 
 @pytest.fixture()
 def perplexity_credentials():
-    """Get real Perplexity credentials from environment"""
-    api_key = env.str("PERPLEXITY_API_KEY", default=None)
-    if not api_key:
-        pytest.skip("PERPLEXITY_API_KEY not set")
-    return {
-        "openai_api_key": api_key,
-    }
+    return _credentials_or_skip(LlmProviderTypes.perplexity, "PERPLEXITY_API_KEY")
 
 
 def _run_llm_pipeline_test(
