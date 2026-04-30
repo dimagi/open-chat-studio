@@ -409,6 +409,13 @@ ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default=None)
 if ANYMAIL_WEBHOOK_SECRET:
     ANYMAIL_WEBHOOK_SECRET = f"anymail:{ANYMAIL_WEBHOOK_SECRET}"
 
+# Inbound email channel restrictions.
+# Comma-separated list of domains the email channel will accept.
+# Supports wildcard subdomains (e.g. "*.example.com").
+# Empty / unset => fail-closed: no inbound email is processed and no email
+# channel can be saved via the form.
+EMAIL_CHANNEL_ALLOWED_DOMAINS = env.list("EMAIL_CHANNEL_ALLOWED_DOMAINS", default=[])
+
 # Django sites
 
 SITE_ID = 1
