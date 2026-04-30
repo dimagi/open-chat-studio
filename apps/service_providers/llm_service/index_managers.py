@@ -144,7 +144,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
     def _ensure_remote_file_exists(self, file: File):
         try:
             if not (file.external_id and self.file_exists_at_remote(file)):
-                file.external_id = None
+                file.external_id = None  # ty: ignore[invalid-assignment]
                 self.upload_file_to_remote(file)
         except Exception:
             logger.exception(

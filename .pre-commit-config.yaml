@@ -54,7 +54,7 @@ repos:
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.17
+    rev: v0.0.33
     hooks:
       # Run the type checker.
       - id: ty-check

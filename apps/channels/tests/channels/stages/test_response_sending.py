@@ -96,7 +96,7 @@ class TestResponseSendingStage:
         file1.content_type = "image/png"
         file1.download_link.return_value = "https://example.com/download"
         error = RuntimeError("file send failed")
-        sender.send_file = MagicMock(side_effect=error)  # type: ignore[assignment]
+        sender.send_file = MagicMock(side_effect=error)  # ty: ignore[invalid-assignment]
         session = MagicMock()
         session.id = 42
         experiment_channel = MagicMock()
