@@ -310,4 +310,4 @@ def email_inbound_handler(sender, event, **kwargs):
             logger.info("No email channel found for to=%s, ignoring", email_msg.to_address)
             return
 
-    handle_email_message.delay(email_data=email_msg.model_dump())
+    handle_email_message.delay(email_data=email_msg.model_dump(mode="json"))
