@@ -3306,7 +3306,7 @@ dev = [
     { name = "ruff" },
     { name = "termcolor" },
     { name = "time-machine" },
-    { name = "ty" },
+    { name = "ty", specifier = "==0.0.17" },
     { name = "watchfiles" },
 ]
 docs = [{ name = "mkdocs-material", specifier = ">=9.6.12" }]

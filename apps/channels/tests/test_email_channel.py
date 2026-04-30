@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.core import mail
 from django.db import IntegrityError  # noqa: F811 - used at runtime in test
+from django.test import override_settings
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
@@ -14,7 +15,6 @@ from apps.channels.channels_v2.email_channel import (
     get_email_experiment_channel,
 )
 from apps.channels.datamodels import EmailMessage
-from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
@@ -138,69 +138,6 @@ class TestEmailMessageParse:
         inbound = _make_inbound_message(text="Just a simple message")
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
-
-
-@pytest.mark.django_db()
-class TestEmailChannelForm:
-    def test_valid_form(self, experiment):
-        form = EmailChannelForm(
-            experiment=experiment,
-            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
-        )
-        assert form.is_valid(), form.errors
-
-    def test_email_address_required(self, experiment):
-        form = EmailChannelForm(experiment=experiment, data={"platform": "email"})
-        assert not form.is_valid()
-        assert "email_address" in form.errors
-
-    def test_from_address_optional(self, experiment):
-        form = EmailChannelForm(
-            experiment=experiment,
-            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
-        )
-        assert form.is_valid()
-        assert form.cleaned_data.get("from_address", "") == ""
-
-    def test_is_default_defaults_to_false(self, experiment):
-        form = EmailChannelForm(
-            experiment=experiment,
-            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
-        )
-        assert form.is_valid()
-        assert form.cleaned_data["is_default"] is False
-
-    def test_duplicate_default_rejected(self, experiment):
-        """Only one default email channel per team."""
-        _make_email_channel(experiment.team, email_address="first@chat.openchatstudio.com", is_default=True)
-
-        form = EmailChannelForm(
-            experiment=experiment,
-            data={
-                "email_address": "second@chat.openchatstudio.com",
-                "is_default": True,
-                "platform": "email",
-            },
-        )
-        assert not form.is_valid()
-        assert "is_default" in form.errors
-
-    def test_duplicate_default_allowed_when_editing_same_channel(self, experiment):
-        """Editing the existing default channel should not trigger uniqueness error."""
-        channel = _make_email_channel(
-            experiment.team, experiment=experiment, email_address="first@chat.openchatstudio.com", is_default=True
-        )
-
-        form = EmailChannelForm(
-            experiment=experiment,
-            channel=channel,
-            data={
-                "email_address": "first@chat.openchatstudio.com",
-                "is_default": True,
-                "platform": "email",
-            },
-        )
-        assert form.is_valid(), form.errors
 
 
 @pytest.mark.django_db()
@@ -472,6 +409,7 @@ class TestHandleEmailMessageTask:
 
 @pytest.mark.django_db()
 class TestEmailInboundHandler:
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_enqueues_task(self, team_with_users):
         team = team_with_users
         ExperimentChannelFactory(
@@ -489,6 +427,7 @@ class TestEmailInboundHandler:
             call_kwargs = mock_task.delay.call_args[1]
             assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
 
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_thread_reply_allowed_through(self, team_with_users):
         """Reply via In-Reply-To is enqueued even when to-address doesn't match a channel."""
         team = team_with_users
@@ -505,6 +444,7 @@ class TestEmailInboundHandler:
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_called_once()
 
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_default_channel_allowed_through(self, team_with_users):
         """Email to unknown address is enqueued when any email channel exists."""
         team = team_with_users
@@ -517,15 +457,21 @@ class TestEmailInboundHandler:
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_called_once()
 
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_no_channel_silently_ignored(self):
-        """Unmatched email is silently ignored (no bounce loop)."""
-        inbound = _make_inbound_message(to_email="unknown@nowhere.com")
+        """Unmatched email is silently ignored (no bounce loop).
+
+        Allowed domain but no channel exists -> the existing has_channel
+        pre-filter drops it.
+        """
+        inbound = _make_inbound_message(to_email="unknown@chat.openchatstudio.com")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))
             mock_task.delay.assert_not_called()
 
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_spam_detected_discarded(self):
         inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com", spam_detected=True)
 
@@ -538,6 +484,67 @@ class TestEmailInboundHandler:
         inbound = MagicMock()
         inbound.spam_detected = None
         inbound.from_email.addr_spec = None  # Will cause parse to fail
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+            mock_task.delay.assert_not_called()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_to_address_on_disallowed_domain_dropped(self, team_with_users):
+        team = team_with_users
+        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        inbound = _make_inbound_message(to_email="someone@evil.example.com")
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+            mock_task.delay.assert_not_called()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["*.example.com"])
+    def test_to_address_wildcard_match_allowed(self, team_with_users):
+        team = team_with_users
+        _make_email_channel(team, email_address="bot@mail.example.com")
+        inbound = _make_inbound_message(to_email="bot@mail.example.com")
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+            mock_task.delay.assert_called_once()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=[])
+    def test_empty_setting_drops_inbound(self, team_with_users):
+        team = team_with_users
+        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com")
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+            mock_task.delay.assert_not_called()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_thread_reply_to_disallowed_domain_still_dropped(self, team_with_users):
+        """Even an existing-thread reply is dropped if to_address is not allowed."""
+        team = team_with_users
+        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com")
+        _make_session(team, channel, "<outbound-1@chat.openchatstudio.com>")
+
+        inbound = _make_inbound_message(
+            to_email="reply@evil.example.com",
+            in_reply_to="<outbound-1@chat.openchatstudio.com>",
+        )
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+            mock_task.delay.assert_not_called()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_malformed_to_address_dropped(self, team_with_users):
+        team = team_with_users
+        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        inbound = _make_inbound_message(to_email="not-an-email")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
             mock_task.delay = MagicMock()

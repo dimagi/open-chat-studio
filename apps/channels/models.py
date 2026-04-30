@@ -67,7 +67,7 @@ class ChannelPlatform(models.TextChoices):
 
         flag = Flag.get("flag_email_channel")
         email_flag_enabled = flag.is_active_for_team(team)
-        if not email_flag_enabled:
+        if not email_flag_enabled or not settings.EMAIL_CHANNEL_ALLOWED_DOMAINS:
             platform_availability.pop(cls.EMAIL, None)
         else:
             platform_availability[cls.EMAIL] = True

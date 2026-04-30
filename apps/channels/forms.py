@@ -15,7 +15,13 @@ from telebot import TeleBot, apihelper, types
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import ALL_DOMAINS, validate_domain_or_wildcard, validate_platform_availability
+from apps.channels.utils import (
+    ALL_DOMAINS,
+    get_allowed_email_domains,
+    is_email_domain_allowed,
+    validate_domain_or_wildcard,
+    validate_platform_availability,
+)
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -674,6 +680,37 @@ class EmailChannelForm(ExtraFormBase):
         required=False,
         help_text="When enabled, this channel receives emails that don't match any other email channel address.",
     )
+
+    _NO_DOMAINS_HINT = "No allowed domains are currently configured. Contact your administrator before saving."
+    _NO_DOMAINS_ERROR = "No allowed domains are currently configured. Contact your administrator."
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        allowed = get_allowed_email_domains()
+        if allowed:
+            hint = f" Allowed domains: {', '.join(allowed)}."
+        else:
+            hint = f" {self._NO_DOMAINS_HINT}"
+        self.fields["email_address"].help_text += hint
+
+    def _validate_domain(self, address: str) -> str:
+        if not is_email_domain_allowed(address):
+            allowed = get_allowed_email_domains()
+            if allowed:
+                msg = f"Domain is not in the allowed list. Allowed: {', '.join(allowed)}."
+            else:
+                msg = self._NO_DOMAINS_ERROR
+            raise ValidationError(msg)
+        return address
+
+    def clean_email_address(self):
+        return self._validate_domain(self.cleaned_data["email_address"])
+
+    def clean_from_address(self):
+        value = self.cleaned_data.get("from_address", "")
+        if not value:
+            return value
+        return self._validate_domain(value)
 
     def clean(self):
         cleaned_data = super().clean()
