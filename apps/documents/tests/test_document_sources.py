@@ -1,11 +1,12 @@
 from collections.abc import Iterator
 from typing import Self
+from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
 from langchain_core.documents import Document
 
-from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
+from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig, JSONCollectionSourceConfig
 from apps.documents.document_source_service import DocumentSourceManager
 from apps.documents.models import (
     Collection,
@@ -17,6 +18,8 @@ from apps.documents.models import (
     SyncStatus,
 )
 from apps.documents.source_loaders.base import BaseDocumentLoader, SyncResult
+from apps.documents.source_loaders.json_collection import JSONCollectionLoader
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 
 
 @pytest.fixture()
@@ -185,3 +188,51 @@ class TestDocumentSourceManager:
         sync_log = DocumentSourceSyncLog.objects.latest("sync_date")
         assert sync_log.document_source == document_source
         assert sync_log.status == SyncStatus.SUCCESS
+
+
+@pytest.mark.django_db()
+class TestJSONCollectionEndToEnd:
+    def test_sync_creates_collection_files_for_each_document(self):
+        collection = CollectionFactory.create(is_index=False)
+        document_source = DocumentSourceFactory.create(
+            collection=collection,
+            config=DocumentSourceConfig(
+                json_collection=JSONCollectionSourceConfig(json_url="https://example.com/feed.json"),
+            ),
+        )
+        document_source.source_type = SourceType.JSON_COLLECTION
+        document_source.save()
+
+        fake_docs = [
+            Document(
+                page_content="text 1",
+                metadata={
+                    "source": "https://example.com/1.pdf",
+                    "link": "https://example.com/1.pdf",
+                    "title": "Doc 1",
+                    "URI": "https://example.com/page1",
+                    "date": "01/01/2025",
+                },
+            ),
+            Document(
+                page_content="text 2",
+                metadata={
+                    "source": "https://example.com/2.pdf",
+                    "link": "https://example.com/2.pdf",
+                    "title": "Doc 2",
+                    "URI": "https://example.com/page2",
+                    "date": "01/01/2025",
+                },
+            ),
+        ]
+
+        with (
+            mock.patch.object(JSONCollectionLoader, "load_documents", return_value=iter(fake_docs)),
+            mock.patch("apps.documents.document_source_service.DocumentSourceManager._index_files") as index_mock,
+        ):
+            result = DocumentSourceManager(document_source).sync_collection()
+
+        assert result.success
+        assert result.files_added == 2
+        assert CollectionFile.objects.filter(collection=collection).count() == 2
+        index_mock.assert_called_once()

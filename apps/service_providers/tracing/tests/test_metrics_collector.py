@@ -1,9 +1,35 @@
 import threading
 import time
 
-from langchain_core.outputs import LLMResult
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 
 from apps.service_providers.tracing.metrics import MetricsCollector
+
+
+def _make_llm_result(
+    input_tokens: int,
+    output_tokens: int,
+    model_name: str = "gpt-4.1-mini",
+) -> LLMResult:
+    """Build an LLMResult shaped like a modern chat-model response.
+
+    Token usage lives on AIMessage.usage_metadata; llm_output is None,
+    matching what OpenAI's Responses API and Anthropic actually emit.
+    """
+    message = AIMessage(
+        content="response text",
+        usage_metadata={
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        },
+        response_metadata={"model_name": model_name},
+    )
+    return LLMResult(
+        generations=[[ChatGeneration(message=message)]],
+        llm_output=None,
+    )
 
 
 class TestMetricsCollectorTurns:
@@ -38,34 +64,34 @@ class TestMetricsCollectorToolCalls:
 
 
 class TestMetricsCollectorTokens:
-    def _make_llm_result(self, prompt_tokens: int, completion_tokens: int) -> LLMResult:
-        return LLMResult(
-            generations=[],
-            llm_output={"token_usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}},
-        )
-
     def test_accumulates_tokens_across_calls(self):
         collector = MetricsCollector(start_time=time.time())
-        collector.on_llm_end(self._make_llm_result(100, 50))
-        collector.on_llm_end(self._make_llm_result(200, 100))
+        collector.on_llm_end(_make_llm_result(100, 50))
+        collector.on_llm_end(_make_llm_result(200, 100))
 
         metrics = collector.get_metrics()
+        assert metrics.n_prompt_tokens == 300
+        assert metrics.n_completion_tokens == 150
         assert metrics.n_total_tokens == 450
 
-    def test_missing_llm_output_handled(self):
+    def test_accumulates_tokens_across_models(self):
+        collector = MetricsCollector(start_time=time.time())
+        collector.on_llm_end(_make_llm_result(100, 50, model_name="gpt-4.1-mini"))
+        collector.on_llm_end(_make_llm_result(80, 40, model_name="claude-haiku-4-5"))
+
+        metrics = collector.get_metrics()
+        assert metrics.n_prompt_tokens == 180
+        assert metrics.n_completion_tokens == 90
+        assert metrics.n_total_tokens == 270
+
+    def test_missing_usage_metadata_handled(self):
         collector = MetricsCollector(start_time=time.time())
         collector.on_llm_start({}, ["prompt"])
-        collector.on_llm_end(LLMResult(generations=[], llm_output=None))
+        message = AIMessage(content="response", response_metadata={"model_name": "gpt-4.1-mini"})
+        collector.on_llm_end(LLMResult(generations=[[ChatGeneration(message=message)]]))
 
         metrics = collector.get_metrics()
         assert metrics.n_turns == 1
-        assert metrics.n_total_tokens is None
-
-    def test_missing_token_usage_key_handled(self):
-        collector = MetricsCollector(start_time=time.time())
-        collector.on_llm_end(LLMResult(generations=[], llm_output={"model_name": "gpt-4"}))
-
-        metrics = collector.get_metrics()
         assert metrics.n_total_tokens is None
 
     def test_no_llm_calls_tokens_none(self):
@@ -110,10 +136,11 @@ class TestMetricsCollectorZeroToNone:
         assert metrics.n_total_tokens is None
 
     def test_turns_present_but_no_tokens(self):
-        """LLM called but no token_usage reported — n_turns is set, n_total_tokens is None."""
+        """LLM called but no usage_metadata reported — n_turns is set, n_total_tokens is None."""
         collector = MetricsCollector(start_time=time.time())
         collector.on_llm_start({}, ["prompt"])
-        collector.on_llm_end(LLMResult(generations=[], llm_output=None))
+        message = AIMessage(content="response", response_metadata={"model_name": "gpt-4.1-mini"})
+        collector.on_llm_end(LLMResult(generations=[[ChatGeneration(message=message)]]))
 
         metrics = collector.get_metrics()
         assert metrics.n_turns == 1

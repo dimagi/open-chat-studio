@@ -18,6 +18,7 @@ from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import is_email_domain_allowed
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File, FilePurpose
@@ -360,7 +361,7 @@ class EmailChannel(ChannelBase):
         if self.experiment_session and self._sender_instance:
             msg_id = self._sender_instance.last_message_id
             if msg_id and not _has_email_message_id(self.experiment_session.external_id):
-                self.experiment_session.external_id = msg_id  # ty: ignore[invalid-assignment]
+                self.experiment_session.external_id = msg_id
                 try:
                     self.experiment_session.save(update_fields=["external_id"])
                 except IntegrityError:
@@ -373,7 +374,7 @@ class EmailChannel(ChannelBase):
         return response
 
 
-def email_inbound_handler(sender, message, event, **kwargs):
+def email_inbound_handler(sender, event, **kwargs):
     """Handle inbound email from anymail's inbound signal.
 
     Performs full routing here (not in the Celery task) so attachments
@@ -385,6 +386,8 @@ def email_inbound_handler(sender, message, event, **kwargs):
     from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
     from apps.channels.tasks import handle_email_message  # noqa: PLC0415
 
+    message = event.message
+
     if getattr(message, "spam_detected", None) is True:
         logger.info("Discarding spam email from %s", getattr(message, "from_email", "unknown"))
         return
@@ -393,6 +396,14 @@ def email_inbound_handler(sender, message, event, **kwargs):
         email_msg = EmailMessageDatamodel.parse(message)
     except Exception:
         logger.exception("Failed to parse inbound email")
+        return
+
+    if not is_email_domain_allowed(email_msg.to_address):
+        logger.info(
+            "Rejecting inbound email: to-domain not allowed (to=%s, in_reply_to=%s)",
+            email_msg.to_address,
+            email_msg.in_reply_to or "-",
+        )
         return
 
     channel, session = get_email_experiment_channel(

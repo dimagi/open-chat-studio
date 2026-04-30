@@ -354,12 +354,14 @@ class Collection(BaseTeamModel, VersionsMixin):
 class SourceType(models.TextChoices):
     GITHUB = "github", _("GitHub Repository")
     CONFLUENCE = "confluence", _("Confluence")
+    JSON_COLLECTION = "json_collection", _("JSON Collection")
 
     @property
     def css_logo(self):
         return {
             SourceType.GITHUB: "fa-brands fa-github",
             SourceType.CONFLUENCE: "fa-brands fa-confluence",
+            SourceType.JSON_COLLECTION: "fa-solid fa-file-code",
         }[self]
 
 
@@ -422,6 +424,8 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
             return self.config.github
         elif self.source_type == SourceType.CONFLUENCE:
             return self.config.confluence
+        elif self.source_type == SourceType.JSON_COLLECTION:
+            return self.config.json_collection
         return None
 
     def _get_version_details(self) -> VersionDetails:
