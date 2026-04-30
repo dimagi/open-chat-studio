@@ -139,6 +139,22 @@ class TestEmailMessageParse:
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
 
+    def test_model_dump_json_mode_serializes_enum_to_string(self):
+        """model_dump(mode='json') must convert MESSAGE_TYPES enum to a plain string.
+
+        Celery's JSON serializer cannot handle Python enum objects, so the inbound
+        handler uses mode='json' before passing email_data to the task.
+        """
+        import json
+
+        inbound = _make_inbound_message()
+        msg = EmailMessage.parse(inbound)
+        data = msg.model_dump(mode="json")
+
+        assert isinstance(data["content_type"], str), "content_type must be a plain string, not an enum instance"
+        assert data["content_type"] == MESSAGE_TYPES.TEXT.value
+        json.dumps(data)  # raises TypeError if any value is not JSON-serializable
+
 
 @pytest.mark.django_db()
 class TestEmailRouting:
@@ -426,6 +442,33 @@ class TestEmailInboundHandler:
             mock_task.delay.assert_called_once()
             call_kwargs = mock_task.delay.call_args[1]
             assert call_kwargs["email_data"]["to_address"] == "bot@chat.openchatstudio.com"
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_enqueued_email_data_is_json_serializable(self, team_with_users):
+        """email_data passed to the Celery task must contain no Python enum instances.
+
+        Regression test for the EncodeError caused by model_dump() returning a raw
+        MESSAGE_TYPES enum for content_type instead of its string value.
+        """
+        import json
+
+        team = team_with_users
+        ExperimentChannelFactory(
+            experiment=ExperimentFactory(team=team),
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+        inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com")
+
+        with patch("apps.channels.tasks.handle_email_message") as mock_task:
+            mock_task.delay = MagicMock()
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+            mock_task.delay.assert_called_once()
+            email_data = mock_task.delay.call_args[1]["email_data"]
+
+        assert isinstance(email_data["content_type"], str), "content_type must not be a MESSAGE_TYPES enum instance"
+        json.dumps(email_data)  # raises TypeError if Celery would EncodeError
 
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_thread_reply_allowed_through(self, team_with_users):
