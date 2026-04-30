@@ -50,7 +50,7 @@ class OCSTracer(Tracer):
     def trace(
         self,
         trace_context: TraceContext,
-        session: ExperimentSession,
+        session: ExperimentSession | None,
         inputs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Iterator[TraceContext]:
@@ -58,6 +58,11 @@ class OCSTracer(Tracer):
 
         Creates a database Trace record on entry and updates it with
         duration and status on exit.
+
+        ``session`` may be None (e.g. an inbound email that has not yet been
+        routed to a session). In that case the record is created without
+        session/participant; callers should invoke ``set_session`` once
+        the session is known so the record can be back-filled.
         """
 
         # Set base class state from context
@@ -80,9 +85,9 @@ class OCSTracer(Tracer):
             team_id=self.team_id,
             session=session,
             duration=0,
-            participant=session.participant,
-            participant_data=session.participant.get_data_for_experiment(session.experiment_id),
-            session_state=session.state,
+            participant=session.participant if session else None,
+            participant_data=(session.participant.get_data_for_experiment(session.experiment_id) if session else {}),
+            session_state=session.state if session else {},
         )
 
         self.start_time = time.time()
@@ -119,17 +124,18 @@ class OCSTracer(Tracer):
             self._update_trace_metrics()
             self.trace_record.save()
 
+            session_id = self.session.id if self.session else None
             logger.debug(
                 "Created trace in DB | experiment_id=%s, session_id=%s, duration=%sms",
                 self.experiment.id,
-                self.session.id,
+                session_id,
                 duration_ms,
             )
         except Exception:
             logger.exception(
                 "Error saving trace in DB | experiment_id=%s, session_id=%s, output_message_id=%s",
                 self.experiment.id,
-                self.session.id,
+                self.session.id if self.session else None,
                 self.trace_record.output_message_id,
             )
 
@@ -221,6 +227,20 @@ class OCSTracer(Tracer):
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         if self.trace_record:
             self.trace_record.participant_data_diff = diff
+
+    def set_session(self, session: ExperimentSession) -> None:
+        """Late-bind a session to the trace record after it has been resolved.
+
+        Used when ``trace`` was opened with ``session=None`` (e.g. inbound
+        email routing) and the session was created mid-pipeline.
+        """
+        self.session = session
+        if not self.trace_record:
+            return
+        self.trace_record.session = session
+        self.trace_record.participant = session.participant
+        self.trace_record.participant_data = session.participant.get_data_for_experiment(session.experiment_id)
+        self.trace_record.session_state = session.state
 
     def set_trace_metadata(self, metadata: dict[str, Any]) -> None:
         if self.trace_record:

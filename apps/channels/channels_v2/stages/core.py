@@ -93,6 +93,10 @@ class SessionResolutionStage(ProcessingStage):
         if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)
 
+        # The trace was opened with session=None for channels that route
+        # to a session lazily (e.g. EmailChannel). Back-fill it now.
+        ctx.trace_service.set_session(ctx.experiment_session)
+
     def _is_reset_request(self, ctx: MessageProcessingContext) -> bool:
         return (
             ctx.message.content_type == MESSAGE_TYPES.TEXT and ctx.message.message_text.lower().strip() == RESET_COMMAND
@@ -116,6 +120,7 @@ class SessionResolutionStage(ProcessingStage):
                 existing.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
 
         ctx.experiment_session = self._create_session(ctx)
+        ctx.trace_service.set_session(ctx.experiment_session)
         raise EarlyExitResponse("Conversation reset")
 
     def _create_session(self, ctx: MessageProcessingContext):

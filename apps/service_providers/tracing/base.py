@@ -158,6 +158,15 @@ class Tracer(ABC):
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         pass
 
+    def set_session(self, session: ExperimentSession) -> None:
+        """Late-bind a session to an active trace.
+
+        Called when the trace was opened with ``session=None`` (e.g. inbound
+        email routing) and the session is resolved partway through the
+        pipeline. Default is a no-op for tracers that cannot back-fill.
+        """
+        return None
+
     def set_trace_metadata(self, metadata: dict[str, Any]) -> None:
         return None
 
