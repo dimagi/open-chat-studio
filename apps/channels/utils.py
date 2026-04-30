@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.validators import validate_domain_name  # ty: ignore[unresolved-import]
 
@@ -42,6 +43,26 @@ def validate_domain(origin_domain: str, allowed_domains: list[str]) -> bool:
         return True
 
     return any(match_domain_pattern(origin_domain, domain) for domain in allowed_domains)
+
+
+def is_email_domain_allowed(email_address: str) -> bool:
+    """Return True if email_address is on a domain in EMAIL_CHANNEL_ALLOWED_DOMAINS.
+
+    Returns False for malformed addresses (no '@') and when the setting is
+    empty/unset (fail-closed).
+    """
+    if not email_address or "@" not in email_address:
+        return False
+    domain = email_address.rsplit("@", 1)[1].lower()
+    allowed = settings.EMAIL_CHANNEL_ALLOWED_DOMAINS
+    if not allowed:
+        return False
+    return any(match_domain_pattern(domain, pattern.lower()) for pattern in allowed)
+
+
+def get_allowed_email_domains() -> list[str]:
+    """Return the configured allowed-domains list, for UI display."""
+    return list(settings.EMAIL_CHANNEL_ALLOWED_DOMAINS)
 
 
 def validate_platform_availability(experiment: Experiment, platform: ChannelPlatform):

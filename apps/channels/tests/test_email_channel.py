@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.core import mail
 from django.db import IntegrityError  # noqa: F811 - used at runtime in test
+from django.test import override_settings
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
@@ -17,6 +18,7 @@ from apps.channels.datamodels import EmailMessage
 from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
+from apps.channels.utils import get_allowed_email_domains, is_email_domain_allowed
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession, Participant
@@ -138,6 +140,46 @@ class TestEmailMessageParse:
         inbound = _make_inbound_message(text="Just a simple message")
         result = EmailMessage.parse(inbound)
         assert result.message_text == "Just a simple message"
+
+
+class TestEmailDomainAllowlist:
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com", "*.foo.com"])
+    def test_exact_match_allowed(self):
+        assert is_email_domain_allowed("user@example.com") is True
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com", "*.foo.com"])
+    def test_wildcard_match_allowed(self):
+        assert is_email_domain_allowed("user@mail.foo.com") is True
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com", "*.foo.com"])
+    def test_bare_domain_does_not_match_wildcard(self):
+        # *.foo.com matches subdomains, not the bare domain.
+        assert is_email_domain_allowed("user@foo.com") is False
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com"])
+    def test_disallowed_domain_rejected(self):
+        assert is_email_domain_allowed("user@bar.com") is False
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=[])
+    def test_empty_setting_rejects_everything(self):
+        assert is_email_domain_allowed("user@example.com") is False
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com"])
+    def test_malformed_address_rejected(self):
+        assert is_email_domain_allowed("not-an-email") is False
+        assert is_email_domain_allowed("") is False
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com"])
+    def test_case_insensitive_match(self):
+        assert is_email_domain_allowed("user@Example.COM") is True
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["example.com", "*.foo.com"])
+    def test_get_allowed_email_domains_returns_list(self):
+        assert get_allowed_email_domains() == ["example.com", "*.foo.com"]
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=[])
+    def test_get_allowed_email_domains_returns_empty_list_when_unset(self):
+        assert get_allowed_email_domains() == []
 
 
 @pytest.mark.django_db()
