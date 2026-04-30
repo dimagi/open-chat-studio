@@ -26,6 +26,7 @@ from apps.service_providers.file_limits import (
     EMAIL_BLOCKED_EXTENSIONS,
     EMAIL_MAX_ATTACHMENT_BYTES,
     EMAIL_TEXT_LIKE_APPLICATION_TYPES,
+    can_send_on_email,
 )
 from apps.teams.utils import set_current_team
 
@@ -341,11 +342,15 @@ class EmailChannel(ChannelBase):
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
             supports_voice_replies=self.voice_replies_supported,
-            supports_files=False,
+            supports_files=True,
             supports_conversational_consent=False,
             supports_static_triggers=True,
             supported_message_types=self.supported_message_types,
+            can_send_file=self._can_send_file,
         )
+
+    def _can_send_file(self, file) -> bool:
+        return can_send_on_email(file.content_type, file.content_size).supported
 
     def new_user_message(self, message):
         response = super().new_user_message(message)

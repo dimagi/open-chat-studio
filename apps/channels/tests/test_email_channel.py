@@ -536,10 +536,43 @@ class TestEmailChannel:
         caps = email_channel._get_capabilities()
 
         assert caps.supports_voice_replies is False
-        assert caps.supports_files is False
+        assert caps.supports_files is True
         assert caps.supports_conversational_consent is False
         assert caps.supports_static_triggers is True
         assert MESSAGE_TYPES.TEXT in caps.supported_message_types
+
+    def test_can_send_file_normal_pdf(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        email_channel = EmailChannel(MagicMock(), channel_mock)
+
+        file = MagicMock()
+        file.content_type = "application/pdf"
+        file.content_size = 1024 * 1024  # 1 MB
+
+        assert email_channel._can_send_file(file) is True
+
+    def test_can_send_file_rejects_oversized(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        email_channel = EmailChannel(MagicMock(), channel_mock)
+
+        file = MagicMock()
+        file.content_type = "application/pdf"
+        file.content_size = 25 * 1024 * 1024  # 25 MB > 20 MB
+
+        assert email_channel._can_send_file(file) is False
+
+    def test_can_send_file_rejects_denylisted(self):
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        email_channel = EmailChannel(MagicMock(), channel_mock)
+
+        file = MagicMock()
+        file.content_type = "application/x-msdownload"
+        file.content_size = 1024
+
+        assert email_channel._can_send_file(file) is False
 
     def test_get_sender_returns_email_sender(self):
         channel_mock = MagicMock()
