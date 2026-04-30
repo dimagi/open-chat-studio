@@ -10,22 +10,32 @@ Usage:
     python manage.py bootstrap_data --skip-sample-data  # Only create user/team
 """
 
-import os
-
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand
 
-from apps.assistants.models import OpenAiAssistant
+from apps.annotations.models import Tag
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.documents.models import Collection
+from apps.evaluations.models import (
+    EvaluationConfig,
+    EvaluationDataset,
+    EvaluationMessage,
+    EvaluationMode,
+    Evaluator,
+)
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.pipelines.models import Pipeline
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.llm_service.credentials import (
+    ProviderCredentials,
+    get_provider_credentials_from_env,
+)
+from apps.service_providers.models import LlmProvider, LlmProviderTypes
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
 from apps.teams.models import Membership, Team
+from apps.trace.models import Trace, TraceStatus
 
 
 class Command(BaseCommand):
@@ -146,17 +156,37 @@ class Command(BaseCommand):
     def _seed_sample_data(self, user, team):
         """Create sample pipelines, experiments, participants, files, etc."""
 
-        # LLM Provider and Model
+        # LLM Providers (one per configured env var set; falls back to a placeholder)
         self.stdout.write("")
-        self.stdout.write("--- Creating LLM Provider ---")
-        openai_api_key = os.environ.get("OPENAI_SECRET_KEY", "test-key")
-        llm_provider, created = LlmProvider.objects.get_or_create(
-            name="OpenAI", team=team, defaults={"type": "openai", "config": {"openai_api_key": openai_api_key}}
-        )
-        if created and openai_api_key != "test-key":
-            self.stdout.write(self.style.SUCCESS("  Using OPENAI_SECRET_KEY from environment"))
-        self._log_created("LLM provider", llm_provider.name, created)
+        self.stdout.write("--- Creating LLM Providers ---")
+        provider_credentials = get_provider_credentials_from_env()
+        if not provider_credentials:
+            self.stdout.write(
+                self.style.WARNING(
+                    "  No provider env vars set; creating a placeholder OpenAI provider with a dummy key."
+                    " Set OPENAI_API_KEY (or another supported key — see .env.example) to enable real LLM calls."
+                )
+            )
+            provider_credentials = [
+                ProviderCredentials(
+                    type=LlmProviderTypes.openai,
+                    name="OpenAI",
+                    config={"openai_api_key": "test-key"},
+                )
+            ]
 
+        llm_providers = []
+        for creds in provider_credentials:
+            provider, created = LlmProvider.objects.get_or_create(
+                team=team,
+                type=str(creds.type),
+                defaults={"name": creds.name, "config": creds.config},
+            )
+            self._log_created("LLM provider", f"{provider.name} ({creds.type})", created)
+            llm_providers.append(provider)
+
+        # Use the first provider as the default for chatbots and assistants
+        llm_provider = llm_providers[0]
         llm_model = get_first_llm_provider_model(llm_provider, team.id)
 
         # Pipelines
@@ -187,42 +217,37 @@ class Command(BaseCommand):
             "Programming Helper",
         ]
 
-        for i, name in enumerate(chatbot_names, 1):
-            _experiment, created = Experiment.objects.get_or_create(
+        experiments = []
+        for i, (name, pipeline) in enumerate(zip(chatbot_names, pipelines, strict=True), 1):
+            experiment, created = Experiment.objects.get_or_create(
                 team=team,
                 name=name,
                 defaults={
                     "owner": user,
                     "description": f"Test pipeline chatbot #{i} for development",
-                    "pipeline": pipelines[i - 1] if i <= len(pipelines) else None,
+                    "pipeline": pipeline,
                 },
             )
             self._log_created("experiment", name, created)
+            experiments.append(experiment)
 
-        # Assistants
+        # Tags
         self.stdout.write("")
-        self.stdout.write("--- Creating Assistants ---")
-        assistant_names = [
-            "Code Review Assistant",
-            "Documentation Writer",
-            "Bug Triage Assistant",
-        ]
-
-        for i, name in enumerate(assistant_names, 1):
-            assistant, created = OpenAiAssistant.objects.get_or_create(
+        self.stdout.write("--- Creating Tags ---")
+        tag_names = ["urgent", "resolved", "needs-review", "feedback"]
+        tags = []
+        for tag_name in tag_names:
+            tag, created = Tag.objects.get_or_create(
                 team=team,
-                name=name,
-                defaults={
-                    "assistant_id": f"test_asst_{i}",
-                    "instructions": f"You are a {name.lower()} that helps developers.",
-                    "llm_provider": llm_provider,
-                    "llm_provider_model": llm_model,
-                    "temperature": 0.8,
-                },
+                name=tag_name,
+                is_system_tag=False,
+                category="",
+                defaults={"created_by": user},
             )
-            self._log_created("assistant", name, created)
+            self._log_created("tag", tag_name, created)
+            tags.append(tag)
 
-        # Participants with Sessions
+        # Participants with Sessions (spread across experiments, tagged for variety)
         self.stdout.write("")
         self.stdout.write("--- Creating Participants with Sessions ---")
         participant_data = [
@@ -233,9 +258,8 @@ class Command(BaseCommand):
             {"name": "Eve Davis", "identifier": "eve.davis@example.com", "platform": "api"},
         ]
 
-        first_experiment = Experiment.objects.filter(team=team).first()
-
-        for data in participant_data:
+        seeded_sessions = []
+        for idx, data in enumerate(participant_data):
             participant, created = Participant.objects.get_or_create(
                 team=team,
                 platform=data["platform"],
@@ -243,31 +267,58 @@ class Command(BaseCommand):
                 defaults={"name": data["name"]},
             )
 
-            if created:
-                self._log_created("participant", f"{data['name']} ({data['identifier']})", created)
+            if not created:
+                self._log_created("participant", data["name"], created)
+                continue
 
-                if first_experiment:
-                    session = ExperimentSession.objects.create(
-                        team=team, experiment=first_experiment, participant=participant
-                    )
-                    ChatMessage.objects.create(
-                        chat=session.chat,
-                        message_type=ChatMessageType.HUMAN,
-                        content=f"Hello, I'm {data['name']}. Can you help me?",
-                    )
-                    ChatMessage.objects.create(
-                        chat=session.chat,
-                        message_type=ChatMessageType.AI,
-                        content=f"Hello {data['name']}! I'd be happy to help. What do you need?",
-                    )
-                    ChatMessage.objects.create(
-                        chat=session.chat,
-                        message_type=ChatMessageType.HUMAN,
-                        content="I have a question about your service.",
-                    )
-                    self.stdout.write(f"    Created session and messages for {data['name']}")
-            else:
-                self._log_created("participant", f"{data['name']}", created)
+            self._log_created("participant", f"{data['name']} ({data['identifier']})", created)
+            target_experiment = experiments[idx % len(experiments)]
+            session = ExperimentSession.objects.create(team=team, experiment=target_experiment, participant=participant)
+            ChatMessage.objects.create(
+                chat=session.chat,
+                message_type=ChatMessageType.HUMAN,
+                content=f"Hello, I'm {data['name']}. Can you help me?",
+            )
+            ChatMessage.objects.create(
+                chat=session.chat,
+                message_type=ChatMessageType.AI,
+                content=f"Hello {data['name']}! I'd be happy to help. What do you need?",
+            )
+            ChatMessage.objects.create(
+                chat=session.chat,
+                message_type=ChatMessageType.HUMAN,
+                content="I have a question about your service.",
+            )
+            session.chat.add_tag(tags[idx % len(tags)], team=team, added_by=user)
+            seeded_sessions.append(session)
+            self.stdout.write(
+                f"    Session for {data['name']} → {target_experiment.name} (tag: {tags[idx % len(tags)].name})"
+            )
+
+        # Traces (one per seeded session, with realistic-looking metrics)
+        if seeded_sessions:
+            self.stdout.write("")
+            self.stdout.write("--- Creating Traces ---")
+            for session in seeded_sessions:
+                messages = list(session.chat.messages.order_by("created_at"))
+                input_msg = next((m for m in messages if m.message_type == ChatMessageType.HUMAN), None)
+                output_msg = next((m for m in messages if m.message_type == ChatMessageType.AI), None)
+                Trace.objects.create(
+                    team=team,
+                    experiment=session.experiment,
+                    session=session,
+                    participant=session.participant,
+                    input_message=input_msg,
+                    output_message=output_msg,
+                    status=TraceStatus.SUCCESS,
+                    duration=1234,
+                    n_turns=1,
+                    n_toolcalls=0,
+                    n_total_tokens=250,
+                    n_prompt_tokens=200,
+                    n_completion_tokens=50,
+                )
+            self.stdout.write(self.style.SUCCESS(f"  Created {len(seeded_sessions)} trace(s)"))
 
         # Files
         self.stdout.write("")
@@ -314,6 +365,74 @@ class Command(BaseCommand):
             if created_files:
                 collection.files.add(*created_files)
                 self.stdout.write(f"    Ensured {len(created_files)} file(s) in collection")
+
+        # Evaluation (Evaluator + Dataset + Config)
+        self.stdout.write("")
+        self.stdout.write("--- Creating Evaluation ---")
+        evaluator_params = {
+            "llm_provider_id": llm_provider.id,
+            "llm_temperature": 0.3,
+            "prompt": (
+                "Analyse the sentiment of the user message.\n\nUser: {input.content}\nAssistant: {output.content}"
+            ),
+            "output_schema": {
+                "sentiment": {
+                    "type": "choice",
+                    "description": "Detected sentiment of the user's message",
+                    "choices": ["positive", "neutral", "negative"],
+                    "use_in_aggregations": True,
+                },
+                "score": {
+                    "type": "int",
+                    "description": "Sentiment score from 1 (very negative) to 10 (very positive)",
+                    "ge": 1,
+                    "le": 10,
+                    "use_in_aggregations": True,
+                },
+            },
+        }
+        if llm_model:
+            evaluator_params["llm_provider_model_id"] = llm_model.id
+
+        evaluator, created = Evaluator.objects.get_or_create(
+            team=team,
+            name="Sentiment Analyzer",
+            defaults={
+                "type": "LlmEvaluator",
+                "evaluation_mode": EvaluationMode.MESSAGE,
+                "params": evaluator_params,
+            },
+        )
+        self._log_created("evaluator", evaluator.name, created)
+
+        dataset, created = EvaluationDataset.objects.get_or_create(
+            team=team,
+            name="Sample Customer Messages",
+            defaults={"evaluation_mode": EvaluationMode.MESSAGE},
+        )
+        self._log_created("dataset", dataset.name, created)
+        if created:
+            sample_msgs = [
+                ("My order arrived broken!", "I'm so sorry — let me get a replacement out today."),
+                ("Thanks for the fast shipping!", "Glad to hear it — enjoy!"),
+                ("This product doesn't match the description.", "I understand, let me help you with a return."),
+            ]
+            for input_text, output_text in sample_msgs:
+                msg = EvaluationMessage.objects.create(
+                    input={"content": input_text, "role": "human"},
+                    output={"content": output_text, "role": "ai"},
+                )
+                dataset.messages.add(msg)
+            self.stdout.write(f"    Added {len(sample_msgs)} sample messages to dataset")
+
+        config, created = EvaluationConfig.objects.get_or_create(
+            team=team,
+            name="Sentiment Analysis Run",
+            defaults={"dataset": dataset},
+        )
+        if created:
+            config.evaluators.add(evaluator)
+        self._log_created("evaluation config", config.name, created)
 
     def _log_created(self, entity_type: str, name: str, created: bool):
         """Helper to log entity creation status."""
