@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import pathlib
 import re
 from dataclasses import dataclass, field
 from email.utils import make_msgid
+from io import BytesIO
 from typing import TYPE_CHECKING
 
+import magic
 from django.core.mail import EmailMessage as DjangoEmailMessage
 from django.db import IntegrityError
 
@@ -13,9 +16,17 @@ from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.datamodels import RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
+from apps.files.models import File, FilePurpose
+from apps.service_providers.file_limits import (
+    EMAIL_BLOCKED_CONTENT_TYPES,
+    EMAIL_BLOCKED_EXTENSIONS,
+    EMAIL_MAX_ATTACHMENT_BYTES,
+    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
+)
 
 if TYPE_CHECKING:
     from apps.experiments.models import Experiment
@@ -155,6 +166,78 @@ def _domain_from_address(email_address: str) -> str:
     return email_address
 
 
+def _detect_content_type(content: bytes, fallback: str = "") -> str:
+    try:
+        detected = magic.from_buffer(content[:2048], mime=True)
+        if detected and detected != "application/octet-stream":
+            return detected
+    except Exception:
+        logger.exception("magic content-type detection failed")
+    return fallback or "application/octet-stream"
+
+
+def _category(content_type: str) -> str:
+    """Top-level category for mismatch comparison.
+    Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
+    since magic typically returns text/plain for them.
+    """
+    if content_type in EMAIL_TEXT_LIKE_APPLICATION_TYPES:
+        return "text"
+    return content_type.split("/", 1)[0]
+
+
+def _is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | None:
+    """Returns a rejection reason if blocked, else None."""
+    if extension in EMAIL_BLOCKED_EXTENSIONS:
+        return f"file extension '.{extension}' not allowed"
+    if detected_type in EMAIL_BLOCKED_CONTENT_TYPES:
+        return f"file type not allowed (detected: {detected_type})"
+    if claimed_type in EMAIL_BLOCKED_CONTENT_TYPES:
+        return f"file type not allowed (claimed: {claimed_type})"
+    if (
+        claimed_type
+        and claimed_type != "application/octet-stream"
+        and detected_type != "application/octet-stream"
+        and _category(claimed_type) != _category(detected_type)
+    ):
+        return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
+    return None
+
+
+def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tuple[list[int], list[dict]]:
+    """Filter and save inbound email attachments, returning accepted File IDs
+    and skipped-attachment metadata for surfacing to the LLM."""
+    accepted_ids: list[int] = []
+    skipped: list[dict] = []
+    for att in raw:
+        size = len(att.content_bytes)
+        ext = pathlib.Path(att.filename or "").suffix.lstrip(".").lower()
+        detected = _detect_content_type(att.content_bytes, fallback=att.content_type)
+
+        if reason := _is_blocked(ext, att.content_type, detected):
+            skipped.append({"name": att.filename, "reason": reason, "size": size})
+            continue
+        if size > EMAIL_MAX_ATTACHMENT_BYTES:
+            skipped.append({"name": att.filename, "reason": "exceeds 20 MB limit", "size": size})
+            continue
+
+        try:
+            f = File.create(
+                filename=att.filename or "attachment",
+                file_obj=BytesIO(att.content_bytes),
+                team_id=team_id,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+                content_type=detected,
+            )
+        except Exception:
+            logger.exception("Failed to persist inbound email attachment %r", att.filename)
+            skipped.append({"name": att.filename, "reason": "storage error", "size": size})
+            continue
+        accepted_ids.append(f.id)
+
+    return accepted_ids, skipped
+
+
 class EmailSender(ChannelSender):
     """Sends threaded email replies via django.core.mail."""
 
@@ -235,17 +318,18 @@ class EmailChannel(ChannelBase):
         # After pipeline: capture outbound Message-ID for thread continuity.
         # The session's external_id defaults to a UUID. If the sender produced
         # a Message-ID, store it so future In-Reply-To lookups find this session.
-        if self.experiment_session and self._sender_instance:
+        session = self.experiment_session
+        if session and self._sender_instance:
             msg_id = self._sender_instance.last_message_id
-            if msg_id and not _has_email_message_id(self.experiment_session.external_id):
-                self.experiment_session.external_id = msg_id
+            if msg_id and not _has_email_message_id(session.external_id):
+                session.external_id = str(msg_id)  # ty: ignore[invalid-assignment]
                 try:
-                    self.experiment_session.save(update_fields=["external_id"])
+                    session.save(update_fields=["external_id"])
                 except IntegrityError:
                     logger.warning(
                         "Could not save Message-ID %s as external_id for session %s (duplicate)",
                         msg_id,
-                        self.experiment_session.id,
+                        session.id,
                     )
 
         return response

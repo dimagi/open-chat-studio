@@ -10,18 +10,22 @@ from apps.channels.channels_v2.email_channel import (
     EmailChannel,
     EmailSender,
     EmailThreadContext,
+    _is_blocked,
+    _persist_inbound_attachments,
     email_inbound_handler,
     get_email_experiment_channel,
 )
-from apps.channels.datamodels import EmailMessage
+from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.forms import EmailChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession, Participant
+from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.team import TeamFactory
 
 
 def _make_inbound_message(
@@ -722,3 +726,135 @@ class TestEmailEndToEnd:
             call_kwargs = MockEmailChannel.call_args[1]
             assert call_kwargs["experiment_session"] == session
             mock_instance.new_user_message.assert_called_once()
+
+
+@pytest.mark.django_db()
+class TestPersistInboundAttachments:
+    def _raw(self, filename, content_type, content):
+        return RawAttachment(filename=filename, content_type=content_type, content_bytes=content)
+
+    def test_accepts_normal_file(self):
+        team = TeamFactory()
+        raw = [self._raw("data.csv", "text/csv", b"a,b\n1,2\n")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert len(accepted) == 1
+        assert skipped == []
+        f = File.objects.get(id=accepted[0])
+        assert f.team_id == team.id
+        assert f.name == "data.csv"
+        assert f.purpose == "message_media"
+
+    def test_rejects_oversized(self):
+        team = TeamFactory()
+        big = b"x" * (21 * 1024 * 1024)
+        raw = [self._raw("big.pdf", "application/pdf", big)]
+
+        # Mock magic detection so the content-type checks pass and only the
+        # size check fires (magic sees b"x"*N as text/plain, causing a
+        # spurious mismatch against application/pdf before the size check).
+        with patch(
+            "apps.channels.channels_v2.email_channel._detect_content_type",
+            return_value="application/pdf",
+        ):
+            accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert len(skipped) == 1
+        assert "20" in skipped[0]["reason"]
+        assert skipped[0]["size"] == len(big)
+
+    def test_rejects_denylisted_extension(self):
+        team = TeamFactory()
+        raw = [self._raw("malware.exe", "application/octet-stream", b"MZ\x90\x00")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert len(skipped) == 1
+        assert ".exe" in skipped[0]["reason"]
+
+    def test_rejects_denylisted_content_type(self):
+        team = TeamFactory()
+        raw = [self._raw("noext", "application/x-msdownload", b"\x00\x00")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert "application/x-msdownload" in skipped[0]["reason"]
+
+    def test_rejects_when_magic_detects_executable_with_innocent_filename(self):
+        """When magic detects a denylisted type, the attachment is rejected
+        regardless of the (possibly spoofed) filename and claimed type."""
+        team = TeamFactory()
+        raw = [self._raw("report.pdf", "application/pdf", b"any bytes")]
+
+        # Force magic detection to return an executable type so we test the
+        # detection-based rejection branch without relying on real libmagic
+        # signatures (which can vary by version/platform).
+        with patch(
+            "apps.channels.channels_v2.email_channel._detect_content_type",
+            return_value="application/x-msdownload",
+        ):
+            accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert "detected" in skipped[0]["reason"].lower()
+        assert "application/x-msdownload" in skipped[0]["reason"]
+
+    def test_canonical_content_type_is_magic_detected(self):
+        team = TeamFactory()
+        # PNG magic bytes; sender claims image/png — magic should agree
+        png_bytes = b"\x89PNG\r\n\x1a\n" + (b"\x00" * 32)
+        raw = [self._raw("image.png", "image/png", png_bytes)]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert len(accepted) == 1
+        f = File.objects.get(id=accepted[0])
+        assert f.content_type.startswith("image/png")
+
+    def test_storage_error_isolated(self):
+        team = TeamFactory()
+        raw = [
+            self._raw("a.txt", "text/plain", b"hello"),
+            self._raw("b.txt", "text/plain", b"world"),
+            self._raw("c.txt", "text/plain", b"again"),
+        ]
+        original = File.create
+        call_count = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("simulated storage error")
+            return original(*args, **kwargs)
+
+        with patch.object(File, "create", side_effect=flaky):
+            accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert len(accepted) == 2
+        assert len(skipped) == 1
+        assert skipped[0]["reason"] == "storage error"
+        assert skipped[0]["name"] == "b.txt"
+
+    @pytest.mark.parametrize(
+        ("ext", "claimed", "detected", "should_block"),
+        [
+            ("pdf", "image/jpeg", "application/pdf", True),  # cross-category mismatch
+            ("pdf", "application/octet-stream", "application/pdf", False),  # claimed unknown
+            ("pdf", "application/pdf", "application/octet-stream", False),  # detected unknown
+            ("json", "application/json", "text/plain", False),  # text-like allowlist
+            ("xml", "application/xml", "text/plain", False),
+            ("csv", "text/csv", "application/javascript", True),  # script not allowlisted
+            ("csv", "text/csv", "text/plain", False),  # same text category
+        ],
+    )
+    def test_is_blocked_mismatch_matrix(self, ext, claimed, detected, should_block):
+        result = _is_blocked(ext, claimed, detected)
+        if should_block:
+            assert result is not None
+            assert "mismatch" in result.lower() or "not allowed" in result.lower()
+        else:
+            assert result is None
