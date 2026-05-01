@@ -524,3 +524,17 @@ class TestParticipantFilter:
         assert filtered.count() == count
         if count == 1:
             assert filtered.first() == session
+
+
+@pytest.mark.django_db()
+def test_session_filter_default_query_does_not_join_experiment_channel():
+    """No filter, no display column references experiment_channel — confirm the COUNT
+    does not pull it in unnecessarily."""
+    from apps.experiments.models import ExperimentSession  # noqa: PLC0415
+    from apps.teams.models import Team  # noqa: PLC0415
+
+    team = Team.objects.first() or TeamFactory.create()
+    qs = ExperimentSession.objects.get_table_queryset(team)
+    qs = ExperimentSessionFilter().apply(qs, FilterParams())
+    sql = str(qs.values("id").query).lower()
+    assert "channels_experimentchannel" not in sql, sql
