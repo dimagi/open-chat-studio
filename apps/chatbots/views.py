@@ -188,6 +188,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
 
     def get_queryset(self):
         """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        # Audited 2026-05-01: get_all() + these filters emit no SELECT DISTINCT (verified via shell + pg_stat).
         queryset = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
