@@ -1438,8 +1438,6 @@ class ExperimentSession(BaseTeamModel):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["chat", "team"]),
-            models.Index(fields=["chat", "team", "ended_at"]),
             models.Index(fields=["team", "-last_activity_at"], name="expsession_team_lastact_idx"),
         ]
 
