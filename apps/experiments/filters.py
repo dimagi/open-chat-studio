@@ -228,7 +228,6 @@ class ExperimentSessionFilter(MultiColumnFilter):
         ),
         MessageTimestampFilter(
             label="Message Date",
-            column="chat__messages__created_at",  # retained for schema/UX, unused at query time
             query_param="message_date",
             description="Filter by message date",
         ),
