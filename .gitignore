@@ -18,6 +18,7 @@ _dist/
 .env.integration
 .env.production
 .DS_Store
+dump.rdb
 .direnv
 .envrc
 .python-version
