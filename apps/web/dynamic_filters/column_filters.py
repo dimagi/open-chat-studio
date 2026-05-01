@@ -138,3 +138,55 @@ class TimestampFilter(ColumnFilter):
             return queryset.filter(**{f"{self.column}__gte": range_starting_utc_time})
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
             return queryset
+
+
+class MessageTimestampFilter(TimestampFilter):
+    """Timestamp filter that traverses chat__messages without multiplying rows.
+
+    Uses `Exists(ChatMessage.objects.filter(...))` instead of a JOIN through
+    `chat__messages__created_at`, so callers do not need a trailing `.distinct()`.
+    """
+
+    def _exists(self, **chatmessage_lookups):
+        # Local import — avoids a top-level chat→dynamic_filters cycle.
+        from django.db.models import Exists, OuterRef  # noqa: PLC0415
+
+        from apps.chat.models import ChatMessage  # noqa: PLC0415
+
+        return Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **chatmessage_lookups))
+
+    def apply_on(self, queryset, value, timezone=None) -> QuerySet:
+        if date_value := self._get_date_as_utc(value):
+            return queryset.filter(self._exists(created_at__date=date_value))
+        return queryset
+
+    def apply_before(self, queryset, value, timezone=None) -> QuerySet:
+        if date_value := self._get_date_as_utc(value):
+            return queryset.filter(self._exists(created_at__date__lt=date_value))
+        return queryset
+
+    def apply_after(self, queryset, value, timezone=None) -> QuerySet:
+        if date_value := self._get_date_as_utc(value):
+            return queryset.filter(self._exists(created_at__date__gt=date_value))
+        return queryset
+
+    def apply_range(self, queryset, value, timezone=None) -> QuerySet:
+        try:
+            client_tz = pytz.timezone(timezone) if timezone else pytz.UTC
+            now_client = datetime.now(client_tz)
+            if not value.endswith(("h", "d", "m")):
+                return queryset
+            num = int(value[:-1])
+            unit = value[-1]
+            if unit == "h":
+                delta = timedelta(hours=num)
+            elif unit == "d":
+                delta = timedelta(days=num)
+            elif unit == "m":
+                delta = timedelta(minutes=num)
+            else:
+                return queryset
+            range_starting_utc_time = (now_client - delta).astimezone(pytz.UTC)
+            return queryset.filter(self._exists(created_at__gte=range_starting_utc_time))
+        except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+            return queryset

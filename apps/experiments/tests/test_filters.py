@@ -176,6 +176,22 @@ class TestExperimentSessionFilters:
         assert filtered.count() == 2
         assert set(filtered) == {session, other}
 
+    def test_message_date_filter_returns_no_duplicates(self, session_with_many_message_tags):
+        session, _ = session_with_many_message_tags
+        # All three messages were created at "now"; filter for that date.
+        today = timezone.now().date().isoformat()
+
+        params = {
+            "filter_0_column": "message_date",
+            "filter_0_operator": Operators.ON,
+            "filter_0_value": today,
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 1
+        assert list(filtered) == [session]
+
     @travel("2025-01-03 10:00:00", tick=False)
     def test_message_timestamp_filters(self):
         """Test message timestamp filtering"""

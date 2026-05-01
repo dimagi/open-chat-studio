@@ -17,6 +17,7 @@ from apps.web.dynamic_filters.base import (
 )
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
+    MessageTimestampFilter,
     ParticipantFilter,
     RemoteIdFilter,
     SessionIdFilter,
@@ -225,9 +226,9 @@ class ExperimentSessionFilter(MultiColumnFilter):
             query_param="first_message",
             description="Filter by first message time",
         ),
-        TimestampFilter(
+        MessageTimestampFilter(
             label="Message Date",
-            column="chat__messages__created_at",
+            column="chat__messages__created_at",  # retained for schema/UX, unused at query time
             query_param="message_date",
             description="Filter by message date",
         ),
