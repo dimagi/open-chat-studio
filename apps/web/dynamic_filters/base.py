@@ -109,7 +109,7 @@ class MultiColumnFilter:
         for filter_component in self.filters:
             queryset = filter_component.apply(queryset, filter_params, timezone)
 
-        return queryset.distinct()
+        return queryset
 
 
 class ColumnFilter(BaseModel):
@@ -209,7 +209,6 @@ class StringColumnFilter(ColumnFilter):
         return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-
         # For exclusion: exclude if it matches ANY column
         q = Q()
         for col in self.columns:
