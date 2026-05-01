@@ -81,7 +81,7 @@
     "reactflow": "^11.11.4",
     "short-unique-id": "^5.3.2",
     "tailwindcss": "^4.1.4",
-    "tom-select": "^2.3.1",
+    "tom-select": "^2.6.0",
     "zustand": "^5.0.3"
   },
   "optionalDependencies": {
