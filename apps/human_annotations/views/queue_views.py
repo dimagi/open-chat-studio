@@ -237,6 +237,28 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
             .order_by("-last_activity_at")
         )
 
+    def get_table_data(self):
+        """Page-bounded tag prefetch — see ChatbotSessionsTableView for rationale."""
+        from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
+
+        from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
+        from apps.chat.models import Chat  # noqa: PLC0415
+
+        rows = list(super().get_table_data())
+        if not rows:
+            return rows
+        chat_ids = [row.chat_id for row in rows]
+        tagged_by_chat = {chat_id: [] for chat_id in chat_ids}
+        chat_ct = ContentType.objects.get_for_model(Chat)
+        for item in CustomTaggedItem.objects.filter(
+            content_type=chat_ct,
+            object_id__in=chat_ids,
+        ).select_related("tag", "user"):
+            tagged_by_chat[item.object_id].append(item)
+        for row in rows:
+            row.chat.prefetched_tagged_items = tagged_by_chat.get(row.chat_id, [])
+        return rows
+
 
 @login_and_team_required
 @permission_required("human_annotations.add_annotationitem", raise_exception=True)

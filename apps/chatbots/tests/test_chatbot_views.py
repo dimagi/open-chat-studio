@@ -5,10 +5,13 @@ import pytest
 from django.contrib.auth.models import Group, Permission
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.db import connection
 from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from apps.annotations.models import Tag
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
@@ -23,7 +26,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
 
@@ -528,3 +531,56 @@ def test_chatbot_admin_can_access_edit_chatbot(client, team_with_users):
     url = reverse("chatbots:edit", args=[team.slug, experiment.id])
     response = client.get(url)
     assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_session_table_prefetch_is_page_bounded(team_with_users):
+    """Adding more sessions than fit on one page must not increase the number of
+    queries fired for the tag prefetch — the prefetch should target only the
+    sessions visible on the current page."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = ExperimentFactory.create(team=team)
+
+    # Two sessions, both tagged. Page size is 25 by default; both fit on one page.
+    tag = Tag.objects.create(team=team, name="t")
+    for _ in range(2):
+        s = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        s.chat.add_tag(tag, team=team, added_by=None)
+
+    factory = RequestFactory()
+
+    def do_request():
+        request = factory.get(
+            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+        )
+        request.user = user
+        request.team = team
+        request.team_membership = get_team_membership_for_request(request)
+        attach_session_middleware_to_request(request)
+        set_current_team(team)
+        view = ChatbotSessionsTableView.as_view()
+        response = view(request, team_slug=team.slug, experiment_id=experiment.id)
+        # Force evaluation of the table data
+        list(response.context_data["table"].rows)
+        return response
+
+    with CaptureQueriesContext(connection) as ctx_two:
+        do_request()
+    queries_for_two = len(ctx_two.captured_queries)
+
+    # Add another 30 tagged sessions — far beyond one page.
+    for _ in range(30):
+        s = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        s.chat.add_tag(tag, team=team, added_by=None)
+
+    with CaptureQueriesContext(connection) as ctx_many:
+        do_request()
+    queries_for_many = len(ctx_many.captured_queries)
+
+    # Adding off-page rows must not bloat the prefetch.
+    # Allow a small slack for the COUNT(*) plan growing slightly.
+    assert queries_for_many <= queries_for_two + 1, (
+        f"Prefetch is not page-bounded: 2 sessions = {queries_for_two} queries, "
+        f"32 sessions = {queries_for_many} queries"
+    )

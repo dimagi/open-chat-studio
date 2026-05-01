@@ -525,6 +525,28 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         )
         return query_set
 
+    def get_table_data(self):
+        """Materialise the page-sized slice, then attach the tag prefetch only to those rows."""
+        from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
+
+        from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
+        from apps.chat.models import Chat  # noqa: PLC0415
+
+        rows = list(super().get_table_data())
+        if not rows:
+            return rows
+        chat_ids = [row.chat_id for row in rows]
+        tagged_by_chat = {chat_id: [] for chat_id in chat_ids}
+        chat_ct = ContentType.objects.get_for_model(Chat)
+        for item in CustomTaggedItem.objects.filter(
+            content_type=chat_ct,
+            object_id__in=chat_ids,
+        ).select_related("tag", "user"):
+            tagged_by_chat[item.object_id].append(item)
+        for row in rows:
+            row.chat.prefetched_tagged_items = tagged_by_chat.get(row.chat_id, [])
+        return rows
+
     def get_table(self, **kwargs):
         """When viewing sessions for a specific chatbot, hide the chatbot column."""
         table = super().get_table(**kwargs)
