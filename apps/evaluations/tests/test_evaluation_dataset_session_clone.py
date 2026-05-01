@@ -8,14 +8,14 @@ from apps.evaluations.models import (
     EvaluationDataset,
     EvaluationMessage,
 )
-from apps.evaluations.tasks import create_dataset_from_sessions_task
+from apps.evaluations.tasks import create_dataset_from_session_messages_task
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
+def test_create_dataset_from_session_messages_task_with_filtered_sessions_no_filter():
     """Test cloning sessions when filtered sessions are selected without filters - should get all messages."""
     session_1 = ExperimentSessionFactory.create()
     team = session_1.team
@@ -27,7 +27,7 @@ def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
 
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset")
 
-    task_result = create_dataset_from_sessions_task.delay(
+    task_result = create_dataset_from_session_messages_task.delay(
         dataset.id,
         team.id,
         [],  # No regular sessions
@@ -59,7 +59,7 @@ def test_create_dataset_from_sessions_task_with_filtered_sessions_no_filter():
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_dataset_from_sessions_task_with_filter():
+def test_create_dataset_from_session_messages_task_with_filter():
     """Test cloning sessions with filter - should only get filtered messages."""
     session_1 = ExperimentSessionFactory.create()
     team = session_1.team
@@ -79,7 +79,7 @@ def test_create_dataset_from_sessions_task_with_filter():
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset")
     filter_params = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
 
-    task_result = create_dataset_from_sessions_task.delay(
+    task_result = create_dataset_from_session_messages_task.delay(
         dataset.id,
         team.id,
         [],  # No regular sessions
@@ -106,7 +106,7 @@ def test_create_dataset_from_sessions_task_with_filter():
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_create_dataset_from_sessions_task_with_duplicates():
+def test_create_dataset_from_session_messages_task_with_duplicates():
     """Test that duplicate detection works when adding messages to existing dataset."""
     session_1 = ExperimentSessionFactory.create()
     team = session_1.team
@@ -126,7 +126,7 @@ def test_create_dataset_from_sessions_task_with_duplicates():
     )
     dataset.messages.add(existing_msg)
 
-    task_result = create_dataset_from_sessions_task.delay(
+    task_result = create_dataset_from_session_messages_task.delay(
         dataset.id,
         team.id,
         [session_1.external_id],

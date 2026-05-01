@@ -4,21 +4,29 @@ import json
 from io import StringIO
 
 from django import forms
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
 from pydantic import ValidationError as PydanticValidationError
 
+from apps.annotations.models import Tag
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
+    ConditionType,
     DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
+    EvaluationMode,
     Evaluator,
+    EvaluatorTagRule,
     ExperimentVersionSelection,
 )
+from apps.evaluations.rule_validation import validate_condition, validate_field_in_schema
 from apps.evaluations.tasks import (
     create_dataset_from_csv_task,
+    create_dataset_from_session_messages_task,
     create_dataset_from_sessions_task,
 )
 from apps.evaluations.utils import parse_history_text
@@ -26,18 +34,41 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 
 
+class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
+    """CheckboxSelectMultiple that adds data-evaluation-mode to each option for Alpine.js filtering."""
+
+    def __init__(self, *args, evaluator_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._evaluator_queryset = evaluator_queryset
+        self._mode_by_id = {}
+
+    def optgroups(self, name, value, attrs=None):
+        if self._evaluator_queryset is not None:
+            self._mode_by_id = {str(e.id): e.evaluation_mode for e in self._evaluator_queryset}
+        return super().optgroups(name, value, attrs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        mode = self._mode_by_id.get(str(value), "")
+        if mode:
+            option["attrs"]["data-evaluation-mode"] = mode
+        return option
+
+
 class StyledRadioSelect(RadioSelect):
-    def __init__(self, attrs=None):
+    def __init__(self, attrs=None, x_model="mode"):
         default_attrs = {"class": "space-y-1"}
         if attrs:
             default_attrs.update(attrs)
         super().__init__(attrs=default_attrs)
+        self.x_model = x_model
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
 
         option["attrs"]["class"] = "radio radio-primary mr-2"
-        option["attrs"]["x-model"] = "mode"
+        if self.x_model:
+            option["attrs"]["x-model"] = self.x_model
         return option
 
 
@@ -101,7 +132,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "base_experiment",
         ]
         widgets = {
-            "evaluators": forms.CheckboxSelectMultiple(),
+            "evaluators": EvaluatorCheckboxWidget(),
         }
 
     def __init__(self, team, *args, **kwargs):
@@ -109,7 +140,10 @@ class EvaluationConfigForm(forms.ModelForm):
         self.team = team
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
-        self.fields["evaluators"].queryset = Evaluator.objects.filter(team=team)
+        evaluator_qs = Evaluator.objects.filter(team=team)
+        self.fields["evaluators"].queryset = evaluator_qs
+        if isinstance(self.fields["evaluators"].widget, EvaluatorCheckboxWidget):
+            self.fields["evaluators"].widget._evaluator_queryset = evaluator_qs
         self.fields["experiment"].queryset = (
             Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
         )
@@ -153,6 +187,22 @@ class EvaluationConfigForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
+        dataset = cleaned_data.get("dataset")
+        evaluators = cleaned_data.get("evaluators")
+        if dataset and evaluators:
+            mismatched = [e for e in evaluators if e.evaluation_mode != dataset.evaluation_mode]
+            if mismatched:
+                names = ", ".join(e.name for e in mismatched)
+                self.add_error(
+                    "evaluators",
+                    f"The following evaluators have a different evaluation mode than the dataset: {names}. "
+                    f"Dataset mode is '{dataset.evaluation_mode}', but these evaluators are set to a different mode.",
+                )
+
+        if dataset and dataset.evaluation_mode == EvaluationMode.SESSION and cleaned_data.get("run_generation"):
+            self.add_error("evaluators", "Generation is not supported for session-mode datasets.")
+            cleaned_data["run_generation"] = False
+
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
@@ -175,6 +225,9 @@ class EvaluationConfigForm(forms.ModelForm):
             elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
                 cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
                 cleaned_data["experiment_version"] = None
+        elif not experiment:
+            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["experiment_version"] = None
         else:
             cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
             try:
@@ -214,15 +267,19 @@ class EvaluationConfigForm(forms.ModelForm):
 class EvaluatorForm(forms.ModelForm):
     class Meta:
         model = Evaluator
-        fields = ("name", "type", "params")
+        fields = ("name", "type", "params", "evaluation_mode")
         widgets = {
             "type": forms.HiddenInput(),
             "params": forms.HiddenInput(),
+            "evaluation_mode": forms.RadioSelect(choices=EvaluationMode.choices),
         }
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+        # Set by the view before is_valid() so the schema-drift check can
+        # ignore rules the user is deleting in the same submit.
+        self.pending_deleted_rule_pks: set[int] = set()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -255,7 +312,235 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
+        self._validate_existing_tag_rules_against_schema(params)
+
         return cleaned_data
+
+    def _validate_existing_tag_rules_against_schema(self, params):
+        """Block save when an existing tag rule no longer matches the new output_schema.
+
+        Skips rules the formset is deleting in the same submit so users aren't
+        stuck having to delete the rule and update the schema in two trips.
+        Surfaces all incompatible rules at once instead of stopping at the first.
+        """
+        if not (self.instance and self.instance.pk):
+            return
+
+        output_schema = (params or {}).get("output_schema") or {}
+        rules = self.instance.tag_rules.exclude(pk__in=self.pending_deleted_rule_pks)
+        errors = []
+        for rule in rules:
+            try:
+                field_def = validate_field_in_schema(rule.field_name, output_schema)
+                validate_condition(rule.condition_type, rule.condition_value, field_def)
+            except DjangoValidationError as err:
+                errors.append(
+                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
+                    f"output schema: {err.messages[0] if err.messages else err}"
+                )
+        if errors:
+            raise forms.ValidationError(errors)
+
+
+class EvaluatorTagRuleForm(forms.ModelForm):
+    """Per-row form for the tag-rule formset on the evaluator edit page.
+
+    Accepts a free-text `tag_name` that resolves to (or creates) an
+    EVALUATIONS-category system tag in the evaluator's team.
+    """
+
+    tag_name = forms.CharField(max_length=100, required=False, label="Tag name")
+    condition_value_single = forms.CharField(required=False, label="Value")
+    condition_value_min = forms.CharField(required=False, label="Min")
+    condition_value_max = forms.CharField(required=False, label="Max")
+
+    class Meta:
+        model = EvaluatorTagRule
+        fields = ("field_name", "condition_type")
+        widgets = {
+            "condition_type": forms.Select(choices=ConditionType.choices),
+        }
+
+    def __init__(self, *args, team=None, output_schema=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.output_schema = output_schema or {}
+        # Defer Tag.objects.get_or_create to save(); clean() stashes the resolved
+        # tag name here for save() to pick up.
+        self._resolved_tag_name: str | None = None
+        if self.instance and self.instance.pk and self.instance.tag_id:
+            self.fields["tag_name"].initial = self.instance.tag.name
+        if self.instance and self.instance.pk and isinstance(self.instance.condition_value, dict):
+            cv = self.instance.condition_value
+            if self.instance.condition_type == ConditionType.EQUALS:
+                self.fields["condition_value_single"].initial = cv.get("value", "")
+            elif self.instance.condition_type == ConditionType.RANGE:
+                self.fields["condition_value_min"].initial = cv.get("min", "")
+                self.fields["condition_value_max"].initial = cv.get("max", "")
+
+    def _row_has_content(self, cleaned_data: dict) -> bool:
+        return bool(
+            cleaned_data.get("tag_name")
+            or cleaned_data.get("field_name")
+            or cleaned_data.get("condition_value_single")
+            or cleaned_data.get("condition_value_min")
+            or cleaned_data.get("condition_value_max")
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.cleaned_data.get("DELETE"):
+            return cleaned
+        if not self._row_has_content(cleaned):
+            return cleaned
+
+        tag_name = self._clean_required_row_fields(cleaned)
+        self._clean_condition_value(cleaned)
+        if self.errors:
+            return cleaned
+
+        if not self._validate_against_schema(cleaned):
+            return cleaned
+
+        self._resolved_tag_name = tag_name
+        self.instance.condition_value = cleaned["condition_value"]
+        return cleaned
+
+    def _clean_required_row_fields(self, cleaned: dict) -> str:
+        """Add errors for missing tag_name/field_name and return the stripped tag name."""
+        tag_name = (cleaned.get("tag_name") or "").strip()
+        if not tag_name:
+            self.add_error("tag_name", "Tag name is required.")
+        if not cleaned.get("field_name"):
+            self.add_error("field_name", "Field is required.")
+        return tag_name
+
+    def _clean_condition_value(self, cleaned: dict) -> None:
+        """Populate cleaned['condition_value'] for the selected condition_type, adding errors on failure."""
+        condition_type = cleaned.get("condition_type")
+        field_schema = self.output_schema.get(cleaned.get("field_name") or "", {}) or {}
+        field_type = field_schema.get("type")
+        if condition_type == ConditionType.EQUALS:
+            self._clean_equals_value(cleaned, field_type)
+        elif condition_type == ConditionType.RANGE:
+            self._clean_range_value(cleaned)
+
+    def _clean_equals_value(self, cleaned: dict, field_type: str | None) -> None:
+        value = cleaned.get("condition_value_single")
+        if not value:
+            self.add_error("condition_value_single", "Value is required for 'equals'.")
+            return
+        try:
+            coerced = ConditionType.coerce_value(value, field_type)
+        except (TypeError, ValueError):
+            msg = "Value must be an integer." if field_type == "int" else "Value must be numeric."
+            self.add_error("condition_value_single", msg)
+            return
+        if not self.errors:
+            cleaned["condition_value"] = {"value": coerced}
+
+    def _clean_range_value(self, cleaned: dict) -> None:
+        lo = cleaned.get("condition_value_min")
+        hi = cleaned.get("condition_value_max")
+        if lo in (None, "") or hi in (None, ""):
+            self.add_error("condition_value_min", "Min and max are required for 'range'.")
+            return
+        try:
+            cleaned["condition_value"] = {"min": float(lo), "max": float(hi)}
+        except (TypeError, ValueError):
+            self.add_error("condition_value_min", "Min/max must be numeric.")
+
+    def _validate_against_schema(self, cleaned: dict) -> bool:
+        """Run schema-level validation; return False when errors were added."""
+        try:
+            field_def = validate_field_in_schema(cleaned["field_name"], self.output_schema)
+            validate_condition(cleaned.get("condition_type"), cleaned["condition_value"], field_def)
+        except DjangoValidationError as err:
+            for field, messages in err.message_dict.items():
+                target = field if field in self.fields else None
+                for msg in messages:
+                    self.add_error(target, msg)
+            return False
+        return True
+
+    def save(self, commit=True):
+        if self._resolved_tag_name:
+            self.instance.tag, _ = Tag.objects.get_or_create(
+                team=self.team,
+                name=self._resolved_tag_name,
+                is_system_tag=False,
+                category="",
+            )
+        return super().save(commit=commit)
+
+    def _post_clean(self):
+        # Our clean() runs the cross-field validation (validate_field_in_schema,
+        # validate_condition) directly against the current output_schema. Re-running
+        # the model's clean() here would double-report errors and would fail on
+        # rows whose condition_value wasn't set by form.clean() because of an
+        # earlier in-row error. Skip model.clean(); the model's own clean() still
+        # runs when rules are created outside the form (e.g. Django admin).
+        opts = self._meta
+        try:
+            self.instance = construct_instance(self, self.instance, opts.fields, opts.exclude)
+        except DjangoValidationError as err:
+            self._update_errors(err)
+
+
+class BaseEvaluatorTagRuleFormSet(forms.BaseInlineFormSet):
+    """Inline formset that treats entirely-empty rows as 'delete me' instead of errors."""
+
+    def __init__(self, *args, team=None, output_schema=None, **kwargs):
+        self.team = team
+        self.output_schema = output_schema or {}
+        super().__init__(*args, **kwargs)
+
+    def _construct_form(self, i, **kwargs):
+        kwargs["team"] = self.team
+        kwargs["output_schema"] = self.output_schema
+        return super()._construct_form(i, **kwargs)
+
+    @property
+    def empty_form(self):
+        form = self.form(
+            auto_id=self.auto_id,
+            prefix=self.add_prefix("__prefix__"),
+            empty_permitted=True,
+            use_required_attribute=False,
+            team=self.team,
+            output_schema=self.output_schema,
+        )
+        self.add_fields(form, None)
+        return form
+
+    def save(self, commit=True):
+        instances = []
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data"):
+                continue
+            if form.cleaned_data.get("DELETE"):
+                if form.instance.pk:
+                    form.instance.delete()
+                continue
+            if not form._row_has_content(form.cleaned_data):
+                if form.instance.pk:
+                    form.instance.delete()
+                continue
+            form.instance.evaluator = self.instance
+            form.instance.team = self.team
+            instance = form.save(commit=commit)
+            instances.append(instance)
+        return instances
+
+
+EvaluatorTagRuleFormSet = forms.inlineformset_factory(
+    Evaluator,
+    EvaluatorTagRule,
+    form=EvaluatorTagRuleForm,
+    formset=BaseEvaluatorTagRuleFormSet,
+    extra=0,
+    can_delete=True,
+)
 
 
 class EvaluationMessageForm(forms.ModelForm):
@@ -285,9 +570,17 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         required=False,
     )
 
+    evaluation_mode = forms.ChoiceField(
+        choices=[(EvaluationMode.MESSAGE, "Message level"), (EvaluationMode.SESSION, "Session level")],
+        initial=EvaluationMode.MESSAGE,
+        widget=StyledRadioSelect(x_model=None),
+        label="Evaluation level",
+        help_text="Message level evaluates individual message pairs. Session level evaluates entire conversations.",
+    )
+
     class Meta:
         model = EvaluationDataset
-        fields = ("name",)
+        fields = ("name", "evaluation_mode")
 
     def __init__(self, team, *args, **kwargs):
         self.filter_params = kwargs.pop("filter_params", None)
@@ -327,7 +620,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
         return session_ids, filtered_session_ids
 
-    def _save_clone(self, dataset):
+    def _save_session_messages_clone(self, dataset):
         """Dispatch async task to clone messages from sessions."""
         session_ids = self.cleaned_data.get("session_ids", [])
         filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
@@ -335,13 +628,32 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         if not session_ids and not filtered_session_ids:
             return
 
-        task = create_dataset_from_sessions_task.delay(
+        task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
             list(session_ids),
             list(filtered_session_ids),
             self.filter_params.to_query() if self.filter_params else None,
             self.timezone,
+        )
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
+    def _save_sessions_clone(self, dataset):
+        """Dispatch async task to create session-mode messages."""
+        # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
+        session_ids = self.cleaned_data.get("session_ids", set())
+        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
+        all_session_ids = list(session_ids | filtered_session_ids)
+
+        if not all_session_ids:
+            return
+
+        task = create_dataset_from_sessions_task.delay(
+            dataset.id,
+            self.team.id,
+            all_session_ids,
         )
 
         dataset.job_id = task.id
@@ -391,6 +703,11 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
+        evaluation_mode = cleaned_data.get("evaluation_mode")
+
+        if evaluation_mode == EvaluationMode.SESSION and mode != "clone":
+            raise forms.ValidationError({"mode": "Session-mode datasets can only be created by cloning from sessions."})
+
         if mode == "clone":
             session_ids, filtered_session_ids = self._clean_clone()
             cleaned_data["session_ids"] = session_ids
@@ -571,7 +888,10 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             return dataset
 
         if mode == "clone":
-            self._save_clone(dataset)
+            if dataset.evaluation_mode == EvaluationMode.SESSION:
+                self._save_sessions_clone(dataset)
+            else:
+                self._save_session_messages_clone(dataset)
         elif mode == "csv":
             self._save_csv(dataset)
 
@@ -627,9 +947,16 @@ def _clean_json_field(field_name: str, field_value: str) -> dict:
 class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
     """Form for editing existing evaluation datasets."""
 
+    class Meta(EvaluationDatasetBaseForm.Meta):
+        fields = ("name",)
+
     def __init__(self, team, *args, **kwargs):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
+        self.fields["mode"].required = False
+        # evaluation_mode is immutable after creation
+        if "evaluation_mode" in self.fields:
+            del self.fields["evaluation_mode"]
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -671,6 +998,9 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
             if self.cleaned_data.get("mode") == "clone":
                 dataset.status = DatasetCreationStatus.PENDING
                 dataset.save(update_fields=["status"])
-                self._save_clone(dataset)
+                if dataset.evaluation_mode == EvaluationMode.SESSION:
+                    self._save_sessions_clone(dataset)
+                else:
+                    self._save_session_messages_clone(dataset)
 
         return dataset

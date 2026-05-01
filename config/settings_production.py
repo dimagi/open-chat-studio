@@ -39,11 +39,15 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 # Your email config goes here.
 # see https://github.com/anymail/django-anymail for more details / examples
 EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="anymail.backends.mailgun.EmailBackend")
+_ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default=None)
+if _ANYMAIL_WEBHOOK_SECRET:
+    _ANYMAIL_WEBHOOK_SECRET = f"anymail:{_ANYMAIL_WEBHOOK_SECRET}"
 match EMAIL_BACKEND:
     case "anymail.backends.mailgun.EmailBackend":
         ANYMAIL = {
             "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
             "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=None),
+            "WEBHOOK_SECRET": _ANYMAIL_WEBHOOK_SECRET,
         }
     case "anymail.backends.amazon_ses.EmailBackend":
         ses_params = {
@@ -53,6 +57,7 @@ match EMAIL_BACKEND:
         }
         ANYMAIL = {
             "AMAZON_SES_CLIENT_PARAMS": dict(item for item in ses_params.items() if item[1]),
+            "WEBHOOK_SECRET": _ANYMAIL_WEBHOOK_SECRET,
         }
     case _:
         raise Exception(f"Unknown email backend: {EMAIL_BACKEND}")

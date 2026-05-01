@@ -194,6 +194,35 @@ def test_get_team_evaluations_channel(team_with_users):
     assert channel.id == channel2.id
 
 
+@pytest.mark.django_db()
+class TestEmailChannelDropdownVisibility:
+    """The EMAIL platform should only appear in the dropdown when both the
+    feature flag is enabled for the team AND EMAIL_CHANNEL_ALLOWED_DOMAINS is non-empty."""
+
+    @pytest.fixture()
+    def email_flag_enabled(self, experiment):
+        flag = Flag.objects.create(name="flag_email_channel")
+        flag.teams.add(experiment.team)
+        flag.flush()
+        return flag
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.example.com"])
+    def test_email_present_when_flag_on_and_allowlist_set(self, experiment, email_flag_enabled):
+        platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
+        assert ChannelPlatform.EMAIL in platforms
+        assert platforms[ChannelPlatform.EMAIL] is True
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=[])
+    def test_email_hidden_when_flag_on_but_allowlist_empty(self, experiment, email_flag_enabled):
+        platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
+        assert ChannelPlatform.EMAIL not in platforms
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.example.com"])
+    def test_email_hidden_when_flag_off(self, experiment):
+        platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
+        assert ChannelPlatform.EMAIL not in platforms
+
+
 class TestChannelPlatform:
     def test_normalize_identifier(self):
         identifier = "abc"

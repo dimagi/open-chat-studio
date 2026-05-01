@@ -9,16 +9,16 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
-from django_htmx.http import HttpResponseClientRedirect, reswap
+from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.documents import tasks
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
@@ -28,6 +28,7 @@ from apps.documents.forms import (
     CreateCollectionFromAssistantForm,
     DocumentSourceForm,
     GithubDocumentSourceForm,
+    JSONCollectionDocumentSourceForm,
 )
 from apps.documents.models import (
     Collection,
@@ -45,14 +46,23 @@ from apps.files.models import File, FileChunkEmbedding
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
+from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.documents.views")
+
+
+def _visible_source_types(request) -> list[SourceType]:
+    types = list(SourceType)
+    if not flag_is_active(request, Flags.JSON_COLLECTION_LOADER.slug):
+        types = [t for t in types if t != SourceType.JSON_COLLECTION]
+    return types
 
 
 class CollectionHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -108,7 +118,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_files_per_collection": settings.MAX_FILES_PER_COLLECTION,
         "max_files": settings.MAX_FILES_PER_COLLECTION,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
-        "document_source_types": list(SourceType),
+        "document_source_types": _visible_source_types(request),
         "read_only": collection.is_a_version,
     }
     return render(request, "documents/single_collection_home.html", context)
@@ -215,6 +225,7 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
         return {
             SourceType.GITHUB: GithubDocumentSourceForm,
             SourceType.CONFLUENCE: ConfluenceDocumentSourceForm,
+            SourceType.JSON_COLLECTION: JSONCollectionDocumentSourceForm,
         }.get(self.source_type, DocumentSourceForm)
 
     @property
@@ -252,6 +263,13 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
 
 class CreateDocumentSource(BaseDocumentSourceView, CreateView):
     permission_required = "documents.add_documentsource"
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.source_type == SourceType.JSON_COLLECTION and not flag_is_active(
+            request, Flags.JSON_COLLECTION_LOADER.slug
+        ):
+            raise Http404("JSON Collection source is not enabled for this team.")
+        return super().dispatch(request, *args, **kwargs)
 
     @property
     def source_type(self):
@@ -629,15 +647,11 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                         ]
                     )
 
-            response = render_to_string(
-                "generic/referenced_objects.html",
-                context={
-                    "object_name": "collection",
-                    "pipeline_nodes": pipeline_node_chips,
-                    "experiments_with_pipeline_nodes": experiment_chips,
-                },
+            return render_referenced_objects_modal(
+                "collection",
+                pipeline_nodes=pipeline_node_chips,
+                experiments_with_pipeline_nodes=experiment_chips,
             )
-            return reswap(HttpResponse(response, status=400), "none")
 
 
 @require_POST

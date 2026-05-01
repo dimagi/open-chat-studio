@@ -75,6 +75,17 @@ docker compose -f docker-compose.prod.yml up -d
 
 On first start, the `migrate` service runs all database migrations and then exits before the web and worker services start.
 
+## Optional: Enable Zero Trust Access (Cloudflare Tunnel)
+
+If you want to expose your deployment using Cloudflare Zero Trust tunneling, you can run the optional `cloudflared` service.
+
+First, export your tunnel token and start the services:
+`export CLOUDFLARE_TUNNEL_TOKEN=your-token`
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml up -d
+```
+
 ## Step 4: Create a Superuser
 
 ```bash

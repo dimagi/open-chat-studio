@@ -6,6 +6,13 @@ from django.urls import reverse
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.chat.models import Chat
+from apps.evaluations.models import AppliedTag, EvaluatorTagRule
+from apps.utils.factories.evaluations import (
+    AppliedTagFactory,
+    EvaluationResultFactory,
+    EvaluatorFactory,
+    EvaluatorTagRuleFactory,
+)
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -56,6 +63,79 @@ def test_delete_tag_deletes_through_model(tag, chat, client):
     client.delete(reverse("annotations:tag_delete", kwargs={"team_slug": tag.team.slug, "pk": tag.id}), data={})
     assert Tag.objects.filter(name=tag.name, team=tag.team).exists() is False
     assert CustomTaggedItem.objects.filter(team=tag.team, tag=tag).exists() is False
+
+
+@pytest.mark.django_db()
+def test_delete_tag_blocked_by_evaluator_tag_rule(tag, client):
+    team = tag.team
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    evaluator = EvaluatorFactory.create(team=team, name="Sentiment Evaluator")
+    EvaluatorTagRuleFactory.create(team=team, evaluator=evaluator, tag=tag)
+
+    response = client.delete(
+        reverse("annotations:tag_delete", kwargs={"team_slug": team.slug, "pk": tag.id}),
+    )
+
+    assert response.status_code == 200
+    assert response["HX-Retarget"] == "body"
+    assert response["HX-Reswap"] == "beforeend"
+    body = response.content.decode()
+    assert "referenced-objects-modal" in body
+    assert "Cannot delete tag" in body
+    assert "Sentiment Evaluator" in body
+    assert Tag.objects.filter(pk=tag.pk).exists()
+    assert EvaluatorTagRule.objects.filter(tag=tag).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_tag_blocked_by_applied_tag(tag, client):
+    """AppliedTag rows whose rule was edited to point at a different tag still
+    PROTECT the original tag — surface the owning evaluator so the user can
+    remove the rule (which cascades the orphan applications)."""
+    team = tag.team
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    evaluator = EvaluatorFactory.create(team=team, name="Other Evaluator")
+    rule = EvaluatorTagRuleFactory.create(team=team, evaluator=evaluator, tag=tag)
+    evaluation_result = EvaluationResultFactory.create(team=team)
+    AppliedTagFactory.create(team=team, rule=rule, tag=tag, evaluation_result=evaluation_result)
+    # Re-point the rule at a different tag to leave the original AppliedTag orphaned.
+    other_tag = Tag.objects.create(name="other", team=team, created_by=user)
+    rule.tag = other_tag
+    rule.save(update_fields=["tag"])
+
+    response = client.delete(
+        reverse("annotations:tag_delete", kwargs={"team_slug": team.slug, "pk": tag.id}),
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "referenced-objects-modal" in body
+    assert "Other Evaluator" in body
+    assert Tag.objects.filter(pk=tag.pk).exists()
+    assert AppliedTag.objects.filter(tag=tag).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_tag_succeeds_after_rule_removed(tag, client):
+    team = tag.team
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    evaluator = EvaluatorFactory.create(team=team)
+    rule = EvaluatorTagRuleFactory.create(team=team, evaluator=evaluator, tag=tag)
+    rule.delete()
+
+    response = client.delete(
+        reverse("annotations:tag_delete", kwargs={"team_slug": team.slug, "pk": tag.id}),
+    )
+
+    assert response.status_code == 200
+    assert "HX-Retarget" not in response
+    assert not Tag.objects.filter(pk=tag.pk).exists()
 
 
 @pytest.mark.django_db()

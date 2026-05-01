@@ -10,19 +10,18 @@ from django.db import transaction
 from django.db.models import QuerySet, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
-from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
+from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
@@ -40,6 +39,7 @@ from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
+from ..generics.referenced_objects import render_referenced_objects_modal
 from ..utils.prompt import PromptVars
 
 
@@ -89,6 +89,72 @@ class CreatePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templat
         return redirect(reverse("pipelines:edit", args=args, kwargs={**kwargs, "pk": pipeline.id}))
 
 
+def _serialize_event_action(action):
+    return {
+        "action_type": action.action_type,
+        "action_type_label": EventActionType(action.action_type).label,
+        "params": action.params,
+    }
+
+
+def _get_chatbot_settings_context(experiment):
+    return {
+        "tracing_configured": bool(experiment.trace_provider_id),
+        "convert_speech_inputs_to_text": bool(experiment.synthetic_voice_id and experiment.echo_transcript),
+        "convert_output_text_to_speech": bool(experiment.synthetic_voice_id),
+        "user_consent_required": bool(experiment.consent_form_id),
+        "file_uploads_allowed": experiment.file_uploads_enabled,
+    }
+
+
+def get_widget_page_context(pipeline, experiment=None):
+    if pipeline is None:
+        return {}
+
+    context = {
+        "pipeline_structure": pipeline.data_without_positions,
+    }
+
+    if experiment is not None:
+        static_triggers = StaticTrigger.objects.filter(experiment=experiment, is_archived=False).select_related(
+            "action"
+        )
+        timeout_triggers = TimeoutTrigger.objects.filter(experiment=experiment, is_archived=False).select_related(
+            "action"
+        )
+
+        context["chatbot"] = {
+            "id": experiment.id,
+            "name": experiment.name,
+            "description": experiment.description,
+            "version": experiment.version_number,
+        }
+        context["event_triggers"] = {
+            "static_triggers": [
+                {
+                    "type": trigger.type,
+                    "type_label": StaticTriggerType(trigger.type).label,
+                    "action": _serialize_event_action(trigger.action),
+                }
+                for trigger in static_triggers
+                if trigger.is_active
+            ],
+            "timeout_triggers": [
+                {
+                    "delay": trigger.delay,
+                    "total_num_triggers": trigger.total_num_triggers,
+                    "trigger_from_first_message": trigger.trigger_from_first_message,
+                    "action": _serialize_event_action(trigger.action),
+                }
+                for trigger in timeout_triggers
+                if trigger.is_active
+            ],
+        }
+        context["settings"] = _get_chatbot_settings_context(experiment)
+
+    return context
+
+
 class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "pipelines.change_pipeline"
     template_name = "pipelines/pipeline_builder.html"
@@ -114,6 +180,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
             "allow_edit_name": True,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
+            "widget_page_context": get_widget_page_context(pipeline),
             **llm_model_parameter_context(),
         }
 
@@ -138,16 +205,11 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 for experiment in Experiment.objects.filter(id__in=Subquery(query)).all()
             ]
 
-            response = render_to_string(
-                "generic/referenced_objects.html",
-                context={
-                    "object_name": "pipeline",
-                    "experiments": experiments,
-                    "static_trigger_experiments": static_trigger_experiments,
-                },
+            return render_referenced_objects_modal(
+                "pipeline",
+                experiments=experiments,
+                static_trigger_experiments=static_trigger_experiments,
             )
-
-        return reswap(HttpResponse(response, status=400), "none")
 
 
 def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
@@ -293,7 +355,6 @@ def _pipeline_node_schemas():
 
 
 def _get_node_schema(node_class):
-
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
 

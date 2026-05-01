@@ -1,11 +1,13 @@
 {% extends "generic/object_form.html" %}
 {% load form_tags i18n %}
 
+{# djlint:off H025 #}
 {% block form %}
   <div x-data="evaluatorForm">
     {{ form.non_field_errors }}
 
     {% render_form_fields form "name" %}
+    {% render_form_fields form "evaluation_mode" %}
 
     <div class="fieldset w-full">
       <label class="label font-bold" for="id_evaluator_type">
@@ -120,15 +122,32 @@
                 </label>
                 <div class="prompt-editor textarea textarea-bordered w-full p-0 overflow-auto resize-y"
                      :data-target-field="'#param_' + fieldName"
-                     data-autocomplete-vars='["input.content", "output.content", "context", "full_history", "generated_response"]'
+                     :data-autocomplete-vars="autocompleteVars"
                      style="height: 300px; min-height: 150px; max-height: 1000px;"></div>
                 <textarea :id="'param_' + fieldName"
                           :name="'param_' + fieldName"
                           x-model="params[fieldName]"
                           style="display: none;"
                           :required="isRequired(fieldName)"></textarea>
-                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+                <small class="form-text text-muted" x-show="field.description && getWidget(field) !== 'text_editor_widget'" x-text="field.description"></small>
               </div>
+            </template>
+
+            <!-- Mode-specific variable hints -->
+            <template x-if="getWidget(field) === 'text_editor_widget'">
+                <div class="mt-1">
+                    <template x-if="evaluationMode === 'session'">
+                        <p class="text-sm text-gray-500">
+                            {% translate "Available variables:" %} <code>{full_history}</code>, <code>{context.[param]}</code>
+                        </p>
+                    </template>
+                    <template x-if="evaluationMode !== 'session'">
+                        <p class="text-sm text-gray-500">
+                            {% translate "Available variables:" %} <code>{input.content}</code>, <code>{output.content}</code>,
+                            <code>{context.[param]}</code>, <code>{full_history}</code>, <code>{generated_response}</code>
+                        </p>
+                    </template>
+                </div>
             </template>
 
             <!-- Expandable Text Widget -->
@@ -442,12 +461,51 @@
     <!-- Hidden fields for Django form -->
     <input type="hidden" name="type" x-model="selectedType">
     <input type="hidden" name="params" x-model="paramsJson">
+
+    <!-- Tag Rules (LLM evaluator only) -->
+    <div class="mt-8 pt-6 border-t" x-show="selectedType === 'LlmEvaluator'">
+      <h3 class="text-lg font-medium mb-3">{% translate "Tag Rules" %}</h3>
+      <p class="text-sm text-gray-500 mb-3">
+        {% translate "Auto-apply an Evaluations-category tag to the evaluated target when an output field matches a condition." %}
+      </p>
+
+      {{ tag_rule_formset.management_form }}
+      {% if tag_rule_formset.non_form_errors %}
+        <div class="alert alert-error mb-3">
+          {{ tag_rule_formset.non_form_errors }}
+        </div>
+      {% endif %}
+
+      <div class="space-y-3">
+        {% for rule_form in tag_rule_formset %}
+          {% include "evaluations/partials/tag_rule_row.html" with form=rule_form %}
+        {% endfor %}
+
+        <template id="tag-rule-empty-form">
+          {% include "evaluations/partials/tag_rule_row.html" with form=tag_rule_formset.empty_form %}
+        </template>
+      </div>
+
+      <button type="button"
+              @click="addTagRuleRow()"
+              :disabled="!hasAnyUsableField()"
+              class="btn btn-outline btn-primary btn-sm mt-3">
+        <i class="fa fa-plus"></i> {% translate "Add tag rule" %}
+      </button>
+      {{ available_tags|json_script:"tag-rule-available-tags" }}
+      <p class="text-xs text-gray-500 mt-1" x-show="!hasAnyUsableField()">
+        {% translate "Define at least one output field (choice with choices, int, float, or string) before adding tag rules." %}
+      </p>
+    </div>
   </div>
 {% endblock form %}
+{# djlint:on #}
 
 {% block page_js %}
   {{ block.super }}
   <script src="{% load static %}{% static 'js/editors-bundle.js' %}"></script>
+  <script src="{% static 'js/tagRuleSelect-bundle.js' %}"
+          onload="SiteJS.tagRuleSelect.bootstrapTagRuleSelects();"></script>
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
@@ -459,12 +517,21 @@
         parameterValues: JSON.parse(document.getElementById("parameter-values").textContent),
         defaultValues: JSON.parse(document.getElementById("default-values").textContent),
         selectedType: '{% if object.type %}{{ object.type|escapejs }}{% else %}{{ form.type.value|default:"" }}{% endif %}',
+        evaluationMode: '{{ form.evaluation_mode.value|default:"message" }}',
         selectedSchema: null,
         params: {},
         keyValuePairs: {},
 
         init() {
           const existingParams = document.getElementById("existing-params") ? JSON.parse(document.getElementById("existing-params").textContent) : null;
+
+          // Watch evaluation_mode changes
+          const evalModeRadios = document.querySelectorAll('input[name="evaluation_mode"]');
+          evalModeRadios.forEach(radio => {
+              radio.addEventListener('change', (e) => {
+                  this.evaluationMode = e.target.value;
+              });
+          });
 
           this.$nextTick(() => {
             this.updateTypeAndSchema();
@@ -742,8 +809,74 @@
           }
         },
 
+        get autocompleteVars() {
+          return this.evaluationMode === 'session'
+            ? JSON.stringify(['full_history', 'context'])
+            : JSON.stringify(['input.content', 'output.content', 'context', 'full_history', 'generated_response']);
+        },
+
         get paramsJson() {
           return JSON.stringify(this.params);
+        },
+
+        schemaFieldNames() {
+          const schema = (this.params && this.params.output_schema) || {};
+          return Object.keys(schema);
+        },
+
+        allowedConditionsForField(fieldName) {
+          if (!fieldName) return [];
+          const schema = (this.params && this.params.output_schema) || {};
+          const def = schema[fieldName];
+          if (!def || !def.type) return [];
+          switch (def.type) {
+            case 'choice': return ['equals'];
+            case 'int':
+            case 'float': return ['equals', 'range'];
+            case 'string': return ['equals'];
+            default: return [];
+          }
+        },
+
+        fieldType(fieldName) {
+          const schema = (this.params && this.params.output_schema) || {};
+          return (schema[fieldName] || {}).type || '';
+        },
+
+        fieldChoices(fieldName) {
+          const schema = (this.params && this.params.output_schema) || {};
+          return ((schema[fieldName] || {}).choices || []).filter(c => c && String(c).trim() !== '');
+        },
+
+        isUsableField(fieldName) {
+          const type = this.fieldType(fieldName);
+          if (type === 'choice') return this.fieldChoices(fieldName).length > 0;
+          return ['int', 'float', 'string'].includes(type);
+        },
+
+        hasAnyUsableField() {
+          return this.schemaFieldNames().some(n => this.isUsableField(n));
+        },
+
+        addTagRuleRow() {
+          const totalInput = document.querySelector('input[name="tag_rules-TOTAL_FORMS"]');
+          if (!totalInput) return;
+          const index = parseInt(totalInput.value, 10);
+          const template = document.getElementById('tag-rule-empty-form');
+          if (!template) return;
+          const fragment = template.content.cloneNode(true);
+          const wrapper = document.createElement('div');
+          wrapper.appendChild(fragment);
+          wrapper.innerHTML = wrapper.innerHTML.replace(/__prefix__/g, index);
+          const newRow = wrapper.firstElementChild;
+          template.parentElement.insertBefore(newRow, template);
+          totalInput.value = index + 1;
+          if (window.Alpine && newRow) {
+            window.Alpine.initTree(newRow);
+          }
+          if (window.SiteJS && window.SiteJS.tagRuleSelect && newRow) {
+            window.SiteJS.tagRuleSelect.setupTagRuleSelects(newRow);
+          }
         }
       }));
     });

@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load chat_tags json_tags %}
+{% load chat_tags humanize json_tags %}
 {% block page_head %}
   {{ block.super }}
   <style>{% pygments_json_css %}</style>
@@ -26,43 +26,96 @@
 {% block app %}
   <div>
     <div class="container mx-auto px-4 py-6">
-      <!-- Header Section -->
-      <div class="flex justify-between w-full">
-        <div>
-          <h1 class="text-3xl font-bold mb-2">{{ trace.experiment.name }}</h1>
-          <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
-        </div>
-        <div class="flex flex-row gap-2 justify-center">
-          <div>{% include "trace/partials/status.html" with object=trace %}</div>
-          <div class="text-center">
-            <div class="font-bold">{{ trace.duration_seconds }}s</div>
-            <div class="text-sm pg-text-muted font-medium">Total latency</div>
+      {# Heading #}
+      <div class="mb-6">
+        <h1 class="text-3xl font-bold mb-1">{{ trace.experiment.name }}</h1>
+        <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
+      </div>
+
+      {# Summary cards #}
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {# Card 1 — Total latency #}
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <div class="flex justify-between items-start">
+              <span class="text-xs uppercase tracking-wide text-base-content/60">Total latency</span>
+              {% include "trace/partials/status.html" with object=trace %}
+            </div>
+            <div class="text-3xl font-bold mt-2">{{ trace.duration_seconds }}s</div>
           </div>
         </div>
-      </div>
-      <!-- Info Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-6">
-        <div>
-          <div class="text-sm text-base-content/60 tracking-wide">Experiment</div>
-          <div class="mt-1">{% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}</div>
-          <div class="text-xs mt-1">
-            {% if trace.experiment_version_number %}
-              Version: {{ trace.experiment_version_number }}
+
+        {# Card 2 — Tokens #}
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <span class="text-xs uppercase tracking-wide text-base-content/60">Tokens</span>
+            {% if trace.n_total_tokens is not None %}
+              <div class="mt-2">
+                <span class="text-3xl font-bold">{{ trace.n_total_tokens|intcomma }}</span>
+                <span class="text-sm text-base-content/60 ml-1">total</span>
+              </div>
+              {% if trace.n_total_tokens %}
+                <div class="flex h-1.5 rounded-full overflow-hidden mt-3 bg-base-200" aria-hidden="true">
+                  <div class="bg-primary" style="flex: {{ trace.n_prompt_tokens|default:0 }};"></div>
+                  <div class="bg-primary/30" style="flex: {{ trace.n_completion_tokens|default:0 }};"></div>
+                </div>
+                <div class="flex justify-between text-xs text-base-content/60 mt-2">
+                  <span>{{ trace.n_prompt_tokens|default:0|intcomma }} in</span>
+                  <span>{{ trace.n_completion_tokens|default:0|intcomma }} out</span>
+                </div>
+              {% endif %}
             {% else %}
-              Unreleased version
+              <div class="text-3xl font-bold mt-2">—</div>
             {% endif %}
           </div>
         </div>
-        <div>
-          <div class="text-sm text-base-content/60 tracking-wide">Session</div>
-          <div class="mt-1">{% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}</div>
+
+        {# Card 3 — Counts #}
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-base-content/60">LLM turns</div>
+                <div class="text-3xl font-bold mt-2">
+                  {% if trace.n_turns is not None %}{{ trace.n_turns }}{% else %}—{% endif %}
+                </div>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-base-content/60">Tool calls</div>
+                <div class="text-3xl font-bold mt-2">
+                  {% if trace.n_toolcalls is not None %}{{ trace.n_toolcalls }}{% else %}—{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div>
-          <div class="text-sm text-base-content/60 tracking-wide">Participant</div>
-          <div class="mt-1">{% include "generic/chip.html" with chip=trace.participant.as_chip %}</div>
-        </div>
-        <div>
-          <div class="text-sm text-base-content/60 tracking-wide">Timestamp</div>
+      </div>
+
+      {# Metadata pill row #}
+      <div class="flex flex-wrap gap-2 mt-4">
+        {% if trace.experiment %}
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
+            <span class="text-xs text-base-content/60">Experiment</span>
+            {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
+            <span class="text-xs text-base-content/60">
+              {% if trace.experiment_version_number is not None %}· v{{ trace.experiment_version_number }}{% else %}· unreleased{% endif %}
+            </span>
+          </div>
+        {% endif %}
+        {% if trace.session %}
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
+            <span class="text-xs text-base-content/60">Session</span>
+            {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
+          </div>
+        {% endif %}
+        {% if trace.participant %}
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
+            <span class="text-xs text-base-content/60">Participant</span>
+            {% include "generic/chip.html" with chip=trace.participant.as_chip %}
+          </div>
+        {% endif %}
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
+          <span class="text-xs text-base-content/60">When</span>
           <time datetime="{{ trace.timestamp.isoformat }}"
                 title="{{ trace.timestamp.isoformat }}">
             {{ trace.timestamp|date:"DATETIME_FORMAT" }}

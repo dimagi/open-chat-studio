@@ -177,6 +177,7 @@ def chip_action(
     enabled_condition: Callable[[Any, Any], bool] | None = None,
     url_factory: Callable[[Any, Any, Any, Any], str] | None = None,
     icon_class: str | None = None,
+    title: str | None = None,
     button_style: str = "",
     open_url_in_new_tab: bool = False,
 ):
@@ -203,6 +204,7 @@ def chip_action(
         label=label,
         label_factory=label_factory,
         icon_class=icon_class,
+        title=title,
         button_style=button_style,
         required_permissions=required_permissions,
         display_condition=display_condition,

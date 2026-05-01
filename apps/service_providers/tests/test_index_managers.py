@@ -13,6 +13,7 @@ from apps.service_providers.llm_service.index_managers import (
     OpenAILocalIndexManager,
     OpenAIRemoteIndexManager,
     RemoteIndexManager,
+    VoyageAILocalIndexManager,
 )
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
@@ -343,3 +344,26 @@ class TestOpenAILocalIndexManager:
         file.read_content = lambda: "This is test content."
         response = index_manager.chunk_file(file, chunk_size=2, chunk_overlap=0)
         assert response == ["This is", "test", "c", "on", "te", "nt", "."]
+
+
+class TestVoyageAILocalIndexManager:
+    @pytest.fixture()
+    def index_manager(self):
+        return VoyageAILocalIndexManager(api_key="test-api-key", embedding_model_name="voyage-4-large")
+
+    def test_get_embedding_vector(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
+            mock_embeddings_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text")
+
+        mock_embeddings_cls.assert_called_once_with(
+            voyage_api_key="test-api-key",
+            model="voyage-4-large",
+            output_dimension=settings.EMBEDDING_VECTOR_SIZE,
+        )
+        assert result == expected_vector
+
+    def test_get_embedding_vector_raises_for_empty_content(self, index_manager):
+        with pytest.raises(ValueError, match="Cannot embed empty string"):
+            index_manager.get_embedding_vector("")

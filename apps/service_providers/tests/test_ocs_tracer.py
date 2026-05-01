@@ -274,3 +274,43 @@ class TestSetTraceMetadata:
 
         # Should not raise
         tracer.set_trace_metadata({"trace_info": [{"trace_id": "lf-123"}]})
+
+
+@pytest.mark.django_db()
+class TestTraceWithoutSession:
+    """Inbound emails with no thread continuity open the trace before the
+    session is resolved — the tracer must accept session=None and back-fill
+    via set_session() once SessionResolutionStage has run."""
+
+    def test_trace_with_none_session_creates_record(self, experiment):
+        tracer = OCSTracer(experiment, experiment.team_id)
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+
+        with tracer.trace(trace_context=trace_context, session=None):
+            pass
+
+        trace = Trace.objects.get(trace_id=trace_context.id)
+        assert trace.session is None
+        assert trace.participant is None
+        assert trace.participant_data == {}
+        assert trace.session_state == {}
+
+    def test_set_session_backfills_trace_record(self, experiment):
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create()
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+
+        with tracer.trace(trace_context=trace_context, session=None):
+            tracer.set_session(session)
+
+        trace = Trace.objects.get(trace_id=trace_context.id)
+        assert trace.session_id == session.id
+        assert trace.participant_id == session.participant_id
+
+    def test_set_session_noop_without_trace_record(self, experiment):
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create()
+
+        # Should not raise even though no trace is open
+        tracer.set_session(session)
+        assert tracer.session is session

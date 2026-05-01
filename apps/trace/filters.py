@@ -9,12 +9,12 @@ from apps.experiments.filters import (
 )
 from apps.experiments.models import Experiment
 from apps.filters.models import FilterSet
+from apps.trace.models import TraceStatus
 from apps.web.dynamic_filters.base import TYPE_CHOICE, ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
-    StatusFilter,
     TimestampFilter,
 )
 
@@ -75,6 +75,14 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
         self.options = Experiment.objects.get_version_names(team)
 
 
+class TraceStatusFilter(ChoiceColumnFilter):
+    query_param: str = "status"
+    column: str = "status"
+    label: str = "Status"
+    options: list[str | dict] = [{"id": value, "label": label} for value, label in TraceStatus.choices]
+    description: str = "Filter by trace status (e.g. success, error, pending)"
+
+
 class TraceFilter(MultiColumnFilter):
     slug: ClassVar[str] = "trace"
     date_range_column: ClassVar[str] = "timestamp"
@@ -85,5 +93,5 @@ class TraceFilter(MultiColumnFilter):
         RemoteIdFilter(),
         ExperimentFilter(),
         ExperimentVersionsFilter(),
-        StatusFilter(query_param="status"),
+        TraceStatusFilter(),
     ]

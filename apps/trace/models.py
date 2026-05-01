@@ -50,6 +50,13 @@ class Trace(models.Model):
         default=dict, blank=True, help_text="Metadata from trace providers (e.g. Langfuse trace_id, trace_url)"
     )
     error = models.TextField(blank=True, help_text="Error message if the trace failed")
+    n_turns = models.IntegerField(null=True, blank=True, help_text="Number of LLM calls during pipeline execution")
+    n_toolcalls = models.IntegerField(null=True, blank=True, help_text="Number of tool invocations across all turns")
+    n_total_tokens = models.IntegerField(null=True, blank=True, help_text="Total tokens (prompt + completion) consumed")
+    n_prompt_tokens = models.IntegerField(null=True, blank=True, help_text="Total input/prompt tokens consumed")
+    n_completion_tokens = models.IntegerField(
+        null=True, blank=True, help_text="Total output/completion tokens consumed"
+    )
 
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"

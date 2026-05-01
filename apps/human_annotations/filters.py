@@ -11,7 +11,8 @@ from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
-    StatusFilter,
+    SessionIdFilter,
+    SessionStatusFilter,
     TimestampFilter,
 )
 
@@ -92,6 +93,7 @@ class AnnotationItemFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         AnnotationItemStatusFilter(),
         ReviewerFilter(),
+        SessionIdFilter(columns=["session__external_id"]),
     ]
 
 
@@ -124,6 +126,7 @@ class AnnotationSessionFilter(MultiColumnFilter):
         VersionsFilter(),
         ChannelsFilter(exclude_platforms=[ChannelPlatform.EVALUATIONS]),
         ExperimentFilter(),
-        StatusFilter(query_param="state"),
+        SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
+        SessionIdFilter(),
     ]

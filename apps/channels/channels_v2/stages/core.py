@@ -8,6 +8,7 @@ from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
+from apps.channels.datamodels import Attachment
 from apps.chat.bots import EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
@@ -93,6 +94,10 @@ class SessionResolutionStage(ProcessingStage):
         if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)
 
+        # The trace was opened with session=None for channels that route
+        # to a session lazily (e.g. EmailChannel). Back-fill it now.
+        ctx.trace_service.set_session(ctx.experiment_session)
+
     def _is_reset_request(self, ctx: MessageProcessingContext) -> bool:
         return (
             ctx.message.content_type == MESSAGE_TYPES.TEXT and ctx.message.message_text.lower().strip() == RESET_COMMAND
@@ -116,6 +121,7 @@ class SessionResolutionStage(ProcessingStage):
                 existing.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
 
         ctx.experiment_session = self._create_session(ctx)
+        ctx.trace_service.set_session(ctx.experiment_session)
         raise EarlyExitResponse("Conversation reset")
 
     def _create_session(self, ctx: MessageProcessingContext):
@@ -529,3 +535,36 @@ class ResponseFormattingStage(ProcessingStage):
             return text
         links = [f"{f.name}\n{f.download_link(ctx.experiment_session.id)}" for f in files]
         return f"{text}\n\n{''.join(links)}"
+
+
+# ---------------------------------------------------------------------------
+# AttachmentHydrationStage
+# ---------------------------------------------------------------------------
+
+
+class AttachmentHydrationStage(ProcessingStage):
+    """Hydrate Attachment objects from file IDs once a session exists.
+
+    Channels that pre-persist inbound files in their webhook handler
+    (e.g. EmailChannel) populate ctx.message.attachment_file_ids; this
+    stage converts those IDs into Attachment objects with download_links
+    that reference a real session. No-op for channels that don't use
+    this pattern.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return bool(
+            ctx.message
+            and getattr(ctx.message, "attachment_file_ids", None)
+            and not ctx.message.attachments
+            and ctx.experiment_session is not None
+        )
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        files = File.objects.filter(
+            id__in=ctx.message.attachment_file_ids,
+            team_id=ctx.experiment.team_id,
+        )
+        ctx.message.attachments = [
+            Attachment.from_file(f, type="ocs_attachments", session_id=ctx.experiment_session.id) for f in files
+        ]

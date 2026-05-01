@@ -151,6 +151,23 @@ open-chat-studio-widget {
     background-size: 1.5em 1.5em;
 }
 
+/* Compact variant used by the evaluator tag-rule rows so the control sits
+   flush with the daisyUI select-sm controls beside it. */
+.ts-wrapper.tag-rule-select {
+  min-height: 2rem;
+}
+
+.ts-wrapper.tag-rule-select .ts-control {
+  @apply py-1 px-2;
+  min-height: 2rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.ts-wrapper.tag-rule-select.single .ts-control > input {
+  margin: 0;
+}
+
 .ts-dropdown {
   @apply rounded-md border border-solid border-t border-gray-300;
 }

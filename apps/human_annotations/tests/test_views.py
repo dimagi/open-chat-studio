@@ -370,6 +370,23 @@ def test_queue_items_table_filters_by_reviewer(client, team_with_users, queue, u
 
 
 @pytest.mark.django_db()
+def test_queue_items_table_filters_by_session_id(client, team_with_users, queue):
+    item1 = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    item2 = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    target_id = str(item1.session.external_id)
+
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(
+        url,
+        {"filter_0_column": "session_id", "filter_0_operator": "equals", "filter_0_value": target_id},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert target_id in content
+    assert str(item2.session.external_id) not in content
+
+
+@pytest.mark.django_db()
 def test_queue_detail_has_filter_context(client, team_with_users, queue):
     url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
@@ -961,7 +978,6 @@ def test_queue_sessions_json_excludes_sessions_without_messages(client, team_wit
 
 @pytest.mark.django_db()
 def test_queue_sessions_table_excludes_evaluation_sessions(client, team_with_users, queue):
-
     normal_session = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=normal_session.chat)
     eval_session = ExperimentSessionFactory.create(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
@@ -976,7 +992,6 @@ def test_queue_sessions_table_excludes_evaluation_sessions(client, team_with_use
 
 @pytest.mark.django_db()
 def test_queue_sessions_json_excludes_evaluation_sessions(client, team_with_users, queue):
-
     normal_session = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=normal_session.chat)
     eval_session = ExperimentSessionFactory.create(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)

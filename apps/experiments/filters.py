@@ -19,7 +19,8 @@ from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
-    StatusFilter,
+    SessionIdFilter,
+    SessionStatusFilter,
     TimestampFilter,
 )
 
@@ -206,8 +207,9 @@ class ExperimentSessionFilter(MultiColumnFilter):
         VersionsFilter(),
         ChannelsFilter(),
         ExperimentFilter(),
-        StatusFilter(query_param="state"),
+        SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
+        SessionIdFilter(),
     ]
 
 

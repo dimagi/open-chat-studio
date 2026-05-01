@@ -1,11 +1,13 @@
 import base64
 import logging
+from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
 from typing import Literal
 
 import phonenumbers
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from mailparser_reply import EmailReplyParser
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
@@ -86,6 +88,10 @@ class BaseMessage(BaseModel):
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
+    attachment_file_ids: list[int] = Field(default=[])
+    """File IDs for attachments persisted by the channel's inbound handler.
+    Hydrated into `attachments` by AttachmentHydrationStage once a session
+    exists. Channels that don't pre-persist files leave this empty."""
 
     cached_media_data: MediaCache | None = Field(default=None, exclude=True)
 
@@ -270,3 +276,93 @@ class SlackMessage(BaseMessage):
     channel_id: str
     thread_ts: str
     message_text: str
+
+
+@dataclass
+class RawAttachment:
+    """In-memory carrier for an inbound email attachment between parse() and
+    the persistence helper. Never serialized; lives only in handler scope."""
+
+    filename: str
+    content_type: str
+    content_bytes: bytes
+
+
+class SkippedAttachment(BaseModel):
+    """Inbound attachment that was rejected at intake. Reported to the LLM
+    via injected notes in the user's message_text."""
+
+    name: str
+    reason: str
+    size: int = 0
+
+
+class EmailMessage(BaseMessage):
+    """Inbound email parsed from AnymailInboundMessage."""
+
+    from_address: str = Field(max_length=254)
+    to_address: str = Field(max_length=254)
+    subject: str = Field(max_length=1000)
+    message_id: str = Field(max_length=500)
+    in_reply_to: str | None = None
+    references: list[str] = Field(default=[])
+    skipped_attachments: list[SkippedAttachment] = Field(default=[])
+
+    _raw_attachments: list[RawAttachment] = PrivateAttr(default_factory=list)
+
+    @staticmethod
+    def parse(inbound) -> "EmailMessage":
+        body = inbound.text or ""
+        reply = EmailReplyParser(languages=["en", "de", "fr", "es", "pt", "it", "nl", "pl", "sv", "da", "no"]).read(
+            body
+        )
+        stripped_text = reply.latest_reply or body
+
+        message = EmailMessage(
+            participant_id=inbound.from_email.addr_spec,
+            message_text=stripped_text,
+            from_address=inbound.from_email.addr_spec,
+            to_address=inbound.to[0].addr_spec if inbound.to else "",
+            subject=inbound.subject or "",
+            message_id=inbound.get("Message-ID", ""),
+            in_reply_to=inbound.get("In-Reply-To"),
+            references=_parse_references(inbound.get("References", "")),
+        )
+        message._raw_attachments = _extract_raw_attachments(inbound)
+        return message
+
+
+def _extract_raw_attachments(inbound) -> list[RawAttachment]:
+    """Pull MIMEPart objects from the inbound message into in-memory RawAttachment records.
+    AnymailInboundMessage.attachments already excludes inlines."""
+    raw = []
+    for part in getattr(inbound, "attachments", None) or []:
+        try:
+            content_type = (part.get_content_type() or "application/octet-stream").split(";")[0].strip().lower()
+            raw.append(
+                RawAttachment(
+                    filename=part.get_filename() or "attachment",
+                    content_type=content_type,
+                    content_bytes=part.get_content_bytes(),
+                )
+            )
+        except Exception:
+            logger.exception("Failed to read inbound email attachment part")
+    return raw
+
+
+_MAX_REFERENCES = 50
+
+
+def _parse_references(refs: str) -> list[str]:
+    """Parse space-separated Message-ID list from References header.
+
+    Keeps the first reference (root message / session anchor) plus the
+    most recent ones to prevent unbounded growth in long email threads.
+    """
+    if not refs:
+        return []
+    parsed = [r.strip() for r in refs.split() if r.strip()]
+    if len(parsed) <= _MAX_REFERENCES:
+        return parsed
+    return [parsed[0], *parsed[-(_MAX_REFERENCES - 1) :]]

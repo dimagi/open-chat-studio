@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from apps.experiments import models
+from apps.utils.admin import ReadonlyAdminMixin
 
 
 class VersionedModelAdminMixin:
@@ -36,13 +37,13 @@ class VersionedModelAdminMixin:
 
 
 @admin.register(models.PromptBuilderHistory)
-class PromptBuilderHistoryAdmin(admin.ModelAdmin):
+class PromptBuilderHistoryAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("history", "created_at", "owner")
     list_filter = ("owner",)
 
 
 @admin.register(models.SourceMaterial)
-class SourceMaterialAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class SourceMaterialAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "topic",
         "team",
@@ -56,27 +57,26 @@ class SourceMaterialAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
     )
 
 
-class ParticipantDataInline(admin.TabularInline):
+class ParticipantDataInline(ReadonlyAdminMixin, admin.TabularInline):
     model = models.ParticipantData
 
 
 @admin.register(models.Participant)
-class ParticipantAdmin(admin.ModelAdmin):
+class ParticipantAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id", "platform")
-    readonly_fields = ("public_id",)
     list_filter = ("team", "platform")
     search_fields = ("external_chat_id",)
     inlines = [ParticipantDataInline]
 
 
 @admin.register(models.ParticipantData)
-class ParticipantData(admin.ModelAdmin):
+class ParticipantData(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("participant", "experiment")
     list_filter = ("participant",)
 
 
 @admin.register(models.Survey)
-class SurveyAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class SurveyAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "team",
@@ -86,7 +86,7 @@ class SurveyAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(models.Experiment)
-class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class ExperimentAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "team",
@@ -97,12 +97,11 @@ class ExperimentAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "is_archived",
     )
     list_filter = ("team", "owner", "source_material")
-    readonly_fields = ("public_id",)
     search_fields = ("public_id", "name")
 
 
 @admin.register(models.ExperimentSession)
-class ExperimentSessionAdmin(admin.ModelAdmin):
+class ExperimentSessionAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = (
         "experiment",
         "team",
@@ -112,7 +111,6 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
     )
     search_fields = ("external_id", "experiment__name", "participant__identifier")
     list_filter = ("created_at", "status", "team")
-    readonly_fields = ("external_id",)
 
     @admin.display(description="Team")
     def team(self, obj):
@@ -120,7 +118,7 @@ class ExperimentSessionAdmin(admin.ModelAdmin):
 
 
 @admin.register(models.ConsentForm)
-class ConsentFormAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
+class ConsentFormAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
         "team",
         "name",
@@ -129,12 +127,11 @@ class ConsentFormAdmin(VersionedModelAdminMixin, admin.ModelAdmin):
         "version_family",
         "is_archived",
     )
-    readonly_fields = ("is_default",)
     list_filter = ("team",)
 
 
 @admin.register(models.SyntheticVoice)
-class SyntheticVoiceAdmin(admin.ModelAdmin):
+class SyntheticVoiceAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = (
         "service",
         "name",

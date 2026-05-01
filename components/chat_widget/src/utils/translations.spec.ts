@@ -88,7 +88,7 @@ describe('mergeTranslations', () => {
 });
 
 describe('TranslationManager', () => {
-  const waitForAsyncLoad = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const waitForAsyncLoad = () => new Promise(resolve => setTimeout(resolve, 0));
 
   it('initializes with resolved language', async () => {
     const manager = new translations.TranslationManager('FR');
@@ -119,12 +119,12 @@ describe('TranslationManager', () => {
 
   it('translations return keys if value is blank', async () => {
     const manager = new translations.TranslationManager('de', {
-      "window.close": "",
+      'window.close': '',
     });
 
     await waitForAsyncLoad();
 
-    expect(manager.get('window.close')).toBe("");
+    expect(manager.get('window.close')).toBe('');
   });
 
   it('returns arrays from getArray and wraps strings', async () => {

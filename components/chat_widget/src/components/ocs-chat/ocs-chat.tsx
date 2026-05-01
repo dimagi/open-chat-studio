@@ -1465,7 +1465,12 @@ export class OcsChat {
     }
 
     const storageKey = `ocs-user-id`;
-    const stored = localStorage.getItem(storageKey);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(storageKey);
+    } catch {
+      // localStorage blocked; fall through to in-memory id generation
+    }
     if (stored) {
       this.generatedUserId = stored;
       return stored;
@@ -1478,7 +1483,11 @@ export class OcsChat {
       .substr(0, 9);
     const newUserId = `ocs:${Date.now()}_${randomString}`;
     this.generatedUserId = newUserId;
-    localStorage.setItem(storageKey, newUserId);
+    try {
+      localStorage.setItem(storageKey, newUserId);
+    } catch {
+      // localStorage blocked; the generated id lives in component state for this page
+    }
 
     return newUserId;
   }
@@ -1812,7 +1821,7 @@ export class OcsChat {
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>
                   {this.translationManager.get('branding.poweredBy')}{' '}
-                  <a class="underline" href="https://www.dimagi.com" target="_blank">
+                  <a class="underline" href="https://www.dimagi.com" target="_blank" rel="noopener noreferrer">
                     Dimagi
                   </a>
                 </p>

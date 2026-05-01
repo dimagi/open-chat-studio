@@ -9,12 +9,10 @@ from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
-from django_htmx.http import reswap
 from django_tables2 import SingleTableView
 
 from apps.documents.models import CollectionFile
@@ -22,10 +20,43 @@ from apps.files.forms import FileForm, MultipleFileFieldForm
 from apps.files.models import File
 from apps.files.tables import FilesTable
 from apps.generics.chips import Chip
+from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
 
 logger = logging.getLogger("ocs.files")
+
+
+def _get_s3_presigned_url(file_field, filename, content_type, expires_in=3600):
+    """Return a presigned S3 URL for direct client download, or None if not applicable.
+
+    When the storage backend is S3 (django-storages S3Boto3Storage), this generates a
+    presigned GET URL with ``Content-Disposition: attachment`` so the browser downloads
+    the file directly from S3 — bypassing the Django app tier entirely.  This is
+    significantly faster for large files and avoids unnecessary bandwidth through Fargate.
+
+    Falls back gracefully: returns None for local/non-S3 storage, or if presigned URL
+    generation fails for any reason (e.g. missing IAM permissions).
+    """
+    storage = file_field.storage
+    if not hasattr(storage, "bucket"):
+        return None
+    try:
+        params = {
+            "Bucket": storage.bucket.name,
+            "Key": storage._normalize_name(file_field.name),
+            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+        }
+        if content_type:
+            params["ResponseContentType"] = content_type
+        return storage.bucket.meta.client.generate_presigned_url(
+            "get_object",
+            Params=params,
+            ExpiresIn=expires_in,
+        )
+    except Exception:
+        logger.exception("Failed to generate S3 presigned URL for %s", file_field.name)
+        return None
 
 
 class FileView(LoginAndTeamRequiredMixin, View):
@@ -41,6 +72,11 @@ class FileView(LoginAndTeamRequiredMixin, View):
         file = get_object_or_404(File, id=pk, team=request.team)
         if not file.file:
             return _not_found()
+
+        if "allow_s3" in request.GET:
+            presigned_url = _get_s3_presigned_url(file.file, file.name, file.content_type)
+            if presigned_url:
+                return redirect(presigned_url)
 
         try:
             return FileResponse(
@@ -257,14 +293,10 @@ class DeleteFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         file = get_object_or_404(File, team__slug=team_slug, id=pk)
 
         if collections := file.get_collection_references():
-            response = render_to_string(
-                "generic/referenced_objects.html",
-                context={
-                    "object_name": "file",
-                    "pipeline_nodes": [Chip(label=col.name, url=col.get_absolute_url()) for col in collections],
-                },
+            return render_referenced_objects_modal(
+                "file",
+                pipeline_nodes=[Chip(label=col.name, url=col.get_absolute_url()) for col in collections],
             )
-            return reswap(HttpResponse(response, status=400), "none")
         else:
             file.delete_or_archive()
             messages.success(request, "File deleted")

@@ -2,12 +2,15 @@ from unittest import mock
 
 import pytest
 from django.urls import reverse
+from waffle.testutils import override_flag
 
+from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
 from apps.documents.models import (
     Collection,
     CollectionFile,
     DocumentSourceSyncLog,
     FileStatus,
+    SourceType,
     SyncStatus,
 )
 from apps.files.models import File
@@ -127,7 +130,9 @@ class TestDeleteCollection:
         url = reverse("documents:collection_delete", args=[collection.team.slug, collection.id])
         # Case 1 - The pipeline is using the collection
         response = client.delete(url)
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert response["HX-Reswap"] == "beforeend"
 
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
         create_remote_index.return_value = "v-321"
@@ -136,7 +141,9 @@ class TestDeleteCollection:
         node.save()
 
         response = client.delete(url)
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert response["HX-Reswap"] == "beforeend"
 
     @pytest.mark.usefixtures("remote_index_manager_mock")
     @pytest.mark.parametrize("is_index", [True, False])
@@ -376,3 +383,86 @@ class TestDocumentSourceSyncLogs:
         # Add another successful log (now most recent)
         DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
         assert not document_source.has_sync_errors()
+
+
+@pytest.mark.django_db()
+class TestJSONCollectionSourceCreation:
+    @pytest.fixture()
+    def collection(self):
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(
+            name="Tester",
+            team=team,
+            is_index=True,
+            is_remote_index=True,
+            llm_provider=LlmProviderFactory.create(team=team),
+        )
+
+    @override_flag("flag_json_collection_loader", active=True)
+    def test_picker_includes_json_collection_when_flag_on(self, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:single_collection_home", args=[collection.team.slug, collection.id])
+        response = client.get(url)
+        assert response.status_code == 200
+        assert SourceType.JSON_COLLECTION in response.context["document_source_types"]
+
+    @override_flag("flag_json_collection_loader", active=False)
+    def test_picker_excludes_json_collection_when_flag_off(self, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:single_collection_home", args=[collection.team.slug, collection.id])
+        response = client.get(url)
+        assert response.status_code == 200
+        assert SourceType.JSON_COLLECTION not in response.context["document_source_types"]
+
+    @override_flag("flag_json_collection_loader", active=True)
+    def test_create_form_loads_when_flag_on(self, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:create_document_source", args=[collection.team.slug, collection.id])
+        response = client.get(url, {"source_type": SourceType.JSON_COLLECTION})
+        assert response.status_code == 200
+
+    @override_flag("flag_json_collection_loader", active=False)
+    def test_create_form_404s_when_flag_off(self, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:create_document_source", args=[collection.team.slug, collection.id])
+        response = client.get(url, {"source_type": SourceType.JSON_COLLECTION})
+        assert response.status_code == 404
+
+    @override_flag("flag_json_collection_loader", active=False)
+    def test_create_post_404s_when_flag_off(self, collection, client):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:create_document_source", args=[collection.team.slug, collection.id])
+        response = client.post(
+            url,
+            {
+                "source_type": SourceType.JSON_COLLECTION,
+                "auto_sync_enabled": False,
+                "json_url": "https://example.com/feed.json",
+                "request_timeout": 30,
+            },
+        )
+        assert response.status_code == 404
+
+    @override_flag("flag_json_collection_loader", active=False)
+    def test_edit_existing_json_source_accessible_when_flag_off(self, collection, client):
+        """Edit page for an existing JSON collection source must still load
+        when the flag is off — the flag controls creation, not edit/sync."""
+
+        document_source = DocumentSourceFactory.create(
+            collection=collection,
+            team=collection.team,
+            source_type=SourceType.JSON_COLLECTION,
+            config=DocumentSourceConfig(
+                json_collection=JSONCollectionSourceConfig(
+                    json_url="https://example.com/feed.json",
+                ),
+            ),
+        )
+        client.force_login(collection.team.members.first())
+        url = reverse(
+            "documents:edit_document_source",
+            args=[collection.team.slug, collection.id, document_source.id],
+        )
+        response = client.get(url)
+        # The edit page must be reachable; flag should not block edit.
+        assert response.status_code == 200

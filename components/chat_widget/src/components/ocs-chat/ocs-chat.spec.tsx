@@ -14,7 +14,7 @@ describe('ocs-chat', () => {
 
       // Mock translation manager to return welcome messages
       component.translationManager = new TranslationManager('en', {
-        'content.welcomeMessages': ['Hello from translations!', 'Welcome to our chat.']
+        'content.welcomeMessages': ['Hello from translations!', 'Welcome to our chat.'],
       });
 
       // Ensure no messages exist yet
@@ -69,7 +69,7 @@ describe('ocs-chat', () => {
 
       // Translation messages should override attribute messages
       component.translationManager = new TranslationManager('en', {
-        'content.welcomeMessages': ['Translation message 1', 'Translation message 2']
+        'content.welcomeMessages': ['Translation message 1', 'Translation message 2'],
       });
 
       component.messages = [];
@@ -93,16 +93,18 @@ describe('ocs-chat', () => {
       const component = page.rootInstance as OcsChat;
 
       component.translationManager = new TranslationManager('en', {
-        'content.welcomeMessages': ['Hello from translations!']
+        'content.welcomeMessages': ['Hello from translations!'],
       });
 
       // Add a message to the chat
-      component.messages = [{
-        created_at: new Date().toISOString(),
-        role: 'user',
-        content: 'Hello',
-        attachments: []
-      }];
+      component.messages = [
+        {
+          created_at: new Date().toISOString(),
+          role: 'user',
+          content: 'Hello',
+          attachments: [],
+        },
+      ];
       component.sessionId = 'test-session';
 
       await page.waitForChanges();
@@ -124,7 +126,7 @@ describe('ocs-chat', () => {
 
       // Mock translation manager to return starter questions
       component.translationManager = new TranslationManager('en', {
-        'content.starterQuestions': ['What can you help me with?', 'How does this work?']
+        'content.starterQuestions': ['What can you help me with?', 'How does this work?'],
       });
 
       component.messages = [];
@@ -178,7 +180,7 @@ describe('ocs-chat', () => {
 
       // Translation questions should override attribute questions
       component.translationManager = new TranslationManager('en', {
-        'content.starterQuestions': ['Translation question 1?', 'Translation question 2?', 'Translation question 3?']
+        'content.starterQuestions': ['Translation question 1?', 'Translation question 2?', 'Translation question 3?'],
       });
 
       component.messages = [];
@@ -202,16 +204,18 @@ describe('ocs-chat', () => {
       const component = page.rootInstance as OcsChat;
 
       component.translationManager = new TranslationManager('en', {
-        'content.starterQuestions': ['Question 1?', 'Question 2?']
+        'content.starterQuestions': ['Question 1?', 'Question 2?'],
       });
 
       // Add a message to the chat
-      component.messages = [{
-        created_at: new Date().toISOString(),
-        role: 'user',
-        content: 'Hello',
-        attachments: []
-      }];
+      component.messages = [
+        {
+          created_at: new Date().toISOString(),
+          role: 'user',
+          content: 'Hello',
+          attachments: [],
+        },
+      ];
       component.sessionId = 'test-session';
 
       await page.waitForChanges();
@@ -375,9 +379,7 @@ describe('ocs-chat', () => {
 
       const component = page.rootInstance as OcsChat;
       component.sessionId = 'session-123';
-      component.messages = [
-        { created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }
-      ];
+      component.messages = [{ created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }];
 
       // Change chatbotId
       page.root!.setAttribute('chatbot-id', 'bot-2');
@@ -397,9 +399,7 @@ describe('ocs-chat', () => {
 
       const component = page.rootInstance as OcsChat;
       component.sessionId = 'session-123';
-      component.messages = [
-        { created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }
-      ];
+      component.messages = [{ created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }];
 
       // Change versionNumber
       page.root!.setAttribute('version-number', '2');
@@ -438,7 +438,7 @@ describe('ocs-chat', () => {
 
       component.translationManager = new TranslationManager('en', {
         'content.welcomeMessages': ['Welcome!'],
-        'content.starterQuestions': ['How can I help?']
+        'content.starterQuestions': ['How can I help?'],
       });
 
       component.messages = [];
