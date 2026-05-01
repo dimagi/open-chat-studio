@@ -107,6 +107,75 @@ class TestExperimentSessionFilters:
 
         return [session1, session2]
 
+    @pytest.fixture()
+    def session_with_many_message_tags(self):
+        """One session whose chat contains multiple messages, each with multiple tags.
+
+        A naive JOIN-based filter on `chat__messages__tags__name` returns the
+        session N×M times (N matching messages × M matching tags) — a regression
+        guard for the EXISTS rewrite.
+        """
+        session = ExperimentSessionFactory.create()
+        team = session.team
+        important = _get_tag(team=team, name="important")
+        urgent = _get_tag(team=team, name="urgent")
+
+        for content in ("first", "second", "third"):
+            msg = ChatMessage.objects.create(
+                chat=session.chat,
+                content=content,
+                message_type=ChatMessageType.HUMAN,
+            )
+            msg.add_tags([important, urgent], team=team, added_by=None)
+
+        return session, [important, urgent]
+
+    def test_message_tags_any_of_returns_no_duplicates(self, session_with_many_message_tags):
+        session, _ = session_with_many_message_tags
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps(["important", "urgent"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 1
+        assert list(filtered) == [session]
+
+    def test_message_tags_all_of_returns_no_duplicates(self, session_with_many_message_tags):
+        session, _ = session_with_many_message_tags
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ALL_OF,
+            "filter_0_value": json.dumps(["important", "urgent"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 1
+        assert list(filtered) == [session]
+
+    def test_message_tags_excludes_returns_no_duplicates(self, session_with_many_message_tags):
+        """Exclude a tag that no message has — both sessions should remain, each exactly once.
+
+        The bug being guarded against is `session` appearing 3 times (one per
+        tagged message) when the global `.distinct()` is removed.
+        """
+        session, _ = session_with_many_message_tags
+        other = ExperimentSessionFactory.create(experiment=session.experiment)
+
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.EXCLUDES,
+            "filter_0_value": json.dumps(["nonexistent"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 2
+        assert set(filtered) == {session, other}
+
     @travel("2025-01-03 10:00:00", tick=False)
     def test_message_timestamp_filters(self):
         """Test message timestamp filtering"""
