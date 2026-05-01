@@ -58,9 +58,23 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def apply_any_of(self, queryset, value, timezone=None):
-        chat_tags_condition = Q(chat__tags__name__in=value)
-        message_tags_condition = Q(chat__messages__tags__name__in=value)
-        return queryset.filter(chat_tags_condition | message_tags_condition)
+        chat_content_type = ContentType.objects.get_for_model(Chat)
+        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+        chat_tag_exists = Exists(
+            CustomTaggedItem.objects.filter(
+                object_id=OuterRef("chat_id"),
+                content_type_id=chat_content_type.id,
+                tag__name__in=value,
+            )
+        )
+        message_tag_exists = Exists(
+            CustomTaggedItem.objects.filter(
+                content_type_id=chat_message_content_type.id,
+                tag__name__in=value,
+                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
+            )
+        )
+        return queryset.filter(chat_tag_exists | message_tag_exists)
 
     def apply_all_of(self, queryset, value, timezone=None):
         conditions = Q()
@@ -88,9 +102,23 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         return queryset.filter(conditions)
 
     def apply_excludes(self, queryset, value, timezone=None):
-        chat_tags_condition = Q(chat__tags__name__in=value)
-        message_tags_condition = Q(chat__messages__tags__name__in=value)
-        return queryset.exclude(chat_tags_condition | message_tags_condition)
+        chat_content_type = ContentType.objects.get_for_model(Chat)
+        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+        chat_tag_exists = Exists(
+            CustomTaggedItem.objects.filter(
+                object_id=OuterRef("chat_id"),
+                content_type_id=chat_content_type.id,
+                tag__name__in=value,
+            )
+        )
+        message_tag_exists = Exists(
+            CustomTaggedItem.objects.filter(
+                content_type_id=chat_message_content_type.id,
+                tag__name__in=value,
+                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
+            )
+        )
+        return queryset.exclude(chat_tag_exists | message_tag_exists)
 
 
 class MessageTagsFilter(ChatMessageTagsFilter):
