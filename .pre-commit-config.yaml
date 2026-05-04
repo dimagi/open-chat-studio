@@ -35,7 +35,7 @@ repos:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.2.1'
+    rev: 'v10.3.0'
     hooks:
       - id: eslint
         additional_dependencies:
@@ -54,7 +54,7 @@ repos:
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.33
+    rev: v0.0.34
     hooks:
       # Run the type checker.
       - id: ty-check
