@@ -14,7 +14,7 @@
         <div>
             {% block pre_form %}
             {% endblock pre_form %}
-            <form method="post" class="my-2" {% include "generic/attrs.html" with attrs=form_attrs %}
+            <form method="post" class="my-2"
                   x-data="formData"
                   x-init="watchTriggerType()">
                 {% csrf_token %}
@@ -25,15 +25,16 @@
                     {% else %}
                         {% render_form_fields trigger_form %}
                     {% endif %}
-                    {% render_form_fields action_form.primary %}
-                    {% for key, form in action_form.secondary.items %}
-                        <div id="form_{{ key }}" x-show="type === '{{ key }}'" x-cloak>
-                            {% render_form_fields form %}
-                            {{ form.non_field_errors }}
-                        </div>
-                    {% endfor %}
+                    {% render_form_fields action_primary_form %}
+                    <div id="action-params"
+                         hx-get="{% url 'events:action_params_form' request.team.slug experiment_id %}"
+                         hx-trigger="change from:[name=action_type]"
+                         hx-include="[name=action_type]"
+                         hx-swap="innerHTML">
+                        {% include "events/_action_params_form.html" with form=action_params_form %}
+                    </div>
                     {{ trigger_form.non_field_errors }}
-                    {{ action_form.primary.non_field_errors }}
+                    {{ action_primary_form.non_field_errors }}
                 {% endblock form %}
                 {% block form_actions %}
                     <input type="submit" class="btn btn-primary mt-2" value="Save">
@@ -46,7 +47,6 @@
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('formData', () => ({
-                type: '{{ secondary_key }}',
                 triggerType: '{{ trigger_form.initial.type }}',
 
                 isActionDisabled(action) {
@@ -56,17 +56,19 @@
 
                 watchTriggerType() {
                     this.$watch('triggerType', value => {
+                        const actionSelect = document.getElementById('{{ action_primary_form.action_type.id_for_label }}');
+                        if (!actionSelect) return;
                         if (value === 'new_bot_message' &&
-                            ['send_message_to_bot', 'schedule_trigger'].includes(this.type)) {
-                                this.type = 'log';
+                            ['send_message_to_bot', 'schedule_trigger'].includes(actionSelect.value)) {
+                                actionSelect.value = 'log';
+                                actionSelect.dispatchEvent(new Event('change'));
                             }
                     });
                 },
 
                 init() {
-                    const actionSelect = document.getElementById('{{ action_form.primary.action_type.id_for_label }}');
+                    const actionSelect = document.getElementById('{{ action_primary_form.action_type.id_for_label }}');
                     if (actionSelect) {
-                        actionSelect.setAttribute('x-model', 'type');
                         actionSelect.querySelectorAll('option').forEach(option => {
                             const value = option.value;
                             option.setAttribute('x-bind:disabled', `isActionDisabled('${value}')`);
