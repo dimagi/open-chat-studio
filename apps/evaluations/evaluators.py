@@ -1,5 +1,5 @@
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 from pydantic_core import ValidationError
 
@@ -73,6 +73,18 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor),
     )
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_contain_variable(cls, v: str) -> str:
+        required_prefixes = ["{input", "{output", "{context.", "{full_history}", "{generated_response}"]
+        if not any(prefix in v for prefix in required_prefixes):
+            raise ValueError(
+                "The prompt must include at least one variable so the evaluator has context to work with. "
+                "Available variables: {input.content}, {output.content}, {context.[name]}, {full_history}, "
+                "{generated_response}"
+            )
+        return v
+
     output_schema: dict[str, FieldDefinition] = Field(
         description="The expected output schema for the evaluation",
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
