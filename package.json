@@ -82,7 +82,7 @@
     "short-unique-id": "^5.3.2",
     "tailwindcss": "^4.1.4",
     "tom-select": "^2.6.0",
-    "zustand": "^5.0.3"
+    "zustand": "^5.0.13"
   },
   "optionalDependencies": {
     "cypress": "^15.14.2"
