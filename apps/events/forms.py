@@ -2,7 +2,6 @@ from django import forms
 
 from apps.events.models import TimePeriod
 from apps.experiments.models import Experiment
-from apps.generics.type_select_form import TypeSelectForm
 from apps.pipelines.models import Pipeline, PipelineEventInputs
 
 from .models import EventAction, StaticTrigger, TimeoutTrigger
@@ -109,30 +108,24 @@ class EventActionForm(forms.ModelForm):
         return instance
 
 
-class EventActionTypeSelectForm(TypeSelectForm):
-    def save(self, *args, **kwargs):
-        instance = self.primary.save(*args, **kwargs, commit=False)
-        instance.params = self.active_secondary().cleaned_data
-        instance.save()
-        return instance
+ACTION_PARAMS_FORMS = {
+    "log": EmptyForm,
+    "send_message_to_bot": SendMessageToBotForm,
+    "end_conversation": EmptyForm,
+    "schedule_trigger": ScheduledMessageConfigForm,
+    "pipeline_start": PipelineStartForm,
+}
 
 
-def get_action_params_form(data=None, instance=None, team_id=None, experiment_id=None):
-    form_kwargs = {
-        "data": data,
-        "initial": instance.params if instance else None,
-    }
-    return EventActionTypeSelectForm(
-        primary=EventActionForm(data=data, instance=instance),
-        secondary={
-            "log": EmptyForm(**form_kwargs),
-            "send_message_to_bot": SendMessageToBotForm(**form_kwargs),
-            "end_conversation": EmptyForm(**form_kwargs),
-            "schedule_trigger": ScheduledMessageConfigForm(experiment_id=experiment_id, **form_kwargs),
-            "pipeline_start": PipelineStartForm(team_id=team_id, **form_kwargs),
-        },
-        secondary_key_field="action_type",
-    )
+def build_action_params_form(action_type, *, data=None, initial=None, team_id, experiment_id):
+    """Build the secondary "params" form for a given EventAction action_type."""
+    form_cls = ACTION_PARAMS_FORMS[action_type]
+    kwargs = {"data": data, "initial": initial}
+    if form_cls is ScheduledMessageConfigForm:
+        kwargs["experiment_id"] = experiment_id
+    elif form_cls is PipelineStartForm:
+        kwargs["team_id"] = team_id
+    return form_cls(**kwargs)
 
 
 class BaseTriggerForm(forms.ModelForm):
