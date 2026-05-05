@@ -175,6 +175,7 @@ Private hostnames like `ocs.your-org` don't exist in public DNS. Here's the full
 ```
 
 Each component has a specific role:
+
 | Component | Role |
 |---|---|
 | `cloudflared` | Routes traffic between the Cloudflare edge and the Docker network. |
@@ -265,6 +266,7 @@ With WARP connected, verify both access methods:
     If a green padlock is required (e.g. for regulatory compliance or user-facing deployments), use a public hostname on a Cloudflare-managed domain instead. Cloudflare terminates TLS at the edge and issues a certificate automatically; the browser sees HTTPS and shows the padlock.
 
 ## Step 6: Configure Access policies
+
 !!! warning "Required - do not skip"
     Without Access policies, anyone with WARP connected can reach your app with no authentication. You **must** complete both parts of this step: protect the app with an Allow policy, and add Bypass policies for webhook paths. Skipping the Bypass policies will break all messaging integrations; external platforms (WhatsApp, Telegram, Slack, Twilio) cannot authenticate via Cloudflare Access and their webhook requests will be blocked.
 
