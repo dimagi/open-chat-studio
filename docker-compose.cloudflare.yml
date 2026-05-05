@@ -16,10 +16,10 @@ services:
   dns:
     image: jpillora/dnsmasq
     restart: unless-stopped
-    command: --address=/${PRIVATE_HOSTNAME:-ocs.local}/${APP_IP:-172.18.0.7}
+    command: --address=/${PRIVATE_HOSTNAME:?PRIVATE_HOSTNAME is required}/${APP_IP:?APP_IP is required}
     networks:
       open-chat-studio_default:
-        ipv4_address: ${DNS_IP:-172.18.0.100}
+        ipv4_address: ${DNS_IP:?DNS_IP is required}
 
 networks:
   open-chat-studio_default:
