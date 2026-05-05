@@ -643,11 +643,20 @@ def test_session_table_session_query_uses_limit(team_with_users):
         # Iterating `table.rows` would force an unpaginated SELECT that the template never fires.
         list(response.context_data["table"].paginated_rows)
 
+    # Exclude the paginator's `SELECT COUNT(*)` row by matching its prefix; do NOT use
+    # `"count(" not in sql` because the main paginated SELECT embeds a `Subquery(... Count("id") ...)`
+    # for the message_count annotation, which would falsely match and leave `session_selects` empty
+    # (making the `all(...)` assertion below vacuously true).
     session_selects = [
         q["sql"]
         for q in ctx.captured_queries
-        if "experiments_experimentsession" in q["sql"].lower() and "count(" not in q["sql"].lower()
+        if "experiments_experimentsession" in q["sql"].lower()
+        and not q["sql"].lstrip().lower().startswith("select count(")
     ]
+    assert session_selects, (
+        "Expected at least one row-fetching SELECT on experiments_experimentsession but found none.\n"
+        "All captured SQL:\n" + "\n\n".join(q["sql"] for q in ctx.captured_queries)
+    )
     assert all("limit" in sql.lower() for sql in session_selects), (
         "Session list ran an unbounded SELECT on experiments_experimentsession (no LIMIT) — "
         "pagination is not being applied at the SQL level. Session selects captured:\n" + "\n\n".join(session_selects)

@@ -351,9 +351,9 @@ class TestTraceFilter:
             content="hi",
             message_type=ChatMessageType.HUMAN,
         )
-        important = Tag.objects.create(team=team, name="important")
-        urgent = Tag.objects.create(team=team, name="urgent")
-        input_message.add_tags([important, urgent], team=team, added_by=None)
+        Tag.objects.create(team=team, name="important")
+        Tag.objects.create(team=team, name="urgent")
+        input_message.add_tags(["important", "urgent"], team=team, added_by=None)
 
         trace = TraceFactory.create(
             team=team,
