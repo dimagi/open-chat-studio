@@ -42,7 +42,7 @@ class ServiceProviderType:
     It is required that the enum has a `form_cls` property which returns
     the config form class for that subtype.
     """
-    subtype: Enum
+    subtype: type[Enum]
 
     primary_fields: list[str]
 
