@@ -12,8 +12,6 @@ from django.http import HttpRequest
 from django_tables2 import tables
 from waffle import flag_is_active
 
-from apps.generics.type_select_form import TypeSelectForm
-
 from . import const
 from .llm_service.default_models import get_default_model
 from .models import (
@@ -87,44 +85,47 @@ def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> l
     return [subtype for subtype in provider.subtype if subtype not in excluded]
 
 
-def get_service_provider_config_form(
-    provider: ServiceProvider, team, exclude_forms: list, data=None, instance=None
-) -> TypeSelectForm:
-    """Return the form for the service provider. This is a 'type select form' which will include the main form
-    and the config form for the selected provider type.
+def get_service_provider_forms(
+    provider: ServiceProvider,
+    team,
+    subtype,
+    *,
+    data=None,
+    instance=None,
+):
+    """Return ``(primary_form, config_form)`` for a service provider create/edit.
+
+    ``subtype`` is the enum member identifying which config form to build.
+    On edit, the subtype is derived from the instance by the caller.
     """
     initial_config = provider.get_form_initial(instance) if instance else None
-
-    excluded_choices = [form.value for form in exclude_forms]
-    main_form = _get_main_form(provider, data=data.copy() if data else None, instance=instance)
-
-    filtered_choices = [
-        choice for choice in main_form.fields[provider.provider_type_field].choices if choice[0] not in excluded_choices
-    ]
-    main_form.fields[provider.provider_type_field].choices = filtered_choices
-
-    return TypeSelectForm(
-        primary=main_form,
-        secondary={
-            str(subtype): subtype.form_cls(team=team, data=data.copy() if data else None, initial=initial_config)
-            for subtype in provider.subtype
-            if subtype not in exclude_forms
-        },
-        secondary_key_field=provider.provider_type_field,
+    primary_form = _get_main_form(provider, instance=instance, data=data, fixed_subtype=subtype)
+    config_form = subtype.form_cls(
+        team=team,
+        data=data.copy() if data else None,
+        initial=initial_config,
     )
+    return primary_form, config_form
 
 
-def _get_main_form(provider: ServiceProvider, instance=None, data=None):
-    """Get the main 'model form' for the service provider which will be used to create the model instance."""
+def _get_main_form(provider: ServiceProvider, *, instance=None, data=None, fixed_subtype):
+    """Get the main 'model form' for the service provider.
+
+    The provider-type field is rendered as a hidden input with the chosen
+    subtype as its initial value. On edit, it is also disabled, matching
+    the previous behavior.
+    """
     form_cls = forms.modelform_factory(
         provider.model,
         fields=provider.primary_fields,
         formfield_callback=functools.partial(formfield_for_dbfield, provider=provider),
     )
-    form = form_cls(data=data, instance=instance)
+    initial = {provider.provider_type_field: str(fixed_subtype)}
+    form = form_cls(data=data, instance=instance, initial=initial)
+    type_field = form.fields[provider.provider_type_field]
+    type_field.widget = forms.HiddenInput()
     if instance:
-        form.fields[provider.provider_type_field].disabled = True
-
+        type_field.disabled = True
     return form
 
 
