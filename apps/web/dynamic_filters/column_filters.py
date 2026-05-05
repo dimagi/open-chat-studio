@@ -144,23 +144,3 @@ class TimestampFilter(ColumnFilter):
             return self._filter_by_lookup(queryset, "gte", range_starting_utc_time)
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
             return queryset
-
-
-class MessageTimestampFilter(TimestampFilter):
-    """Timestamp filter that traverses ``chat__messages`` without multiplying rows.
-
-    Overrides only ``_filter_by_lookup`` to swap the JOIN for an ``EXISTS`` subquery
-    against ``ChatMessage``; the date-parsing and ``apply_*`` methods are inherited
-    unchanged from :class:`TimestampFilter`.
-    """
-
-    def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
-        # Local imports avoid an apps.web.dynamic_filters → apps.chat dependency
-        # at module load (the inverse direction is already a real edge).
-        from django.db.models import Exists, OuterRef  # noqa: PLC0415
-
-        from apps.chat.models import ChatMessage  # noqa: PLC0415
-
-        return queryset.filter(
-            Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **{f"created_at__{lookup_suffix}": value}))
-        )

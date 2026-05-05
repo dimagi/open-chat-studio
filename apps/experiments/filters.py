@@ -17,13 +17,26 @@ from apps.web.dynamic_filters.base import (
 )
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
-    MessageTimestampFilter,
     ParticipantFilter,
     RemoteIdFilter,
     SessionIdFilter,
     SessionStatusFilter,
     TimestampFilter,
 )
+
+
+class MessageTimestampFilter(TimestampFilter):
+    """Timestamp filter that traverses ``chat__messages`` without multiplying rows.
+
+    Targets a queryset whose model has a ``chat`` foreign key. Overrides only
+    ``_filter_by_lookup`` — date-parsing and the ``apply_*`` methods are inherited
+    from :class:`TimestampFilter`.
+    """
+
+    def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
+        return queryset.filter(
+            Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **{f"created_at__{lookup_suffix}": value}))
+        )
 
 
 def get_filter_context_data(

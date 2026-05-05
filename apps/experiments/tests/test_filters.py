@@ -176,15 +176,48 @@ class TestExperimentSessionFilters:
         assert filtered.count() == 2
         assert set(filtered) == {session, other}
 
-    def test_message_date_filter_returns_no_duplicates(self, session_with_many_message_tags):
+    @pytest.mark.parametrize(
+        ("operator", "value_offset_days", "should_match"),
+        [
+            (Operators.ON, 0, True),
+            (Operators.ON, -1, False),
+            (Operators.BEFORE, 1, True),
+            (Operators.BEFORE, 0, False),
+            (Operators.AFTER, -1, True),
+            (Operators.AFTER, 0, False),
+        ],
+    )
+    def test_message_date_filter_no_duplicates(
+        self, session_with_many_message_tags, operator, value_offset_days, should_match
+    ):
+        """Every operator on the message-date filter must return one row per session,
+        regardless of how many messages match. The naive JOIN through
+        ``chat__messages__created_at`` would yield 3 rows for our fixture session.
+        """
         session, _ = session_with_many_message_tags
-        # All three messages were created at "now"; filter for that date.
-        today = timezone.now().date().isoformat()
+        target_date = (timezone.now().date() + timedelta(days=value_offset_days)).isoformat()
 
         params = {
             "filter_0_column": "message_date",
-            "filter_0_operator": Operators.ON,
-            "filter_0_value": today,
+            "filter_0_operator": operator,
+            "filter_0_value": target_date,
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        if should_match:
+            assert filtered.count() == 1
+            assert list(filtered) == [session]
+        else:
+            assert filtered.count() == 0
+
+    def test_message_date_filter_range_no_duplicates(self, session_with_many_message_tags):
+        """The relative ``range`` operator must not multiply rows either."""
+        session, _ = session_with_many_message_tags
+        params = {
+            "filter_0_column": "message_date",
+            "filter_0_operator": Operators.RANGE,
+            "filter_0_value": "1d",
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -531,9 +564,8 @@ def test_session_filter_default_query_does_not_join_experiment_channel():
     """No filter, no display column references experiment_channel — confirm the COUNT
     does not pull it in unnecessarily."""
     from apps.experiments.models import ExperimentSession  # noqa: PLC0415
-    from apps.teams.models import Team  # noqa: PLC0415
 
-    team = Team.objects.first() or TeamFactory.create()
+    team = TeamFactory.create()
     qs = ExperimentSession.objects.get_table_queryset(team)
     qs = ExperimentSessionFilter().apply(qs, FilterParams())
     sql = str(qs.values("id").query).lower()
