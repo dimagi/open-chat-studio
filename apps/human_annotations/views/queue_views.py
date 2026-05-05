@@ -238,8 +238,12 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
             .order_by("-last_activity_at")
         )
 
-    def get_table_data(self):
-        return attach_chat_tagged_items(super().get_table_data())
+    def get_table(self, **kwargs):
+        """Attach the tag prefetch to the paginated page only — see ChatbotSessionsTableView for rationale."""
+        table = super().get_table(**kwargs)
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return table
 
 
 @login_and_team_required

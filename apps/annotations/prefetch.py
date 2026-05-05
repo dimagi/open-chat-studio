@@ -36,19 +36,24 @@ def attach_chat_tagged_items(rows):
     A single ``CustomTaggedItem`` query keyed by chat_id replaces the
     queryset-level Prefetch, keeping the cost bounded by ``len(rows)``
     rather than the upstream filtered queryset.
+
+    Accepts either model instances directly or django-tables2 ``BoundRow``
+    wrappers (whose ``.record`` is the underlying instance) — different
+    paginators expose ``page.object_list`` as different shapes, and callers
+    shouldn't have to care which.
     """
     from apps.chat.models import Chat  # noqa: PLC0415
 
-    rows = list(rows)
-    if not rows:
-        return rows
-    chat_ids = [row.chat_id for row in rows]
+    records = [getattr(r, "record", r) for r in rows]
+    if not records:
+        return records
+    chat_ids = [row.chat_id for row in records]
     tagged_by_chat: dict[int, list[CustomTaggedItem]] = {chat_id: [] for chat_id in chat_ids}
     chat_ct = ContentType.objects.get_for_model(Chat)
     for item in CustomTaggedItem.objects.filter(content_type=chat_ct, object_id__in=chat_ids).select_related(
         "tag", "user"
     ):
         tagged_by_chat[item.object_id].append(item)
-    for row in rows:
+    for row in records:
         row.chat.prefetched_tagged_items = tagged_by_chat.get(row.chat_id, [])
-    return rows
+    return records

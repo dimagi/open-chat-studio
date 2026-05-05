@@ -584,3 +584,47 @@ def test_session_table_prefetch_is_page_bounded(team_with_users):
         f"Prefetch is not page-bounded: 2 sessions = {queries_for_two} queries, "
         f"32 sessions = {queries_for_many} queries"
     )
+
+
+@pytest.mark.django_db()
+def test_session_table_session_query_uses_limit(team_with_users):
+    """The session list page must fetch sessions with LIMIT — not materialise the entire
+    filtered queryset before pagination. Detects the case where the tag-prefetch helper is
+    attached at an unpaginated lifecycle hook (e.g. ``get_table_data`` instead of after
+    ``RequestConfig.configure``)."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = ExperimentFactory.create(team=team)
+
+    tag = Tag.objects.create(team=team, name="t")
+    # 50 sessions — twice the default page size.
+    for _ in range(50):
+        s = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        s.chat.add_tag(tag, team=team, added_by=None)
+
+    factory = RequestFactory()
+    request = factory.get(
+        reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    )
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    set_current_team(team)
+
+    with CaptureQueriesContext(connection) as ctx:
+        view = ChatbotSessionsTableView.as_view()
+        response = view(request, team_slug=team.slug, experiment_id=experiment.id)
+        # `paginated_rows` is what the django-tables2 template iterates in production.
+        # Iterating `table.rows` would force an unpaginated SELECT that the template never fires.
+        list(response.context_data["table"].paginated_rows)
+
+    session_selects = [
+        q["sql"]
+        for q in ctx.captured_queries
+        if "experiments_experimentsession" in q["sql"].lower() and "count(" not in q["sql"].lower()
+    ]
+    assert all("limit" in sql.lower() for sql in session_selects), (
+        "Session list ran an unbounded SELECT on experiments_experimentsession (no LIMIT) — "
+        "pagination is not being applied at the SQL level. Session selects captured:\n" + "\n\n".join(session_selects)
+    )
