@@ -1,0 +1,1774 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/design/email_channel/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Email Channel — Design Document - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#email-channel-design-document" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Email Channel — Design Document
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#existing-infrastructure-leveraged" class="md-nav__link">
+    <span class="md-ellipsis">
+      Existing infrastructure leveraged
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals-non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goals &amp; Non-Goals
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Goals &amp; Non-Goals">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goals
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#non-goals-phase-1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Non-Goals (Phase 1)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routing-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routing &amp; Identity
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Routing &amp; Identity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#message-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Message Routing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-continuity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Session Continuity
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#participant-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Participant Identity
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routing-pseudocode" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routing Pseudocode
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#domain-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Domain Strategy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Domain Strategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-shared-ocs-domain-implement-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 1 — Shared OCS Domain (implement now)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-custom-domains-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 2 — Custom Domains (future)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Model
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#channelplatform-enum" class="md-nav__link">
+    <span class="md-ellipsis">
+      ChannelPlatform enum
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#experimentchannelextra_data-schema-for-email" class="md-nav__link">
+    <span class="md-ellipsis">
+      ExperimentChannel.extra_data schema for email
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#experimentsessionexternal_id-for-thread-lookup" class="md-nav__link">
+    <span class="md-ellipsis">
+      ExperimentSession.external_id for thread lookup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emailmessage-datamodel" class="md-nav__link">
+    <span class="md-ellipsis">
+      EmailMessage datamodel
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inbound-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inbound Flow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outbound-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Outbound Flow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#emailchannel" class="md-nav__link">
+    <span class="md-ellipsis">
+      EmailChannel
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Files Changed
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-cutting-concerns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-Cutting Concerns
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Cutting Concerns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reply-parsing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reply Parsing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#html-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTML Handling
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spam-prevention" class="md-nav__link">
+    <span class="md-ellipsis">
+      Spam Prevention
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#email-authentication-spf-dkim-dmarc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Email Authentication (SPF, DKIM, DMARC)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bounce-loop-prevention" class="md-nav__link">
+    <span class="md-ellipsis">
+      Bounce Loop Prevention
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ad-hoc-messages-reminders-check-ins" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ad Hoc Messages (Reminders, Check-ins)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Decisions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resolved" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resolved
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#open" class="md-nav__link">
+    <span class="md-ellipsis">
+      Open
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="email-channel-design-document">Email Channel — Design Document</h1>
+<p><strong>Date:</strong> April 2026
+<strong>Status:</strong> Draft</p>
+<h2 id="overview">Overview</h2>
+<p>Add email as a messaging channel in Open Chat Studio. Users communicate with experiments via email. The system receives inbound email through an ESP webhook (AWS SES), processes it through the existing <code>channels_v2</code> pipeline, and sends a threaded reply.</p>
+<p>Conversation routing follows a Slack-inspired priority model: <code>In-Reply-To</code> header for thread continuity, to-address for experiment matching, and a default fallback channel for unsolicited email. Participant identity is the sender email address.</p>
+<p>Phase 1 uses a shared OCS-controlled domain (<code>chat.openchatstudio.com</code>) for zero per-client infrastructure. Phase 2 (future) adds custom domain provisioning via ESP API.</p>
+<h3 id="existing-infrastructure-leveraged">Existing infrastructure leveraged</h3>
+<ul>
+<li><strong>django-anymail</strong> — already a dependency; SES configured in production</li>
+<li><strong>beautifulsoup4</strong> / <strong>html2text</strong> — for HTML parsing (already installed)</li>
+<li><strong>Celery</strong> — async task processing (already installed)</li>
+<li><strong>Only new dependency:</strong> <code>mail-parser-reply</code> (reply/quote text stripping)</li>
+</ul>
+<h2 id="goals-non-goals">Goals &amp; Non-Goals</h2>
+<h3 id="goals">Goals</h3>
+<ul>
+<li>Receive inbound email via ESP webhook and process through the existing pipeline</li>
+<li>Send threaded email replies with correct <code>In-Reply-To</code> / <code>References</code> headers</li>
+<li>Route messages to the correct experiment using to-address matching with a default fallback</li>
+<li>Strip quoted reply text so the LLM sees only new content</li>
+<li>Self-service channel setup via a shared OCS domain (no per-client infra)</li>
+<li>Participant identified by sender email address</li>
+<li>Follow the same architectural patterns as Telegram, WhatsApp, and Slack channels</li>
+</ul>
+<h3 id="non-goals-phase-1">Non-Goals (Phase 1)</h3>
+<ul>
+<li>Custom client domains (Phase 2)</li>
+<li>IMAP polling / "bring your own mailbox"</li>
+<li>Microsoft Graph or Gmail API direct integration</li>
+<li>Rich HTML email composition (plain text replies are fine for v1)</li>
+<li>Attachment processing (pass-through to LLM, PDF extraction, etc.)</li>
+<li>Subject-line keyword routing</li>
+<li>Multi-address identity resolution (same person, different email addresses)</li>
+</ul>
+<h2 id="routing-identity">Routing &amp; Identity</h2>
+<h3 id="message-routing">Message Routing</h3>
+<p>Modeled after Slack's priority chain in <code>apps/slack/slack_listeners.py:get_experiment_channel()</code>. Each tier is tried in order; first match wins.</p>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Signal</th>
+<th>Action</th>
+<th>Slack Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1</strong></td>
+<td><code>In-Reply-To</code> / <code>References</code> headers</td>
+<td>Look up existing <code>ExperimentSession</code> via <code>external_id</code>. Skip all further routing.</td>
+<td><code>thread_ts</code> → <code>get_session_for_thread()</code></td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td>To-address</td>
+<td>Match <code>ExperimentChannel.extra_data["email_address"]</code>. Create new session.</td>
+<td>Exact <code>slack_channel_id</code> match</td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td>Default fallback</td>
+<td>Find channel with <code>extra_data["is_default"] == True</code>. Create new session.</td>
+<td><code>is_default: True</code> + <code>SLACK_ALL_CHANNELS</code></td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td>No match</td>
+<td>Ignore the email (no error reply — prevents bounce loops)</td>
+<td><em>"Unable to find a bot"</em></td>
+</tr>
+</tbody>
+</table>
+<h3 id="session-continuity">Session Continuity</h3>
+<p><code>In-Reply-To</code> is the primary signal — email clients set it automatically when the user replies. This is the direct analog of Slack's <code>thread_ts</code>.</p>
+<ul>
+<li>Store first outbound <code>Message-ID</code> as <code>ExperimentSession.external_id</code></li>
+<li>On inbound: look up <code>In-Reply-To</code> against <code>external_id</code> (unique indexed field)</li>
+<li>Fall back to scanning <code>References</code> header — RFC 2822 guarantees root Message-ID is always present</li>
+<li>Same pattern as Slack's <code>make_session_external_id(channel_id, thread_ts)</code></li>
+</ul>
+<p>When a user replies to an older message in the thread (not the most recent), <code>In-Reply-To</code> may not match <code>external_id</code>. However, the <code>References</code> header always contains the full thread ancestry including the root Message-ID, so the fallback scan finds it. RFC 2822 specifies that even when <code>References</code> is truncated, the first (root) and most recent entries are preserved.</p>
+<h3 id="participant-identity">Participant Identity</h3>
+<p>Sender email address is the <code>participant_id</code>, consistent with how every other channel works:</p>
+<ul>
+<li>Slack: <code>event["user"]</code></li>
+<li>Telegram: <code>chat.id</code></li>
+<li>Email: <code>from_address</code> (e.g., <code>john@example.com</code>)</li>
+</ul>
+<p>Address fuzziness (same person, multiple addresses) is a known limitation accepted for v1.</p>
+<h3 id="routing-pseudocode">Routing Pseudocode</h3>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">get_email_experiment_channel</span><span class="p">(</span>
+    <span class="n">in_reply_to</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">references</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">to_address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">team</span><span class="p">:</span> <span class="n">Team</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ExperimentChannel</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ExperimentSession</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Route an inbound email to the correct channel and session.&quot;&quot;&quot;</span>
+
+    <span class="c1"># Priority 1: Thread continuity via In-Reply-To</span>
+    <span class="k">if</span> <span class="n">in_reply_to</span><span class="p">:</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">_lookup_session</span><span class="p">(</span><span class="n">in_reply_to</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">experiment_channel</span><span class="p">,</span> <span class="n">session</span>
+
+    <span class="c1"># Priority 1b: Fallback to References header</span>
+    <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">references</span><span class="p">:</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">_lookup_session</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">experiment_channel</span><span class="p">,</span> <span class="n">session</span>
+
+    <span class="c1"># Priority 2: To-address match</span>
+    <span class="n">channel</span> <span class="o">=</span> <span class="n">ExperimentChannel</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+        <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">,</span>
+        <span class="n">extra_data__contains</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="n">to_address</span><span class="p">},</span>
+        <span class="n">deleted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;team&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">channel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">channel</span><span class="p">,</span> <span class="kc">None</span>
+
+    <span class="c1"># Priority 3: Default fallback</span>
+    <span class="n">default</span> <span class="o">=</span> <span class="n">ExperimentChannel</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+        <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">,</span>
+        <span class="n">extra_data__is_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span>
+        <span class="n">deleted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;team&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">default</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span><span class="p">,</span> <span class="kc">None</span>
+
+    <span class="c1"># Priority 4: No match</span>
+    <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">_lookup_session</span><span class="p">(</span><span class="n">message_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExperimentSession</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Find a session by its external_id (first outbound Message-ID).</span>
+
+<span class="sd">    Uses the existing unique indexed field on ExperimentSession —</span>
+<span class="sd">    same pattern as Slack&#39;s thread lookup via make_session_external_id().</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ExperimentSession</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span>
+            <span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;participant&quot;</span><span class="p">,</span> <span class="s2">&quot;experiment_channel&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">external_id</span><span class="o">=</span><span class="n">message_id</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">ExperimentSession</span><span class="o">.</span><span class="n">DoesNotExist</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+</code></pre></div>
+<h2 id="domain-strategy">Domain Strategy</h2>
+<blockquote>
+<p><strong>MX record constraint:</strong> MX records are domain-wide. Pointing <code>example.com</code>'s MX to an ESP redirects <em>all</em> mail for that domain. Always use a <strong>subdomain</strong> (e.g., <code>chat.example.com</code>) to isolate chatbot email from regular delivery.</p>
+</blockquote>
+<h3 id="phase-1-shared-ocs-domain-implement-now">Phase 1 — Shared OCS Domain (implement now)</h3>
+<p>All email routes through a single OCS-controlled domain. Per-channel addressing handles routing:</p>
+<ul>
+<li><code>client-a-support@chat.openchatstudio.com</code> → Client A's experiment</li>
+<li><code>client-b-health@chat.openchatstudio.com</code> → Client B's experiment</li>
+</ul>
+<p>Zero per-client DNS or backend setup. Fully self-service. MX + SPF/DKIM/DMARC configured once.</p>
+<p><strong>Advantages:</strong> No per-client infra, fully self-service, single DNS config.
+<strong>Limitations:</strong> Emails come from the OCS domain, not the client's brand.</p>
+<h3 id="phase-2-custom-domains-future">Phase 2 — Custom Domains (future)</h3>
+<p>Automate domain provisioning via ESP API. Client provides subdomain, OCS registers it via SES API, shows required DNS records, polls for verification. Same routing logic — only provisioning changes. SES supports 10K verified domains per region.</p>
+<h2 id="data-model">Data Model</h2>
+<h3 id="channelplatform-enum"><code>ChannelPlatform</code> enum</h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">ChannelPlatform</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">TextChoices</span><span class="p">):</span>
+    <span class="o">...</span>
+    <span class="n">EMAIL</span> <span class="o">=</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span> <span class="s2">&quot;Email&quot;</span>              <span class="c1"># NEW</span>
+</code></pre></div>
+<h3 id="experimentchannelextra_data-schema-for-email"><code>ExperimentChannel.extra_data</code> schema for email</h3>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;email_address&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;support@chat.openchatstudio.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;from_address&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;noreply@chat.openchatstudio.com&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;is_default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<span class="p">}</span>
+</code></pre></div>
+<ul>
+<li><code>email_address</code> — the to-address used for routing (Priority 2)</li>
+<li><code>from_address</code> — optional override for the From header on outbound replies (defaults to <code>settings.DEFAULT_FROM_EMAIL</code>)</li>
+<li><code>is_default</code> — when <code>true</code>, this channel is the fallback for unmatched emails (Priority 3)</li>
+</ul>
+<h3 id="experimentsessionexternal_id-for-thread-lookup"><code>ExperimentSession.external_id</code> for thread lookup</h3>
+<p>Same pattern as Slack. The session's <code>external_id</code> stores the first outbound <code>Message-ID</code> for the conversation. This field is <code>CharField(max_length=255, unique=True)</code> with an existing unique index.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># When creating a new email session:</span>
+<span class="n">session</span> <span class="o">=</span> <span class="n">EmailChannel</span><span class="o">.</span><span class="n">start_new_session</span><span class="p">(</span>
+    <span class="n">working_experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+    <span class="n">experiment_channel</span><span class="o">=</span><span class="n">experiment_channel</span><span class="p">,</span>
+    <span class="n">participant_identifier</span><span class="o">=</span><span class="n">sender_email</span><span class="p">,</span>
+    <span class="n">session_external_id</span><span class="o">=</span><span class="n">first_outbound_message_id</span><span class="p">,</span>
+    <span class="c1"># e.g., &quot;&lt;abc123@chat.openchatstudio.com&gt;&quot;</span>
+<span class="p">)</span>
+
+<span class="c1"># On inbound reply, lookup is:</span>
+<span class="n">ExperimentSession</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">external_id</span><span class="o">=</span><span class="n">in_reply_to_value</span><span class="p">)</span>
+</code></pre></div>
+<p>The <code>In-Reply-To</code> header may reference a later message in the thread (not the root). The <code>References</code> header always contains the root <code>Message-ID</code> per RFC 2822, so we scan it as a fallback. No extra tables or JSON queries needed.</p>
+<h3 id="emailmessage-datamodel"><code>EmailMessage</code> datamodel</h3>
+<p>New <code>BaseMessage</code> subclass in <code>apps/channels/datamodels.py</code>, following the same pattern as <code>TelegramMessage</code>, <code>TwilioMessage</code>, <code>SlackMessage</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">EmailMessage</span><span class="p">(</span><span class="n">BaseMessage</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Inbound email parsed from AnymailInboundMessage.&quot;&quot;&quot;</span>
+    <span class="n">from_address</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">to_address</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">message_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">in_reply_to</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">references</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">[])</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="n">inbound</span><span class="p">:</span> <span class="n">AnymailInboundMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;EmailMessage&quot;</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">mail_parser_reply</span> <span class="kn">import</span> <span class="n">EmailReplyParser</span>
+
+        <span class="n">body</span> <span class="o">=</span> <span class="n">inbound</span><span class="o">.</span><span class="n">text</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">reply</span> <span class="o">=</span> <span class="n">EmailReplyParser</span><span class="p">(</span><span class="n">languages</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;en&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
+        <span class="n">stripped_text</span> <span class="o">=</span> <span class="n">reply</span><span class="o">.</span><span class="n">reply</span> <span class="ow">or</span> <span class="n">body</span>
+
+        <span class="k">return</span> <span class="n">EmailMessage</span><span class="p">(</span>
+            <span class="n">participant_id</span><span class="o">=</span><span class="n">inbound</span><span class="o">.</span><span class="n">from_email</span><span class="o">.</span><span class="n">addr_spec</span><span class="p">,</span>
+            <span class="n">message_text</span><span class="o">=</span><span class="n">stripped_text</span><span class="p">,</span>
+            <span class="n">from_address</span><span class="o">=</span><span class="n">inbound</span><span class="o">.</span><span class="n">from_email</span><span class="o">.</span><span class="n">addr_spec</span><span class="p">,</span>
+            <span class="n">to_address</span><span class="o">=</span><span class="n">inbound</span><span class="o">.</span><span class="n">to</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">addr_spec</span> <span class="k">if</span> <span class="n">inbound</span><span class="o">.</span><span class="n">to</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">subject</span><span class="o">=</span><span class="n">inbound</span><span class="o">.</span><span class="n">subject</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">message_id</span><span class="o">=</span><span class="n">inbound</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Message-ID&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+            <span class="n">in_reply_to</span><span class="o">=</span><span class="n">inbound</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;In-Reply-To&quot;</span><span class="p">),</span>
+            <span class="n">references</span><span class="o">=</span><span class="n">_parse_references</span><span class="p">(</span><span class="n">inbound</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;References&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)),</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_parse_references</span><span class="p">(</span><span class="n">refs</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse space-separated Message-ID list from References header.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">refs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">refs</span><span class="o">.</span><span class="n">split</span><span class="p">()</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span>
+</code></pre></div>
+<h2 id="inbound-flow">Inbound Flow</h2>
+<div class="highlight"><pre><span></span><code>ESP Webhook → anymail signal → Parse + Route → Celery Task → Pipeline → EmailSender reply
+</code></pre></div>
+<ol>
+<li><strong>ESP receives email</strong> at the shared domain (e.g., <code>support@chat.openchatstudio.com</code>). The MX record routes it to SES. SES delivers to SNS which POSTs to the configured webhook URL.</li>
+<li><strong>django-anymail receives the webhook.</strong> Validates the webhook signature. Fires the <code>anymail.signals.inbound</code> signal with an <code>AnymailInboundMessage</code>.</li>
+<li><strong>Signal handler parses and routes.</strong> Creates an <code>EmailMessage</code> datamodel (strips quoted text via <code>mail-parser-reply</code>). Runs the routing priority chain: <code>In-Reply-To</code> → to-address → default. If no match, ignores the email.</li>
+<li><strong>Celery task queued.</strong> <code>handle_email_message.delay(email_data, channel_id, team_id, session_id)</code>. The view returns <code>200 OK</code> immediately (ESP requires fast response).</li>
+<li><strong>Pipeline runs.</strong> Task instantiates <code>EmailChannel</code>, calls <code>new_user_message(message)</code>. The standard pipeline executes: participant validation, session resolution, LLM interaction, response formatting.</li>
+<li><strong>EmailSender delivers the reply.</strong> Sends via <code>django.core.mail.EmailMessage</code> (which uses the anymail backend). Sets <code>Message-ID</code>, <code>In-Reply-To</code>, <code>References</code>, and <code>Subject</code> for proper threading.</li>
+</ol>
+<blockquote>
+<p><strong>Why use the anymail signal handler instead of a custom view?</strong> django-anymail already handles webhook signature validation, MIME parsing, and provider normalization. The signal handler receives a clean <code>AnymailInboundMessage</code>. No need to duplicate that work.</p>
+</blockquote>
+<h2 id="outbound-flow">Outbound Flow</h2>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">send_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">recipient</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Send a threaded email reply.&quot;&quot;&quot;</span>
+    <span class="n">msg</span> <span class="o">=</span> <span class="n">EmailMessage</span><span class="p">(</span>
+        <span class="n">subject</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_reply_subject</span><span class="p">(),</span>
+        <span class="n">body</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
+        <span class="n">from_email</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">from_address</span><span class="p">,</span>
+        <span class="n">to</span><span class="o">=</span><span class="p">[</span><span class="n">recipient</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="n">msg_id</span> <span class="o">=</span> <span class="n">make_msgid</span><span class="p">(</span><span class="n">domain</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">domain</span><span class="p">)</span>
+    <span class="n">msg</span><span class="o">.</span><span class="n">extra_headers</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;Message-ID&quot;</span><span class="p">:</span> <span class="n">msg_id</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_message_id</span><span class="p">:</span>
+        <span class="n">msg</span><span class="o">.</span><span class="n">extra_headers</span><span class="p">[</span><span class="s2">&quot;In-Reply-To&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_message_id</span>
+        <span class="n">msg</span><span class="o">.</span><span class="n">extra_headers</span><span class="p">[</span><span class="s2">&quot;References&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_references</span><span class="p">()</span>
+
+    <span class="n">msg</span><span class="o">.</span><span class="n">send</span><span class="p">()</span>
+
+    <span class="c1"># The session&#39;s external_id already holds the first Message-ID</span>
+    <span class="c1"># (set at session creation). No per-message storage needed.</span>
+</code></pre></div>
+<ul>
+<li><strong>Threading headers:</strong> Every outbound reply sets <code>In-Reply-To</code> (parent message) and <code>References</code> (root + parent). This ensures Gmail, Outlook, Apple Mail, and Thunderbird all thread correctly.</li>
+<li><strong>Subject line:</strong> Replies preserve the original subject with <code>Re:</code> prefix. Email clients use subject + references for thread grouping. Never change the subject mid-conversation.</li>
+</ul>
+<h2 id="components">Components</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Extends</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EmailMessage</code></td>
+<td>Datamodel</td>
+<td><code>BaseMessage</code></td>
+<td>Parsed inbound email with threading headers, stripped body text</td>
+</tr>
+<tr>
+<td><code>EmailChannel</code></td>
+<td>Channel</td>
+<td><code>ChannelBase</code></td>
+<td>Pipeline builder. Provides <code>EmailCallbacks</code> + <code>EmailSender</code>. Text-only.</td>
+</tr>
+<tr>
+<td><code>EmailSender</code></td>
+<td>Sender</td>
+<td><code>ChannelSender</code></td>
+<td>Sends threaded email via django-anymail with <code>In-Reply-To</code> / <code>References</code> headers</td>
+</tr>
+<tr>
+<td><code>EmailCallbacks</code></td>
+<td>Callbacks</td>
+<td><code>ChannelCallbacks</code></td>
+<td>No-op for v1. Email has no typing indicators or transcription.</td>
+</tr>
+<tr>
+<td><code>EmailChannelForm</code></td>
+<td>Form</td>
+<td><code>ExtraFormBase</code></td>
+<td>Config fields: <code>email_address</code>, <code>from_address</code>, <code>is_default</code></td>
+</tr>
+<tr>
+<td><code>handle_email_message</code></td>
+<td>Celery Task</td>
+<td>—</td>
+<td>Async message handler (same pattern as <code>handle_telegram_message</code>)</td>
+</tr>
+<tr>
+<td><code>email_inbound_handler</code></td>
+<td>Signal Handler</td>
+<td>—</td>
+<td>Receives anymail <code>inbound</code> signal, parses, routes, queues task</td>
+</tr>
+<tr>
+<td><code>get_email_experiment_channel</code></td>
+<td>Routing Function</td>
+<td>—</td>
+<td>Priority chain: In-Reply-To → to-address → default</td>
+</tr>
+</tbody>
+</table>
+<h3 id="emailchannel"><code>EmailChannel</code></h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">EmailChannel</span><span class="p">(</span><span class="n">ChannelBase</span><span class="p">):</span>
+    <span class="n">voice_replies_supported</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">supported_message_types</span> <span class="o">=</span> <span class="p">(</span><span class="n">MESSAGE_TYPES</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">,</span> <span class="n">experiment_channel</span><span class="p">,</span> <span class="n">experiment_session</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="o">*</span><span class="p">,</span> <span class="n">email_context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">experiment</span><span class="p">,</span> <span class="n">experiment_channel</span><span class="p">,</span> <span class="n">experiment_session</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">email_context</span> <span class="o">=</span> <span class="n">email_context</span>  <span class="c1"># threading headers from inbound</span>
+
+    <span class="k">def</span> <span class="nf">_get_callbacks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChannelCallbacks</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ChannelCallbacks</span><span class="p">()</span>  <span class="c1"># no-op for email</span>
+
+    <span class="k">def</span> <span class="nf">_get_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EmailSender</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">EmailSender</span><span class="p">(</span>
+            <span class="n">from_address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">experiment_channel</span><span class="o">.</span><span class="n">extra_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;from_address&quot;</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">DEFAULT_FROM_EMAIL</span>
+            <span class="p">),</span>
+            <span class="n">email_context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">email_context</span><span class="p">,</span>
+            <span class="n">experiment_session</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">experiment_session</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_capabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChannelCapabilities</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ChannelCapabilities</span><span class="p">(</span>
+            <span class="n">supports_voice_replies</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">supports_files</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">supports_conversational_consent</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">supports_static_triggers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">supported_message_types</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">supported_message_types</span><span class="p">,</span>
+        <span class="p">)</span>
+</code></pre></div>
+<h2 id="files-changed">Files Changed</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apps/channels/models.py</code></td>
+<td>Add <code>EMAIL</code> to <code>ChannelPlatform</code>, update <code>extra_form()</code>, <code>channel_identifier_key</code>, <code>for_dropdown()</code></td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>apps/channels/forms.py</code></td>
+<td>Add <code>EmailChannelForm(ExtraFormBase)</code> with email_address, from_address, is_default fields + validation</td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>apps/channels/datamodels.py</code></td>
+<td>Add <code>EmailMessage(BaseMessage)</code> with threading headers and reply parsing</td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>apps/channels/tasks.py</code></td>
+<td>Add <code>handle_email_message</code> Celery task</td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>apps/channels/email.py</code></td>
+<td>Signal handler, routing function, <code>EmailChannel</code>, <code>EmailSender</code>, <code>EmailCallbacks</code></td>
+<td><strong>New</strong></td>
+</tr>
+<tr>
+<td><code>apps/channels/apps.py</code></td>
+<td>Connect the anymail <code>inbound</code> signal in <code>ready()</code></td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>config/settings.py</code></td>
+<td>Add <code>ANYMAIL</code> inbound webhook secret config</td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>config/urls.py</code></td>
+<td>Include anymail's inbound URL (if not already present)</td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>pyproject.toml</code></td>
+<td>Add <code>mail-parser-reply</code> dependency</td>
+<td>Modified</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_email_channel.py</code></td>
+<td>Tests for routing, parsing, sending, threading</td>
+<td><strong>New</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>No new model fields needed.</strong> Threading uses <code>ExperimentSession.external_id</code> (already exists, unique indexed). Only migration required is for the <code>ChannelPlatform</code> enum change (adding <code>"email"</code> to the <code>platform</code> CharField choices).</p>
+<h2 id="cross-cutting-concerns">Cross-Cutting Concerns</h2>
+<h3 id="reply-parsing">Reply Parsing</h3>
+<p><code>mail-parser-reply</code> strips quoted text, signatures, and disclaimers. 13 languages supported. Called during <code>EmailMessage.parse()</code> so the LLM only ever sees new content.</p>
+<h3 id="html-handling">HTML Handling</h3>
+<ul>
+<li><strong>Inbound:</strong> Use <code>AnymailInboundMessage.text</code> (plain text part). Fall back to <code>html2text</code> on <code>.html</code> if no text part.</li>
+<li><strong>Outbound:</strong> Plain text for v1.</li>
+</ul>
+<h3 id="spam-prevention">Spam Prevention</h3>
+<ul>
+<li>anymail validates webhook signatures automatically</li>
+<li>Rate limit per sender address</li>
+<li>Check SPF/DKIM pass status</li>
+<li>Sender allowlists/blocklists per experiment (future)</li>
+</ul>
+<h3 id="email-authentication-spf-dkim-dmarc">Email Authentication (SPF, DKIM, DMARC)</h3>
+<p>Configured once for the shared OCS domain. The ESP handles DKIM signing. DNS records needed:</p>
+<ul>
+<li><strong>MX</strong>: <code>chat.openchatstudio.com</code> → SES inbound endpoint</li>
+<li><strong>SPF</strong>: TXT record authorizing SES to send on behalf of the domain</li>
+<li><strong>DKIM</strong>: TXT record with SES-provided public key</li>
+<li><strong>DMARC</strong>: Start with <code>p=none</code>, tighten to <code>quarantine</code> after monitoring</li>
+</ul>
+<h3 id="bounce-loop-prevention">Bounce Loop Prevention</h3>
+<p>When no matching channel is found (Priority 4), the system <strong>silently ignores</strong> the email. Never send an automated "no bot found" reply — this can trigger infinite bounce loops if the sender is also automated. For legitimate routing failures, log with enough detail to debug.</p>
+<h3 id="ad-hoc-messages-reminders-check-ins">Ad Hoc Messages (Reminders, Check-ins)</h3>
+<p><code>ChannelBase.send_message_to_user()</code> already supports ad hoc bot-initiated messages. <code>EmailChannel</code> inherits this. The <code>EmailSender</code> sends a new email (not a reply) with a fresh <code>Message-ID</code> and subject. If the user replies, the <code>In-Reply-To</code> header routes them back into the session.</p>
+<h2 id="decisions">Decisions</h2>
+<h3 id="resolved">Resolved</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Which ESP?</td>
+<td><strong>AWS SES</strong> — already used in the production instance.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Shared domain?</td>
+<td><code>chat.openchatstudio.com</code> as the primary domain. A second domain TBD.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Thread lookup mechanism?</td>
+<td><strong><code>ExperimentSession.external_id</code></strong> — store first outbound Message-ID. Same pattern as Slack. Unique indexed field, no JSON queries or new tables.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Conversational consent?</td>
+<td><strong>Not supported.</strong> <code>supports_conversational_consent=False</code>.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Feature flag?</td>
+<td><strong>Yes</strong> — Waffle flag <code>flag_email_channel</code> gates visibility in the channel dropdown, same pattern as <code>flag_commcare_connect</code>.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Attachments?</td>
+<td><strong>Phase 2.</strong> Ignore in v1, log their presence for monitoring.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="open">Open</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7</td>
+<td>Second shared domain name</td>
+<td>TBD. Will be configured alongside <code>chat.openchatstudio.com</code> in SES.</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

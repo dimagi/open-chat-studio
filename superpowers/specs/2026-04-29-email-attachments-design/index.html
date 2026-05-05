@@ -1,0 +1,1687 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/superpowers/specs/2026-04-29-email-attachments-design/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Email Channel Attachments — Design - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#email-channel-attachments-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Email Channel Attachments — Design
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goals
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Non-Goals
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decisions-made" class="md-nav__link">
+    <span class="md-ellipsis">
+      Decisions Made
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#data-model-appschannelsdatamodelspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data model — apps/channels/datamodels.py
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emailmessageparseinbound-extended" class="md-nav__link">
+    <span class="md-ellipsis">
+      EmailMessage.parse(inbound) — extended
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#email_inbound_handler-promoted-to-full-router" class="md-nav__link">
+    <span class="md-ellipsis">
+      email_inbound_handler — promoted to full router
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shared-constants-appsservice_providersfile_limitspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Shared constants — apps/service_providers/file_limits.py
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_persist_inbound_attachments-new-helper-in-appschannelschannels_v2email_channelpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      _persist_inbound_attachments — new helper in apps/channels/channels_v2/email_channel.py
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handle_email_message-task-simplified" class="md-nav__link">
+    <span class="md-ellipsis">
+      handle_email_message task — simplified
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attachmenthydrationstage-new-pipeline-stage-in-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      AttachmentHydrationStage — new pipeline stage in core
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#channelsenderflush-new-no-op-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      ChannelSender.flush() — new no-op default
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#responsesendingstageprocess-call-flush" class="md-nav__link">
+    <span class="md-ellipsis">
+      ResponseSendingStage.process() — call flush
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emailsender-stateful-sends-on-flush" class="md-nav__link">
+    <span class="md-ellipsis">
+      EmailSender — stateful, sends on flush
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emailchannel_get_capabilities-_can_send_file" class="md-nav__link">
+    <span class="md-ellipsis">
+      EmailChannel._get_capabilities() + _can_send_file
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#appsservice_providersfile_limitspy-can_send_on_email" class="md-nav__link">
+    <span class="md-ellipsis">
+      apps/service_providers/file_limits.py — can_send_on_email
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failure-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failure Behavior
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Files Changed
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="email-channel-attachments-design">Email Channel Attachments — Design</h1>
+<p><strong>Issue:</strong> <a href="https://github.com/dimagi/open-chat-studio/issues/3246">#3246</a> — Phase 2 of the email channel: bidirectional attachment support.</p>
+<h2 id="goals">Goals</h2>
+<ul>
+<li><strong>Inbound:</strong> when a user emails an attachment to the bot, save it as a <code>File</code>, expose it on the message so the LLM/pipeline can use it.</li>
+<li><strong>Outbound:</strong> when the pipeline produces files (e.g. via <code>add_file_attachment()</code> in a Python node), include them as MIME attachments on the same email reply that carries the bot's text response.</li>
+</ul>
+<h2 id="non-goals">Non-Goals</h2>
+<ul>
+<li>New <code>FilePurpose</code>. Reuse <code>MESSAGE_MEDIA</code>.</li>
+<li>Custom retention/expiry rules for email attachments — they follow the same lifecycle as any other channel media.</li>
+<li>Reply-to-bounce on rejected attachments. Rejections are surfaced via metadata in the user's message text so the LLM can mention them; no out-of-band bounce mail.</li>
+<li>Inline image extraction. Email "inline" parts (<code>Content-Disposition: inline</code>, embedded in HTML body) are skipped; only true attachments are processed. <code>AnymailInboundMessage.attachments</code> already excludes inlines.</li>
+</ul>
+<h2 id="decisions-made">Decisions Made</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Outbound shape — one combined email or text + per-file follow-ups?</td>
+<td><strong>One combined email</strong>: text body + all MIME attachments in a single Django <code>EmailMessage</code>.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Per-attachment size cap (inbound + outbound)</td>
+<td><strong>20 MB</strong>.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Behavior on oversized inbound attachment</td>
+<td><strong>Surface as metadata in <code>message_text</code></strong> so the LLM can tell the user. No bounce reply.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Inbound MIME policy</td>
+<td><strong>Denylist of executables / installers / disk images.</strong> All other types accepted.</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>FilePurpose</code> for inbound attachments</td>
+<td><strong><code>MESSAGE_MEDIA</code></strong> — same as voice notes and other channel media.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Outbound MIME policy</td>
+<td><strong>Symmetric</strong> with inbound denylist + 20 MB cap. Files that fail get inline download URLs (existing fallback).</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Where do inbound files get saved? Webhook handler vs Celery task?</td>
+<td><strong>Webhook handler.</strong> Promotes the handler from "best-effort pre-filter" to full router; <code>File.create()</code> runs synchronously with team known. Celery payload carries <code>File</code> IDs only — never raw bytes. Avoids putting blobs through the Redis broker.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Type validation strategy</td>
+<td><strong>Use <code>python-magic</code> to detect the canonical content type from bytes</strong>, not the email-header content type or filename extension (both spoofable). Defense in depth: filename ext, header type, and magic-detected type are <em>all</em> checked against the denylist; ANY hit rejects.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="architecture">Architecture</h2>
+<div class="highlight"><pre><span></span><code>INBOUND
+  AWS SES → anymail webhook → email_inbound_handler
+        ├─ EmailMessage.parse(inbound) → headers, body, raw attachment list (in-memory)
+        ├─ get_email_experiment_channel(...) → (channel, session)
+        │     no match → return; no Celery enqueue, no files saved (no orphans)
+        ├─ set_current_team(channel.team)
+        ├─ for each raw attachment:
+        │     - detect type with python-magic
+        │     - reject if size &gt; 20 MB or denylisted (ext / claimed type / detected type)
+        │     - else File.create(team_id=channel.team_id, purpose=MESSAGE_MEDIA,
+        │                        content_type=&lt;magic-detected&gt;)
+        ├─ append &quot;[Attachment X skipped — reason]&quot; notes to email.message_text
+        └─ handle_email_message.delay(
+              email_data={..., attachment_file_ids:[...], skipped_attachments:[...]},
+              channel_id=channel.id,
+              session_id=session.id or None,
+           )
+
+CELERY TASK
+  handle_email_message
+        ├─ EmailMessage(**email_data)
+        ├─ Reload channel + session by ID (already routed; trust the IDs)
+        └─ EmailChannel.new_user_message(message)
+              ├─ ParticipantValidationStage
+              ├─ SessionResolutionStage           (creates session if needed)
+              ├─ SessionActivationStage
+              ├─ AttachmentHydrationStage         ← NEW (generic); file IDs → Attachment objects
+              ├─ MessageTypeValidationStage
+              ├─ QueryExtractionStage
+              ├─ ChatMessageCreationStage         (now sees message.attachments)
+              ├─ BotInteractionStage              (passes attachments to bot)
+              └─ ResponseFormattingStage
+
+OUTBOUND
+  ResponseSendingStage (modified):
+        ├─ ctx.sender.send_text(formatted_message, recipient)
+        ├─ for file in ctx.files_to_send:
+        │     ctx.sender.send_file(file, recipient, session_id)
+        └─ ctx.sender.flush()                       ← NEW; ChannelSender base = no-op
+
+  EmailSender becomes stateful:
+        send_text → buffers body
+        send_file → buffers (filename, bytes, mime)
+        flush    → builds one Django EmailMessage with body + attachments + threading
+                   headers; sends; resets state.
+</code></pre></div>
+<h2 id="components">Components</h2>
+<h3 id="data-model-appschannelsdatamodelspy">Data model — <code>apps/channels/datamodels.py</code></h3>
+<p>No DB changes. One new field on <code>BaseMessage</code>, plus email-specific fields and a transient attribute on <code>EmailMessage</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">PrivateAttr</span>
+
+
+<span class="k">class</span> <span class="nc">BaseMessage</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="c1"># existing fields...</span>
+    <span class="n">attachments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Attachment</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">[])</span>
+    <span class="n">attachment_file_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">[])</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;File IDs for attachments persisted by the channel&#39;s inbound handler.</span>
+<span class="sd">    Hydrated into `attachments` by AttachmentHydrationStage once a session</span>
+<span class="sd">    exists. Channels that don&#39;t pre-persist files leave this empty.&quot;&quot;&quot;</span>
+
+
+<span class="k">class</span> <span class="nc">SkippedAttachment</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span>   <span class="c1"># human-readable; included verbatim in message_text note</span>
+    <span class="n">size</span><span class="p">:</span> <span class="nb">int</span>     <span class="c1"># bytes; 0 if unknown</span>
+
+
+<span class="k">class</span> <span class="nc">EmailMessage</span><span class="p">(</span><span class="n">BaseMessage</span><span class="p">):</span>
+    <span class="c1"># existing email-specific fields...</span>
+    <span class="n">skipped_attachments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SkippedAttachment</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">[])</span>
+
+    <span class="c1"># transient — populated by parse(), consumed by handler; never serialized</span>
+    <span class="n">_raw_attachments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;RawAttachment&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+</code></pre></div>
+<p><code>attachment_file_ids</code> is generic — channels that v2-migrate after this work and want to pre-persist inbound files can populate it without further plumbing. <code>skipped_attachments</code> stays on <code>EmailMessage</code> because the "rejected for size/type" concept is currently specific to the email channel's intake rules.</p>
+<p><code>RawAttachment</code> is a private <code>@dataclass</code> defined in the same module — name, content_type, content_bytes — used only in-process between <code>parse()</code> and <code>_persist_inbound_attachments()</code>. Using <code>PrivateAttr</code> so pydantic v2 ignores it during dump/load (it would be dropped from a leading-underscore class field anyway, but <code>PrivateAttr</code> makes the intent explicit and gives a per-instance default).</p>
+<h3 id="emailmessageparseinbound-extended"><code>EmailMessage.parse(inbound)</code> — extended</h3>
+<p>Iterate <code>inbound.attachments</code> (already excludes inlines). For each part, capture <code>get_filename()</code>, <code>get_content_type()</code> (split off any params), and <code>get_content_bytes()</code>. Set <code>_raw_attachments</code> on the returned message. The pydantic-visible fields (<code>attachment_file_ids</code>, <code>skipped_attachments</code>) are populated later by the handler.</p>
+<h3 id="email_inbound_handler-promoted-to-full-router"><code>email_inbound_handler</code> — promoted to full router</h3>
+<p>Order of operations:</p>
+<ol>
+<li>Spam check (existing).</li>
+<li><code>EmailMessageDatamodel.parse(message)</code>.</li>
+<li><code>get_email_experiment_channel(...)</code> — full routing using the same priority chain that previously lived in the Celery task. No match → return.</li>
+<li><code>set_current_team(channel.team)</code>.</li>
+<li><code>_persist_inbound_attachments(email_msg._raw_attachments, team_id=channel.team_id)</code> → <code>(accepted_ids, skipped_attachments)</code>.</li>
+<li>Set <code>email_msg.attachment_file_ids</code>, <code>email_msg.skipped_attachments</code>.</li>
+<li>Augment <code>email_msg.message_text</code> with one bracketed line per skipped attachment, e.g. <code>[Attachment 'macro.exe' (1.2 MB) skipped — file type not allowed (detected: application/x-msdownload)]</code>.</li>
+<li><code>handle_email_message.delay(email_data=email_msg.model_dump(), channel_id=channel.id, session_id=session.id if session else None)</code>.</li>
+</ol>
+<p>If routing fails at step 3, no files are saved — there are no orphans to clean up. If <code>_persist_inbound_attachments</code> raises mid-loop, individual attachment failures are caught per-iteration (skipped with reason <code>"storage error"</code>); a top-level failure is logged and the email proceeds with whatever was already saved.</p>
+<h3 id="shared-constants-appsservice_providersfile_limitspy">Shared constants — <code>apps/service_providers/file_limits.py</code></h3>
+<p>The denylist constants and the email size cap live here so that both inbound persistence (in <code>email_channel.py</code>) and outbound sendability (<code>can_send_on_email</code>, in this same module) import from a single source. <code>file_limits.py</code> is already the canonical module for per-channel limits and has no dependencies on the channels app, so importing it from <code>email_channel.py</code> is a clean direction:</p>
+<div class="highlight"><pre><span></span><code><span class="n">EMAIL_MAX_ATTACHMENT_BYTES</span> <span class="o">=</span> <span class="mi">20</span> <span class="o">*</span> <span class="n">MB</span>
+
+<span class="n">EMAIL_BLOCKED_EXTENSIONS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span>
+    <span class="s2">&quot;exe&quot;</span><span class="p">,</span> <span class="s2">&quot;bat&quot;</span><span class="p">,</span> <span class="s2">&quot;cmd&quot;</span><span class="p">,</span> <span class="s2">&quot;com&quot;</span><span class="p">,</span> <span class="s2">&quot;scr&quot;</span><span class="p">,</span> <span class="s2">&quot;ps1&quot;</span><span class="p">,</span> <span class="s2">&quot;vbs&quot;</span><span class="p">,</span> <span class="s2">&quot;vbe&quot;</span><span class="p">,</span> <span class="s2">&quot;wsf&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;msi&quot;</span><span class="p">,</span> <span class="s2">&quot;app&quot;</span><span class="p">,</span> <span class="s2">&quot;dmg&quot;</span><span class="p">,</span> <span class="s2">&quot;jar&quot;</span><span class="p">,</span> <span class="s2">&quot;appimage&quot;</span><span class="p">,</span> <span class="s2">&quot;deb&quot;</span><span class="p">,</span> <span class="s2">&quot;rpm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;iso&quot;</span><span class="p">,</span> <span class="s2">&quot;img&quot;</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="n">EMAIL_BLOCKED_CONTENT_TYPES</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span>
+    <span class="s2">&quot;application/x-msdownload&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-msdos-program&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-bat&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-sh&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-executable&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-mach-binary&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-elf&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-iso9660-image&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-apple-diskimage&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/vnd.debian.binary-package&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-rpm&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-msi&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/java-archive&quot;</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="c1"># Application-namespaced types that are actually textual. Magic typically</span>
+<span class="c1"># returns text/plain for these, so a text/* detection should not be flagged</span>
+<span class="c1"># as a mismatch when the claimed type is one of these. Deliberately excludes</span>
+<span class="c1"># script types (application/javascript, application/x-sh, ...) — those are</span>
+<span class="c1"># textual but executable, and we want lies of the form &quot;I&#39;m a CSV but</span>
+<span class="c1"># actually a shell script&quot; to fail the mismatch check.</span>
+<span class="n">EMAIL_TEXT_LIKE_APPLICATION_TYPES</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span>
+    <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/ld+json&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/manifest+json&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/xml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/atom+xml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/rss+xml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/toml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-toml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;application/x-ndjson&quot;</span><span class="p">,</span>
+<span class="p">})</span>
+</code></pre></div>
+<h3 id="_persist_inbound_attachments-new-helper-in-appschannelschannels_v2email_channelpy"><code>_persist_inbound_attachments</code> — new helper in <code>apps/channels/channels_v2/email_channel.py</code></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">magic</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
+<span class="kn">import</span> <span class="nn">pathlib</span>
+
+<span class="kn">from</span> <span class="nn">apps.service_providers.file_limits</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EMAIL_MAX_ATTACHMENT_BYTES</span><span class="p">,</span>
+    <span class="n">EMAIL_BLOCKED_EXTENSIONS</span><span class="p">,</span>
+    <span class="n">EMAIL_BLOCKED_CONTENT_TYPES</span><span class="p">,</span>
+    <span class="n">EMAIL_TEXT_LIKE_APPLICATION_TYPES</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_detect_content_type</span><span class="p">(</span><span class="n">content</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">fallback</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">detected</span> <span class="o">=</span> <span class="n">magic</span><span class="o">.</span><span class="n">from_buffer</span><span class="p">(</span><span class="n">content</span><span class="p">[:</span><span class="mi">2048</span><span class="p">],</span> <span class="n">mime</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">detected</span> <span class="ow">and</span> <span class="n">detected</span> <span class="o">!=</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">detected</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;magic content-type detection failed&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fallback</span> <span class="ow">or</span> <span class="s2">&quot;application/octet-stream&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_category</span><span class="p">(</span><span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Top-level category for mismatch comparison.</span>
+
+<span class="sd">    Maps known textual application/* types (JSON, XML, YAML, ...) to &#39;text&#39;</span>
+<span class="sd">    since magic typically returns text/plain for them.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">content_type</span> <span class="ow">in</span> <span class="n">EMAIL_TEXT_LIKE_APPLICATION_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;text&quot;</span>
+    <span class="k">return</span> <span class="n">content_type</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_is_blocked</span><span class="p">(</span><span class="n">extension</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">claimed_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">detected_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a rejection reason if blocked, else None.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">extension</span> <span class="ow">in</span> <span class="n">EMAIL_BLOCKED_EXTENSIONS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;file extension &#39;.</span><span class="si">{</span><span class="n">extension</span><span class="si">}</span><span class="s2">&#39; not allowed&quot;</span>
+    <span class="k">if</span> <span class="n">detected_type</span> <span class="ow">in</span> <span class="n">EMAIL_BLOCKED_CONTENT_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;file type not allowed (detected: </span><span class="si">{</span><span class="n">detected_type</span><span class="si">}</span><span class="s2">)&quot;</span>
+    <span class="k">if</span> <span class="n">claimed_type</span> <span class="ow">in</span> <span class="n">EMAIL_BLOCKED_CONTENT_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;file type not allowed (claimed: </span><span class="si">{</span><span class="n">claimed_type</span><span class="si">}</span><span class="s2">)&quot;</span>
+    <span class="c1"># Cross-category lie detection: header claims one major type, magic</span>
+    <span class="c1"># detects another. Exempt application/octet-stream on either side</span>
+    <span class="c1"># (sender or magic indicating &quot;unknown&quot;); exempt textual application/*</span>
+    <span class="c1"># types via _category().</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">claimed_type</span>
+        <span class="ow">and</span> <span class="n">claimed_type</span> <span class="o">!=</span> <span class="s2">&quot;application/octet-stream&quot;</span>
+        <span class="ow">and</span> <span class="n">detected_type</span> <span class="o">!=</span> <span class="s2">&quot;application/octet-stream&quot;</span>
+        <span class="ow">and</span> <span class="n">_category</span><span class="p">(</span><span class="n">claimed_type</span><span class="p">)</span> <span class="o">!=</span> <span class="n">_category</span><span class="p">(</span><span class="n">detected_type</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;content type mismatch (claimed: </span><span class="si">{</span><span class="n">claimed_type</span><span class="si">}</span><span class="s2">, detected: </span><span class="si">{</span><span class="n">detected_type</span><span class="si">}</span><span class="s2">)&quot;</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">_persist_inbound_attachments</span><span class="p">(</span>
+    <span class="n">raw</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RawAttachment</span><span class="p">],</span> <span class="n">team_id</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]:</span>
+    <span class="n">accepted_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">skipped</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">att</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">att</span><span class="o">.</span><span class="n">content_bytes</span><span class="p">)</span>
+        <span class="n">ext</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">att</span><span class="o">.</span><span class="n">filename</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">detected</span> <span class="o">=</span> <span class="n">_detect_content_type</span><span class="p">(</span><span class="n">att</span><span class="o">.</span><span class="n">content_bytes</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="n">att</span><span class="o">.</span><span class="n">content_type</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">reason</span> <span class="o">:=</span> <span class="n">_is_blocked</span><span class="p">(</span><span class="n">ext</span><span class="p">,</span> <span class="n">att</span><span class="o">.</span><span class="n">content_type</span><span class="p">,</span> <span class="n">detected</span><span class="p">):</span>
+            <span class="n">skipped</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">att</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;reason&quot;</span><span class="p">:</span> <span class="n">reason</span><span class="p">,</span> <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="n">size</span><span class="p">})</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">EMAIL_MAX_ATTACHMENT_BYTES</span><span class="p">:</span>
+            <span class="n">skipped</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">att</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;reason&quot;</span><span class="p">:</span> <span class="s2">&quot;exceeds 20 MB limit&quot;</span><span class="p">,</span> <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="n">size</span><span class="p">})</span>
+            <span class="k">continue</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">f</span> <span class="o">=</span> <span class="n">File</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+                <span class="n">filename</span><span class="o">=</span><span class="n">att</span><span class="o">.</span><span class="n">filename</span> <span class="ow">or</span> <span class="s2">&quot;attachment&quot;</span><span class="p">,</span>
+                <span class="n">file_obj</span><span class="o">=</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">att</span><span class="o">.</span><span class="n">content_bytes</span><span class="p">),</span>
+                <span class="n">team_id</span><span class="o">=</span><span class="n">team_id</span><span class="p">,</span>
+                <span class="n">purpose</span><span class="o">=</span><span class="n">FilePurpose</span><span class="o">.</span><span class="n">MESSAGE_MEDIA</span><span class="p">,</span>
+                <span class="n">content_type</span><span class="o">=</span><span class="n">detected</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Failed to persist inbound email attachment </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">att</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span>
+            <span class="n">skipped</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">att</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;reason&quot;</span><span class="p">:</span> <span class="s2">&quot;storage error&quot;</span><span class="p">,</span> <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="n">size</span><span class="p">})</span>
+            <span class="k">continue</span>
+        <span class="n">accepted_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">accepted_ids</span><span class="p">,</span> <span class="n">skipped</span>
+</code></pre></div>
+<h3 id="handle_email_message-task-simplified"><code>handle_email_message</code> task — simplified</h3>
+<p>Channel/session lookup becomes a trusted ID lookup (routing already happened in the handler). The task does <strong>not</strong> hydrate <code>Attachment</code> objects — that happens later in the pipeline once a session exists, so the <code>download_link</code> cached on each <code>Attachment</code> always references a real session:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@shared_task</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">handle_email_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">email_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">channel_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">session_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="n">EmailMessageDatamodel</span><span class="p">(</span><span class="o">**</span><span class="n">email_data</span><span class="p">)</span>
+    <span class="n">channel</span> <span class="o">=</span> <span class="n">ExperimentChannel</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;team&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">channel_id</span><span class="p">)</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">ExperimentSession</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;participant&quot;</span><span class="p">,</span> <span class="s2">&quot;experiment_channel&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">session_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">session_id</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+
+    <span class="n">set_current_team</span><span class="p">(</span><span class="n">channel</span><span class="o">.</span><span class="n">team</span><span class="p">)</span>
+
+    <span class="n">thread_context</span> <span class="o">=</span> <span class="n">EmailThreadContext</span><span class="o">.</span><span class="n">from_inbound</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+    <span class="n">handler</span> <span class="o">=</span> <span class="n">EmailChannel</span><span class="p">(</span>
+        <span class="n">experiment</span><span class="o">=</span><span class="n">channel</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">default_version</span><span class="p">,</span>
+        <span class="n">experiment_channel</span><span class="o">=</span><span class="n">channel</span><span class="p">,</span>
+        <span class="n">experiment_session</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
+        <span class="n">thread_context</span><span class="o">=</span><span class="n">thread_context</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">update_taskbadger_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">handler</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+    <span class="n">handler</span><span class="o">.</span><span class="n">new_user_message</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+</code></pre></div>
+<p>Backwards compat: <code>channel_id</code> is a new required arg. Existing in-flight tasks (queued before deploy) won't have it. The task signature accepts the legacy form (no <code>channel_id</code>) and falls back to the old routing logic for one release cycle, after which the fallback is removed.</p>
+<h3 id="attachmenthydrationstage-new-pipeline-stage-in-core"><code>AttachmentHydrationStage</code> — new pipeline stage in core</h3>
+<p>Generic stage that hydrates <code>BaseMessage.attachment_file_ids</code> into <code>BaseMessage.attachments</code>. Lives in <code>apps/channels/channels_v2/stages/core.py</code> and is wired into the default pipeline in <code>ChannelBase._build_pipeline()</code> between <code>SessionActivationStage</code> and <code>MessageTypeValidationStage</code>. Runs after session resolution (so <code>ctx.experiment_session</code> exists) and before <code>ChatMessageCreationStage</code> (which consumes <code>message.attachments</code>).</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">AttachmentHydrationStage</span><span class="p">(</span><span class="n">ProcessingStage</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydrate Attachment objects from file IDs once a session exists.</span>
+
+<span class="sd">    Channels that pre-persist inbound files in their webhook handler</span>
+<span class="sd">    (e.g. EmailChannel) populate ctx.message.attachment_file_ids; this</span>
+<span class="sd">    stage converts those IDs into Attachment objects with download_links</span>
+<span class="sd">    that reference a real session. No-op for channels that don&#39;t use</span>
+<span class="sd">    this pattern.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">should_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">message</span>
+            <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="s2">&quot;attachment_file_ids&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">ctx</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">attachments</span>
+            <span class="ow">and</span> <span class="n">ctx</span><span class="o">.</span><span class="n">experiment_session</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="n">File</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="n">id__in</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">attachment_file_ids</span><span class="p">,</span>
+            <span class="n">team_id</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">team_id</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">attachments</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">Attachment</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;ocs_attachments&quot;</span><span class="p">,</span>
+                                 <span class="n">session_id</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">experiment_session</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span>
+        <span class="p">]</span>
+</code></pre></div>
+<p><code>EmailChannel</code> does not override <code>_build_pipeline()</code> — it inherits the default which now includes this stage.</p>
+<h3 id="channelsenderflush-new-no-op-default"><code>ChannelSender.flush()</code> — new no-op default</h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">ChannelSender</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">send_text</span><span class="p">(</span><span class="o">...</span><span class="p">):</span> <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+    <span class="k">def</span> <span class="nf">send_voice</span><span class="p">(</span><span class="o">...</span><span class="p">):</span> <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+    <span class="k">def</span> <span class="nf">send_file</span><span class="p">(</span><span class="o">...</span><span class="p">):</span> <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+    <span class="k">def</span> <span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Override in senders that buffer. Called by ResponseSendingStage after all sends.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+</code></pre></div>
+<h3 id="responsesendingstageprocess-call-flush"><code>ResponseSendingStage.process()</code> — call flush</h3>
+<p>One line added inside the existing <code>try</code>, after the per-file loop. Failures from <code>flush()</code> propagate into the same <code>MessageDeliveryFailure</code> notification path.</p>
+<h3 id="emailsender-stateful-sends-on-flush"><code>EmailSender</code> — stateful, sends on flush</h3>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">EmailSender</span><span class="p">(</span><span class="n">ChannelSender</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">from_address</span><span class="p">,</span> <span class="n">domain</span><span class="p">,</span> <span class="n">thread_context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">from_address</span> <span class="o">=</span> <span class="n">from_address</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">domain</span> <span class="o">=</span> <span class="n">domain</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">thread_context</span> <span class="o">=</span> <span class="n">thread_context</span> <span class="ow">or</span> <span class="n">EmailThreadContext</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_message_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_body</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recipient</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_attachments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span> <span class="nf">send_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">recipient</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_body</span> <span class="o">=</span> <span class="n">text</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recipient</span> <span class="o">=</span> <span class="n">recipient</span>
+
+    <span class="k">def</span> <span class="nf">send_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">recipient</span><span class="p">,</span> <span class="n">session_id</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recipient</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_recipient</span> <span class="o">=</span> <span class="n">recipient</span>
+        <span class="c1"># File.file is a FieldFile; read full bytes (already gated by 20MB cap upstream)</span>
+        <span class="k">with</span> <span class="n">file</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">fh</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_attachments</span><span class="o">.</span><span class="n">append</span><span class="p">((</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">content</span><span class="p">,</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">content_type</span> <span class="ow">or</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
+        <span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_body</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attachments</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">thread_context</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">DjangoEmailMessage</span><span class="p">(</span>
+            <span class="n">subject</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">subject</span> <span class="ow">or</span> <span class="s2">&quot;New message&quot;</span><span class="p">,</span>
+            <span class="n">body</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_body</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">from_email</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">from_address</span><span class="p">,</span>
+            <span class="n">to</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_recipient</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">msg_id</span> <span class="o">=</span> <span class="n">make_msgid</span><span class="p">(</span><span class="n">domain</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">domain</span><span class="p">)</span>
+        <span class="n">msg</span><span class="o">.</span><span class="n">extra_headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Message-ID&quot;</span><span class="p">:</span> <span class="n">msg_id</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">in_reply_to</span><span class="p">:</span>
+            <span class="n">msg</span><span class="o">.</span><span class="n">extra_headers</span><span class="p">[</span><span class="s2">&quot;In-Reply-To&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">in_reply_to</span>
+            <span class="n">msg</span><span class="o">.</span><span class="n">extra_headers</span><span class="p">[</span><span class="s2">&quot;References&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">references</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">filename</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">mimetype</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attachments</span><span class="p">:</span>
+            <span class="n">msg</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">mimetype</span><span class="p">)</span>
+        <span class="n">msg</span><span class="o">.</span><span class="n">send</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_message_id</span> <span class="o">=</span> <span class="n">msg_id</span>
+        <span class="c1"># reset for any subsequent send (ad hoc messages, etc.)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_body</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recipient</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_attachments</span> <span class="o">=</span> <span class="p">[]</span>
+</code></pre></div>
+<h3 id="emailchannel_get_capabilities-_can_send_file"><code>EmailChannel._get_capabilities()</code> + <code>_can_send_file</code></h3>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">_get_capabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">ChannelCapabilities</span><span class="p">(</span>
+        <span class="n">supports_voice_replies</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">supports_files</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                     <span class="c1"># was False</span>
+        <span class="n">supports_conversational_consent</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">supports_static_triggers</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">supported_message_types</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">supported_message_types</span><span class="p">,</span>
+        <span class="n">can_send_file</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_can_send_file</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_can_send_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">can_send_on_email</span><span class="p">(</span><span class="n">file</span><span class="o">.</span><span class="n">content_type</span><span class="p">,</span> <span class="n">file</span><span class="o">.</span><span class="n">content_size</span><span class="p">)</span><span class="o">.</span><span class="n">supported</span>
+</code></pre></div>
+<h3 id="appsservice_providersfile_limitspy-can_send_on_email"><code>apps/service_providers/file_limits.py</code> — <code>can_send_on_email</code></h3>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">can_send_on_email</span><span class="p">(</span><span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">content_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SendabilityResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Email: 20 MB cap, executable/installer denylist applies.&quot;&quot;&quot;</span>
+    <span class="n">content_type</span> <span class="o">=</span> <span class="p">(</span><span class="n">content_type</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;;&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">content_size</span> <span class="ow">or</span> <span class="n">content_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SendabilityResult</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;File size unknown&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">content_type</span> <span class="ow">in</span> <span class="n">EMAIL_BLOCKED_CONTENT_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SendabilityResult</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;File type &#39;</span><span class="si">{</span><span class="n">content_type</span><span class="si">}</span><span class="s2">&#39; not allowed for email&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">content_size</span> <span class="o">&gt;</span> <span class="n">EMAIL_MAX_ATTACHMENT_BYTES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SendabilityResult</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Exceeds 20MB email attachment limit&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">SendabilityResult</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+<span class="n">FILE_SENDABILITY_CHECKERS</span><span class="p">[</span><span class="s2">&quot;email&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">can_send_on_email</span>
+</code></pre></div>
+<p>The inbound persistence checks the filename extension, claimed header type, and magic-detected type — all against the shared <code>EMAIL_BLOCKED_*</code> constants. Outbound trusts <code>file.content_type</code> (and <code>file.content_size</code>) because they were already magic-detected and sized at <code>File.create</code> time, and re-reading 20 MB of bytes just to re-validate would be wasteful for trusted bot-generated content.</p>
+<h2 id="failure-behavior">Failure Behavior</h2>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EmailMessage.parse()</code> raises</td>
+<td>Log and return; no Celery enqueue. (existing)</td>
+</tr>
+<tr>
+<td>Routing returns no channel</td>
+<td>Return; no files persisted.</td>
+</tr>
+<tr>
+<td>Single attachment fails <code>File.create</code></td>
+<td>Caught per attachment; recorded as skipped with reason <code>"storage error"</code>; other attachments continue.</td>
+</tr>
+<tr>
+<td><code>_persist_inbound_attachments</code> raises at top level</td>
+<td>Logged; email proceeds with no attachments rather than dropping the message.</td>
+</tr>
+<tr>
+<td>Celery enqueue fails after files are saved</td>
+<td>Existing retry policy on <code>handle_email_message</code> triggers retry. Files are reused via IDs in the payload.</td>
+</tr>
+<tr>
+<td>Blocked or oversized inbound attachment</td>
+<td>Not saved; reason surfaced in <code>message_text</code>.</td>
+</tr>
+<tr>
+<td>Outbound: <code>send_file</code> reads missing bytes</td>
+<td>Raises during <code>file.file.open()</code> → wrapped by terminal stage as <code>FileDeliveryFailure</code>; download-link fallback in body.</td>
+</tr>
+<tr>
+<td>Outbound: <code>flush()</code> raises (SMTP/SES error)</td>
+<td>Inside terminal <code>try</code> → recorded as <code>MessageDeliveryFailure</code>; existing notification path.</td>
+</tr>
+<tr>
+<td>Outbound: nothing was queued</td>
+<td><code>flush()</code> early-returns; no empty email sent.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="testing">Testing</h2>
+<p>All in <code>apps/channels/tests/test_email_channel.py</code> unless noted.</p>
+<p><strong><code>TestEmailMessageParse</code> (extend)</strong>
+- <code>test_parse_extracts_attachments</code>
+- <code>test_parse_excludes_inlines</code>
+- <code>test_parse_no_attachments</code></p>
+<p><strong><code>TestPersistInboundAttachments</code> (new, <code>@pytest.mark.django_db</code>)</strong>
+- <code>test_accepts_normal_file</code>
+- <code>test_rejects_oversized</code>
+- <code>test_rejects_denylisted_extension</code>
+- <code>test_rejects_denylisted_content_type</code>
+- <code>test_rejects_when_magic_detects_executable_with_innocent_filename</code> — bytes are an ELF binary but filename is <code>report.pdf</code> and claimed type is <code>application/pdf</code>; rejected on detected type.
+- <code>test_canonical_content_type_is_magic_detected</code> — accepted file's saved <code>content_type</code> matches magic, not the (lying) header.
+- <code>test_storage_error_isolated</code> — patch <code>File.create</code> to raise on the second of three attachments; first and third saved, second skipped.
+- <code>test_rejects_cross_category_mismatch</code> — claimed <code>image/jpeg</code>, detected <code>application/pdf</code> → rejected on category mismatch.
+- <code>test_allows_octet_stream_claim_with_specific_detection</code> — claimed <code>application/octet-stream</code>, detected <code>application/pdf</code> → accepted (sender didn't know).
+- <code>test_allows_octet_stream_detection_with_specific_claim</code> — claimed <code>application/pdf</code>, detected <code>application/octet-stream</code> → accepted (magic uncertain).
+- <code>test_allows_json_claim_with_plaintext_detection</code> — claimed <code>application/json</code>, detected <code>text/plain</code> → accepted via text-like allowlist.
+- <code>test_allows_xml_claim_with_plaintext_detection</code> — same for <code>application/xml</code>.
+- <code>test_rejects_csv_claim_with_javascript_detection</code> — claimed <code>text/csv</code>, detected <code>application/javascript</code> → rejected (mismatch; <code>application/javascript</code> is <strong>not</strong> in the text-like allowlist).
+- <code>test_allows_csv_claim_with_plaintext_detection</code> — claimed <code>text/csv</code>, detected <code>text/plain</code> → accepted (same <code>text</code> category).</p>
+<p><strong><code>TestEmailInboundHandler</code> (extend)</strong>
+- <code>test_handler_persists_files_before_enqueue</code>
+- <code>test_handler_no_files_saved_when_no_channel_match</code>
+- <code>test_skipped_attachments_appended_to_message_text</code></p>
+<p><strong><code>TestHandleEmailMessageTask</code> (extend)</strong>
+- <code>test_task_uses_channel_id_when_provided</code>
+- <code>test_task_legacy_payload_falls_back_to_routing</code> — covers the one-release-cycle fallback path.</p>
+<p><strong><code>TestAttachmentHydrationStage</code> (new, <code>apps/channels/tests/channels/stages/test_attachment_hydration.py</code>)</strong>
+- <code>test_hydrates_attachments_from_file_ids</code> — <code>attachment_file_ids</code> set, session exists; after stage runs <code>message.attachments</code> is populated and each carries a download_link with the real session id.
+- <code>test_skips_when_no_file_ids</code> — <code>should_run</code> returns False for a <code>BaseMessage</code> without <code>attachment_file_ids</code>; no-op for non-email channels.
+- <code>test_skips_when_session_missing</code> — <code>should_run</code> returns False; no DB query.
+- <code>test_skips_when_attachments_already_populated</code> — idempotent; doesn't double-hydrate.</p>
+<p><strong><code>TestEmailSender</code> (extend)</strong>
+- <code>test_send_text_alone_sends_one_email</code>
+- <code>test_send_text_then_files_sends_one_combined_email</code> — assert one <code>mail.outbox</code> entry with body, two attachments, threading headers.
+- <code>test_flush_with_nothing_queued_is_noop</code>
+- <code>test_flush_failure_propagates_via_response_sending_stage</code></p>
+<p><strong><code>TestEmailChannel</code> (extend)</strong>
+- <code>test_capabilities_supports_files</code> — <code>supports_files is True</code>; <code>can_send_file</code> returns True for normal small file, False for 25 MB or <code>.exe</code>.</p>
+<p><strong><code>TestCanSendOnEmail</code> (new, <code>apps/service_providers/tests/test_file_limits.py</code>)</strong>
+- mirrors existing whatsapp/telegram/slack checker tests: under-limit, over-limit, denylisted, missing type/size.</p>
+<p><strong><code>test_response_sending.py</code> (extend)</strong>
+- <code>test_response_sending_stage_calls_flush</code>
+- <code>test_flush_failure_recorded_as_message_delivery_failure</code></p>
+<h2 id="files-changed">Files Changed</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apps/channels/datamodels.py</code></td>
+<td>Add <code>attachment_file_ids</code> field to <code>BaseMessage</code>; add <code>SkippedAttachment</code>, <code>RawAttachment</code>, new fields on <code>EmailMessage</code>; extend <code>EmailMessage.parse()</code> to capture raw attachments.</td>
+</tr>
+<tr>
+<td><code>apps/channels/channels_v2/stages/core.py</code></td>
+<td>Add generic <code>AttachmentHydrationStage</code>.</td>
+</tr>
+<tr>
+<td><code>apps/channels/channels_v2/channel_base.py</code></td>
+<td>Insert <code>AttachmentHydrationStage</code> into the default pipeline.</td>
+</tr>
+<tr>
+<td><code>apps/channels/channels_v2/email_channel.py</code></td>
+<td>Promote <code>email_inbound_handler</code> to full router; add <code>_persist_inbound_attachments</code>; make <code>EmailSender</code> stateful with <code>flush()</code>; flip <code>supports_files=True</code> and wire <code>can_send_file</code>.</td>
+</tr>
+<tr>
+<td><code>apps/channels/channels_v2/sender.py</code></td>
+<td>Add <code>ChannelSender.flush()</code> no-op default.</td>
+</tr>
+<tr>
+<td><code>apps/channels/channels_v2/stages/terminal.py</code></td>
+<td><code>ResponseSendingStage.process()</code> calls <code>ctx.sender.flush()</code> after the file loop, inside the existing try block.</td>
+</tr>
+<tr>
+<td><code>apps/channels/tasks.py</code></td>
+<td><code>handle_email_message</code> accepts <code>channel_id</code>/<code>session_id</code> and uses them directly (no re-routing). Legacy fallback path retained for one release cycle. Attachment hydration is deferred to the pipeline stage.</td>
+</tr>
+<tr>
+<td><code>apps/service_providers/file_limits.py</code></td>
+<td>Add <code>EMAIL_MAX_ATTACHMENT_BYTES</code>, <code>EMAIL_BLOCKED_EXTENSIONS</code>, <code>EMAIL_BLOCKED_CONTENT_TYPES</code>, <code>EMAIL_TEXT_LIKE_APPLICATION_TYPES</code>, <code>can_send_on_email</code>; register in <code>FILE_SENDABILITY_CHECKERS</code>.</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_email_channel.py</code></td>
+<td>New + extended test classes (see Testing).</td>
+</tr>
+<tr>
+<td><code>apps/service_providers/tests/test_file_limits.py</code></td>
+<td>New <code>TestCanSendOnEmail</code>.</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/channels/stages/test_response_sending.py</code></td>
+<td>Tests for flush wiring.</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>
