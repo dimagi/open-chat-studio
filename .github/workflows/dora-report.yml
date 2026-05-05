@@ -42,7 +42,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Configure AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v6.0.0
+        uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: ${{ vars.DORA_AWS_ROLE_ARN }}
           role-session-name: DoraReport

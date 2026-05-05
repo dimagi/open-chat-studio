@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 from langchain_core.messages import AIMessage
+from pydantic import ValidationError
 
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
@@ -17,6 +18,40 @@ from apps.utils.factories.evaluations import (
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.langchain import build_fake_llm_service
+
+_VALID_PROMPTS = [
+    "Evaluate this: {input.content}",
+    "Check the output: {output.content}",
+    "Context value: {context.my_param}",
+    "Full history: {full_history}",
+    "Generated: {generated_response}",
+]
+
+_OUTPUT_SCHEMA = {"result": {"type": "string", "description": "result"}}
+
+
+@pytest.mark.parametrize("prompt", _VALID_PROMPTS)
+def test_llm_evaluator_prompt_valid_variables(prompt):
+    evaluator = LlmEvaluator(
+        llm_provider_id=1,
+        llm_provider_model_id=1,
+        prompt=prompt,
+        output_schema=_OUTPUT_SCHEMA,
+    )
+    assert evaluator.prompt == prompt
+
+
+def test_llm_evaluator_prompt_no_variables_raises():
+    with pytest.raises(ValidationError) as exc_info:
+        LlmEvaluator(
+            llm_provider_id=1,
+            llm_provider_model_id=1,
+            prompt="Evaluate this conversation please.",
+            output_schema=_OUTPUT_SCHEMA,
+        )
+    error_message = str(exc_info.value)
+    assert "at least one variable" in error_message
+    assert "{input.content}" in error_message
 
 
 @pytest.fixture()

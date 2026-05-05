@@ -28,7 +28,7 @@
                 </li>
               </ul>
             </div>
-            {% partialdef code-interpreter-input inline=True %}
+            {% partialdef code-interpreter-input inline %}
           <!-- Supported file types for code interpreter: https://platform.openai.com/docs/assistants/tools/code-interpreter/supported-files -->
               <input
                 x-ref="codeInterpreter"
@@ -41,7 +41,7 @@
                 class="file-input file-input-sm w-full max-w-xs"
               />
             {% endpartialdef code-interpreter-input %}
-            {% partialdef file-search-input inline=True %}
+            {% partialdef file-search-input inline %}
           <!-- Supported file types for file search: https://platform.openai.com/docs/assistants/tools/file-search/supported-files -->
               <input
                 x-ref="fileSearch"
