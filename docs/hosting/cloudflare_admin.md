@@ -151,7 +151,7 @@ For long-term storage or compliance reporting:
 Work through this checklist:
 
 1. Is WARP installed and turned on? The icon should be blue and show **Connected**.
-2. Has the user enrolled their device in the organisation? (WARP → Settings → Account → Login with Cloudflare Zero Trust)
+2. Has the user enrolled their device in the organisation? **(WARP → Settings → Account → Login with Cloudflare Zero Trust)**
 3. Is their serial number in the device posture rule?
 4. Is their email address in the Access policy?
 5. Is the tunnel healthy? Go to **Networks → Tunnels**; status should show **Healthy**.
