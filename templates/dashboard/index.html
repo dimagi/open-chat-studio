@@ -57,7 +57,7 @@
           <div class="form-control">
             <label class="label label-text">{% translate "Channels" %}</label>
             {% with field=filter_form.channels %}
-              {% partialdef "select_filter" inline=True %}
+              {% partialdef "select_filter" inline %}
                 <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
                   {% if not field.field.required %}
                     <option value="">---------</option>
