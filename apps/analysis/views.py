@@ -10,6 +10,7 @@ from django.views.generic import CreateView, DeleteView, DetailView
 from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefresh
 from django_tables2 import RequestConfig, SingleTableView
 
+from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.models import Experiment, ExperimentSession
@@ -100,7 +101,11 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         return context
 
     def get_table(self):
-        sessions = ExperimentSession.objects.get_table_queryset(self.request.team).filter(analyses=self.object)
+        sessions = (
+            ExperimentSession.objects.get_table_queryset(self.request.team)
+            .filter(analyses=self.object)
+            .prefetch_related(chat_tagged_items_prefetch())
+        )
         table = ChatbotSessionsTable(data=sessions)
         return RequestConfig(self.request).configure(table)
 
@@ -153,9 +158,7 @@ def download_analysis_results(request, team_slug, pk):
 def export_sessions(request, team_slug, pk):
     analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
     sessions = analysis.sessions.all()
-    rows = generate_export_rows(
-        analysis.experiment, sessions, translation_language=analysis.translation_language
-    )
+    rows = generate_export_rows(analysis.experiment, sessions, translation_language=analysis.translation_language)
     response = StreamingHttpResponse(export_rows_to_csv_stream(rows), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{analysis.name}_sessions_export.csv"'
     return response

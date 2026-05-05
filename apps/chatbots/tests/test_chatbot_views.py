@@ -5,10 +5,13 @@ import pytest
 from django.contrib.auth.models import Group, Permission
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.db import connection
 from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from apps.annotations.models import Tag
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
@@ -23,7 +26,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
 
@@ -64,6 +67,30 @@ def test_chatbot_experiment_table_view(client, team_with_users):
     assert response.status_code == 200
     assert "Test 2" in response.content.decode()
     assert "Test 1" not in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_chatbot_experiment_table_queryset_has_no_select_distinct(team_with_users):
+    """The chatbot list queryset must not emit ``SELECT DISTINCT`` — its filters and
+    annotations don't introduce row multiplication, and a deduping outer SELECT would
+    defeat the indexed plan. ``COUNT(DISTINCT ...)`` inside an aggregate subquery is a
+    different concern and is allowed."""
+    team = team_with_users
+    user = team.members.first()
+
+    factory = RequestFactory()
+    request = factory.get(reverse("chatbots:table", args=[team.slug]))
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    set_current_team(team)
+
+    view = ChatbotExperimentTableView()
+    view.request = request
+    view.kwargs = {"team_slug": team.slug}
+    sql = str(view.get_queryset().query).lower()
+    assert "select distinct" not in sql, sql
 
 
 @pytest.mark.django_db()
@@ -528,3 +555,111 @@ def test_chatbot_admin_can_access_edit_chatbot(client, team_with_users):
     url = reverse("chatbots:edit", args=[team.slug, experiment.id])
     response = client.get(url)
     assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_session_table_prefetch_is_page_bounded(team_with_users):
+    """Adding more sessions than fit on one page must not increase the number of
+    queries fired for the tag prefetch — the prefetch should target only the
+    sessions visible on the current page."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = ExperimentFactory.create(team=team)
+
+    # Two sessions, both tagged. Page size is 25 by default; both fit on one page.
+    tag = Tag.objects.create(team=team, name="t")
+    for _ in range(2):
+        s = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        s.chat.add_tag(tag, team=team, added_by=None)
+
+    factory = RequestFactory()
+
+    def do_request():
+        request = factory.get(
+            reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+        )
+        request.user = user
+        request.team = team
+        request.team_membership = get_team_membership_for_request(request)
+        attach_session_middleware_to_request(request)
+        set_current_team(team)
+        view = ChatbotSessionsTableView.as_view()
+        response = view(request, team_slug=team.slug, experiment_id=experiment.id)
+        # Force evaluation of the table data
+        list(response.context_data["table"].rows)
+        return response
+
+    with CaptureQueriesContext(connection) as ctx_two:
+        do_request()
+    queries_for_two = len(ctx_two.captured_queries)
+
+    # Add another 30 tagged sessions — far beyond one page.
+    for _ in range(30):
+        s = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        s.chat.add_tag(tag, team=team, added_by=None)
+
+    with CaptureQueriesContext(connection) as ctx_many:
+        do_request()
+    queries_for_many = len(ctx_many.captured_queries)
+
+    # Adding off-page rows must not bloat the prefetch. Slack absorbs minor non-prefetch
+    # variation (e.g. an extra permission/feature-flag fetch) without missing a real
+    # page-boundedness regression — those would 10×+ the count, not change it by 1–2.
+    allowed_slack = 2
+    assert queries_for_many <= queries_for_two + allowed_slack, (
+        f"Prefetch is not page-bounded: 2 sessions = {queries_for_two} queries, "
+        f"32 sessions = {queries_for_many} queries (slack {allowed_slack})"
+    )
+
+
+@pytest.mark.django_db()
+def test_session_table_session_query_uses_limit(team_with_users):
+    """The session list page must fetch sessions with LIMIT — not materialise the entire
+    filtered queryset before pagination. Detects the case where the tag-prefetch helper is
+    attached at an unpaginated lifecycle hook (e.g. ``get_table_data`` instead of after
+    ``RequestConfig.configure``)."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = ExperimentFactory.create(team=team)
+
+    tag = Tag.objects.create(team=team, name="t")
+    # 50 sessions — twice the default page size.
+    for _ in range(50):
+        s = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        s.chat.add_tag(tag, team=team, added_by=None)
+
+    factory = RequestFactory()
+    request = factory.get(
+        reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    )
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    set_current_team(team)
+
+    with CaptureQueriesContext(connection) as ctx:
+        view = ChatbotSessionsTableView.as_view()
+        response = view(request, team_slug=team.slug, experiment_id=experiment.id)
+        # `paginated_rows` is what the django-tables2 template iterates in production.
+        # Iterating `table.rows` would force an unpaginated SELECT that the template never fires.
+        list(response.context_data["table"].paginated_rows)
+
+    # Exclude the paginator's `SELECT COUNT(*)` row by matching its prefix; do NOT use
+    # `"count(" not in sql` because the main paginated SELECT embeds a `Subquery(... Count("id") ...)`
+    # for the message_count annotation, which would falsely match and leave `session_selects` empty
+    # (making the `all(...)` assertion below vacuously true).
+    session_selects = [
+        q["sql"]
+        for q in ctx.captured_queries
+        if "experiments_experimentsession" in q["sql"].lower()
+        and not q["sql"].lstrip().lower().startswith("select count(")
+    ]
+    assert session_selects, (
+        "Expected at least one row-fetching SELECT on experiments_experimentsession but found none.\n"
+        "All captured SQL:\n" + "\n\n".join(q["sql"] for q in ctx.captured_queries)
+    )
+    assert all("limit" in sql.lower() for sql in session_selects), (
+        "Session list ran an unbounded SELECT on experiments_experimentsession (no LIMIT) — "
+        "pagination is not being applied at the SQL level. Session selects captured:\n" + "\n\n".join(session_selects)
+    )

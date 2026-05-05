@@ -1,7 +1,20 @@
 import pytest
+from django.db import connection
 
 from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+
+
+@pytest.mark.django_db()
+def test_trace_expected_indexes_exist():
+    """Smoke check that the indexes the list-view hot path depends on are present."""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'trace_trace'")
+        names = {row[0] for row in cursor.fetchall()}
+
+    assert "trace_team_timestamp_idx" in names
+    assert "trace_experiment_timestamp_idx" in names
+    assert "trace_session_timestamp_idx" in names
 
 
 @pytest.mark.django_db()

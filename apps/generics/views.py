@@ -1,13 +1,13 @@
 from django import views
 from django.contrib import messages
-from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.utils.translation import gettext
 from waffle import flag_is_active
 
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import Tag
+from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.events.models import StaticTrigger, StaticTriggerType
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
@@ -95,13 +95,9 @@ class BaseTypeSelectFormView(views.View):
 def render_session_details(
     request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
 ):
-    session = ExperimentSession.objects.prefetch_related(
-        Prefetch(
-            "chat__tagged_items",
-            queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-            to_attr="prefetched_tagged_items",
-        )
-    ).get(external_id=session_id, team__slug=team_slug)
+    session = ExperimentSession.objects.prefetch_related(chat_tagged_items_prefetch()).get(
+        external_id=session_id, team__slug=team_slug
+    )
     experiment = request.experiment
     participant = session.participant
     annotation_queue_names = []

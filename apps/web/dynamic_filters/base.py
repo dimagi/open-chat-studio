@@ -103,13 +103,23 @@ class MultiColumnFilter:
         return queryset
 
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
-        """Applies the filters to the given queryset based on the `self.filter_params`."""
+        """Applies the filters to the given queryset based on the `self.filter_params`.
+
+        Contract: every `ColumnFilter` in `self.filters` must produce a queryset with at
+        most one row per outer-model row. There is no trailing ``.distinct()`` to dedupe
+        — filters that traverse a one-to-many relation (`chat__messages__*`,
+        `chat__messages__tags__*`, etc.) must use ``Exists`` subqueries rather than JOINs,
+        otherwise the page query and ``COUNT(*)`` will return duplicate rows.
+
+        See ``MessageTimestampFilter`` for the EXISTS pattern applied to a column
+        traversal, and ``ChatMessageTagsFilter`` for the chat-or-message tag check.
+        """
         queryset = self.prepare_queryset(queryset)
 
         for filter_component in self.filters:
             queryset = filter_component.apply(queryset, filter_params, timezone)
 
-        return queryset.distinct()
+        return queryset
 
 
 class ColumnFilter(BaseModel):
@@ -209,7 +219,6 @@ class StringColumnFilter(ColumnFilter):
         return self._apply_with_lookup(queryset, "icontains", value)
 
     def apply_does_not_contain(self, queryset, value, timezone=None) -> QuerySet:
-
         # For exclusion: exclude if it matches ANY column
         q = Q()
         for col in self.columns:

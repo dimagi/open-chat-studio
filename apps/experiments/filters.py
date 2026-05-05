@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Subquery
 
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
@@ -23,6 +23,20 @@ from apps.web.dynamic_filters.column_filters import (
     SessionStatusFilter,
     TimestampFilter,
 )
+
+
+class MessageTimestampFilter(TimestampFilter):
+    """Timestamp filter that traverses ``chat__messages`` without multiplying rows.
+
+    Targets a queryset whose model has a ``chat`` foreign key. Overrides only
+    ``_filter_by_lookup`` — date-parsing and the ``apply_*`` methods are inherited
+    from :class:`TimestampFilter`.
+    """
+
+    def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
+        return queryset.filter(
+            Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **{f"created_at__{lookup_suffix}": value}))
+        )
 
 
 def get_filter_context_data(
@@ -57,57 +71,86 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
     def prepare(self, team, **_):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
-    def apply_any_of(self, queryset, value, timezone=None):
-        chat_tags_condition = Q(chat__tags__name__in=value)
-        message_tags_condition = Q(chat__messages__tags__name__in=value)
-        return queryset.filter(chat_tags_condition | message_tags_condition)
-
-    def apply_all_of(self, queryset, value, timezone=None):
-        conditions = Q()
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
-        for tag in value:
-            chat_tag_exists = Exists(
-                CustomTaggedItem.objects.filter(
-                    object_id=OuterRef("chat_id"),
-                    content_type_id=chat_content_type.id,
-                    tag__name=tag,
-                )
+    def _chat_or_message_tag_exists(self, tag_names):
+        """Build a Q matching outer rows whose chat or any of its messages carries one of ``tag_names``."""
+        chat_ct = ContentType.objects.get_for_model(Chat)
+        chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
+        chat_tag_exists = Exists(
+            CustomTaggedItem.objects.filter(
+                object_id=OuterRef("chat_id"),
+                content_type_id=chat_ct.id,
+                tag__name__in=tag_names,
             )
-            message_tag_exists = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type_id=chat_message_content_type.id,
-                    tag__name=tag,
-                    object_id__in=Subquery(
-                        ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")
-                    ),
-                )
+        )
+        # Double OuterRef: the inner Subquery sits inside an Exists, so OuterRef("chat_id")
+        # would resolve to the Subquery's parent (CustomTaggedItem). One more OuterRef hop
+        # is needed to reach the outermost ExperimentSession queryset's chat_id. Don't
+        # collapse to a single OuterRef — that breaks the correlation.
+        message_tag_exists = Exists(
+            CustomTaggedItem.objects.filter(
+                content_type_id=chat_message_ct.id,
+                tag__name__in=tag_names,
+                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
             )
-            conditions &= chat_tag_exists | message_tag_exists
-        return queryset.filter(conditions)
-
-    def apply_excludes(self, queryset, value, timezone=None):
-        chat_tags_condition = Q(chat__tags__name__in=value)
-        message_tags_condition = Q(chat__messages__tags__name__in=value)
-        return queryset.exclude(chat_tags_condition | message_tags_condition)
-
-
-class MessageTagsFilter(ChatMessageTagsFilter):
-    """Simple tags filter for messages - works directly on message tags."""
-
-    description: str = "Filter by tags on messages"
+        )
+        return chat_tag_exists | message_tag_exists
 
     def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(tags__name__in=value)
+        return queryset.filter(self._chat_or_message_tag_exists(value))
 
     def apply_all_of(self, queryset, value, timezone=None):
         for tag in value:
-            queryset = queryset.filter(tags__name=tag)
+            queryset = queryset.filter(self._chat_or_message_tag_exists([tag]))
         return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(tags__name__in=value)
+        return queryset.exclude(self._chat_or_message_tag_exists(value))
+
+
+def _message_tag_exists(tag_names, category=None):
+    """``EXISTS`` matching ``ChatMessage`` rows whose own tags include one of ``tag_names``.
+
+    Used by :class:`MessageTagsFilter` and :class:`MessageVersionsFilter`. Avoids the
+    JOIN-multiplication that ``queryset.filter(tags__name__in=...)`` would cause when
+    a message carries multiple matching tags — the global ``.distinct()`` was removed
+    from :meth:`MultiColumnFilter.apply`, so JOIN-based filters now leak duplicates.
+    """
+    chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
+    qs = CustomTaggedItem.objects.filter(
+        content_type_id=chat_message_ct.id,
+        tag__name__in=tag_names,
+        object_id=OuterRef("pk"),
+    )
+    if category is not None:
+        qs = qs.filter(tag__category=category)
+    return Exists(qs)
+
+
+class MessageTagsFilter(ChoiceColumnFilter):
+    """Tag filter for ChatMessage querysets — matches tags on the message itself.
+
+    Distinct from :class:`ChatMessageTagsFilter`, which targets a *session* queryset
+    and looks for tags on either the chat or any of its messages.
+    """
+
+    query_param: str = "tags"
+    label: str = "Tags"
+    type: str = TYPE_CHOICE
+    description: str = "Filter by tags on messages"
+
+    def prepare(self, team, **_):
+        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(_message_tag_exists(value))
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        for tag in value:
+            queryset = queryset.filter(_message_tag_exists([tag]))
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(_message_tag_exists(value))
 
 
 class VersionsFilter(ChoiceColumnFilter):
@@ -137,21 +180,31 @@ class VersionsFilter(ChoiceColumnFilter):
         return queryset.filter(experiment_versions__contains=version_numbers)
 
 
-class MessageVersionsFilter(VersionsFilter):
-    """Versions filter for messages - works directly on message version tags."""
+class MessageVersionsFilter(ChoiceColumnFilter):
+    """Version filter for ChatMessage querysets — matches the version tag on a message.
 
+    Distinct from :class:`VersionsFilter`, which targets a session queryset and matches
+    against the ``experiment_versions`` array column.
+    """
+
+    query_param: str = "versions"
+    label: str = "Versions"
     description: str = "Filter by message version"
 
+    def prepare(self, team, **kwargs):
+        single_experiment = kwargs.get("single_experiment")
+        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
+
     def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return queryset.filter(_message_tag_exists(value, category=Chat.MetadataKeys.EXPERIMENT_VERSION))
 
     def apply_all_of(self, queryset, value, timezone=None):
         for tag in value:
-            queryset = queryset.filter(tags__name=tag, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+            queryset = queryset.filter(_message_tag_exists([tag], category=Chat.MetadataKeys.EXPERIMENT_VERSION))
         return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return queryset.exclude(_message_tag_exists(value, category=Chat.MetadataKeys.EXPERIMENT_VERSION))
 
 
 class ChannelsFilter(ChoiceColumnFilter):
@@ -197,9 +250,8 @@ class ExperimentSessionFilter(MultiColumnFilter):
             query_param="first_message",
             description="Filter by first message time",
         ),
-        TimestampFilter(
+        MessageTimestampFilter(
             label="Message Date",
-            column="chat__messages__created_at",
             query_param="message_date",
             description="Filter by message date",
         ),

@@ -339,3 +339,64 @@ class TestTraceFilter:
         value = json.dumps(["important", "other"])
         result = self._create_filter_and_apply(queryset, "message_tags", Operators.EXCLUDES, value)
         assert trace not in result
+
+    @pytest.fixture()
+    def trace_with_many_message_tags(self, team, experiment, participant):
+        """A trace whose input_message has multiple tags — would multiply under JOIN."""
+        chat = ChatFactory.create(team=team)
+        input_message = ChatMessage.objects.create(
+            chat=chat,
+            content="hi",
+            message_type=ChatMessageType.HUMAN,
+        )
+        Tag.objects.create(team=team, name="important")
+        Tag.objects.create(team=team, name="urgent")
+        input_message.add_tags(["important", "urgent"], team=team, added_by=None)
+
+        trace = TraceFactory.create(
+            team=team,
+            experiment=experiment,
+            participant=participant,
+            status=TraceStatus.SUCCESS,
+            duration=1000,
+            input_message=input_message,
+        )
+        return trace
+
+    def test_trace_message_tags_any_of_no_duplicates(self, trace_with_many_message_tags, team):
+        queryset = Trace.objects.filter(team=team)
+        result = self._create_filter_and_apply(
+            queryset,
+            "message_tags",
+            Operators.ANY_OF,
+            json.dumps(["important", "urgent"]),
+        )
+        assert result.count() == 1
+        assert list(result) == [trace_with_many_message_tags]
+
+    def test_trace_message_tags_all_of_no_duplicates(self, trace_with_many_message_tags, team):
+        queryset = Trace.objects.filter(team=team)
+        result = self._create_filter_and_apply(
+            queryset,
+            "message_tags",
+            Operators.ALL_OF,
+            json.dumps(["important", "urgent"]),
+        )
+        assert result.count() == 1
+        assert list(result) == [trace_with_many_message_tags]
+
+    def test_trace_message_tags_excludes_no_duplicates(self, trace_with_many_message_tags, team):
+        """Exclude a tag that no message has — the trace should remain exactly once.
+
+        The bug being guarded against is the trace appearing 2 times (one per
+        tag on its input_message) when the global `.distinct()` is removed.
+        """
+        queryset = Trace.objects.filter(team=team)
+        result = self._create_filter_and_apply(
+            queryset,
+            "message_tags",
+            Operators.EXCLUDES,
+            json.dumps(["nonexistent"]),
+        )
+        assert result.count() == 1
+        assert list(result) == [trace_with_many_message_tags]

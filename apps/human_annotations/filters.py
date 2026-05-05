@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Exists, OuterRef, QuerySet
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.filters import ChannelsFilter, ChatMessageTagsFilter, VersionsFilter
+from apps.experiments.filters import ChannelsFilter, ChatMessageTagsFilter, MessageTimestampFilter, VersionsFilter
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
@@ -116,9 +116,8 @@ class AnnotationSessionFilter(MultiColumnFilter):
             query_param="first_message",
             description="Filter by first message time",
         ),
-        TimestampFilter(
+        MessageTimestampFilter(
             label="Message Date",
-            column="chat__messages__created_at",
             query_param="message_date",
             description="Filter by message date",
         ),

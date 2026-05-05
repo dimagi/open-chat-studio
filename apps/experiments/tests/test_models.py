@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import dictdiffer
 import pytest
 import time_machine
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.utils import timezone
 from time_machine import travel
@@ -1035,3 +1035,14 @@ def _compare_models(original, new, expected_changed_fields: list) -> None:
     assert field_difference == set(), (
         f"These fields differ between the experiment versions, but should not: {field_difference}"
     )
+
+
+@pytest.mark.django_db()
+def test_experimentsession_team_lastactivity_index_exists():
+    """Smoke check that the composite index backing the session list ordering is present."""
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'experiments_experimentsession'")
+        names = {row[0] for row in cursor.fetchall()}
+
+    assert "expsession_team_lastact_idx" in names

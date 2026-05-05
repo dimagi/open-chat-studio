@@ -21,6 +21,7 @@ from django.views.generic import CreateView, DetailView, TemplateView, UpdateVie
 from django_tables2 import LazyPaginator, SingleTableView
 from waffle import flag_is_active
 
+from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage
 from apps.experiments.filters import get_filter_context_data
@@ -236,6 +237,13 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
             .select_related("team", "participant__user", "chat", "experiment")
             .order_by("-last_activity_at")
         )
+
+    def get_table(self, **kwargs):
+        """Attach the tag prefetch to the paginated page only — see ChatbotSessionsTableView for rationale."""
+        table = super().get_table(**kwargs)
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return table
 
 
 @login_and_team_required

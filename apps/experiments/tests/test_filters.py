@@ -9,7 +9,7 @@ from time_machine import travel
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.filters import ExperimentSessionFilter
-from apps.experiments.models import SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.teams.models import Team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -106,6 +106,124 @@ class TestExperimentSessionFilters:
         session2 = ExperimentSessionFactory.create(experiment=session1.experiment, status=SessionStatus.COMPLETE)
 
         return [session1, session2]
+
+    @pytest.fixture()
+    def session_with_many_message_tags(self):
+        """One session whose chat contains multiple messages, each with multiple tags.
+
+        A naive JOIN-based filter on `chat__messages__tags__name` returns the
+        session N×M times (N matching messages × M matching tags) — a regression
+        guard for the EXISTS rewrite.
+        """
+        session = ExperimentSessionFactory.create()
+        team = session.team
+        important = _get_tag(team=team, name="important")
+        urgent = _get_tag(team=team, name="urgent")
+
+        for content in ("first", "second", "third"):
+            msg = ChatMessage.objects.create(
+                chat=session.chat,
+                content=content,
+                message_type=ChatMessageType.HUMAN,
+            )
+            msg.add_tags([important, urgent], team=team, added_by=None)
+
+        return session, [important, urgent]
+
+    def test_message_tags_any_of_returns_no_duplicates(self, session_with_many_message_tags):
+        session, _ = session_with_many_message_tags
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps(["important", "urgent"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 1
+        assert list(filtered) == [session]
+
+    def test_message_tags_all_of_returns_no_duplicates(self, session_with_many_message_tags):
+        session, _ = session_with_many_message_tags
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ALL_OF,
+            "filter_0_value": json.dumps(["important", "urgent"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 1
+        assert list(filtered) == [session]
+
+    def test_message_tags_excludes_returns_no_duplicates(self, session_with_many_message_tags):
+        """Exclude a tag that no message has — both sessions should remain, each exactly once.
+
+        The bug being guarded against is `session` appearing 3 times (one per
+        tagged message) when the global `.distinct()` is removed.
+        """
+        session, _ = session_with_many_message_tags
+        other = ExperimentSessionFactory.create(experiment=session.experiment)
+
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.EXCLUDES,
+            "filter_0_value": json.dumps(["nonexistent"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 2
+        assert set(filtered) == {session, other}
+
+    @pytest.mark.parametrize(
+        ("operator", "value_offset_days", "should_match"),
+        [
+            (Operators.ON, 0, True),
+            (Operators.ON, -1, False),
+            (Operators.BEFORE, 1, True),
+            (Operators.BEFORE, 0, False),
+            (Operators.AFTER, -1, True),
+            (Operators.AFTER, 0, False),
+        ],
+    )
+    def test_message_date_filter_no_duplicates(
+        self, session_with_many_message_tags, operator, value_offset_days, should_match
+    ):
+        """Every operator on the message-date filter must return one row per session,
+        regardless of how many messages match. The naive JOIN through
+        ``chat__messages__created_at`` would yield 3 rows for our fixture session.
+        """
+        session, _ = session_with_many_message_tags
+        target_date = (timezone.now().date() + timedelta(days=value_offset_days)).isoformat()
+
+        params = {
+            "filter_0_column": "message_date",
+            "filter_0_operator": operator,
+            "filter_0_value": target_date,
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        if should_match:
+            assert filtered.count() == 1
+            assert list(filtered) == [session]
+        else:
+            assert filtered.count() == 0
+
+    def test_message_date_filter_range_no_duplicates(self, session_with_many_message_tags):
+        """The relative ``range`` operator must not multiply rows either."""
+        session, _ = session_with_many_message_tags
+        params = {
+            "filter_0_column": "message_date",
+            "filter_0_operator": Operators.RANGE,
+            "filter_0_value": "1d",
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert filtered.count() == 1
+        assert list(filtered) == [session]
 
     @travel("2025-01-03 10:00:00", tick=False)
     def test_message_timestamp_filters(self):
@@ -439,3 +557,15 @@ class TestParticipantFilter:
         assert filtered.count() == count
         if count == 1:
             assert filtered.first() == session
+
+
+@pytest.mark.django_db()
+def test_session_filter_default_query_does_not_join_experiment_channel():
+    """No filter, no display column references experiment_channel — confirm the COUNT
+    does not pull it in unnecessarily."""
+
+    team = TeamFactory.create()
+    qs = ExperimentSession.objects.get_table_queryset(team)
+    qs = ExperimentSessionFilter().apply(qs, FilterParams())
+    sql = str(qs.values("id").query).lower()
+    assert "channels_experimentchannel" not in sql, sql

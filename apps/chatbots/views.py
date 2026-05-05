@@ -20,6 +20,7 @@ from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
+from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import ChannelBase
@@ -187,7 +188,9 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         return qs
 
     def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
+        """Returns the chatbot list queryset annotated with per-row session/participant/interaction
+        counts and last-activity. Trend data (24h success/error series) is attached separately in
+        :meth:`get_table_data` since it requires a single bulk query keyed on the visible IDs."""
         queryset = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
@@ -515,7 +518,6 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     permission_required = "experiments.view_experimentsession"
 
     def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
         experiment_id = self.kwargs.get("experiment_id")
         query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
         timezone = self.request.session.get("detected_tz", None)
@@ -526,8 +528,15 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         return query_set
 
     def get_table(self, **kwargs):
-        """When viewing sessions for a specific chatbot, hide the chatbot column."""
+        """Configure the table, then attach the tag prefetch to the paginated page only.
+
+        Hooking after `RequestConfig.configure` ensures the underlying queryset is sliced
+        with LIMIT before we evaluate it — so both the page rows and the CustomTaggedItem
+        lookup are bounded to a single page, not the full filtered set.
+        """
         table = super().get_table(**kwargs)
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
         if self.kwargs.get("experiment_id"):
             table.exclude = ("chatbot",)
         return table
