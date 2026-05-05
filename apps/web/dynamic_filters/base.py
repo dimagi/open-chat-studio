@@ -103,7 +103,17 @@ class MultiColumnFilter:
         return queryset
 
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
-        """Applies the filters to the given queryset based on the `self.filter_params`."""
+        """Applies the filters to the given queryset based on the `self.filter_params`.
+
+        Contract: every `ColumnFilter` in `self.filters` must produce a queryset with at
+        most one row per outer-model row. There is no trailing ``.distinct()`` to dedupe
+        — filters that traverse a one-to-many relation (`chat__messages__*`,
+        `chat__messages__tags__*`, etc.) must use ``Exists`` subqueries rather than JOINs,
+        otherwise the page query and ``COUNT(*)`` will return duplicate rows.
+
+        See ``MessageTimestampFilter`` for the EXISTS pattern applied to a column
+        traversal, and ``ChatMessageTagsFilter`` for the chat-or-message tag check.
+        """
         queryset = self.prepare_queryset(queryset)
 
         for filter_component in self.filters:

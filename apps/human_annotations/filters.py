@@ -9,6 +9,7 @@ from apps.experiments.filters import ChannelsFilter, ChatMessageTagsFilter, Vers
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
+    MessageTimestampFilter,
     ParticipantFilter,
     RemoteIdFilter,
     SessionIdFilter,
@@ -116,9 +117,8 @@ class AnnotationSessionFilter(MultiColumnFilter):
             query_param="first_message",
             description="Filter by first message time",
         ),
-        TimestampFilter(
+        MessageTimestampFilter(
             label="Message Date",
-            column="chat__messages__created_at",
             query_param="message_date",
             description="Filter by message date",
         ),
