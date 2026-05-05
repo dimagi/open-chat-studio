@@ -1,0 +1,5 @@
+{% load form_tags %}
+{% if form.fields %}
+  {% render_form_fields form %}
+{% endif %}
+{{ form.non_field_errors }}

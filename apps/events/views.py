@@ -1,13 +1,14 @@
 from django.contrib.auth.decorators import permission_required
 from django.db import models
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from apps.events.forms import (
+    ACTION_PARAMS_FORMS,
     StaticTriggerForm,
     TimeoutTriggerForm,
-    get_action_params_form,
+    build_action_params_form,
 )
 from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.teams.decorators import login_and_team_required
@@ -168,3 +169,20 @@ def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_
     all_versions.update(is_active=new_status)
 
     return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
+
+
+@login_and_team_required
+def action_params_form_view(request, team_slug: str, experiment_id: str):
+    """Return the action-params secondary form fragment for ``action_type``.
+
+    Reachable from the same pages that already require event create/change perms.
+    """
+    action_type = request.GET.get("action_type")
+    if action_type not in ACTION_PARAMS_FORMS:
+        return HttpResponseBadRequest("Invalid action_type")
+    form = build_action_params_form(
+        action_type,
+        team_id=request.team.id,
+        experiment_id=experiment_id,
+    )
+    return render(request, "events/_action_params_form.html", {"form": form})
