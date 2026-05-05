@@ -77,11 +77,11 @@ def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> l
 
     Filters out subtypes gated by feature flags / settings.
     """
-    excluded = set()
+    excluded = []
     if provider == ServiceProvider.voice and not flag_is_active(request, "flag_open_ai_voice_engine"):
-        excluded.add(VoiceProviderType.openai_voice_engine)
+        excluded.append(VoiceProviderType.openai_voice_engine)
     if provider == ServiceProvider.messaging and not settings.SLACK_ENABLED:
-        excluded.add(MessagingProviderType.slack)
+        excluded.append(MessagingProviderType.slack)
     return [subtype for subtype in provider.subtype if subtype not in excluded]
 
 
@@ -111,9 +111,9 @@ def get_service_provider_forms(
 def _get_main_form(provider: ServiceProvider, *, instance=None, data=None, fixed_subtype: Enum):
     """Get the main 'model form' for the service provider.
 
-    The provider-type field is rendered as a hidden input with the chosen
-    subtype as its initial value. On edit, it is also disabled, matching
-    the previous behavior.
+    The provider-type field is rendered as a hidden input pre-filled with
+    the chosen subtype, and is always disabled — its value is fixed by the
+    URL on create and by the instance on edit.
     """
     form_cls = forms.modelform_factory(
         provider.model,
@@ -124,8 +124,7 @@ def _get_main_form(provider: ServiceProvider, *, instance=None, data=None, fixed
     form = form_cls(data=data, instance=instance, initial=initial)
     type_field = form.fields[provider.provider_type_field]
     type_field.widget = forms.HiddenInput()
-    if instance:
-        type_field.disabled = True
+    type_field.disabled = True
     return form
 
 

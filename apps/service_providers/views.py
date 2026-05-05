@@ -142,11 +142,11 @@ class CreateServiceProvider(
     def _resolve_subtype(self):
         instance = self._get_instance()
         if instance:
-            return self.provider_type.subtype(instance.type)
+            return self.provider_type.subtype[instance.type]
         slug = self.kwargs.get("subtype")
         try:
-            subtype = self.provider_type.subtype(slug)
-        except ValueError as exc:
+            subtype = self.provider_type.subtype[slug]
+        except KeyError as exc:
             raise Http404(f"Unknown subtype: {slug}") from exc
         if subtype not in get_available_subtypes(self.provider_type, self.request):
             raise Http404("Subtype is not enabled")
