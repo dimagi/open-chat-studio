@@ -3,13 +3,16 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
+from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 from langchain_core.messages import BaseMessage, RemoveMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
 
 from apps.chat.conversation import COMPRESSION_MARKER
+from apps.pipelines.exceptions import MessageTooLargeError
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import PipelineNode
@@ -128,3 +131,25 @@ class MaxHistoryLengthHistoryMiddleware(BaseNodeHistoryMiddleware):
     def persist_summary(self, messages: list[BaseMessage]):
         # No summary to persist for message-count-based pruning
         pass
+
+
+class MessageSizeValidationMiddleware(AgentMiddleware):
+    """Raises MessageTooLargeError before the model call if the full context exceeds the token budget.
+
+    Runs after history compression and includes all messages in state
+    (history + current user input + any attachments).
+    """
+
+    def __init__(self, token_limit: int):
+        self._token_limit = token_limit
+
+    def before_model(self, state, runtime):
+        if not self._token_limit:
+            return None
+        token_count = count_tokens_approximately(state["messages"])
+        if token_count > self._token_limit:
+            raise MessageTooLargeError(
+                f"Your message is too large for this model. "
+                f"It uses approximately {token_count} tokens, but only {self._token_limit} tokens are available."
+            )
+        return None
