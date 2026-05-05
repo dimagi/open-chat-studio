@@ -108,7 +108,7 @@ def get_service_provider_forms(
     return primary_form, config_form
 
 
-def _get_main_form(provider: ServiceProvider, *, instance=None, data=None, fixed_subtype):
+def _get_main_form(provider: ServiceProvider, *, instance=None, data=None, fixed_subtype: Enum):
     """Get the main 'model form' for the service provider.
 
     The provider-type field is rendered as a hidden input with the chosen
