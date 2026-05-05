@@ -188,8 +188,9 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         return qs
 
     def get_queryset(self):
-        """Returns a lightweight queryset for counting. Expensive annotations are added in get_table_data()."""
-        # Audited 2026-05-01: get_all() + these filters emit no SELECT DISTINCT (verified via shell + pg_stat).
+        """Returns the chatbot list queryset annotated with per-row session/participant/interaction
+        counts and last-activity. Trend data (24h success/error series) is attached separately in
+        :meth:`get_table_data` since it requires a single bulk query keyed on the visible IDs."""
         queryset = (
             self.model.objects.get_all()
             .filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)

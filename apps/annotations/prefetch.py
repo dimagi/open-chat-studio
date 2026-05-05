@@ -41,6 +41,10 @@ def attach_chat_tagged_items(rows):
     wrappers (whose ``.record`` is the underlying instance) — different
     paginators expose ``page.object_list`` as different shapes, and callers
     shouldn't have to care which.
+
+    The caller's queryset MUST ``select_related("chat")`` (or otherwise
+    pre-populate ``row.chat``); this helper sets attributes on the related
+    ``Chat`` instance, and a deferred FK would silently regress to N+1.
     """
     from apps.chat.models import Chat  # noqa: PLC0415
 

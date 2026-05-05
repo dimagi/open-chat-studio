@@ -64,7 +64,7 @@ class Trace(models.Model):
             models.Index(
                 fields=["team", "-timestamp"],
                 name="trace_team_timestamp_idx",
-                condition=~Q(status="pending"),
+                condition=~Q(status=TraceStatus.PENDING),
             ),
             models.Index(
                 fields=["experiment", "-timestamp"],

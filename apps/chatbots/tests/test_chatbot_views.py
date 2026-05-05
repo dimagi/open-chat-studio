@@ -70,6 +70,30 @@ def test_chatbot_experiment_table_view(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_chatbot_experiment_table_queryset_has_no_select_distinct(team_with_users):
+    """The chatbot list queryset must not emit ``SELECT DISTINCT`` — its filters and
+    annotations don't introduce row multiplication, and a deduping outer SELECT would
+    defeat the indexed plan. ``COUNT(DISTINCT ...)`` inside an aggregate subquery is a
+    different concern and is allowed."""
+    team = team_with_users
+    user = team.members.first()
+
+    factory = RequestFactory()
+    request = factory.get(reverse("chatbots:table", args=[team.slug]))
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    set_current_team(team)
+
+    view = ChatbotExperimentTableView()
+    view.request = request
+    view.kwargs = {"team_slug": team.slug}
+    sql = str(view.get_queryset().query).lower()
+    assert "select distinct" not in sql, sql
+
+
+@pytest.mark.django_db()
 def test_create_chatbot_view(team_with_users):
     team = team_with_users
     user = team.members.first()

@@ -90,6 +90,9 @@ class TimestampFilter(ColumnFilter):
             # Convert date to UTC to compare it correctly with stored timestamps
             return date_value.astimezone(pytz.UTC)
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+            # Filter values come from URL query params controlled by the user; an
+            # invalid value should silently no-op (return the unfiltered queryset)
+            # rather than 500 the page or spam logs.
             return None
 
     def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
@@ -143,4 +146,5 @@ class TimestampFilter(ColumnFilter):
             range_starting_utc_time = (now_client - delta).astimezone(pytz.UTC)
             return self._filter_by_lookup(queryset, "gte", range_starting_utc_time)
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+            # User-controlled URL value; silent no-op is preferred over a 500.
             return queryset
