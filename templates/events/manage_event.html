@@ -27,7 +27,7 @@
                     {% endif %}
                     {% render_form_fields action_primary_form %}
                     <div id="action-params"
-                         hx-get="{% url 'events:action_params_form' request.team.slug experiment_id %}"
+                         hx-get="{{ action_params_url }}"
                          hx-trigger="change from:[name=action_type]"
                          hx-include="[name=action_type]"
                          hx-swap="innerHTML">

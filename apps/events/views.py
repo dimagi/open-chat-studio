@@ -63,7 +63,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
         trigger_form = trigger_form_class()
 
     context = _event_form_context(
-        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id
+        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
     )
     return render(request, "events/manage_event.html", context)
 
@@ -74,8 +74,9 @@ def _default_action_type() -> str:
 
 
 def _event_form_context(
-    trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id
+    trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
 ):
+    namespace = request.resolver_match.namespace  # e.g., "chatbots:events"
     return {
         "trigger_form": trigger_form,
         "action_primary_form": action_primary_form,
@@ -83,6 +84,10 @@ def _event_form_context(
         "action_type": action_type,
         "event_type": trigger_form_class._meta.model._meta.model_name,
         "experiment_id": experiment_id,
+        "action_params_url": reverse(
+            f"{namespace}:action_params_form",
+            args=[request.team.slug, experiment_id],
+        ),
     }
 
 
@@ -138,7 +143,7 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         trigger_form = trigger_form_class(instance=trigger)
 
     context = _event_form_context(
-        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id
+        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
     )
     return render(request, "events/manage_event.html", context)
 

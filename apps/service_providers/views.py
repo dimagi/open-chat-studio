@@ -35,6 +35,14 @@ from .utils import ServiceProvider, get_available_subtypes, get_service_provider
 log = logging.getLogger("ocs.service_providers")
 
 
+def _lookup_subtype_by_slug(subtype_enum, slug):
+    """Find the enum member whose ``str()`` form is ``slug``."""
+    for member in subtype_enum:
+        if str(member) == slug:
+            return member
+    raise KeyError(slug)
+
+
 class ServiceProviderMixin:
     @property
     def provider_type(self) -> ServiceProvider:
@@ -141,11 +149,12 @@ class CreateServiceProvider(
 
     def _resolve_subtype(self):
         instance = self._get_instance()
+        subtype_enum = self.provider_type.subtype
         if instance:
-            return self.provider_type.subtype[instance.type]
+            return _lookup_subtype_by_slug(subtype_enum, instance.type)
         slug = self.kwargs.get("subtype")
         try:
-            subtype = self.provider_type.subtype[slug]
+            subtype = _lookup_subtype_by_slug(subtype_enum, slug)
         except KeyError as exc:
             raise Http404(f"Unknown subtype: {slug}") from exc
         if subtype not in get_available_subtypes(self.provider_type, self.request):
