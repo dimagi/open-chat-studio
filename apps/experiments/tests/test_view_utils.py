@@ -11,8 +11,7 @@ from apps.utils.factories.service_provider_factories import LlmProviderModelFact
 
 def _expected_chars(token_limit: int) -> int:
     chars_per_token = (count_tokens_approximately.__kwdefaults__ or {}).get("chars_per_token", 4.0)
-    effective_tokens = token_limit - token_limit // 8
-    return int(effective_tokens * chars_per_token)
+    return int(token_limit * chars_per_token)
 
 
 @pytest.fixture(autouse=True)
