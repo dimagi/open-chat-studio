@@ -41,9 +41,9 @@ Ask the team member to install the [Cloudflare WARP client](https://developers.c
 
 1. Open WARP → **Preferences → Account → Login with Cloudflare Zero Trust**
 2. Enter the organisation team name (available under **Zero Trust → Settings → Custom Pages**)
-3. Enter the OTP code sent to their work email
-4. Turn WARP on - the icon should show **Connected**
-5. Open a browser and navigate to the app hostname (e.g. `https://ocs.your-org`)
+3. Enter the **OTP code** sent to their work **email**
+4. Turn **WARP ON** - the icon should show **Connected**
+5. Open a browser and navigate to the app **hostname** (e.g. `https://ocs.your-org`)
 
 ---
 
@@ -52,7 +52,7 @@ Ask the team member to install the [Cloudflare WARP client](https://developers.c
 **To remove access immediately:**
 
 1. Go to **Access → Applications → Open Chat Studio → Policies**.
-2. Remove their email address from the Include list.
+2. Remove their **email address** from the Include list.
 3. Click **Save**.
 
 They are blocked from the next request onwards.
@@ -150,14 +150,14 @@ For long-term storage or compliance reporting:
 
 Work through this checklist:
 
-1. Is WARP installed and turned on? The icon should be blue and show **Connected**.
-2. Has the user enrolled their device in the organisation? (WARP → Settings → Account → Login with Cloudflare Zero Trust)
+1. Is **WARP** installed and turned on? The icon should be blue and show **Connected**.
+2. Has the user enrolled their device in the organisation? **(WARP → Settings → Account → Login with Cloudflare Zero Trust)**
 3. Is their serial number in the device posture rule?
 4. Is their email address in the Access policy?
 5. Is the tunnel healthy? Go to **Networks → Tunnels**; status should show **Healthy**.
-6. Can they reach the app by CIDR IP? Try `http://172.18.0.7:8000`. If this works but the hostname doesn't, the issue is DNS, not access.
+6. Can they reach the app by **CIDR IP**? Try `http://172.18.0.7:8000`. If this works but the hostname doesn't, the issue is **DNS**, not access.
 7. Is Local Domain Fallback configured with the correct dnsmasq IP? Go to **Settings → WARP Client → Device profiles → Default profile → Local Domain Fallback**.
-8. Is Gateway Proxy enabled with UDP? Go to **Traffic policies → Traffic settings → Proxy and inspection**. UDP must be on for DNS resolution to private IPs.
+8. Is Gateway Proxy enabled with **UDP**? Go to **Traffic policies → Traffic settings → Proxy and inspection**. UDP must be on for DNS resolution to private IPs.
 
 If all of the above are correct, check the Access logs. The deny reason will identify exactly which check is failing.
 
@@ -165,8 +165,8 @@ If all of the above are correct, check the Access logs. The deny reason will ide
 
 The private hostname cannot be resolved. This is a DNS issue, not an access issue. Check in order:
 
-1. Is WARP connected? Private hostnames only resolve through WARP.
-2. Has the user toggled WARP off and on since the last profile change? Profile updates require a reconnect.
+1. Is **WARP connected**? Private hostnames only resolve through WARP.
+2. Has the user toggled **WARP OFF** and on since the last profile change? Profile updates require a reconnect.
 3. Is Local Domain Fallback configured? Go to **Settings → WARP Client → Device profiles → Default profile → Local Domain Fallback**; the hostname must be listed with the dnsmasq IP.
 4. Is Gateway Proxy enabled with UDP? Go to **Traffic policies → Traffic settings**; UDP must be on.
 5. Is the dnsmasq container running? Check on the server: `docker compose -f docker-compose.cloudflare.yml logs dns`
@@ -195,7 +195,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml resta
 
 ### A user's OTP email is not arriving
 
-1. Ask them to check their spam or junk folder.
+1. Ask them to check their **spam or junk folder**.
 2. Confirm their email address in the Access policy is spelled correctly.
 3. Ask them to click **Resend code** and wait 60 seconds.
 4. If the problem persists, remove their email from the policy and re-add it to reset their Access session.

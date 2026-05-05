@@ -46,29 +46,32 @@ The `cloudflared` container initiates the tunnel, your server opens no inbound p
 ### Add a Private Hostname
 The primary access method is a **private hostname** (e.g. `ocs.your-org`). This hostname is only resolvable when WARP is connected; it does not appear in public DNS, certificate transparency logs, or any external registry. No domain ownership or Cloudflare DNS management is required.
 
-!!! warning "Avoid the `.local` TLD" The `.local` TLD is reserved for mDNS/Bonjour on macOS and Linux. Browsers may try to resolve `.local` hostnames via mDNS instead of sending them to WARP's DNS, causing silent resolution failures. Use a custom name like `ocs.your-org`, `ocs.internal`, or `ocs.lan`.
+!!! warning "Avoid the `.local` TLD"
+    The `.local` TLD is reserved for mDNS/Bonjour on macOS and Linux. Browsers may try to resolve `.local` hostnames via mDNS instead of sending them to WARP's DNS, causing silent resolution failures. Use a custom name like `ocs.your-org`, `ocs.internal`, or `ocs.lan`.
 
-1. Navigate to your tunnel → Routes tab
-2. Click Add route → select Private hostname
-3. Enter hostname (e.g. ocs.your-org)
+1. Navigate to **your tunnel → Routes tab**
+2. Click Add route → select `Private hostname`
+3. Enter hostname (e.g. `ocs.your-org`)
 4. Optional: add a description
 5. Save
 
 ### Add a CIDR route
 The CIDR route tells WARP where to send traffic for your Docker network. Without it, DNS resolves the hostname to an IP, but WARP does not know how to reach that IP.
 
-1. Still in Routes → Add route → select Private CIDR
+1. Still in **Routes → Add route → select Private CIDR**
 2. On your server, find your web container's IP address:
 ```bash
 docker inspect open-chat-studio-web-1 | grep -A 5 "IPAddress"
 ```
 
 Note the IP address (e.g. `172.18.0.7`); the subnet is the /16 range (e.g. `172.18.0.0/16`)
+
 3. Enter the CIDR (e.g. `172.18.0.0/16`)
 4. Optional: add a description
 5. Save
 
-!!! note Use the full subnet notation (e.g. `172.18.0.0/16`), not a specific host with a wide mask (e.g. `172.18.0.7/16`). The latter works but is incorrect CIDR notation.
+!!! note
+    Use the full subnet notation (e.g. `172.18.0.0/16`), not a specific host with a wide mask (e.g. `172.18.0.7/16`). The latter works but is incorrect CIDR notation.
 
 ## Step 3: Configure Cloudflare Zero Trust
 ### Enable Gateway Proxy
@@ -81,19 +84,21 @@ Gateway Proxy is **required** for private hostname resolution. Without it, WARP 
 5. Optionally select **ICMP**
 6. Save
 
-!!! warning Without UDP enabled, WARP cannot forward DNS queries to your private DNS server and private hostnames will not resolve.
+!!! warning
+    Without UDP enabled, WARP cannot forward DNS queries to your private DNS server and private hostnames will not resolve.
 
 ### Create a DNS Location
 A DNS location tells Cloudflare Gateway where to receive DNS queries. Without it, private hostnames like ocs.your-org will not resolve, even with WARP connected.
 
-1. Go to Zero Trust → Settings → Locations
+1. Go to **Zero Trust → Settings → Locations**
 2. Click Create a location
 3. Name: Default DNS Location
 4. Set as default: ✅ Yes
 5. Do NOT add a network restriction; leave it empty so all WARP clients match
 6. Click Create
 
-!!! warning If you restrict the DNS location to a specific public IP, WARP clients will not match because they resolve DNS from Cloudflare's edge, not your public IP.
+!!! warning
+    If you restrict the DNS location to a specific public IP, WARP clients will not match because they resolve DNS from Cloudflare's edge, not your public IP.
 
 ### Configure Split Tunnels
 By default, WARP excludes private IP ranges from routing through the tunnel. You must remove these exclusions so WARP sends traffic to your Docker network.
@@ -104,7 +109,8 @@ By default, WARP excludes private IP ranges from routing through the tunnel. You
 4. Remove `192.168.0.0/16` if your Docker network uses that range
 5. Save
 
-!!! note Removing `172.16.0.0/12` means all traffic to the `172.16.x.x` – `172.31.x.x` range routes through WARP. This is usually fine since home and office networks rarely use `172.18.x.x.` If users experience issues reaching local resources on those ranges, add specific sub-ranges back to the exclude list instead.
+!!! note
+    Removing `172.16.0.0/12` means all traffic to the `172.16.x.x` – `172.31.x.x` range routes through WARP. This is usually fine since home and office networks rarely use `172.18.x.x.` If users experience issues reaching local resources on those ranges, add specific sub-ranges back to the exclude list instead.
 
 ### Configure Local Domain Fallback
 Local Domain Fallback tells WARP to send DNS queries for your private hostname to your dnsmasq container instead of Cloudflare's public DNS.
@@ -115,7 +121,8 @@ Local Domain Fallback tells WARP to send DNS queries for your private hostname t
 4. DNS server IP: `172.18.0.100` (the dnsmasq container IP; see Step 4)
 5. Save
 
-!!! note Resolver Policies (Cloudflare resolves hostnames natively without a DNS server) require an Enterprise plan. Local Domain Fallback with a self-hosted dnsmasq container works on all plans including Free.
+!!! note
+    Resolver Policies (Cloudflare resolves hostnames natively without a DNS server) require an Enterprise plan. Local Domain Fallback with a self-hosted dnsmasq container works on all plans including Free.
 
 !!! tip "Toggle WARP after profile changes"
     After changing Split Tunnels, Local Domain Fallback, or any device profile setting, users must disconnect and reconnect WARP to pick up the updated profile. Changes are not applied to connected clients automatically.
@@ -157,17 +164,18 @@ networks:
 Private hostnames like `ocs.your-org` don't exist in public DNS. Here's the full resolution chain:
 
 ```
-1. User types ocs.your-org in browser
+1. User types `ocs.your-org` in browser
 2. WARP intercepts the DNS query
-3. WARP checks Local Domain Fallback → matches ocs.your-org
-4. WARP forwards DNS query to dnsmasq at 172.18.0.100 (through the tunnel)
-5. dnsmasq returns 172.18.0.7 (the web container IP)
-6. Browser connects to 172.18.0.7:8000
-7. WARP routes traffic through the tunnel (CIDR 172.18.0.0/16 matches)
+3. WARP checks Local Domain Fallback → matches `ocs.your-org`
+4. WARP forwards DNS query to dnsmasq at `172.18.0.100` (through the tunnel)
+5. dnsmasq returns `172.18.0.7` (the web container IP)
+6. Browser connects to `172.18.0.7:8000`
+7. WARP routes traffic through the tunnel (CIDR `172.18.0.0/16` matches)
 8. Traffic reaches the web container
 ```
 
 Each component has a specific role:
+
 | Component | Role |
 |---|---|
 | `cloudflared` | Routes traffic between the Cloudflare edge and the Docker network. |
@@ -252,8 +260,15 @@ With WARP connected, verify both access methods:
 !!! note "Why port 8000?"
     Browsers default to port 80. Since the Django app runs on port 8000 and there is no reverse proxy in front of it, you must include `:8000` in the URL. If you want `ocs.your-org` (without the port) to work, add an nginx reverse proxy to `docker-compose.cloudflare.yml` that listens on port 80 and forwards to `web:8000`.
 
+!!! note "\"Not Secure\" label on private hostnames"
+    Browsers show **Not Secure** for `http://ocs.your-org:8000` because the URL uses HTTP. This is expected and not a security gap. Private hostname traffic is encrypted end-to-end by WARP's TLS 1.3 tunnel; the browser cannot see that encryption layer, so it falls back to labelling the connection by the application-layer scheme (HTTP). The actual data in transit is protected.
+
+    If a green padlock is required (e.g. for regulatory compliance or user-facing deployments), use a public hostname on a Cloudflare-managed domain instead. Cloudflare terminates TLS at the edge and issues a certificate automatically; the browser sees HTTPS and shows the padlock.
+
 ## Step 6: Configure Access policies
-!!! warning "Required - do not skip" Without Access policies, anyone with WARP connected can reach your app with no authentication. You **must** complete both parts of this step: protect the app with an Allow policy, and add Bypass policies for webhook paths. Skipping the Bypass policies will break all messaging integrations; external platforms (WhatsApp, Telegram, Slack, Twilio) cannot authenticate via Cloudflare Access and their webhook requests will be blocked.
+
+!!! warning "Required - do not skip"
+    Without Access policies, anyone with WARP connected can reach your app with no authentication. You **must** complete both parts of this step: protect the app with an Allow policy, and add Bypass policies for webhook paths. Skipping the Bypass policies will break all messaging integrations; external platforms (WhatsApp, Telegram, Slack, Twilio) cannot authenticate via Cloudflare Access and their webhook requests will be blocked.
 
 ### Part A: Protect the app
 1. Go to **Zero Trust → Access → Applications → Add an application**
@@ -286,7 +301,8 @@ ben.ns.cloudflare.com
 5. Log in to your domain registrar and replace the existing nameservers with Cloudflare's two nameservers
 6. Save and wait for propagation, typically a few minutes, up to 48 hours. Cloudflare will email you when the domain is active.
 
-!!! note "You keep your domain registrar" You do **not** need to transfer your domain registration to Cloudflare. Only the nameservers need to point to Cloudflare. Your domain stays registered at GoDaddy, Namecheap, Route 53, or wherever it is; Cloudflare only takes over DNS resolution. You can switch nameservers back at any time.
+!!! note "You keep your domain registrar"
+    You do **not** need to transfer your domain registration to Cloudflare. Only the nameservers need to point to Cloudflare. Your domain stays registered at GoDaddy, Namecheap, Route 53, or wherever it is; Cloudflare only takes over DNS resolution. You can switch nameservers back at any time.
 
 Once the domain is active in Cloudflare, the public hostname configuration below will work.
 
@@ -356,7 +372,8 @@ Add each Bypass policy to the **same application** created in Part A:
 !!! tip
     Platform-level security is unchanged. Each platform enforces its own request verification (Meta HMAC-SHA256, Telegram token in the URL, Twilio HMAC-SHA1, Slack signing secret). The Bypass policy only removes the Cloudflare Access cookie requirement for those paths.
 
-!!! warning "Policy order matters" Cloudflare evaluates policies top to bottom and stops at the first match. Place all Bypass policies above the Allow policy in the list. If the Allow policy is evaluated first, webhook requests will be rejected before the Bypass rule is reached.
+!!! warning "Policy order matters"
+    Cloudflare evaluates policies top to bottom and stops at the first match. Place all Bypass policies above the Allow policy in the list. If the Allow policy is evaluated first, webhook requests will be rejected before the Bypass rule is reached.
 
 ## Troubleshooting
 

@@ -5,8 +5,22 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+    networks:
+      - open-chat-studio_default
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
+  dns:
+    image: jpillora/dnsmasq
+    restart: unless-stopped
+    command: --address=/${PRIVATE_HOSTNAME:?PRIVATE_HOSTNAME is required}/${APP_IP:?APP_IP is required}
+    networks:
+      open-chat-studio_default:
+        ipv4_address: ${DNS_IP:?DNS_IP is required}
+
+networks:
+  open-chat-studio_default:
+    external: true
