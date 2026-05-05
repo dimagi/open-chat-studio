@@ -16,6 +16,7 @@
   "modal.confirm": "पुष्टि करें",
   "composer.placeholder": "संदेश लिखें...",
   "composer.send": "संदेश भेजें",
+  "composer.messageTooLong": "संदेश बहुत लंबा है",
   "error.fileTooLarge": "फ़ाइल बहुत बड़ी है",
   "error.totalTooLarge": "कुल फ़ाइल आकार बहुत बड़ा है",
   "error.unsupportedType": "फ़ाइल प्रकार समर्थित नहीं है",
