@@ -3,7 +3,6 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Prefetch
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -12,7 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
-from apps.annotations.models import CustomTaggedItem
+from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform
 from apps.chatbots.tables import ChatbotSessionsTable
@@ -50,13 +49,7 @@ def single_participant_home_context(team, context: dict, participant_id: int, ex
         sessions = (
             ExperimentSession.objects.get_table_queryset(team, experiment_id)
             .filter(participant=participant)
-            .prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
+            .prefetch_related(chat_tagged_items_prefetch())
         )
         context["session_table"] = ChatbotSessionsTable(
             sessions,

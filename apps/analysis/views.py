@@ -2,7 +2,6 @@ from functools import cached_property
 
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Prefetch
 from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,7 +10,7 @@ from django.views.generic import CreateView, DeleteView, DetailView
 from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefresh
 from django_tables2 import RequestConfig, SingleTableView
 
-from apps.annotations.models import CustomTaggedItem
+from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.models import Experiment, ExperimentSession
@@ -105,13 +104,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         sessions = (
             ExperimentSession.objects.get_table_queryset(self.request.team)
             .filter(analyses=self.object)
-            .prefetch_related(
-                Prefetch(
-                    "chat__tagged_items",
-                    queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                    to_attr="prefetched_tagged_items",
-                ),
-            )
+            .prefetch_related(chat_tagged_items_prefetch())
         )
         table = ChatbotSessionsTable(data=sessions)
         return RequestConfig(self.request).configure(table)
