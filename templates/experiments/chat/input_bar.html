@@ -158,9 +158,6 @@
       get messageTooLong() {
         return maxCharLimit !== null && this.message.length > maxCharLimit;
       },
-      get messageNearLimit() {
-        return maxCharLimit !== null && this.message.length > maxCharLimit * 0.8;
-      },
       init() {
         let fieldsToWatch = ['message'];
         if (this.$refs.fileSearch) {
