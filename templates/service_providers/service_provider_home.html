@@ -1,9 +1,9 @@
-{% load i18n team_tags %}
+{% load i18n service_provider_tags team_tags %}
 <div>
   {% has_perm "service_providers" perm as allow_new %}
   {% url "service_providers:table" request.team.slug provider_type as table_url %}
-  {% url "service_providers:new" request.team.slug provider_type as new_object_url %}
+  {% service_provider_subtype_choices provider_type as new_object_choices %}
   {% with button_style="btn-outline" title_class="pg-subtitle" %}
-    {% include "generic/object_home_content.html" with new_object_url=new_object_url table_url=table_url data_cy_title="title-"|add:provider_type %}
+    {% include "generic/object_home_content.html" with new_object_choices=new_object_choices table_url=table_url data_cy_title="title-"|add:provider_type %}
   {% endwith %}
 </div>
