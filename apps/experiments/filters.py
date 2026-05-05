@@ -82,6 +82,10 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
                 tag__name__in=tag_names,
             )
         )
+        # Double OuterRef: the inner Subquery sits inside an Exists, so OuterRef("chat_id")
+        # would resolve to the Subquery's parent (CustomTaggedItem). One more OuterRef hop
+        # is needed to reach the outermost ExperimentSession queryset's chat_id. Don't
+        # collapse to a single OuterRef — that breaks the correlation.
         message_tag_exists = Exists(
             CustomTaggedItem.objects.filter(
                 content_type_id=chat_message_ct.id,
@@ -103,11 +107,30 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         return queryset.exclude(self._chat_or_message_tag_exists(value))
 
 
-class MessageTagsFilter(ChoiceColumnFilter):
-    """Tag filter for ChatMessage querysets — uses the model's own ``tags`` related manager.
+def _message_tag_exists(tag_names, category=None):
+    """``EXISTS`` matching ``ChatMessage`` rows whose own tags include one of ``tag_names``.
 
-    Distinct from :class:`ChatMessageTagsFilter`, which targets a *session* queryset and
-    looks for tags on either the chat or any of its messages via ``CustomTaggedItem``.
+    Used by :class:`MessageTagsFilter` and :class:`MessageVersionsFilter`. Avoids the
+    JOIN-multiplication that ``queryset.filter(tags__name__in=...)`` would cause when
+    a message carries multiple matching tags — the global ``.distinct()`` was removed
+    from :meth:`MultiColumnFilter.apply`, so JOIN-based filters now leak duplicates.
+    """
+    chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
+    qs = CustomTaggedItem.objects.filter(
+        content_type_id=chat_message_ct.id,
+        tag__name__in=tag_names,
+        object_id=OuterRef("pk"),
+    )
+    if category is not None:
+        qs = qs.filter(tag__category=category)
+    return Exists(qs)
+
+
+class MessageTagsFilter(ChoiceColumnFilter):
+    """Tag filter for ChatMessage querysets — matches tags on the message itself.
+
+    Distinct from :class:`ChatMessageTagsFilter`, which targets a *session* queryset
+    and looks for tags on either the chat or any of its messages.
     """
 
     query_param: str = "tags"
@@ -119,15 +142,15 @@ class MessageTagsFilter(ChoiceColumnFilter):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(tags__name__in=value)
+        return queryset.filter(_message_tag_exists(value))
 
     def apply_all_of(self, queryset, value, timezone=None):
         for tag in value:
-            queryset = queryset.filter(tags__name=tag)
+            queryset = queryset.filter(_message_tag_exists([tag]))
         return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(tags__name__in=value)
+        return queryset.exclude(_message_tag_exists(value))
 
 
 class VersionsFilter(ChoiceColumnFilter):
@@ -173,15 +196,15 @@ class MessageVersionsFilter(ChoiceColumnFilter):
         self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
 
     def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return queryset.filter(_message_tag_exists(value, category=Chat.MetadataKeys.EXPERIMENT_VERSION))
 
     def apply_all_of(self, queryset, value, timezone=None):
         for tag in value:
-            queryset = queryset.filter(tags__name=tag, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+            queryset = queryset.filter(_message_tag_exists([tag], category=Chat.MetadataKeys.EXPERIMENT_VERSION))
         return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)
+        return queryset.exclude(_message_tag_exists(value, category=Chat.MetadataKeys.EXPERIMENT_VERSION))
 
 
 class ChannelsFilter(ChoiceColumnFilter):

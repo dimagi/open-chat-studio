@@ -5,7 +5,7 @@ from time_machine import travel
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.filters import ChatMessageFilter, MessageVersionsFilter
+from apps.experiments.filters import ChatMessageFilter, MessageTagsFilter, MessageVersionsFilter
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 
@@ -89,6 +89,57 @@ class TestMessageVersionsFilter:
         assert team_with_messages["regular_msg"] in filtered
         assert team_with_messages["important_msg"] not in filtered
         assert team_with_messages["urgent_msg"] not in filtered
+
+
+@pytest.mark.django_db()
+class TestMessageFiltersNoRowMultiplication:
+    """Regression guards for the JOIN-multiplication bug after the global ``.distinct()``
+    removal in ``MultiColumnFilter.apply``. A ``ChatMessage`` carrying multiple matching
+    tags would previously appear once per matching tag under
+    ``queryset.filter(tags__name__in=...)`` — the EXISTS-based fix returns each row once.
+    """
+
+    @pytest.fixture()
+    def message_with_two_matching_tags(self, team):
+        chat = ChatFactory.create(team=team)
+        msg = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="multi-tag")
+        for name in ("important", "urgent"):
+            tag = Tag.objects.create(team=team, name=name)
+            msg.add_tag(tag, team=team)
+        return msg
+
+    @pytest.fixture()
+    def message_with_two_matching_versions(self, team):
+        chat = ChatFactory.create(team=team)
+        msg = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="multi-version")
+        for name in ("v1.0", "v2.0"):
+            tag = Tag.objects.create(team=team, name=name, category=TagCategories.EXPERIMENT_VERSION)
+            msg.add_tag(tag, team=team)
+        return msg
+
+    def test_message_tags_any_of_no_duplicates(self, team, message_with_two_matching_tags):
+        queryset = ChatMessage.objects.filter(chat=message_with_two_matching_tags.chat)
+        filtered = MessageTagsFilter().apply_any_of(queryset, ["important", "urgent"])
+        assert filtered.count() == 1
+        assert list(filtered) == [message_with_two_matching_tags]
+
+    def test_message_tags_excludes_no_duplicates(self, team, message_with_two_matching_tags):
+        queryset = ChatMessage.objects.filter(chat=message_with_two_matching_tags.chat)
+        filtered = MessageTagsFilter().apply_excludes(queryset, ["nonexistent"])
+        assert filtered.count() == 1
+        assert list(filtered) == [message_with_two_matching_tags]
+
+    def test_message_versions_any_of_no_duplicates(self, team, message_with_two_matching_versions):
+        queryset = ChatMessage.objects.filter(chat=message_with_two_matching_versions.chat)
+        filtered = MessageVersionsFilter().apply_any_of(queryset, ["v1.0", "v2.0"])
+        assert filtered.count() == 1
+        assert list(filtered) == [message_with_two_matching_versions]
+
+    def test_message_versions_excludes_no_duplicates(self, team, message_with_two_matching_versions):
+        queryset = ChatMessage.objects.filter(chat=message_with_two_matching_versions.chat)
+        filtered = MessageVersionsFilter().apply_excludes(queryset, ["v3.0"])
+        assert filtered.count() == 1
+        assert list(filtered) == [message_with_two_matching_versions]
 
 
 @pytest.mark.django_db()

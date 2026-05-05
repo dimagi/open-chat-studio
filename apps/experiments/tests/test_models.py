@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import dictdiffer
 import pytest
 import time_machine
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.utils import timezone
 from time_machine import travel
@@ -1040,7 +1040,6 @@ def _compare_models(original, new, expected_changed_fields: list) -> None:
 @pytest.mark.django_db()
 def test_experimentsession_team_lastactivity_index_exists():
     """Smoke check that the composite index backing the session list ordering is present."""
-    from django.db import connection  # noqa: PLC0415
 
     with connection.cursor() as cursor:
         cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'experiments_experimentsession'")

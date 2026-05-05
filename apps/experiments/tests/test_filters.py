@@ -9,7 +9,7 @@ from time_machine import travel
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.filters import ExperimentSessionFilter
-from apps.experiments.models import SessionStatus
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.teams.models import Team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -563,7 +563,6 @@ class TestParticipantFilter:
 def test_session_filter_default_query_does_not_join_experiment_channel():
     """No filter, no display column references experiment_channel — confirm the COUNT
     does not pull it in unnecessarily."""
-    from apps.experiments.models import ExperimentSession  # noqa: PLC0415
 
     team = TeamFactory.create()
     qs = ExperimentSession.objects.get_table_queryset(team)

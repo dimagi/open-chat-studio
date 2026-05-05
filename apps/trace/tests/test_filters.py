@@ -343,9 +343,7 @@ class TestTraceFilter:
     @pytest.fixture()
     def trace_with_many_message_tags(self, team, experiment, participant):
         """A trace whose input_message has multiple tags — would multiply under JOIN."""
-        from apps.chat.models import Chat  # noqa: PLC0415
-
-        chat = Chat.objects.create(team=team, name="t")
+        chat = ChatFactory.create(team=team)
         input_message = ChatMessage.objects.create(
             chat=chat,
             content="hi",

@@ -116,6 +116,8 @@ Audit of which filters actually need DISTINCT:
 | `RemoteIdFilter` | No | FK |
 | `SessionIdFilter` | No | Direct column |
 | `MessageTagsFilter` (trace) | **Yes** | Already calls `.distinct()` itself |
+| `MessageTagsFilter` (experiments, used by `ChatMessageFilter`) | **Yes** for `apply_any_of` | `tags__name__in=` joins through M2M |
+| `MessageVersionsFilter` (experiments) | **Yes** for `apply_any_of` | Same M2M JOIN, with `tag__category` constraint |
 | `TraceStatusFilter`, `ExperimentVersionsFilter` | No | Direct column |
 
 The fix:
@@ -124,6 +126,7 @@ The fix:
 2. Rewrite the row-multiplying filters as `EXISTS` subqueries (extending the pattern already in `ChatMessageTagsFilter.apply_all_of`):
    - `ChatMessageTagsFilter.apply_any_of` and `apply_excludes`
    - `MessageTagsFilter.apply_any_of`, `apply_all_of`, `apply_excludes` (trace)
+   - `MessageTagsFilter` and `MessageVersionsFilter` `apply_any_of` (experiments — used by `ChatMessageFilter`)
    - `TimestampFilter` when its column traverses `chat__messages__*`
 
 `EXISTS` is the structurally correct expression of "rows where a related row matches" — no multiplication, no DISTINCT. Both the page query and the `COUNT(*)` get clean shapes.

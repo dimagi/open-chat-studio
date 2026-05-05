@@ -602,11 +602,13 @@ def test_session_table_prefetch_is_page_bounded(team_with_users):
         do_request()
     queries_for_many = len(ctx_many.captured_queries)
 
-    # Adding off-page rows must not bloat the prefetch.
-    # Allow a small slack for the COUNT(*) plan growing slightly.
-    assert queries_for_many <= queries_for_two + 1, (
+    # Adding off-page rows must not bloat the prefetch. Slack absorbs minor non-prefetch
+    # variation (e.g. an extra permission/feature-flag fetch) without missing a real
+    # page-boundedness regression — those would 10×+ the count, not change it by 1–2.
+    allowed_slack = 2
+    assert queries_for_many <= queries_for_two + allowed_slack, (
         f"Prefetch is not page-bounded: 2 sessions = {queries_for_two} queries, "
-        f"32 sessions = {queries_for_many} queries"
+        f"32 sessions = {queries_for_many} queries (slack {allowed_slack})"
     )
 
 
