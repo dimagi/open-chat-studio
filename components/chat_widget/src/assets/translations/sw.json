@@ -16,6 +16,7 @@
   "modal.confirm": "Thibitisha",
   "composer.placeholder": "Andika ujumbe...",
   "composer.send": "Tuma ujumbe",
+  "composer.messageTooLong": "Ujumbe ni mrefu sana",
   "error.fileTooLarge": "Faili ni kubwa sana",
   "error.totalTooLarge": "Jumla ya ukubwa wa faili ni kubwa sana",
   "error.unsupportedType": "Aina ya faili haitumiki",

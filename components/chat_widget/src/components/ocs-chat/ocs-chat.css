@@ -582,6 +582,27 @@
     }
   }
 
+  .message-textarea-error {
+    border-color: var(--error-text-color);
+    &:focus {
+      outline-color: var(--error-text-color);
+    }
+  }
+
+  .char-counter {
+    @apply text-xs text-right pr-1 pt-0.5;
+    color: var(--char-counter-color, #9ca3af);
+  }
+
+  .char-counter-warning {
+    color: var(--char-counter-warning-color, #f59e0b);
+  }
+
+  .char-counter-error {
+    color: var(--error-text-color);
+    font-weight: 600;
+  }
+
   .send-button {
     @apply rounded-md font-medium transition-colors duration-200;
     padding: 0.5em 1em;

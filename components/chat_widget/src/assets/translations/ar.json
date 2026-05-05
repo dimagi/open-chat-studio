@@ -16,6 +16,7 @@
   "modal.confirm": "تأكيد",
   "composer.placeholder": "اكتب رسالة...",
   "composer.send": "إرسال الرسالة",
+  "composer.messageTooLong": "الرسالة طويلة جدًا",
   "error.fileTooLarge": "الملف كبير جدًا",
   "error.totalTooLarge": "إجمالي حجم الملفات كبير جدًا",
   "error.unsupportedType": "نوع الملف غير مدعوم",

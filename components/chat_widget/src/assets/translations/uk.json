@@ -16,6 +16,7 @@
   "modal.confirm": "Підтвердити",
   "composer.placeholder": "Введіть повідомлення...",
   "composer.send": "Надіслати повідомлення",
+  "composer.messageTooLong": "Повідомлення занадто довге",
   "error.fileTooLarge": "Файл занадто великий",
   "error.totalTooLarge": "Загальний розмір файлів занадто великий",
   "error.unsupportedType": "Непідтримуваний тип файлу",
