@@ -8,6 +8,7 @@ from django import forms
 from django.conf import settings
 from django.db import models
 from django.db.models import Field
+from django.http import HttpRequest
 from django_tables2 import tables
 from waffle import flag_is_active
 
@@ -73,7 +74,7 @@ class ServiceProvider(ServiceProviderType, Enum):
         return instance.config
 
 
-def get_available_subtypes(provider: ServiceProvider, request) -> list:
+def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> list:
     """Return the subtypes for ``provider`` available to the given request.
 
     Filters out subtypes gated by feature flags / settings.
