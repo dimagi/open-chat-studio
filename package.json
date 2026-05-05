@@ -18,11 +18,11 @@
   "homepage": "http://example.com/",
   "devDependencies": {
     "@babel/cli": "^7.27.2",
-    "@babel/compat-data": "^7.29.0",
+    "@babel/compat-data": "^7.29.3",
     "@babel/core": "^7.27.7",
     "@babel/preset-env": "^7.27.2",
     "@babel/preset-react": "^7.25.9",
-    "@babel/preset-typescript": "^7.27.1",
+    "@babel/preset-typescript": "^7.28.5",
     "@eslint/js": "^9.39.2",
     "@tailwindcss/typography": "^0.5.19",
     "@types/js-cookie": "^3.0.6",
@@ -62,7 +62,7 @@
     "@uiw/react-codemirror": "^4.23.7",
     "alertifyjs": "^1.14.0",
     "alpinejs": "^3.15.9",
-    "axios": "^1.15.0",
+    "axios": "^1.15.2",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.1.0",
@@ -81,10 +81,10 @@
     "reactflow": "^11.11.4",
     "short-unique-id": "^5.3.2",
     "tailwindcss": "^4.1.4",
-    "tom-select": "^2.3.1",
-    "zustand": "^5.0.3"
+    "tom-select": "^2.6.0",
+    "zustand": "^5.0.13"
   },
   "optionalDependencies": {
-    "cypress": "^15.8.1"
+    "cypress": "^15.14.2"
   }
 }
