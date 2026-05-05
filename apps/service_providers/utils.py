@@ -5,9 +5,11 @@ from enum import Enum
 from typing import Any, Literal
 
 from django import forms
+from django.conf import settings
 from django.db import models
 from django.db.models import Field
 from django_tables2 import tables
+from waffle import flag_is_active
 
 from apps.generics.type_select_form import TypeSelectForm
 
@@ -69,6 +71,19 @@ class ServiceProvider(ServiceProviderType, Enum):
     def get_form_initial(self, instance) -> dict:
         """Return the initial data for the config form."""
         return instance.config
+
+
+def get_available_subtypes(provider: ServiceProvider, request) -> list:
+    """Return the subtypes for ``provider`` available to the given request.
+
+    Filters out subtypes gated by feature flags / settings.
+    """
+    excluded = set()
+    if provider == ServiceProvider.voice and not flag_is_active(request, "flag_open_ai_voice_engine"):
+        excluded.add(VoiceProviderType.openai_voice_engine)
+    if provider == ServiceProvider.messaging and not settings.SLACK_ENABLED:
+        excluded.add(MessagingProviderType.slack)
+    return [subtype for subtype in provider.subtype if subtype not in excluded]
 
 
 def get_service_provider_config_form(
