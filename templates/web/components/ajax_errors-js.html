@@ -1,7 +1,15 @@
 <script>
   document.body.addEventListener('htmx:responseError', function(evt) {
+    let message = evt.detail.xhr.responseText;
+    const contentType = evt.detail.xhr.getResponseHeader('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const data = JSON.parse(message);
+        message = data.detail || data.error || message;
+      } catch(e) {}
+    }
     alertify
-      .alert(document.createTextNode(evt.detail.xhr.responseText).textContent, function(){
+      .alert(document.createTextNode(message).textContent, function(){
         alertify.message('OK');
       }).setting({
         title: 'Error',

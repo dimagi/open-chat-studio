@@ -463,11 +463,18 @@ def chat_send_message(request, session_id):
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
+        400: inline_serializer(
+            "ChatTaskPollUserError",
+            {
+                "error": serializers.CharField(required=False),
+                "status": serializers.CharField(),
+            },
+        ),
         500: inline_serializer(
             "ChatTaskPollError",
             {
                 "error": serializers.CharField(required=False),
-                "status": "error",
+                "status": serializers.CharField(),
             },
         ),
     },
@@ -510,7 +517,9 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if error := task_details["error_msg"]:
         data = {"error": error, "status": "error"}
-        return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        is_user_error = task_details.get("user_facing_error")
+        http_status = status.HTTP_400_BAD_REQUEST if is_user_error else status.HTTP_500_INTERNAL_SERVER_ERROR
+        return Response(data, status=http_status)
 
     if message := task_details["message"]:
         data = {

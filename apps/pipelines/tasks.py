@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from apps.chat.bots import PipelineTestBot
-from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.runnables import GenerationError
 
@@ -34,5 +34,5 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
         return bot.process_input(message_text)
     except PipelineBuildError as e:
         return {"error": e.message}
-    except (GenerationError, PipelineNodeBuildError) as e:
+    except (GenerationError, PipelineNodeBuildError, PipelineNodeRunError) as e:
         return {"error": str(e)}
