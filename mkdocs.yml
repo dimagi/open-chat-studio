@@ -98,6 +98,10 @@ nav:
     - Heroku: hosting/heroku.md
     - AWS Fargate: hosting/aws.md
     - Kamal: hosting/kamal.md
+    - Zero Trust Access:
+      - Overview: hosting/zero_trust_access.md
+      - Cloudflare Tunnel: hosting/cloudflare_tunnel.md
+      - Cloudflare Admin: hosting/cloudflare_admin.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md
