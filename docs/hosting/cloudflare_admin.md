@@ -59,7 +59,7 @@ They are blocked from the next request onwards.
 
 **To revoke any currently active session:**
 
-1. Go to **My Team → Users**.
+1. Go to **Zero Trust → My Team → Users**.
 2. Find the user and click **Revoke active sessions**.
 
 This terminates their Access token immediately rather than waiting for it to expire.
@@ -104,6 +104,9 @@ Go to **Settings → WARP Client → Global settings → Session duration**.
 
 !!! warning "Keep WARP session longer than app session"
     The WARP session must always be set equal to or longer than the app session. If WARP expires before the app session, users will be disconnected from the network while the application still considers them logged in, causing confusing errors.
+
+!!! note "Profile changes require WARP reconnect"
+    Changes to Split Tunnels, Local Domain Fallback, or device posture rules are not pushed to connected WARP clients in real time. Users must disconnect and reconnect WARP to pick up the updated profile. Consider asking all users to toggle WARP after making profile changes.
 
 ---
 
@@ -151,16 +154,30 @@ Work through this checklist:
 2. Has the user enrolled their device in the organisation? (WARP → Settings → Account → Login with Cloudflare Zero Trust)
 3. Is their serial number in the device posture rule?
 4. Is their email address in the Access policy?
-5. Is the tunnel healthy? Go to **Networks → Tunnels** - status should show **Healthy**.
+5. Is the tunnel healthy? Go to **Networks → Tunnels**; status should show **Healthy**.
+6. Can they reach the app by CIDR IP? Try `http://172.18.0.7:8000`. If this works but the hostname doesn't, the issue is DNS, not access.
+7. Is Local Domain Fallback configured with the correct dnsmasq IP? Go to **Settings → WARP Client → Device profiles → Default profile → Local Domain Fallback**.
+8. Is Gateway Proxy enabled with UDP? Go to **Traffic policies → Traffic settings → Proxy and inspection**. UDP must be on for DNS resolution to private IPs.
 
 If all of the above are correct, check the Access logs. The deny reason will identify exactly which check is failing.
+
+### A user sees `DNS_PROBE_FINISHED_NXDOMAIN` when accessing the private hostname
+
+The private hostname cannot be resolved. This is a DNS issue, not an access issue. Check in order:
+
+1. Is WARP connected? Private hostnames only resolve through WARP.
+2. Has the user toggled WARP off and on since the last profile change? Profile updates require a reconnect.
+3. Is Local Domain Fallback configured? Go to **Settings → WARP Client → Device profiles → Default profile → Local Domain Fallback**; the hostname must be listed with the dnsmasq IP.
+4. Is Gateway Proxy enabled with UDP? Go to **Traffic policies → Traffic settings**; UDP must be on.
+5. Is the dnsmasq container running? Check on the server: `docker compose -f docker-compose.cloudflare.yml logs dns`
+6. Is the hostname using `.local`? The `.local` TLD is reserved for mDNS and will not resolve through WARP. Use a different name.
 
 ### A device is lost or stolen
 
 Act immediately:
 
 1. Go to **Settings → WARP Client → Device posture** and remove the serial number.
-2. Go to **My Team → Users** and revoke active sessions for that user.
+2. Go to **Zero Trust → My Team → Users** and revoke active sessions for that user.
 3. Check Access logs for any recent connections from that device.
 
 Access is revoked as soon as the serial number is removed.
@@ -193,13 +210,16 @@ docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml resta
 | Remove device serial | Settings → WARP Client → Device posture |
 | Add user email | Access → Applications → [app] → Policies |
 | Remove user email | Access → Applications → [app] → Policies |
-| Revoke active session | My Team → Users → [user] → Revoke |
+| Revoke active session | Zero Trust → My Team → Users → [user] → Revoke |
 | Check who connected | Logs → Access |
 | Check network activity | Logs → Gateway |
 | Export logs | Logs → Logpush |
 | Check tunnel health | Networks → Tunnels |
 | Change app session duration | Access → Applications → [app] → Session duration |
 | Change WARP session duration | Settings → WARP Client → Global settings |
+| Configure Local Domain Fallback | Settings → WARP Client → Device profiles → Default → Local Domain Fallback |
+| Enable Gateway Proxy | Traffic policies → Traffic settings → Proxy and inspection |
+| Check dnsmasq status | On server: `docker compose -f docker-compose.cloudflare.yml logs dns` |
 
 ---
 
