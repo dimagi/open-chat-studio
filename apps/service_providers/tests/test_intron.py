@@ -78,19 +78,21 @@ def test_run_post_save_hook_returns_warning_on_seeding_failure(team_with_users):
 def test_create_intron_provider_via_view_seeds_voices(team_with_users, client):
     """Creating an intron provider via the view seeds voices end-to-end.
 
-    Form field convention: secondary forms in BaseTypeSelectFormView are instantiated without
-    a Django form prefix (confirmed by reading apps/service_providers/utils.py:93 and
-    apps/generics/type_select_form.py). Fields are submitted bare (e.g. 'intron_api_key'),
-    not prefixed (e.g. 'intron-intron_api_key').
+    Form field convention: the config form is built without a Django form prefix
+    (see apps/service_providers/utils.py). Fields are submitted bare
+    (e.g. 'intron_api_key'), not prefixed (e.g. 'intron-intron_api_key').
     """
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse(
         "service_providers:new",
-        kwargs={"team_slug": team_with_users.slug, "provider_type": "voice"},
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "provider_type": "voice",
+            "subtype": VoiceProviderType.intron.value,
+        },
     )
     data = {
-        "type": VoiceProviderType.intron.value,
         "name": "My Intron",
         "intron_api_key": "test_key",
     }
