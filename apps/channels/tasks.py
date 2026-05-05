@@ -2,6 +2,7 @@ import uuid
 
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from django.db import OperationalError  # noqa: F811 - used at runtime in task decorator
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
@@ -209,5 +210,69 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
 
     set_current_team(experiment_channel.team)
     channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
+    update_taskbadger_data(self, channel, message)
+    channel.new_user_message(message)
+
+
+@shared_task(
+    bind=True,
+    base=TaskbadgerTask,
+    ignore_result=True,
+    autoretry_for=(OperationalError, ConnectionError),
+    max_retries=3,
+    retry_backoff=60,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def handle_email_message(self, email_data: dict, channel_id: int | None = None, session_id: int | None = None):
+    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415
+        EmailChannel,
+        EmailThreadContext,
+        get_email_experiment_channel,
+    )
+    from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
+
+    message = EmailMessageDatamodel(**email_data)
+
+    if channel_id is not None:
+        # Post-deploy payload: routing already happened in the webhook handler.
+        try:
+            experiment_channel = ExperimentChannel.objects.select_related("experiment", "team").get(id=channel_id)
+        except ExperimentChannel.DoesNotExist:
+            log.info("Email channel id=%s no longer exists, ignoring", channel_id)
+            return
+        session = None
+        if session_id is not None:
+            try:
+                session = ExperimentSession.objects.select_related("team", "participant", "experiment_channel").get(
+                    id=session_id
+                )
+            except ExperimentSession.DoesNotExist:
+                # Session was deleted between enqueue and dequeue; let the
+                # pipeline create a fresh one rather than dropping the message.
+                session = None
+    else:
+        # Legacy payload: in-flight tasks queued before this deploy don't
+        # carry channel_id. Resolve by routing as the previous version did.
+        experiment_channel, session = get_email_experiment_channel(
+            in_reply_to=message.in_reply_to,
+            references=message.references,
+            to_address=message.to_address,
+            sender_address=message.from_address,
+        )
+        if not experiment_channel:
+            log.info("No email channel found for to=%s, ignoring", message.to_address)
+            return
+
+    set_current_team(experiment_channel.team)
+
+    thread_context = EmailThreadContext.from_inbound(message)
+
+    channel = EmailChannel(
+        experiment=experiment_channel.experiment.default_version,
+        experiment_channel=experiment_channel,
+        experiment_session=session,
+        thread_context=thread_context,
+    )
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)

@@ -98,6 +98,8 @@ CONTENT_TYPES = {
         "evaluationmessage",
         "evaluationresult",
         "evaluationrunaggregate",
+        "appliedtag",
+        "evaluatortagrule",
     ],
     "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
     "trace": ["trace"],

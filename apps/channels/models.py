@@ -32,6 +32,7 @@ class ChannelPlatform(models.TextChoices):
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
     EVALUATIONS = "evaluations", "Evaluations"
     EMBEDDED_WIDGET = "embedded_widget", "Embedded Widget"
+    EMAIL = "email", "Email"
 
     @classmethod
     def team_global_platforms(cls):
@@ -64,6 +65,13 @@ class ChannelPlatform(models.TextChoices):
         elif settings.COMMCARE_CONNECT_ENABLED:
             platform_availability[cls.COMMCARE_CONNECT] = True
 
+        flag = Flag.get("flag_email_channel")
+        email_flag_enabled = flag.is_active_for_team(team)
+        if not email_flag_enabled or not settings.EMAIL_CHANNEL_ALLOWED_DOMAINS:
+            platform_availability.pop(cls.EMAIL, None)
+        else:
+            platform_availability[cls.EMAIL] = True
+
         # Platforms already used should not be displayed
         for platform in used_platforms:
             platform_availability.pop(platform)
@@ -93,6 +101,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.CommCareConnectChannelForm(**kwargs)
             case self.EMBEDDED_WIDGET:
                 return forms.EmbeddedWidgetChannelForm(**kwargs)
+            case self.EMAIL:
+                return forms.EmailChannelForm(**kwargs)
         return None
 
     @property
@@ -115,6 +125,8 @@ class ChannelPlatform(models.TextChoices):
                 return "commcare_connect_bot_name"
             case self.EMBEDDED_WIDGET:
                 return "widget_token"
+            case self.EMAIL:
+                return "email_address"
         return None
 
     @staticmethod

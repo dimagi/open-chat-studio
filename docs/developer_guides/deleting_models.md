@@ -56,6 +56,35 @@ class Migration(migrations.Migration):
     ]
 ```
 
+### Step 3: Remove these operations from all previous migrations
+
+`llm_model_migration()` and the data migrations (`notify_deprecated_models`, `remove_deprecated_models`) should only run **once per deployment** — in the newest migration. Any earlier migration that calls them should have those operations removed (leaving `operations = []` if nothing else remains).
+
+Find all affected migrations:
+
+```bash
+grep -rl "llm_model_migration\|notify_deprecated_models\|remove_deprecated_models" \
+    apps/service_providers/migrations/
+```
+
+For each one (except your new migration), remove the relevant operations and their imports. For example:
+
+```python
+# Before
+from apps.service_providers.migration_utils import llm_model_migration
+
+class Migration(migrations.Migration):
+    operations = [
+        llm_model_migration(),
+    ]
+
+# After
+class Migration(migrations.Migration):
+    operations = []
+```
+
+> **Why?** Each call to `llm_model_migration()` re-syncs the entire model list. Running it multiple times in a single deployment is harmless but wasteful. More importantly, data migrations like `notify_deprecated_models` would fire multiple times, sending duplicate notifications to teams.
+
 ---
 
 ## Deleting a Model
@@ -110,6 +139,17 @@ class Migration(migrations.Migration):
         RunDataMigration("remove_deprecated_models", command_options={"force": True}),
     ]
 ```
+
+### Step 3: Remove these operations from all previous migrations
+
+Same as for deprecation — `llm_model_migration()` and data migrations should only run once per deployment. Strip them from all earlier migrations:
+
+```bash
+grep -rl "llm_model_migration\|notify_deprecated_models\|remove_deprecated_models" \
+    apps/service_providers/migrations/
+```
+
+Remove the operations (and unused imports) from every migration in that list except your new one.
 
 ---
 

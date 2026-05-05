@@ -1,8 +1,13 @@
 import pytest
 
 from apps.service_providers.file_limits import (
+    EMAIL_BLOCKED_CONTENT_TYPES,
+    EMAIL_BLOCKED_EXTENSIONS,
+    EMAIL_MAX_ATTACHMENT_BYTES,
+    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
     FILE_SENDABILITY_CHECKERS,
     SendabilityResult,
+    can_send_on_email,
     can_send_on_slack,
     can_send_on_telegram,
     can_send_on_whatsapp,
@@ -133,11 +138,83 @@ class TestCanSendOnSlack:
         assert result.supported is False
 
 
+class TestCanSendOnEmail:
+    """Tests for email file limits (20MB cap, executable denylist)."""
+
+    @pytest.mark.parametrize(
+        ("content_type", "content_size", "expected_supported"),
+        [
+            # Under 20MB limit — allowed types
+            ("application/pdf", 1 * MB, True),
+            ("image/jpeg", 5 * MB, True),
+            ("text/plain", 1 * MB, True),
+            # Exactly at limit
+            ("application/pdf", EMAIL_MAX_ATTACHMENT_BYTES, True),
+            # 1 byte over limit
+            ("application/pdf", EMAIL_MAX_ATTACHMENT_BYTES + 1, False),
+            # Blocked content types
+            ("application/x-msdownload", 1 * MB, False),
+            ("application/x-sh", 1 * MB, False),
+            ("application/java-archive", 1 * MB, False),
+            ("application/x-msi", 1 * MB, False),
+        ],
+    )
+    def test_mime_and_size_limits(self, content_type, content_size, expected_supported):
+        result = can_send_on_email(content_type, content_size)
+        assert isinstance(result, SendabilityResult)
+        assert result.supported is expected_supported
+
+    def test_blocked_type_has_reason(self):
+        result = can_send_on_email("application/x-msdownload", 1 * MB)
+        assert result.supported is False
+        assert result.reason
+
+    def test_over_size_has_reason(self):
+        result = can_send_on_email("application/pdf", EMAIL_MAX_ATTACHMENT_BYTES + 1)
+        assert result.supported is False
+        assert "20MB" in result.reason
+
+    def test_supported_has_empty_reason(self):
+        result = can_send_on_email("application/pdf", 1 * MB)
+        assert result.supported is True
+        assert result.reason == ""
+
+    @pytest.mark.parametrize(
+        ("content_type", "content_size"),
+        [
+            ("", 1024),
+            ("application/pdf", 0),
+            ("application/pdf", -1),
+        ],
+    )
+    def test_unknown_type_or_size(self, content_type, content_size):
+        result = can_send_on_email(content_type, content_size)
+        assert result.supported is False
+        assert "unknown" in result.reason.lower()
+
+    def test_content_type_params_stripped(self):
+        """MIME parameters (e.g. charset) must not cause false rejections."""
+        result = can_send_on_email("application/pdf; charset=utf-8", 1 * MB)
+        assert result.supported is True
+
+    def test_registered_in_checkers(self):
+        assert FILE_SENDABILITY_CHECKERS["email"] is can_send_on_email
+
+    def test_constants_exposed(self):
+        assert EMAIL_MAX_ATTACHMENT_BYTES == 20 * MB
+        assert "exe" in EMAIL_BLOCKED_EXTENSIONS
+        assert "application/x-msdownload" in EMAIL_BLOCKED_CONTENT_TYPES
+        assert "application/json" in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+        # Script types deliberately excluded from text-like allowlist
+        assert "application/javascript" not in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+        assert "application/x-sh" not in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+
+
 class TestChannelChecksRegistry:
     """Tests for the FILE_SENDABILITY_CHECKERS registry."""
 
     def test_registry_contains_expected_channels(self):
-        assert set(FILE_SENDABILITY_CHECKERS.keys()) == {"whatsapp", "telegram", "slack"}
+        assert set(FILE_SENDABILITY_CHECKERS.keys()) == {"whatsapp", "telegram", "slack", "email"}
 
     def test_registry_values_are_callable(self):
         for name, func in FILE_SENDABILITY_CHECKERS.items():

@@ -22,7 +22,7 @@ export function postProcessMarkdownHTML(html: string): string {
 
     // Add target="_blank" and rel="noopener noreferrer" to external links
     const links = tempDiv.querySelectorAll('a[href]');
-    links.forEach((link) => {
+    links.forEach(link => {
       const href = link.getAttribute('href');
       if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
         link.setAttribute('target', '_blank');
@@ -37,18 +37,42 @@ export function postProcessMarkdownHTML(html: string): string {
   }
 }
 
-
 export const SANITIZE_CONFIG = {
   ALLOWED_TAGS: [
-    'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'code', 'pre',
-    'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'blockquote', 'a', 'img', 'hr', 'table', 'thead', 'tbody',
-    'tr', 'td', 'th', 'del', 'ins', 'sub', 'sup'
+    'p',
+    'br',
+    'strong',
+    'b',
+    'em',
+    'i',
+    'u',
+    'code',
+    'pre',
+    'ul',
+    'ol',
+    'li',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'blockquote',
+    'a',
+    'img',
+    'hr',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'td',
+    'th',
+    'del',
+    'ins',
+    'sub',
+    'sup',
   ],
-  ALLOWED_ATTR: [
-    'href', 'target', 'rel', 'class', 'src', 'alt', 'title',
-    'width', 'height', 'align', 'colspan', 'rowspan'
-  ],
+  ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'src', 'alt', 'title', 'width', 'height', 'align', 'colspan', 'rowspan'],
   ALLOWED_URI_REGEXP: /^(?:(?:https?):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
   ADD_ATTR: ['target'],
   FORBID_TAGS: ['script', 'style', 'form', 'input', 'button', 'iframe', 'object', 'embed', 'svg', 'math'],

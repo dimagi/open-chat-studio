@@ -287,3 +287,18 @@ class TracingService:
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         for tracer in self._active_tracers:
             tracer.set_participant_data_diff(diff)
+
+    def set_session(self, session: ExperimentSession) -> None:
+        """Late-bind a session to active tracers after it has been resolved.
+
+        ``trace`` may be opened with ``session=None`` (e.g. inbound email
+        before routing has identified a session). Once a stage creates or
+        loads the session, callers should invoke this so tracers can
+        back-fill the session/participant on their records.
+        """
+        self.session = session
+        for tracer in self._active_tracers:
+            try:
+                tracer.set_session(session)
+            except Exception:
+                logger.exception(f"Tracer {tracer.__class__.__name__} failed to set session.")

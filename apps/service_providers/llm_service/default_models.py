@@ -46,7 +46,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
-        Model("gpt-4.1-nano", 1000000),
+        Model("gpt-4.1-nano", 1000000, deprecated=True, replacement="gpt-4.1-mini"),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
     ],
@@ -79,14 +79,14 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o4-mini-high", 200000, deprecated=True),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
-        Model("gpt-4.1-nano", 1000000),
+        Model("gpt-4.1-nano", 1000000, deprecated=True, replacement="gpt-4.1-mini"),
         Model("o3", 128000, parameters=OpenAIReasoningParameters),
         Model("o3-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
         Model("chatgpt-4o-latest", 128000, deprecated=True),
         Model("gpt-4", k(8)),
-        Model("gpt-3.5-turbo", k(16)),
+        Model("gpt-3.5-turbo", k(16), deprecated=True, replacement="gpt-4.1-mini"),
         Model("gpt-3.5-turbo-1106", k(16), deprecated=True),
         Model("gpt-5", k(400), parameters=GPT5Parameters),
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
@@ -188,6 +188,14 @@ DELETED_MODELS = [
 DEFAULT_EMBEDDING_PROVIDER_MODELS = {
     "openai": ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"],
     "google": ["gemini-embedding-001"],
+    "voyage": [
+        "voyage-4-large",
+        "voyage-4",
+        "voyage-4-lite",
+        "voyage-code-3",
+        "voyage-finance-2",
+        "voyage-law-2",
+    ],
 }
 
 
@@ -224,13 +232,11 @@ def get_default_translation_models_by_provider() -> dict:
 
 @transaction.atomic()
 def update_llm_provider_models():
-
     _update_llm_provider_models(LlmProviderModel)
 
 
 @transaction.atomic()
 def update_embedding_provider_models():
-
     _update_embedding_provider_models(EmbeddingProviderModel)
 
 

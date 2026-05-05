@@ -16,6 +16,9 @@ from django_tables2 import SingleTableView
 from apps.annotations.forms import TagForm
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.annotations.tables import TagTable
+from apps.evaluations.models import AppliedTag, Evaluator, EvaluatorTagRule
+from apps.generics.chips import Chip
+from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.search import similarity_search
 
@@ -93,9 +96,27 @@ class DeleteTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         tag = get_object_or_404(Tag, id=pk, team=request.team)
         if tag.is_system_tag:
             return HttpResponseForbidden("System tags cannot be deleted.")
+
+        evaluator_chips = self._get_blocking_evaluator_chips(tag)
+        if evaluator_chips:
+            return render_referenced_objects_modal("tag", evaluators=evaluator_chips)
+
         tag.delete()
         messages.success(request, "Tag Deleted")
         return HttpResponse()
+
+    @staticmethod
+    def _get_blocking_evaluator_chips(tag: Tag) -> list[Chip]:
+        # Tag → EvaluatorTagRule.tag and Tag → AppliedTag.tag are both PROTECT,
+        # so collect evaluators from both paths. AppliedTag.rule is CASCADE, so
+        # removing the rule from the evaluator clears any applications too.
+        rule_evaluator_ids = EvaluatorTagRule.objects.filter(tag=tag).values_list("evaluator_id", flat=True)
+        applied_evaluator_ids = AppliedTag.objects.filter(tag=tag).values_list("rule__evaluator_id", flat=True)
+        evaluator_ids = set(rule_evaluator_ids) | set(applied_evaluator_ids)
+        if not evaluator_ids:
+            return []
+        evaluators = Evaluator.objects.filter(id__in=evaluator_ids).order_by("name")
+        return [Chip(label=e.name, url=e.get_absolute_url()) for e in evaluators]
 
 
 class TagTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):

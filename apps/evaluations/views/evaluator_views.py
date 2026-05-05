@@ -1,14 +1,19 @@
 import inspect
+import json
+from functools import lru_cache
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
+from apps.annotations.models import Tag
 from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
-from apps.evaluations.forms import EvaluatorForm
+from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import Evaluator
 from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -44,8 +49,82 @@ class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):
         )
 
 
+class EvaluatorFormsetMixin:
+    """Shared formset plumbing for Create/Edit evaluator views."""
+
+    def _build_tag_rule_formset(self, instance, data=None):
+        return EvaluatorTagRuleFormSet(
+            data=data,
+            instance=instance,
+            team=self.request.team,
+            output_schema=(instance.params or {}).get("output_schema", {}) if instance else {},
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if "tag_rule_formset" not in context:
+            context["tag_rule_formset"] = self._build_tag_rule_formset(context.get("object"))
+        context["available_tags"] = list(
+            Tag.objects.filter(team=self.request.team, is_system_tag=False)
+            .order_by("name")
+            .values_list("name", flat=True)
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object_or_none()
+
+        initial_instance = self.object or Evaluator(team=request.team)
+        initial_formset = self._build_tag_rule_formset(initial_instance, data=request.POST)
+        pending_deleted_pks = _extract_pending_deleted_rule_pks(request.POST, initial_formset.prefix)
+
+        form = self.get_form()
+        form.pending_deleted_rule_pks = pending_deleted_pks
+
+        if form.is_valid():
+            evaluator = form.save(commit=False)
+            evaluator.team = request.team
+            # Re-bind formset against the pending-save evaluator so nested validation has team + schema.
+            formset = EvaluatorTagRuleFormSet(
+                data=request.POST,
+                instance=evaluator,
+                team=request.team,
+                output_schema=(form.cleaned_data.get("params") or {}).get("output_schema", {}),
+            )
+            if formset.is_valid():
+                with transaction.atomic():
+                    evaluator.save()
+                    formset.instance = evaluator
+                    formset.save()
+                return redirect(self.get_success_url())
+        else:
+            # Rebuild against the user's submitted output_schema (best effort) so
+            # per-row tag-rule errors reference the new schema, not the stored one.
+            formset = EvaluatorTagRuleFormSet(
+                data=request.POST,
+                instance=initial_instance,
+                team=request.team,
+                output_schema=_submitted_output_schema(form, initial_instance),
+            )
+            formset.is_valid()  # surface errors in the template
+
+        return self.render_to_response(self.get_context_data(form=form, tag_rule_formset=formset))
+
+    def get_object_or_none(self):
+        return None
+
+    def _get_evaluator_form_context(self):
+        llm_providers = list(LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type"))
+        llm_provider_models = list(LlmProviderModel.objects.for_team(self.request.team))
+        return {
+            "evaluator_schemas": _evaluator_schemas(),
+            "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
+            "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
+        }
+
+
 @waf_allow(WafRule.SizeRestrictions_BODY)
-class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, EvaluatorFormsetMixin, CreateView):
     permission_required = "evaluations.add_evaluator"
     template_name = "evaluations/evaluator_form.html"
     model = Evaluator
@@ -59,15 +138,7 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Create
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        context.update(
-            {
-                "evaluator_schemas": _evaluator_schemas(),
-                "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
-                "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
-            }
-        )
+        context.update(self._get_evaluator_form_context())
         return context
 
     def get_form_kwargs(self):
@@ -76,13 +147,8 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Create
     def get_success_url(self):
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.created_by = self.request.user
-        return super().form_valid(form)
 
-
-class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, EvaluatorFormsetMixin, UpdateView):
     permission_required = "evaluations.change_evaluator"
     model = Evaluator
     form_class = EvaluatorForm
@@ -96,15 +162,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateVi
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
-        context.update(
-            {
-                "evaluator_schemas": _evaluator_schemas(),
-                "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
-                "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
-            }
-        )
+        context.update(self._get_evaluator_form_context())
         return context
 
     def get_queryset(self):
@@ -112,6 +170,9 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateVi
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "team": self.request.team}
+
+    def get_object_or_none(self):
+        return self.get_object()
 
     def get_success_url(self):
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
@@ -130,6 +191,50 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Delete
         return HttpResponse(status=200)
 
 
+def _extract_pending_deleted_rule_pks(post_data, prefix: str) -> set[int]:
+    """Return existing-rule pks that the formset POST has marked DELETE."""
+    try:
+        total = int(post_data.get(f"{prefix}-TOTAL_FORMS", 0))
+    except (TypeError, ValueError):
+        return set()
+    pks: set[int] = set()
+    for i in range(total):
+        if not post_data.get(f"{prefix}-{i}-DELETE"):
+            continue
+        raw_pk = post_data.get(f"{prefix}-{i}-id")
+        if not raw_pk:
+            continue
+        try:
+            pks.add(int(raw_pk))
+        except (TypeError, ValueError):
+            continue
+    return pks
+
+
+def _submitted_output_schema(form, instance) -> dict:
+    """Best-effort output_schema from submitted params, falling back to the stored schema."""
+    schema = _output_schema_from_form_params(form)
+    if isinstance(schema, dict):
+        return schema
+    if instance and instance.pk:
+        return (instance.params or {}).get("output_schema") or {}
+    return {}
+
+
+def _output_schema_from_form_params(form):
+    """Return the submitted output_schema, or None when params can't be parsed."""
+    params = getattr(form, "cleaned_data", {}).get("params")
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+    if not isinstance(params, dict):
+        return None
+    return params.get("output_schema")
+
+
+@lru_cache(maxsize=1)
 def _evaluator_schemas():
     """Returns schemas for all available evaluator classes."""
     schemas = []
@@ -187,10 +292,10 @@ def _evaluator_default_values(llm_providers: list[dict], llm_provider_models):
     """Returns the default values for evaluator parameters."""
     llm_provider_model_id = None
     provider_id = None
-    if len(llm_providers) > 0:
+    if llm_providers:
         provider = llm_providers[0]
         provider_id = provider["id"]
-        first_model = llm_provider_models.filter(type=provider["type"]).first()
+        first_model = next((m for m in llm_provider_models if m.type == provider["type"]), None)
         if first_model:
             llm_provider_model_id = first_model.id
 

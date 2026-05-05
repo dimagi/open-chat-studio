@@ -30,7 +30,6 @@ const translationFiles: Record<string, TranslationStrings> = {
   uk: uk as TranslationStrings,
 };
 
-
 export function getBrowserLanguage(): string {
   if (typeof navigator !== 'undefined') {
     const lang = navigator.language || (navigator as any).userLanguage;
@@ -55,10 +54,7 @@ export async function loadTranslations(language: string): Promise<TranslationStr
 /**
  * Overrides matching keys
  */
-export function mergeTranslations(
-  baseTranslations: TranslationStrings,
-  customTranslations: Partial<TranslationStrings>
-): TranslationStrings {
+export function mergeTranslations(baseTranslations: TranslationStrings, customTranslations: Partial<TranslationStrings>): TranslationStrings {
   return { ...baseTranslations, ...customTranslations };
 }
 
@@ -80,9 +76,7 @@ export class TranslationManager {
       baseTranslations = defaultTranslations;
     }
 
-    this.translations = customTranslations
-      ? mergeTranslations(baseTranslations, customTranslations)
-      : baseTranslations;
+    this.translations = customTranslations ? mergeTranslations(baseTranslations, customTranslations) : baseTranslations;
   }
 
   get(key: keyof TranslationStrings, override?: string | null): string | undefined {

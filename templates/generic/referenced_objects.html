@@ -1,5 +1,5 @@
 <div>
-  <p>This {{ object_name }} is still referenced by other objects. You must archive those first.</p>
+  <p>This {{ object_name }} is still referenced by other objects. Remove or archive those references first.</p>
   {% if experiments %}
     <h2 class="font-semibold my-2">Experiments</h2>
     <ul class="list-disc list-inside">
@@ -41,6 +41,14 @@
     <ul class="list-disc list-inside">
       {% for assistant in assistants %}
         <li>{% include "generic/chip.html" with chip=assistant %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if evaluators %}
+    <h2 class="font-semibold my-2">Evaluators</h2>
+    <ul class="list-disc list-inside">
+      {% for evaluator in evaluators %}
+        <li>{% include "generic/chip.html" with chip=evaluator %}</li>
       {% endfor %}
     </ul>
   {% endif %}

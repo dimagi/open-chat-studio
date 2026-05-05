@@ -26,6 +26,7 @@ IGNORE_APPS = {
     "account",
     "admin",
     "allauth",
+    "anymail",
     "mfa",  # allauth.mfa app label
     "api",
     "analysis",  # TODO: delete once the app is completely removed
@@ -154,7 +155,7 @@ def test_chatbot_admin_documents_permissions_regression():
     Django's auto-generated permission codenames ("view_collection", etc.), resulting in zero
     permissions being granted for documents.
     """
-    from apps.teams.backends import CHATBOT_ADMIN_GROUP
+    from apps.teams.backends import CHATBOT_ADMIN_GROUP  # noqa: PLC0415
 
     chatbot_admin = next(g for g in GROUPS if g.name == CHATBOT_ADMIN_GROUP)
     documents_def = next(pd for pd in chatbot_admin.permission_defs if pd.app_label == "documents")

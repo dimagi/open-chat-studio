@@ -27,6 +27,38 @@ from apps.utils.search import similarity_search
 logger = logging.getLogger("ocs.files")
 
 
+def _get_s3_presigned_url(file_field, filename, content_type, expires_in=3600):
+    """Return a presigned S3 URL for direct client download, or None if not applicable.
+
+    When the storage backend is S3 (django-storages S3Boto3Storage), this generates a
+    presigned GET URL with ``Content-Disposition: attachment`` so the browser downloads
+    the file directly from S3 — bypassing the Django app tier entirely.  This is
+    significantly faster for large files and avoids unnecessary bandwidth through Fargate.
+
+    Falls back gracefully: returns None for local/non-S3 storage, or if presigned URL
+    generation fails for any reason (e.g. missing IAM permissions).
+    """
+    storage = file_field.storage
+    if not hasattr(storage, "bucket"):
+        return None
+    try:
+        params = {
+            "Bucket": storage.bucket.name,
+            "Key": storage._normalize_name(file_field.name),
+            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+        }
+        if content_type:
+            params["ResponseContentType"] = content_type
+        return storage.bucket.meta.client.generate_presigned_url(
+            "get_object",
+            Params=params,
+            ExpiresIn=expires_in,
+        )
+    except Exception:
+        logger.exception("Failed to generate S3 presigned URL for %s", file_field.name)
+        return None
+
+
 class FileView(LoginAndTeamRequiredMixin, View):
     @method_decorator(permission_required("files.view_file"))
     def get(self, request, team_slug: str, pk: int):
@@ -40,6 +72,11 @@ class FileView(LoginAndTeamRequiredMixin, View):
         file = get_object_or_404(File, id=pk, team=request.team)
         if not file.file:
             return _not_found()
+
+        if "allow_s3" in request.GET:
+            presigned_url = _get_s3_presigned_url(file.file, file.name, file.content_type)
+            if presigned_url:
+                return redirect(presigned_url)
 
         try:
             return FileResponse(

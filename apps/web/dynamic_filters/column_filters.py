@@ -55,11 +55,11 @@ class ExperimentFilter(ChoiceColumnFilter):
         return queryset.exclude(self._get_filter_clause(value))
 
 
-class StatusFilter(ChoiceColumnFilter):
+class SessionStatusFilter(ChoiceColumnFilter):
     column: str = "status"
     label: str = "Status"
-    options: list[str] = SessionStatus.for_chatbots()
-    description: str = "Filter by session status (e.g. active, complete)"
+    options: list[str | dict] = [{"id": value, "label": label} for value, label in SessionStatus.choices]
+    description: str = "Filter by session status (e.g. active, complete, pending-review)"
 
 
 class RemoteIdFilter(ChoiceColumnFilter):

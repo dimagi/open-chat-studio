@@ -14,9 +14,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.core.management.base import BaseCommand, CommandError
 from langfuse import Langfuse
+from langfuse.api.commons.types import Usage
 from langfuse.api.core.api_error import ApiError
-from langfuse.api.resources.commons.types import Usage
-from langfuse.api.resources.ingestion.types import (
+from langfuse.api.ingestion.types import (
     CreateEventBody,
     CreateGenerationBody,
     CreateSpanBody,

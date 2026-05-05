@@ -11,6 +11,7 @@ from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -31,7 +32,9 @@ from apps.evaluations.models import (
     EvaluationRunStatus,
     EvaluationRunType,
     Evaluator,
+    EvaluatorTagRule,
 )
+from apps.evaluations.tagging import apply_rules_to_result
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
@@ -61,14 +64,19 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
 
     with current_team(evaluation_run.team):
-        message = EvaluationMessage.objects.get(id=message_id)
+        message = EvaluationMessage.objects.select_related("session__chat", "expected_output_chat_message").get(
+            id=message_id
+        )
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
         if generation_experiment is not None:
             session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
 
-        evaluators = {e.id: e for e in Evaluator.objects.filter(id__in=evaluator_ids)}
+        evaluators_qs = Evaluator.objects.filter(id__in=evaluator_ids).prefetch_related(
+            Prefetch("tag_rules", queryset=EvaluatorTagRule.objects.select_related("tag")),
+        )
+        evaluators = {e.id: e for e in evaluators_qs}
         for evaluator_id in evaluator_ids:
             try:
                 evaluator = evaluators[evaluator_id]
@@ -77,14 +85,17 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                 continue
             try:
                 result = evaluator.run(message, bot_response or "")
-                EvaluationResult.objects.create(
-                    message=message,
-                    run=evaluation_run,
-                    evaluator=evaluator,
-                    output=result.model_dump(),
-                    team=evaluation_run.team,
-                    session_id=session_id,
-                )
+                output = result.model_dump()
+                with transaction.atomic():
+                    evaluation_result = EvaluationResult.objects.create(
+                        message=message,
+                        run=evaluation_run,
+                        evaluator=evaluator,
+                        output=output,
+                        team=evaluation_run.team,
+                        session_id=session_id,
+                    )
+                    _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
             except Exception as e:
                 logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
                 EvaluationResult.objects.create(
@@ -95,6 +106,20 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                     team=evaluation_run.team,
                     session_id=session_id,
                 )
+
+
+def _maybe_apply_tag_rules(
+    evaluation_run: EvaluationRun,
+    evaluator: Evaluator,
+    evaluation_result: EvaluationResult,
+    message: EvaluationMessage,
+) -> None:
+    """Skip tagging on preview runs or results with errors; otherwise apply rules."""
+    if evaluation_run.type == EvaluationRunType.PREVIEW:
+        return
+    if (evaluation_result.output or {}).get("error"):
+        return
+    apply_rules_to_result(evaluation_result, evaluator, message)
 
 
 def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment) -> tuple[int | None, str | None]:

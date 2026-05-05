@@ -141,7 +141,7 @@ class PipelineGraph(pydantic.BaseModel):
             compiled_graph = state_graph.compile()
         except ValueError as e:
             raise PipelineBuildError(str(e)) from e
-        return compiled_graph
+        return compiled_graph  # ty: ignore[invalid-return-type]
 
     def _check_for_cycles(self):
         """Detect cycles in a directed graph."""

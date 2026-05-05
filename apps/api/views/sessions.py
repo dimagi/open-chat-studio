@@ -158,6 +158,10 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         if experiment_id := self.request.query_params.get("experiment"):
+            try:
+                serializers.UUIDField().run_validation(experiment_id)
+            except serializers.ValidationError:
+                raise serializers.ValidationError({"experiment": [f'"{experiment_id}" is not a valid UUID.']})
             queryset = queryset.filter(experiment__public_id=experiment_id)
         if versions_param := self.request.query_params.get("versions"):
             version_list = versions_param.split(",")

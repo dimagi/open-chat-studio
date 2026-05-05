@@ -40,12 +40,14 @@ dependencies = [
     "langchain>=1.1.0",
     "langchain-core>=0.3.23",
     "langchain-anthropic",
-    "langchain-openai>1.0.0",
+    "langchain-openai>=1.1.14",
     "langchain_google_genai",
+    "langchain-voyageai",
     "langchain-community>=0.3",
-    "langfuse>=2.59.7",
+    "langfuse>=4.5.0",
     "langgraph>=0.2.20",
     "loguru",
+    "mail-parser-reply>=0.20",
     "nh3",
     "openai",
     "openapi_pydantic",
@@ -149,6 +151,7 @@ banned-module-level-imports = [
     "langchain_google_genai",
     "langchain_anthropic",
     "langchain_openai",
+    "langchain_voyageai",
     "boto3",
 ]
 
@@ -169,7 +172,7 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "prek>=0.3.2",
     "django-types",
-    "ty",
+    "ty==0.0.33",
 ]
 docs = [
     "mkdocs-material>=9.6.12",
