@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from apps.events.forms import (
     ACTION_PARAMS_FORMS,
+    EventActionForm,
     StaticTriggerForm,
     TimeoutTriggerForm,
     build_action_params_form,
@@ -33,23 +34,56 @@ def create_static_event_view(request, team_slug: str, experiment_id: str):
 
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
     if request.method == "POST":
-        action_form = get_action_params_form(request.POST, team_id=request.team.id, experiment_id=experiment_id)
+        action_type = request.POST.get("action_type") or _default_action_type()
+        action_primary_form = EventActionForm(request.POST)
+        action_params_form = build_action_params_form(
+            action_type,
+            data=request.POST,
+            team_id=request.team.id,
+            experiment_id=experiment_id,
+        )
         trigger_form = trigger_form_class(request.POST)
-        if action_form.is_valid() and trigger_form.is_valid():
-            saved_action = action_form.save(experiment_id=experiment_id)
+
+        if action_primary_form.is_valid() and action_params_form.is_valid() and trigger_form.is_valid():
+            saved_action = action_primary_form.save(experiment_id=experiment_id)
+            saved_action.params = action_params_form.cleaned_data
+            saved_action.save()
             trigger = trigger_form.save(commit=False, experiment_id=experiment_id)
             trigger.action = saved_action
             trigger.save()
             return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
     else:
-        action_form = get_action_params_form(team_id=request.team.id, experiment_id=experiment_id)
+        action_type = _default_action_type()
+        action_primary_form = EventActionForm()
+        action_params_form = build_action_params_form(
+            action_type,
+            team_id=request.team.id,
+            experiment_id=experiment_id,
+        )
         trigger_form = trigger_form_class()
-    context = {
-        "action_form": action_form,
-        "trigger_form": trigger_form,
-        "event_type": trigger_form_class._meta.model._meta.model_name,
-    }
+
+    context = _event_form_context(
+        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id
+    )
     return render(request, "events/manage_event.html", context)
+
+
+def _default_action_type() -> str:
+    """First key in ACTION_PARAMS_FORMS."""
+    return next(iter(ACTION_PARAMS_FORMS))
+
+
+def _event_form_context(
+    trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id
+):
+    return {
+        "trigger_form": trigger_form,
+        "action_primary_form": action_primary_form,
+        "action_params_form": action_params_form,
+        "action_type": action_type,
+        "event_type": trigger_form_class._meta.model._meta.model_name,
+        "experiment_id": experiment_id,
+    }
 
 
 @login_and_team_required
@@ -74,27 +108,38 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         "timeout": TimeoutTrigger,
     }[trigger_type]
     trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
+
     if request.method == "POST":
-        action_form = get_action_params_form(
-            request.POST, instance=trigger.action, team_id=request.team.id, experiment_id=experiment_id
+        action_type = request.POST.get("action_type") or trigger.action.action_type
+        action_primary_form = EventActionForm(request.POST, instance=trigger.action)
+        action_params_form = build_action_params_form(
+            action_type,
+            data=request.POST,
+            initial=trigger.action.params,
+            team_id=request.team.id,
+            experiment_id=experiment_id,
         )
         trigger_form = trigger_form_class(request.POST, instance=trigger)
-
-        if action_form.is_valid() and trigger_form.is_valid():
-            action_form.save(experiment_id=experiment_id)
-            trigger = trigger_form.save(experiment_id=experiment_id)
+        if action_primary_form.is_valid() and action_params_form.is_valid() and trigger_form.is_valid():
+            saved_action = action_primary_form.save(experiment_id=experiment_id)
+            saved_action.params = action_params_form.cleaned_data
+            saved_action.save()
+            trigger_form.save(experiment_id=experiment_id)
             return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
     else:
-        action_form = get_action_params_form(
-            instance=trigger.action, team_id=request.team.id, experiment_id=experiment_id
+        action_type = trigger.action.action_type
+        action_primary_form = EventActionForm(instance=trigger.action)
+        action_params_form = build_action_params_form(
+            action_type,
+            initial=trigger.action.params,
+            team_id=request.team.id,
+            experiment_id=experiment_id,
         )
         trigger_form = trigger_form_class(instance=trigger)
 
-    context = {
-        "action_form": action_form,
-        "trigger_form": trigger_form,
-        "secondary_key": action_form.get_secondary_key(trigger.action),
-    }
+    context = _event_form_context(
+        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id
+    )
     return render(request, "events/manage_event.html", context)
 
 
