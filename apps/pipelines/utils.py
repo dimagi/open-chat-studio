@@ -7,8 +7,8 @@ def compute_max_char_limit(pipeline) -> int | None:
     """Return the maximum input character limit for the given pipeline, or None if unconstrained.
 
     Cached by pipeline.id + pipeline.updated_at — any pipeline save naturally busts the cache.
-    Reads the smallest token limit across all LLM nodes, converts to characters using LangChain's
-    approximation ratio, and deducts a response-budget reserve (1/8 of the token limit).
+    Reads the smallest model max_token_limit across all LLM nodes and converts to characters
+    using LangChain's approximation ratio.
     """
     cache_key = f"max_char_limit:{pipeline.id}:{pipeline.updated_at.timestamp()}"
     cached = cache.get(cache_key)
@@ -36,10 +36,7 @@ def _compute_max_char_limit(pipeline) -> int | None:
     model_ids_needing_lookup = []
 
     for node in llm_nodes:
-        user_limit = node.params.get("user_max_token_limit")
-        if user_limit is not None and int(user_limit) > 0:
-            limits.append(int(user_limit))
-        elif node.params.get("llm_provider_model_id"):
+        if node.params.get("llm_provider_model_id"):
             model_ids_needing_lookup.append(node.params["llm_provider_model_id"])
 
     if model_ids_needing_lookup:
@@ -55,9 +52,7 @@ def _compute_max_char_limit(pipeline) -> int | None:
         return None
 
     token_limit = min(limits)
-    response_reserve = token_limit // 8
-    effective_tokens = token_limit - response_reserve
     # Read chars_per_token from LangChain's function default so the frontend counter
     # always uses the same ratio as MessageSizeValidationMiddleware.
     chars_per_token = (count_tokens_approximately.__kwdefaults__ or {}).get("chars_per_token", 4.0)
-    return int(effective_tokens * chars_per_token)
+    return int(token_limit * chars_per_token)

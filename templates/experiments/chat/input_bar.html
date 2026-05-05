@@ -86,13 +86,6 @@
         <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off"
                :maxlength="maxCharLimit || false"
                :class="messageTooLong ? 'input input-error w-full' : 'input input-primary w-full'">
-        {% if max_char_limit %}
-        <div class="flex justify-end text-xs pr-1">
-          <span :class="messageTooLong ? 'text-error font-semibold' : (messageNearLimit ? 'text-warning' : 'text-base-content/50')">
-            <span x-text="message.length"></span> / {{ max_char_limit }}
-          </span>
-        </div>
-        {% endif %}
       </div>
       <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled
               :title="messageTooLong ? 'Message is too long' : ''">Send</button>

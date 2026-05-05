@@ -118,16 +118,11 @@ def build_node_agent(
 
 
 def _build_size_validation_middleware(node: PipelineNode, system_message) -> MessageSizeValidationMiddleware | None:
-    user_limit = getattr(node, "user_max_token_limit", None)
-    if user_limit is not None:
-        max_token_limit = int(user_limit)
-    else:
-        max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
+    max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
     if not max_token_limit:
         return None
     system_tokens = count_tokens_approximately([system_message])
-    response_reserve = max_token_limit // 8
-    effective_limit = max(max_token_limit - system_tokens - response_reserve, 0)
+    effective_limit = max(max_token_limit - system_tokens, 0)
     return MessageSizeValidationMiddleware(token_limit=effective_limit)
 
 

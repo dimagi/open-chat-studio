@@ -151,6 +151,6 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "
                 f"It uses approximately {token_count} tokens, but only {self._token_limit} tokens are available "
-                f"after accounting for the system prompt and response budget."
+                f"after accounting for the system prompt."
             )
         return None
