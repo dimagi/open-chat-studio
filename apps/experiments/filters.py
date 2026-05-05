@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Subquery
 
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
@@ -58,74 +58,52 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
     def prepare(self, team, **_):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
-    def apply_any_of(self, queryset, value, timezone=None):
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    def _chat_or_message_tag_exists(self, tag_names):
+        """Build a Q matching outer rows whose chat or any of its messages carries one of ``tag_names``."""
+        chat_ct = ContentType.objects.get_for_model(Chat)
+        chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
         chat_tag_exists = Exists(
             CustomTaggedItem.objects.filter(
                 object_id=OuterRef("chat_id"),
-                content_type_id=chat_content_type.id,
-                tag__name__in=value,
+                content_type_id=chat_ct.id,
+                tag__name__in=tag_names,
             )
         )
         message_tag_exists = Exists(
             CustomTaggedItem.objects.filter(
-                content_type_id=chat_message_content_type.id,
-                tag__name__in=value,
+                content_type_id=chat_message_ct.id,
+                tag__name__in=tag_names,
                 object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
             )
         )
-        return queryset.filter(chat_tag_exists | message_tag_exists)
+        return chat_tag_exists | message_tag_exists
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(self._chat_or_message_tag_exists(value))
 
     def apply_all_of(self, queryset, value, timezone=None):
-        conditions = Q()
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
         for tag in value:
-            chat_tag_exists = Exists(
-                CustomTaggedItem.objects.filter(
-                    object_id=OuterRef("chat_id"),
-                    content_type_id=chat_content_type.id,
-                    tag__name=tag,
-                )
-            )
-            message_tag_exists = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type_id=chat_message_content_type.id,
-                    tag__name=tag,
-                    object_id__in=Subquery(
-                        ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")
-                    ),
-                )
-            )
-            conditions &= chat_tag_exists | message_tag_exists
-        return queryset.filter(conditions)
+            queryset = queryset.filter(self._chat_or_message_tag_exists([tag]))
+        return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-        chat_tag_exists = Exists(
-            CustomTaggedItem.objects.filter(
-                object_id=OuterRef("chat_id"),
-                content_type_id=chat_content_type.id,
-                tag__name__in=value,
-            )
-        )
-        message_tag_exists = Exists(
-            CustomTaggedItem.objects.filter(
-                content_type_id=chat_message_content_type.id,
-                tag__name__in=value,
-                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
-            )
-        )
-        return queryset.exclude(chat_tag_exists | message_tag_exists)
+        return queryset.exclude(self._chat_or_message_tag_exists(value))
 
 
-class MessageTagsFilter(ChatMessageTagsFilter):
-    """Simple tags filter for messages - works directly on message tags."""
+class MessageTagsFilter(ChoiceColumnFilter):
+    """Tag filter for ChatMessage querysets — uses the model's own ``tags`` related manager.
 
+    Distinct from :class:`ChatMessageTagsFilter`, which targets a *session* queryset and
+    looks for tags on either the chat or any of its messages via ``CustomTaggedItem``.
+    """
+
+    query_param: str = "tags"
+    label: str = "Tags"
+    type: str = TYPE_CHOICE
     description: str = "Filter by tags on messages"
+
+    def prepare(self, team, **_):
+        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(tags__name__in=value)
@@ -166,10 +144,20 @@ class VersionsFilter(ChoiceColumnFilter):
         return queryset.filter(experiment_versions__contains=version_numbers)
 
 
-class MessageVersionsFilter(VersionsFilter):
-    """Versions filter for messages - works directly on message version tags."""
+class MessageVersionsFilter(ChoiceColumnFilter):
+    """Version filter for ChatMessage querysets — matches the version tag on a message.
 
+    Distinct from :class:`VersionsFilter`, which targets a session queryset and matches
+    against the ``experiment_versions`` array column.
+    """
+
+    query_param: str = "versions"
+    label: str = "Versions"
     description: str = "Filter by message version"
+
+    def prepare(self, team, **kwargs):
+        single_experiment = kwargs.get("single_experiment")
+        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(tags__name__in=value, tags__category=Chat.MetadataKeys.EXPERIMENT_VERSION)

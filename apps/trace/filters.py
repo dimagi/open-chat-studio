@@ -1,8 +1,12 @@
 from collections.abc import Sequence
 from typing import ClassVar
 
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Exists, OuterRef
 from django.urls import reverse
 
+from apps.annotations.models import CustomTaggedItem
+from apps.chat.models import ChatMessage
 from apps.experiments.filters import (
     get_filter_context_data,
 )
@@ -41,35 +45,31 @@ class MessageTagsFilter(ChoiceColumnFilter):
             team.tag_set.filter(is_system_tag=False).values_list("name", flat=True).order_by("name").distinct()
         )
 
-    def _exists(self, message_field: str, tag_names: list[str]):
-        """Build an EXISTS clause matching tags on the message referenced by `message_field`."""
-        from django.contrib.contenttypes.models import ContentType  # noqa: PLC0415
-        from django.db.models import Exists, OuterRef  # noqa: PLC0415
+    def _input_or_output_message_tag_exists(self, tag_names: list[str]):
+        """Build a Q matching traces whose input or output message carries one of ``tag_names``."""
+        chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
 
-        from apps.annotations.models import CustomTaggedItem  # noqa: PLC0415
-        from apps.chat.models import ChatMessage  # noqa: PLC0415
-
-        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-        return Exists(
-            CustomTaggedItem.objects.filter(
-                content_type_id=chat_message_content_type.id,
-                tag__name__in=tag_names,
-                object_id=OuterRef(message_field),
+        def _exists(message_field):
+            return Exists(
+                CustomTaggedItem.objects.filter(
+                    content_type_id=chat_message_ct.id,
+                    tag__name__in=tag_names,
+                    object_id=OuterRef(message_field),
+                )
             )
-        )
+
+        return _exists("input_message_id") | _exists("output_message_id")
 
     def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(self._exists("input_message_id", value) | self._exists("output_message_id", value))
+        return queryset.filter(self._input_or_output_message_tag_exists(value))
 
     def apply_all_of(self, queryset, value, timezone=None):
         for tag in value:
-            queryset = queryset.filter(
-                self._exists("input_message_id", [tag]) | self._exists("output_message_id", [tag])
-            )
+            queryset = queryset.filter(self._input_or_output_message_tag_exists([tag]))
         return queryset
 
     def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(self._exists("input_message_id", value) | self._exists("output_message_id", value))
+        return queryset.exclude(self._input_or_output_message_tag_exists(value))
 
 
 class ExperimentVersionsFilter(ChoiceColumnFilter):
