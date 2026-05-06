@@ -1,0 +1,1252 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/superpowers/specs/2026-04-30-list-view-performance-design/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>List View Performance — Approach 1 - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#list-view-performance-approach-1" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              List View Performance — Approach 1
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      Problem
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals-non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goals &amp; non-goals
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#success-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      Success criteria
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design" class="md-nav__link">
+    <span class="md-ellipsis">
+      Design
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trace-list-indexes-filter-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Trace list — indexes &amp; filter cleanup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-list-pagination-count-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Session list — pagination COUNT cleanup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filter-machinery-make-distinct-conditional" class="md-nav__link">
+    <span class="md-ellipsis">
+      Filter machinery — make DISTINCT conditional
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chatbot-list-small-wins-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      Chatbot list — small wins only
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rollout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rollout
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#risks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Risks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      Measurement
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="list-view-performance-approach-1">List View Performance — Approach 1</h1>
+<p><strong>Status:</strong> Draft
+<strong>Date:</strong> 2026-04-30
+<strong>Owner:</strong> Simon Kelly</p>
+<h2 id="problem">Problem</h2>
+<p>On teams with substantial data, four list views are slow:</p>
+<ul>
+<li><strong>Trace list</strong> (<code>TraceTableView</code>) — <code>pg_stat_statements</code> shows the main <code>SELECT trace_trace … ORDER BY timestamp DESC</code> averaging ~2.8s; the sorted/filtered variant with <code>SELECT DISTINCT</code> averages ~10s, and its <code>COUNT(*)</code> over <code>SELECT DISTINCT</code> averages ~9s.</li>
+<li><strong>Session list</strong> (<code>ChatbotSessionsTableView</code>, <code>AllSessionsHome</code>) — pagination <code>COUNT(*)</code> averages 350ms with a <code>LEFT OUTER JOIN channels_experimentchannel</code> that the view does not appear to need; the <code>customtaggeditem</code> prefetch returns ~10M rows over 632 calls (~16K rows per page load).</li>
+<li><strong>Chatbot list</strong> (<code>ChatbotExperimentTableView</code>) — averages ~250ms; four correlated subqueries per row plus a 24h trend query. Smaller hit, but visible.</li>
+<li><strong>Annotation queue sessions</strong> (<code>AnnotationQueueSessionsTableView</code> and its <code>_json</code> sibling, <code>apps/human_annotations/views/queue_views.py:218</code>) — same shape as the session list, same bottlenecks.</li>
+</ul>
+<p>Scale at the largest team: ~500K traces, ~50K sessions, ~1K experiments (including versions).</p>
+<h2 id="goals-non-goals">Goals &amp; non-goals</h2>
+<p>This is <strong>Approach 1</strong> of a two-phase plan: low-risk, high-leverage fixes first, measure, then decide whether Approach 2 (keyset pagination, denormalized counters on <code>Experiment</code>) is justified.</p>
+<p><strong>In scope:</strong></p>
+<ul>
+<li>Add missing indexes on <code>Trace</code> and <code>ExperimentSession</code>.</li>
+<li>Rewrite the unconditional <code>.distinct()</code> in <code>MultiColumnFilter</code> and convert offending filters to <code>EXISTS</code>.</li>
+<li>Remove <code>team__slug</code> join in <code>TraceTableView</code>.</li>
+<li>Bound the <code>CustomTaggedItem</code> prefetch on the session list.</li>
+<li>Investigate and remove the stray <code>LEFT OUTER JOIN channels_experimentchannel</code> in the session-list <code>COUNT</code>.</li>
+</ul>
+<p><strong>Out of scope (deferred):</strong></p>
+<ul>
+<li>Keyset pagination on Trace.</li>
+<li>Denormalized aggregate columns on <code>Experiment</code> (<code>session_count</code>, <code>participant_count</code>, <code>interaction_count</code>, <code>last_activity_at</code>).</li>
+<li>Materialized rollups for trend data.</li>
+<li><code>Trace</code> partitioning / retention policy.</li>
+<li>The team dashboard's aggregate queries (separate spec — they hit the same tables and would benefit from these indexes incidentally).</li>
+</ul>
+<h2 id="success-criteria">Success criteria</h2>
+<p>Re-pull <code>pg_stat_statements</code> after rollout and verify:</p>
+<ul>
+<li>Trace list main query mean execution time drops by ≥80%.</li>
+<li>Session list <code>COUNT(*) … DISTINCT</code> total time drops by ≥50%.</li>
+<li>No new duplicate-row regressions in test or staging QA.</li>
+<li><code>Trace</code> / <code>ExperimentSession</code> insert latency unchanged within ±10%.</li>
+</ul>
+<p>If the gates are met, Approach 1 is complete. Re-evaluate Approach 2 from a fresh baseline.</p>
+<h2 id="design">Design</h2>
+<h3 id="trace-list-indexes-filter-cleanup">Trace list — indexes &amp; filter cleanup</h3>
+<p>Add three indexes on <code>Trace</code>, all created with <code>AddIndexConcurrently</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+    <span class="n">indexes</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+            <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_team_timestamp_idx&quot;</span><span class="p">,</span>
+            <span class="n">condition</span><span class="o">=~</span><span class="n">Q</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;pending&quot;</span><span class="p">),</span>  <span class="c1"># partial — matches view WHERE clause</span>
+        <span class="p">),</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_experiment_timestamp_idx&quot;</span><span class="p">),</span>
+        <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;session&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_session_timestamp_idx&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+</code></pre></div>
+<p>Rationale:</p>
+<ul>
+<li>The partial <code>(team, -timestamp) WHERE status != 'pending'</code> matches the view's hot path exactly: <code>Trace.objects.filter(team=...).exclude(status=PENDING).order_by("-timestamp")</code>. Index range scan, no sort.</li>
+<li><code>(experiment, -timestamp)</code> covers the most common filter narrowing (filter by chatbot) and also benefits <code>get_bulk_trend_data</code> on the chatbot list.</li>
+<li><code>(session, -timestamp)</code> covers session-detail-page lookups and any filter pivoting on session.</li>
+</ul>
+<p>We deliberately do <strong>not</strong> add <code>(team, status, -timestamp)</code> for now. The partial index handles the default view, and status filtering can use the partial then filter status in-memory. If post-rollout data shows status filtering is heavy and not well-served, we add it then.</p>
+<p>Also in <code>TraceTableView.get_queryset</code>: replace <code>team__slug=self.request.team.slug</code> with <code>team=self.request.team</code> to remove a redundant join.</p>
+<h3 id="session-list-pagination-count-cleanup">Session list — pagination COUNT cleanup</h3>
+<p>Add a composite index on <code>ExperimentSession</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;-last_activity_at&quot;</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;expsession_team_lastactivity_idx&quot;</span><span class="p">),</span>
+</code></pre></div>
+<p>Every session list filters by team and orders by <code>last_activity_at</code>; this turns the order_by into a tail scan.</p>
+<p>Bound the <code>CustomTaggedItem</code> prefetch in <code>ExperimentSessionObjectManager.get_table_queryset</code>. Today the prefetch fires across the entire filtered queryset, before pagination is applied. Two options:</p>
+<ul>
+<li><strong>Option A (recommended):</strong> override <code>get_table_data</code> on the relevant table views to slice to the visible page first, then attach the prefetch only to the page rows. Mirrors the pattern already used in <code>ChatbotExperimentTableView.get_table_data</code> for <code>get_bulk_trend_data</code>.</li>
+<li><strong>Option B (deferred):</strong> drop the prefetch and render tag chips lazily via an HTMX endpoint. Cleaner but bigger; defer to Approach 2 if it comes up.</li>
+</ul>
+<p>Option A is the chosen implementation.</p>
+<p>The stray <code>LEFT OUTER JOIN channels_experimentchannel</code> visible in the pg_stat <code>COUNT(*)</code> row is investigated and removed. Tracing the source is an implementation step — likely a single column accessor or <code>order_by</code> reference. Not designed in detail here.</p>
+<p>The per-row <code>message_count</code> Subquery is left as-is. At 50K sessions and ~25 per page, 25 small subqueries on an indexed FK is cheap. Revisit if data says otherwise.</p>
+<h3 id="filter-machinery-make-distinct-conditional">Filter machinery — make <code>DISTINCT</code> conditional</h3>
+<p><code>MultiColumnFilter.apply</code> (<code>apps/web/dynamic_filters/base.py:112</code>) ends with <code>return queryset.distinct()</code> unconditionally. Every filtered list pays for it whether or not any active filter actually multiplies rows.</p>
+<p>Audit of which filters actually need DISTINCT:</p>
+<table>
+<thead>
+<tr>
+<th>Filter</th>
+<th>Needs DISTINCT?</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ParticipantFilter</code></td>
+<td>No</td>
+<td>FK join, no multiplication</td>
+</tr>
+<tr>
+<td><code>TimestampFilter</code> (most uses)</td>
+<td>No</td>
+<td>Direct column on session/trace</td>
+</tr>
+<tr>
+<td><code>TimestampFilter("Message Date", chat__messages__created_at)</code></td>
+<td><strong>Yes</strong></td>
+<td>One-to-many join through messages</td>
+</tr>
+<tr>
+<td><code>ChatMessageTagsFilter.apply_any_of</code> / <code>apply_excludes</code></td>
+<td><strong>Yes</strong></td>
+<td>Joins <code>chat__messages__tags</code></td>
+</tr>
+<tr>
+<td><code>ChatMessageTagsFilter.apply_all_of</code></td>
+<td>No</td>
+<td>Already uses <code>Exists</code></td>
+</tr>
+<tr>
+<td><code>VersionsFilter</code></td>
+<td>No</td>
+<td>Array overlap on session column</td>
+</tr>
+<tr>
+<td><code>ChannelsFilter</code></td>
+<td>No</td>
+<td>Direct <code>platform</code> column</td>
+</tr>
+<tr>
+<td><code>ExperimentFilter</code></td>
+<td>No</td>
+<td>FK filter</td>
+</tr>
+<tr>
+<td><code>SessionStatusFilter</code></td>
+<td>No</td>
+<td>Direct column</td>
+</tr>
+<tr>
+<td><code>RemoteIdFilter</code></td>
+<td>No</td>
+<td>FK</td>
+</tr>
+<tr>
+<td><code>SessionIdFilter</code></td>
+<td>No</td>
+<td>Direct column</td>
+</tr>
+<tr>
+<td><code>MessageTagsFilter</code> (trace)</td>
+<td><strong>Yes</strong></td>
+<td>Already calls <code>.distinct()</code> itself</td>
+</tr>
+<tr>
+<td><code>MessageTagsFilter</code> (experiments, used by <code>ChatMessageFilter</code>)</td>
+<td><strong>Yes</strong> for <code>apply_any_of</code></td>
+<td><code>tags__name__in=</code> joins through M2M</td>
+</tr>
+<tr>
+<td><code>MessageVersionsFilter</code> (experiments)</td>
+<td><strong>Yes</strong> for <code>apply_any_of</code></td>
+<td>Same M2M JOIN, with <code>tag__category</code> constraint</td>
+</tr>
+<tr>
+<td><code>TraceStatusFilter</code>, <code>ExperimentVersionsFilter</code></td>
+<td>No</td>
+<td>Direct column</td>
+</tr>
+</tbody>
+</table>
+<p>The fix:</p>
+<ol>
+<li>Remove the unconditional <code>return queryset.distinct()</code> from <code>MultiColumnFilter.apply</code>.</li>
+<li>Rewrite the row-multiplying filters as <code>EXISTS</code> subqueries (extending the pattern already in <code>ChatMessageTagsFilter.apply_all_of</code>):</li>
+<li><code>ChatMessageTagsFilter.apply_any_of</code> and <code>apply_excludes</code></li>
+<li><code>MessageTagsFilter.apply_any_of</code>, <code>apply_all_of</code>, <code>apply_excludes</code> (trace)</li>
+<li><code>MessageTagsFilter</code> and <code>MessageVersionsFilter</code> <code>apply_any_of</code> (experiments — used by <code>ChatMessageFilter</code>)</li>
+<li><code>TimestampFilter</code> when its column traverses <code>chat__messages__*</code></li>
+</ol>
+<p><code>EXISTS</code> is the structurally correct expression of "rows where a related row matches" — no multiplication, no DISTINCT. Both the page query and the <code>COUNT(*)</code> get clean shapes.</p>
+<p>Backwards compatibility: this is the only change that could expose duplicate rows if a join-multiplier is missed. Mitigation: per-filter unit tests asserting <code>apply()</code> returns no duplicates with fixtures containing multiple messages/tags per session, plus assertions on the emitted SQL (no <code>DISTINCT</code>).</p>
+<p>This change benefits all four in-scope views plus the annotation-queue-items table as a bonus.</p>
+<h3 id="chatbot-list-small-wins-only">Chatbot list — small wins only</h3>
+<p>This view does not go through <code>MultiColumnFilter</code> (it uses <code>similarity_search</code> and direct <code>.filter()</code>). The <code>SELECT DISTINCT experiment</code> in pg_stat appears to come from <code>Experiment.objects.get_all()</code> or working-version logic — a one-line audit during implementation; if the DISTINCT is from a join we don't need, drop it.</p>
+<p>The four correlated subqueries (<code>session_count</code>, <code>participant_count</code>, <code>interaction_count</code>, <code>last_activity</code>) are left in place — at 250ms total they are not the bottleneck, and denormalizing is explicitly Approach 2 work. <code>get_bulk_trend_data</code> is similarly left alone; it picks up a small free win from <code>trace_experiment_timestamp_idx</code>.</p>
+<h2 id="rollout">Rollout</h2>
+<p>Each step is independently shippable. Ship in this order so we can attribute wins per change:</p>
+<ol>
+<li><code>Trace</code> indexes via <code>AddIndexConcurrently</code> (<code>Migration.atomic = False</code>).</li>
+<li><code>team__slug</code> → <code>team</code> fix in <code>TraceTableView</code> — one-line PR.</li>
+<li><code>ExperimentSession.last_activity_at</code> composite index.</li>
+<li><code>MultiColumnFilter</code> DISTINCT removal + <code>EXISTS</code> rewrites in offending filters.</li>
+<li>Bound the <code>CustomTaggedItem</code> prefetch on session list.</li>
+<li>Investigate and fix the stray <code>experiment_channel</code> <code>LEFT JOIN</code> in the session <code>COUNT</code>.</li>
+</ol>
+<p>After each step: re-pull <code>pg_stat_statements</code> and the Sentry route metrics for <code>chatbots:table</code>, <code>chatbots:sessions-list</code>, <code>chatbots:all_sessions_list</code>, <code>trace:table</code>, <code>human_annotations:queue_sessions_table</code>. If a change does not move the numbers, pause and re-investigate before continuing.</p>
+<h2 id="risks">Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CONCURRENTLY</code> index creation fails or is slow</td>
+<td>Use <code>AddIndexConcurrently</code> with <code>Migration.atomic = False</code>. Monitor <code>pg_stat_progress_create_index</code>. Roll back via <code>DROP INDEX CONCURRENTLY</code>.</td>
+</tr>
+<tr>
+<td>Removing global <code>.distinct()</code> exposes duplicate rows</td>
+<td>Per-filter unit test asserting no duplicates with multi-tag/multi-message fixtures. SQL-shape assertion that emitted query lacks <code>DISTINCT</code>.</td>
+</tr>
+<tr>
+<td><code>EXISTS</code> rewrites change result set in subtle ways</td>
+<td>Run the existing tests for each filter operator (<code>any of</code>, <code>all of</code>, <code>excludes</code>) and add new ones covering multi-tag and multi-message fixtures.</td>
+</tr>
+<tr>
+<td>Partial-index condition drift if a new <code>TraceStatus</code> is added</td>
+<td>Comment on the index and a regression test exercising non-pending statuses.</td>
+</tr>
+<tr>
+<td>Planner picks a bad plan</td>
+<td><code>EXPLAIN ANALYZE</code> after each migration; <code>ANALYZE trace_trace;</code> if needed. <code>pg_hint_plan</code> only as last resort — not expected at 500K rows.</td>
+</tr>
+<tr>
+<td>Slicing in <code>get_table_data</code> interacts badly with django-tables2 ordering / sort headers</td>
+<td>Test sort-by-each-column on a seeded staging dataset. The chatbot list already uses this pattern, so confidence is high.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="measurement">Measurement</h2>
+<p><strong>Before each step:</strong></p>
+<ul>
+<li>Snapshot <code>pg_stat_statements</code> for queries against <code>trace_trace</code>, <code>experiments_experimentsession</code>, <code>experiments_experiment</code>, <code>annotations_customtaggeditem</code>. Save calls / mean / total.</li>
+<li><code>EXPLAIN (ANALYZE, BUFFERS)</code> on representative production-shape queries (default view, view + sort, view + filter combinations). Save plans.</li>
+<li>Sentry transaction p95 for the affected URL routes.</li>
+</ul>
+<p><strong>After each step:</strong> repeat. Compare. If a change doesn't move the right numbers, pause.</p>
+<p>A markdown file in this PR will collect the before/after numbers per step so we can quote them in the post-rollout review and decide whether Approach 2 is needed.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

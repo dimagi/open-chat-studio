@@ -1,0 +1,1504 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/superpowers/plans/2026-05-05-participant-create-view/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Participant Create View Implementation Plan - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#participant-create-view-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Participant Create View Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-1-replace-participantform-with-a-working-modelform-tdd" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 1: Replace ParticipantForm with a working ModelForm (TDD)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Task 1: Replace ParticipantForm with a working ModelForm (TDD)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background-for-the-engineer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Background for the engineer
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-2-wire-up-createparticipant-view-tdd" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 2: Wire up CreateParticipant view (TDD)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Task 2: Wire up CreateParticipant view (TDD)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#background" class="md-nav__link">
+    <span class="md-ellipsis">
+      Background
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-3-manual-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 3: Manual verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#self-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      Self-Review
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      Execution Handoff
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="participant-create-view-implementation-plan">Participant Create View Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Add a Django form view to create a single participant by hand, accessible from the participants home page.</p>
+<p><strong>Architecture:</strong> Repurpose the unwired <code>CreateParticipant</code> <code>CreateView</code> at <code>apps/participants/views.py:110</code>, replace the broken <code>ParticipantForm</code> with a working ModelForm that validates uniqueness, register the URL via the existing <code>make_crud_urls</code> helper, and add a "Create" action button on the participants home page.</p>
+<p><strong>Tech Stack:</strong> Django (ModelForm, CreateView, PermissionRequiredMixin), pytest-django, factory_boy. No new third-party deps.</p>
+<p><strong>Spec:</strong> <code>docs/superpowers/specs/2026-05-05-participant-create-view-design.md</code></p>
+<hr />
+<h2 id="file-structure">File Structure</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Responsibility</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apps/participants/forms.py</code></td>
+<td><code>ParticipantForm</code> — ModelForm with team-scoped uniqueness validation and platform choice list matching the CSV importer</td>
+<td>Modify (rewrite <code>ParticipantForm</code>)</td>
+</tr>
+<tr>
+<td><code>apps/participants/views.py</code></td>
+<td><code>CreateParticipant</code> view — wire up team in form kwargs, drop broken <code>created_by</code>, redirect to detail page; <code>ParticipantHome</code> adds Create action</td>
+<td>Modify</td>
+</tr>
+<tr>
+<td><code>apps/participants/urls.py</code></td>
+<td>URL config — flip <code>new=False</code> to <code>new=True</code> so <code>participants/new/</code> resolves</td>
+<td>Modify</td>
+</tr>
+<tr>
+<td><code>apps/participants/tests/test_forms.py</code></td>
+<td>Tests for <code>ParticipantForm</code> (validation, platform choices, duplicate detection)</td>
+<td>Create</td>
+</tr>
+<tr>
+<td><code>apps/participants/tests/test_views.py</code></td>
+<td>Tests for <code>CreateParticipant</code> view (GET, POST success, POST duplicate, home page action)</td>
+<td>Modify</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="task-1-replace-participantform-with-a-working-modelform-tdd">Task 1: Replace ParticipantForm with a working ModelForm (TDD)</h2>
+<p><strong>Files:</strong>
+- Create: <code>apps/participants/tests/test_forms.py</code>
+- Modify: <code>apps/participants/forms.py:13-19</code> (replace <code>ParticipantForm</code>)</p>
+<h3 id="background-for-the-engineer">Background for the engineer</h3>
+<p>The current <code>ParticipantForm</code> in <code>apps/participants/forms.py</code> is broken for create: <code>identifier</code> is <code>disabled=True</code>, and only <code>user</code> is editable. It has no <code>team</code> awareness. We're replacing it with a form that:</p>
+<ol>
+<li>Exposes <code>identifier</code>, <code>platform</code>, <code>name</code> (name optional).</li>
+<li>Populates the <code>platform</code> dropdown using <code>ChannelPlatform.for_dropdown(used_platforms=[], team=team)</code> keys plus <code>WEB</code> and <code>API</code> — matches the set the CSV importer accepts (see <code>apps/participants/import_export.py:31-33</code>).</li>
+<li>In <code>clean()</code>, checks for an existing <code>(team, platform, identifier)</code> row and raises a non-field <code>ValidationError</code> whose message contains an HTML link to the existing participant's detail page.</li>
+</ol>
+<p>We use <code>format_html</code> (already safe-by-default for <code>ValidationError</code> rendering when surfaced via <code>{{ form.non_field_errors }}</code> in templates that mark them safe — <code>generic/object_form.html</code> does so).</p>
+<p><code>ParticipantFactory</code> lives at <code>apps/utils/factories/experiment.py:103</code>. By default it does <strong>not</strong> set <code>platform</code>, so tests should pass <code>platform=</code> explicitly when the test relies on the unique constraint.</p>
+<ul>
+<li>[ ] <strong>Step 1.1: Write failing tests for <code>ParticipantForm</code></strong></li>
+</ul>
+<p>Create <code>apps/participants/tests/test_forms.py</code> with this content:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">pytest</span>
+
+<span class="kn">from</span> <span class="nn">apps.channels.models</span> <span class="kn">import</span> <span class="n">ChannelPlatform</span>
+<span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Participant</span>
+<span class="kn">from</span> <span class="nn">apps.participants.forms</span> <span class="kn">import</span> <span class="n">ParticipantForm</span>
+<span class="kn">from</span> <span class="nn">apps.utils.factories.experiment</span> <span class="kn">import</span> <span class="n">ParticipantFactory</span>
+<span class="kn">from</span> <span class="nn">apps.utils.factories.team</span> <span class="kn">import</span> <span class="n">TeamFactory</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_creates_participant</span><span class="p">():</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">},</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+    <span class="n">participant</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">commit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">participant</span><span class="o">.</span><span class="n">team</span> <span class="o">=</span> <span class="n">team</span>
+    <span class="n">participant</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">participant</span><span class="o">.</span><span class="n">identifier</span> <span class="o">==</span> <span class="s2">&quot;user@example.com&quot;</span>
+    <span class="k">assert</span> <span class="n">participant</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span>
+    <span class="k">assert</span> <span class="n">participant</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;Alice&quot;</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_name_is_optional</span><span class="p">():</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">},</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_requires_identifier_and_platform</span><span class="p">():</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="p">{},</span> <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;identifier&quot;</span> <span class="ow">in</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+    <span class="k">assert</span> <span class="s2">&quot;platform&quot;</span> <span class="ow">in</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_platform_choices_include_web_and_api</span><span class="p">():</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="n">value</span> <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">_label</span> <span class="ow">in</span> <span class="n">form</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;platform&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">choices</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span> <span class="ow">in</span> <span class="n">values</span>
+    <span class="k">assert</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">API</span> <span class="ow">in</span> <span class="n">values</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_rejects_duplicate_with_link</span><span class="p">():</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">existing</span> <span class="o">=</span> <span class="n">ParticipantFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="s2">&quot;user@example.com&quot;</span>
+    <span class="p">)</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">},</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">()</span>
+    <span class="n">error_html</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">form</span><span class="o">.</span><span class="n">non_field_errors</span><span class="p">())</span>
+    <span class="k">assert</span> <span class="n">existing</span><span class="o">.</span><span class="n">get_absolute_url</span><span class="p">()</span> <span class="ow">in</span> <span class="n">error_html</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_allows_same_identifier_on_different_platform</span><span class="p">():</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">ParticipantFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="s2">&quot;user@example.com&quot;</span>
+    <span class="p">)</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">TELEGRAM</span><span class="p">},</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_form_allows_same_identifier_on_different_team</span><span class="p">():</span>
+    <span class="n">team_a</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">team_b</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">ParticipantFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team_a</span><span class="p">,</span> <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="s2">&quot;user@example.com&quot;</span>
+    <span class="p">)</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">ParticipantForm</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">},</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team_b</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+    <span class="c1"># Sanity: no row exists yet for team_b</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">Participant</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team_b</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 1.2: Run the tests to confirm they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/participants/tests/test_forms.py -v</code></p>
+<p>Expected: failures because the current <code>ParticipantForm</code> has <code>disabled=True</code> on <code>identifier</code> and doesn't accept a <code>team</code> kwarg.</p>
+<ul>
+<li>[ ] <strong>Step 1.3: Rewrite <code>ParticipantForm</code></strong></li>
+</ul>
+<p>Replace lines 1–19 of <code>apps/participants/forms.py</code> with this. Keep the rest of the file (<code>ParticipantImportForm</code>, <code>ParticipantExportForm</code>, <code>TriggerBotForm</code>) untouched.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">csv</span>
+<span class="kn">import</span> <span class="nn">io</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">from</span> <span class="nn">django</span> <span class="kn">import</span> <span class="n">forms</span>
+<span class="kn">from</span> <span class="nn">django.urls</span> <span class="kn">import</span> <span class="n">reverse</span>
+<span class="kn">from</span> <span class="nn">django.utils.html</span> <span class="kn">import</span> <span class="n">format_html</span>
+
+<span class="kn">from</span> <span class="nn">apps.channels.models</span> <span class="kn">import</span> <span class="n">ChannelPlatform</span>
+<span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">Participant</span>
+<span class="kn">from</span> <span class="nn">apps.utils.json</span> <span class="kn">import</span> <span class="n">PrettyJSONEncoder</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;ocs.participants&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">ParticipantForm</span><span class="p">(</span><span class="n">forms</span><span class="o">.</span><span class="n">ModelForm</span><span class="p">):</span>
+    <span class="n">platform</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">ChoiceField</span><span class="p">()</span>
+
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">Participant</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;identifier&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">team</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">team</span> <span class="o">=</span> <span class="n">team</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;platform&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">choices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_platform_choices</span><span class="p">(</span><span class="n">team</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_platform_choices</span><span class="p">(</span><span class="n">team</span><span class="p">):</span>
+        <span class="n">platforms</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">for_dropdown</span><span class="p">(</span><span class="n">used_platforms</span><span class="o">=</span><span class="p">[],</span> <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="k">if</span> <span class="n">team</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="n">platforms</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">API</span><span class="p">])</span>
+        <span class="n">platforms</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[(</span><span class="n">p</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">label</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">platforms</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">clean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cleaned</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">clean</span><span class="p">()</span>
+        <span class="n">identifier</span> <span class="o">=</span> <span class="n">cleaned</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;identifier&quot;</span><span class="p">)</span>
+        <span class="n">platform</span> <span class="o">=</span> <span class="n">cleaned</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;platform&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">team</span> <span class="ow">and</span> <span class="n">identifier</span> <span class="ow">and</span> <span class="n">platform</span><span class="p">:</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">Participant</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">team</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">team</span><span class="p">,</span> <span class="n">platform</span><span class="o">=</span><span class="n">platform</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="n">identifier</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">existing</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">forms</span><span class="o">.</span><span class="n">ValidationError</span><span class="p">(</span>
+                    <span class="n">format_html</span><span class="p">(</span>
+                        <span class="s1">&#39;A participant with identifier &quot;</span><span class="si">{}</span><span class="s1">&quot; already exists on this platform: &#39;</span>
+                        <span class="s1">&#39;&lt;a class=&quot;link&quot; href=&quot;</span><span class="si">{}</span><span class="s1">&quot;&gt;view existing participant&lt;/a&gt;&#39;</span><span class="p">,</span>
+                        <span class="n">identifier</span><span class="p">,</span>
+                        <span class="n">existing</span><span class="o">.</span><span class="n">get_absolute_url</span><span class="p">(),</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cleaned</span>
+</code></pre></div>
+<p>Why <code>team</code> may be <code>None</code>: the broken existing call sites are gone after Task 2, but defensively returning a minimal choice list (just <code>WEB</code> + <code>API</code>) keeps the form usable in unit-test contexts that don't pass a team.</p>
+<ul>
+<li>[ ] <strong>Step 1.4: Run the tests to confirm they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/participants/tests/test_forms.py -v</code></p>
+<p>Expected: 7 passed.</p>
+<ul>
+<li>[ ] <strong>Step 1.5: Lint and format the changed file</strong></li>
+</ul>
+<p>Run:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/participants/forms.py<span class="w"> </span>apps/participants/tests/test_forms.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>apps/participants/forms.py<span class="w"> </span>apps/participants/tests/test_forms.py
+</code></pre></div>
+<p>Expected: no remaining errors.</p>
+<ul>
+<li>[ ] <strong>Step 1.6: Commit</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/participants/forms.py<span class="w"> </span>apps/participants/tests/test_forms.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(participants): rewrite ParticipantForm with uniqueness validation&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-2-wire-up-createparticipant-view-tdd">Task 2: Wire up CreateParticipant view (TDD)</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/participants/views.py:110-127</code> (<code>CreateParticipant</code>)
+- Modify: <code>apps/participants/urls.py:42</code> (flip <code>new=False</code> → <code>new=True</code>)
+- Modify: <code>apps/participants/tests/test_views.py</code> (append new tests)</p>
+<h3 id="background">Background</h3>
+<p><code>CreateParticipant</code> exists but has two bugs:</p>
+<ol>
+<li>It sets <code>form.instance.created_by = self.request.user</code>, but <code>Participant</code> has no <code>created_by</code> field — this would raise <code>AttributeError</code>.</li>
+<li>It doesn't pass <code>team</code> into the form, so the new <code>ParticipantForm</code> from Task 1 wouldn't have one.</li>
+</ol>
+<p>Also, the URL isn't registered: <code>apps/participants/urls.py:42</code> calls <code>make_crud_urls(..., new=False)</code>. After flipping that flag, the URL <code>participants/new/</code> becomes available with name <code>participants:participant_new</code>.</p>
+<p>After success, the user should land on the new participant's detail page. The route is <code>participants:single-participant-home</code> with kwargs <code>team_slug</code> and <code>participant_id</code>.</p>
+<p>The login pattern in this test file is <code>client.login(username=user.username, password="password")</code> — <code>UserFactory</code> sets <code>password="password"</code> for all generated users, and the first member of <code>TeamWithUsersFactory</code> is the team admin (has <code>experiments.add_participant</code>).</p>
+<ul>
+<li>[ ] <strong>Step 2.1: Write failing tests for the create view</strong></li>
+</ul>
+<p>Append to <code>apps/participants/tests/test_views.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_create_participant_get</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">login</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="s2">&quot;password&quot;</span><span class="p">)</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;participants:participant_new&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">})</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+    <span class="k">assert</span> <span class="sa">b</span><span class="s2">&quot;Create Participant&quot;</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_create_participant_post_success_redirects_to_detail</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Participant</span>
+
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">login</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="s2">&quot;password&quot;</span><span class="p">)</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;participants:participant_new&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">})</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+        <span class="n">url</span><span class="p">,</span>
+        <span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;alice@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">},</span>
+    <span class="p">)</span>
+
+    <span class="n">participant</span> <span class="o">=</span> <span class="n">Participant</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team_with_users</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">participant</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span>
+    <span class="k">assert</span> <span class="n">participant</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;Alice&quot;</span>
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">302</span>
+    <span class="k">assert</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;Location&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">reverse</span><span class="p">(</span>
+        <span class="s2">&quot;participants:single-participant-home&quot;</span><span class="p">,</span>
+        <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">,</span> <span class="s2">&quot;participant_id&quot;</span><span class="p">:</span> <span class="n">participant</span><span class="o">.</span><span class="n">id</span><span class="p">},</span>
+    <span class="p">)</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_create_participant_duplicate_shows_error_with_link</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Participant</span>
+
+    <span class="n">existing</span> <span class="o">=</span> <span class="n">ParticipantFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team_with_users</span><span class="p">,</span> <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="s2">&quot;alice@example.com&quot;</span>
+    <span class="p">)</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">login</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="s2">&quot;password&quot;</span><span class="p">)</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;participants:participant_new&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">})</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+        <span class="n">url</span><span class="p">,</span>
+        <span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;alice@example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">WEB</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">},</span>
+    <span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+    <span class="k">assert</span> <span class="n">existing</span><span class="o">.</span><span class="n">get_absolute_url</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
+    <span class="k">assert</span> <span class="n">Participant</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team_with_users</span><span class="p">,</span> <span class="n">identifier</span><span class="o">=</span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_create_participant_missing_fields_shows_field_errors</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Participant</span>
+
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">login</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="s2">&quot;password&quot;</span><span class="p">)</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;participants:participant_new&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">})</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;identifier&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">})</span>
+
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">Participant</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team_with_users</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_participant_home_shows_create_action</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">client</span><span class="o">.</span><span class="n">login</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="s2">&quot;password&quot;</span><span class="p">)</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;participants:participant_home&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">})</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+    <span class="n">create_url</span> <span class="o">=</span> <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;participants:participant_new&quot;</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team_with_users</span><span class="o">.</span><span class="n">slug</span><span class="p">})</span>
+    <span class="k">assert</span> <span class="n">create_url</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2.2: Run the new tests to confirm they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/participants/tests/test_views.py -v -k "create_participant or participant_home_shows_create"</code></p>
+<p>Expected: failures — the URL <code>participants:participant_new</code> doesn't resolve yet.</p>
+<ul>
+<li>[ ] <strong>Step 2.3: Wire up the URL</strong></li>
+</ul>
+<p>Edit <code>apps/participants/urls.py:42</code>. Change:</p>
+<div class="highlight"><pre><span></span><code><span class="n">urlpatterns</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">make_crud_urls</span><span class="p">(</span><span class="n">views</span><span class="p">,</span> <span class="s2">&quot;Participant&quot;</span><span class="p">,</span> <span class="s2">&quot;participant&quot;</span><span class="p">,</span> <span class="n">edit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">delete</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+</code></pre></div>
+<p>to:</p>
+<div class="highlight"><pre><span></span><code><span class="n">urlpatterns</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">make_crud_urls</span><span class="p">(</span><span class="n">views</span><span class="p">,</span> <span class="s2">&quot;Participant&quot;</span><span class="p">,</span> <span class="s2">&quot;participant&quot;</span><span class="p">,</span> <span class="n">edit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">delete</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+</code></pre></div>
+<p>(<code>new</code> defaults to <code>True</code> — see <code>apps/generics/urls.py:4</code>.)</p>
+<ul>
+<li>[ ] <strong>Step 2.4: Fix <code>CreateParticipant</code></strong></li>
+</ul>
+<p>Replace the <code>CreateParticipant</code> class at <code>apps/participants/views.py:110-127</code> with:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">CreateParticipant</span><span class="p">(</span><span class="n">LoginAndTeamRequiredMixin</span><span class="p">,</span> <span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">CreateView</span><span class="p">):</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s2">&quot;experiments.add_participant&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Participant</span>
+    <span class="n">form_class</span> <span class="o">=</span> <span class="n">ParticipantForm</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s2">&quot;generic/object_form.html&quot;</span>
+    <span class="n">extra_context</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;Create Participant&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;button_text&quot;</span><span class="p">:</span> <span class="s2">&quot;Create&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;active_tab&quot;</span><span class="p">:</span> <span class="s2">&quot;participants&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">get_form_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get_form_kwargs</span><span class="p">()</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span>
+        <span class="k">return</span> <span class="n">kwargs</span>
+
+    <span class="k">def</span> <span class="nf">form_valid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">form</span><span class="p">):</span>
+        <span class="n">form</span><span class="o">.</span><span class="n">instance</span><span class="o">.</span><span class="n">team</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">form_valid</span><span class="p">(</span><span class="n">form</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_success_url</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">reverse</span><span class="p">(</span>
+            <span class="s2">&quot;participants:single-participant-home&quot;</span><span class="p">,</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span><span class="o">.</span><span class="n">slug</span><span class="p">,</span> <span class="s2">&quot;participant_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">object</span><span class="o">.</span><span class="n">id</span><span class="p">},</span>
+        <span class="p">)</span>
+</code></pre></div>
+<p>The <code>created_by</code> line is dropped because <code>Participant</code> has no such field.</p>
+<ul>
+<li>[ ] <strong>Step 2.5: Add the Create action on the home page</strong></li>
+</ul>
+<p>Edit <code>apps/participants/views.py</code> inside <code>ParticipantHome.get_context_data</code> (the <code>actions</code> list, currently lines ~86–105). Add a new action <strong>before</strong> the existing Import action so the order reads Create → Import → Export:</p>
+<div class="highlight"><pre><span></span><code><span class="s2">&quot;actions&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="n">actions</span><span class="o">.</span><span class="n">Action</span><span class="p">(</span>
+        <span class="s2">&quot;participants:participant_new&quot;</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Create&quot;</span><span class="p">,</span>
+        <span class="n">icon_class</span><span class="o">=</span><span class="s2">&quot;fa-solid fa-plus&quot;</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Create participant&quot;</span><span class="p">,</span>
+        <span class="n">required_permissions</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;experiments.add_participant&quot;</span><span class="p">],</span>
+    <span class="p">),</span>
+    <span class="n">actions</span><span class="o">.</span><span class="n">Action</span><span class="p">(</span>
+        <span class="s2">&quot;participants:import&quot;</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Import&quot;</span><span class="p">,</span>
+        <span class="n">icon_class</span><span class="o">=</span><span class="s2">&quot;fa-solid fa-file-import&quot;</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Import participants&quot;</span><span class="p">,</span>
+        <span class="n">required_permissions</span><span class="o">=</span><span class="n">IMPORT_PERMISSIONS</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">actions</span><span class="o">.</span><span class="n">ModalAction</span><span class="p">(</span>
+        <span class="s2">&quot;participants:export&quot;</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Export&quot;</span><span class="p">,</span>
+        <span class="n">icon_class</span><span class="o">=</span><span class="s2">&quot;fa-solid fa-download&quot;</span><span class="p">,</span>
+        <span class="n">required_permissions</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;experiments.view_participant&quot;</span><span class="p">,</span> <span class="s2">&quot;experiments.view_participantdata&quot;</span><span class="p">],</span>
+        <span class="n">modal_template</span><span class="o">=</span><span class="s2">&quot;participants/components/export_modal.html&quot;</span><span class="p">,</span>
+        <span class="n">modal_context</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;form&quot;</span><span class="p">:</span> <span class="n">ParticipantExportForm</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span><span class="p">),</span>
+            <span class="s2">&quot;modal_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Export Participant Data&quot;</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">),</span>
+<span class="p">],</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2.6: Run the new tests to confirm they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/participants/tests/test_views.py -v -k "create_participant or participant_home_shows_create"</code></p>
+<p>Expected: 5 passed.</p>
+<ul>
+<li>[ ] <strong>Step 2.7: Run the full participants test module to catch regressions</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/participants/tests/ -v</code></p>
+<p>Expected: all green.</p>
+<ul>
+<li>[ ] <strong>Step 2.8: Lint and typecheck</strong></li>
+</ul>
+<p>Run:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/participants/views.py<span class="w"> </span>apps/participants/urls.py<span class="w"> </span>apps/participants/tests/test_views.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>apps/participants/views.py<span class="w"> </span>apps/participants/urls.py<span class="w"> </span>apps/participants/tests/test_views.py
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/participants/
+</code></pre></div>
+<p>Expected: no errors.</p>
+<ul>
+<li>[ ] <strong>Step 2.9: Commit</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/participants/views.py<span class="w"> </span>apps/participants/urls.py<span class="w"> </span>apps/participants/tests/test_views.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat(participants): add Create Participant view and home action&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-3-manual-verification">Task 3: Manual verification</h2>
+<p><strong>Files:</strong> none modified.</p>
+<p>This task confirms the feature works end-to-end in a real browser.</p>
+<ul>
+<li>[ ] <strong>Step 3.1: Start services and dev server</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>inv<span class="w"> </span>up
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>migrate
+uv<span class="w"> </span>run<span class="w"> </span>inv<span class="w"> </span>runserver
+</code></pre></div>
+<p>In a separate terminal:</p>
+<div class="highlight"><pre><span></span><code>npm<span class="w"> </span>run<span class="w"> </span>dev
+</code></pre></div>
+<ul>
+<li>
+<p>[ ] <strong>Step 3.2: Exercise the happy path in a browser</strong></p>
+</li>
+<li>
+<p>Log in to a team.</p>
+</li>
+<li>Navigate to <code>/a/&lt;team-slug&gt;/participants/</code>.</li>
+<li>Confirm the "Create" button appears next to "Import" and "Export".</li>
+<li>Click "Create". Confirm the form shows <code>identifier</code>, <code>platform</code>, <code>name</code> fields and a Create button.</li>
+<li>
+<p>Submit a brand-new (<code>identifier</code>, <code>platform</code>) pair. Confirm you land on the new participant's detail page.</p>
+</li>
+<li>
+<p>[ ] <strong>Step 3.3: Exercise the duplicate path</strong></p>
+</li>
+<li>
+<p>Click "Create" again from the home page.</p>
+</li>
+<li>Submit the same <code>(identifier, platform)</code> you just created.</li>
+<li>
+<p>Confirm the form re-renders with a non-field error containing a clickable link to the existing participant. Click the link and confirm it navigates to the existing record.</p>
+</li>
+<li>
+<p>[ ] <strong>Step 3.4: Exercise the validation path</strong></p>
+</li>
+<li>
+<p>Click "Create" again.</p>
+</li>
+<li>Submit with an empty identifier. Confirm Django's standard "This field is required" error renders next to the field.</li>
+</ul>
+<p>If all four checks pass, the feature is complete.</p>
+<hr />
+<h2 id="self-review">Self-Review</h2>
+<p><strong>Spec coverage:</strong>
+- ✅ Form fields <code>identifier</code>, <code>platform</code>, <code>name</code> — Task 1.
+- ✅ Platform list matches CSV importer (<code>for_dropdown</code> keys + <code>WEB</code> + <code>API</code>, sorted by value) — Task 1.3.
+- ✅ Create action on home — Task 2.5.
+- ✅ Duplicate handling with link — Task 1.3 (<code>clean</code>) + Task 2.1 (test asserts link in response).
+- ✅ Redirect to single-participant home — Task 2.4 (<code>get_success_url</code>).
+- ✅ Permission <code>experiments.add_participant</code> — preserved on the view, plus on the home action.
+- ✅ Tests for GET, POST success, duplicate, field errors, home action visibility — Task 2.1.</p>
+<p><strong>Placeholder scan:</strong> No "TBD" / "TODO" / "appropriate error handling" / "similar to" entries.</p>
+<p><strong>Type consistency:</strong> Form constructor <code>team=None</code> matches the <code>team=team_with_users</code> kwarg used in tests; <code>get_form_kwargs</code> passes <code>team=self.request.team</code>; <code>get_absolute_url()</code> is the same method called from both form-clean and the view test assertion.</p>
+<hr />
+<h2 id="execution-handoff">Execution Handoff</h2>
+<p>Plan complete and saved to <code>docs/superpowers/plans/2026-05-05-participant-create-view.md</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

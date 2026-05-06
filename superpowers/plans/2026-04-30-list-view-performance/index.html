@@ -1,0 +1,2227 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/superpowers/plans/2026-04-30-list-view-performance/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>List View Performance — Approach 1 Implementation Plan - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#list-view-performance-approach-1-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              List View Performance — Approach 1 Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      File map
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-1-add-tracemetaindexes-and-concurrent-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 1: Add Trace.Meta.indexes and concurrent migration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-2-replace-team__slug-join-with-team_id-in-tracetableview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 2: Replace team__slug join with team_id in TraceTableView
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-3-add-team-last_activity_at-index-on-experimentsession" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 3: Add (team, -last_activity_at) index on ExperimentSession
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-4-add-no-duplicate-regression-tests-for-chatmessagetagsfilter" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 4: Add no-duplicate regression tests for ChatMessageTagsFilter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-5-rewrite-chatmessagetagsfilterapply_any_of-and-apply_excludes-as-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 5: Rewrite ChatMessageTagsFilter.apply_any_of and apply_excludes as EXISTS
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-6-add-messagetimestampfilter-exists-and-swap-usage-in-experimentsessionfilter" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 6: Add MessageTimestampFilter (EXISTS) and swap usage in ExperimentSessionFilter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-7-add-no-duplicate-regression-tests-for-trace-messagetagsfilter" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 7: Add no-duplicate regression tests for trace MessageTagsFilter
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-8-rewrite-trace-messagetagsfilter-operators-as-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 8: Rewrite trace MessageTagsFilter operators as EXISTS
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-9-remove-unconditional-distinct-from-multicolumnfilterapply" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 9: Remove unconditional .distinct() from MultiColumnFilter.apply
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-10-bound-customtaggeditem-prefetch-to-the-visible-page" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 10: Bound CustomTaggedItem prefetch to the visible page
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-11-investigate-and-remove-the-stray-experiment_channel-left-join" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 11: Investigate and remove the stray experiment_channel LEFT JOIN
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-12-audit-experimentobjectsget_all-for-the-chatbot-list-select-distinct" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 12: Audit Experiment.objects.get_all() for the chatbot list SELECT DISTINCT
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      Measurement
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#self-review-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Self-review notes
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="list-view-performance-approach-1-implementation-plan">List View Performance — Approach 1 Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Reduce p95 latency of the chatbot list, session list, trace list, and annotation-queue session list on data-heavy teams via indexes, query rewrites, and a bounded prefetch — measure-first before considering Approach 2.</p>
+<p><strong>Architecture:</strong> Twelve independently-shippable changes layered onto the existing Django/django-tables2 list views. Pattern: add Postgres indexes for the hot-path queries, replace the unconditional <code>.distinct()</code> in the dynamic-filter base class with targeted <code>EXISTS</code> subqueries in the few filters that traverse one-to-many relations, and slice the prefetch to the visible page. No schema reshape, no new tables, no behavioural changes for users.</p>
+<p><strong>Tech Stack:</strong> Django 5.x, django-tables2, Postgres (<code>pg_stat_statements</code>, <code>AddIndexConcurrently</code> for online index creation), pytest, factory-boy.</p>
+<p><strong>Spec:</strong> <code>docs/superpowers/specs/2026-04-30-list-view-performance-design.md</code></p>
+<hr />
+<h2 id="file-map">File map</h2>
+<p><strong>Modified:</strong>
+- <code>apps/trace/models.py</code> — add <code>Meta.indexes</code>
+- <code>apps/trace/views.py</code> — replace <code>team__slug=...</code> with <code>team=...</code>
+- <code>apps/experiments/models.py</code> — add <code>(team, -last_activity_at)</code> to <code>ExperimentSession.Meta.indexes</code>; tighten <code>get_table_queryset</code>
+- <code>apps/web/dynamic_filters/base.py</code> — drop unconditional <code>.distinct()</code>
+- <code>apps/experiments/filters.py</code> — rewrite <code>ChatMessageTagsFilter</code> operators as <code>EXISTS</code>; add <code>MessageTimestampFilter</code> subclass
+- <code>apps/trace/filters.py</code> — rewrite <code>MessageTagsFilter</code> operators as <code>EXISTS</code>, drop manual <code>.distinct()</code>
+- <code>apps/chatbots/views.py</code> — <code>ChatbotSessionsTableView.get_table_data</code> — page-bounded prefetch
+- <code>apps/human_annotations/views/queue_views.py</code> — page-bounded prefetch on <code>AnnotationQueueSessionsTableView</code></p>
+<p><strong>Created:</strong>
+- <code>apps/trace/migrations/0012_trace_indexes.py</code>
+- <code>apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py</code>
+- New tests appended to <code>apps/experiments/tests/test_filters.py</code> and <code>apps/trace/tests/test_filters.py</code>
+- A short before/after measurement note in <code>docs/superpowers/specs/2026-04-30-list-view-performance-results.md</code> (collected as work progresses)</p>
+<p>Each task below produces one commit.</p>
+<hr />
+<h2 id="task-1-add-tracemetaindexes-and-concurrent-migration">Task 1: Add <code>Trace.Meta.indexes</code> and concurrent migration</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/trace/models.py:18</code> (<code>Trace</code> model)
+- Create: <code>apps/trace/migrations/0012_trace_indexes.py</code>
+- Test: <code>apps/trace/tests/test_models.py</code> (append)</p>
+<ul>
+<li>[ ] <strong>Step 1: Add a regression test for index presence</strong></li>
+</ul>
+<p>Append to <code>apps/trace/tests/test_models.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.db</span> <span class="kn">import</span> <span class="n">connection</span>
+
+<span class="kn">import</span> <span class="nn">pytest</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_trace_expected_indexes_exist</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Smoke check that the indexes the list-view hot path depends on are present.&quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="s2">&quot;SELECT indexname FROM pg_indexes WHERE tablename = &#39;trace_trace&#39;&quot;</span>
+        <span class="p">)</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()}</span>
+
+    <span class="k">assert</span> <span class="s2">&quot;trace_team_timestamp_idx&quot;</span> <span class="ow">in</span> <span class="n">names</span>
+    <span class="k">assert</span> <span class="s2">&quot;trace_experiment_timestamp_idx&quot;</span> <span class="ow">in</span> <span class="n">names</span>
+    <span class="k">assert</span> <span class="s2">&quot;trace_session_timestamp_idx&quot;</span> <span class="ow">in</span> <span class="n">names</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/trace/tests/test_models.py::test_trace_expected_indexes_exist -v</code></p>
+<p>Expected: FAIL — none of the three index names exist yet.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add <code>Meta.indexes</code> to the <code>Trace</code> model</strong></li>
+</ul>
+<p>In <code>apps/trace/models.py</code>, add <code>from django.db.models import Q</code> to the imports at the top, then add a <code>Meta</code> class to <code>Trace</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">Trace</span><span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">Model</span><span class="p">):</span>
+    <span class="c1"># ... existing fields unchanged ...</span>
+
+    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">indexes</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_team_timestamp_idx&quot;</span><span class="p">,</span>
+                <span class="n">condition</span><span class="o">=~</span><span class="n">Q</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;pending&quot;</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_experiment_timestamp_idx&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;session&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_session_timestamp_idx&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">]</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 4: Generate the migration</strong></li>
+</ul>
+<p>Run: <code>uv run python manage.py makemigrations trace --name trace_indexes</code></p>
+<p>This produces <code>apps/trace/migrations/0012_trace_indexes.py</code>. It will be a regular <code>AddIndex</code> migration — we need to convert it to concurrent.</p>
+<ul>
+<li>[ ] <strong>Step 5: Convert the migration to concurrent operations</strong></li>
+</ul>
+<p>Open <code>apps/trace/migrations/0012_trace_indexes.py</code> and replace its contents with:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.contrib.postgres.operations</span> <span class="kn">import</span> <span class="n">AddIndexConcurrently</span>
+<span class="kn">from</span> <span class="nn">django.db</span> <span class="kn">import</span> <span class="n">migrations</span><span class="p">,</span> <span class="n">models</span>
+<span class="kn">from</span> <span class="nn">django.db.models</span> <span class="kn">import</span> <span class="n">Q</span>
+
+
+<span class="k">class</span> <span class="nc">Migration</span><span class="p">(</span><span class="n">migrations</span><span class="o">.</span><span class="n">Migration</span><span class="p">):</span>
+    <span class="n">atomic</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="n">dependencies</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;trace&quot;</span><span class="p">,</span> <span class="s2">&quot;0011_add_trace_metrics&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="n">operations</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">AddIndexConcurrently</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;trace&quot;</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_team_timestamp_idx&quot;</span><span class="p">,</span>
+                <span class="n">condition</span><span class="o">=~</span><span class="n">Q</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;pending&quot;</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">AddIndexConcurrently</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;trace&quot;</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_experiment_timestamp_idx&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">AddIndexConcurrently</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;trace&quot;</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;session&quot;</span><span class="p">,</span> <span class="s2">&quot;-timestamp&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trace_session_timestamp_idx&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+</code></pre></div>
+<p><code>atomic = False</code> is required because Postgres <code>CREATE INDEX CONCURRENTLY</code> cannot run inside a transaction.</p>
+<ul>
+<li>[ ] <strong>Step 6: Apply the migration and run tests</strong></li>
+</ul>
+<p>Run: <code>uv run python manage.py migrate trace</code>
+Run: <code>uv run pytest apps/trace/tests/test_models.py::test_trace_expected_indexes_exist -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run: <code>uv run pytest apps/trace/ -v</code></p>
+<p>Expected: existing trace tests still pass.</p>
+<ul>
+<li>[ ] <strong>Step 7: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/trace/models.py apps/trace/migrations/0012_trace_indexes.py apps/trace/tests/test_models.py --fix</code>
+Run: <code>uv run ruff format apps/trace/models.py apps/trace/migrations/0012_trace_indexes.py apps/trace/tests/test_models.py</code>
+Run: <code>uv run ty check apps/trace/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/trace/models.py<span class="w"> </span>apps/trace/migrations/0012_trace_indexes.py<span class="w"> </span>apps/trace/tests/test_models.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(trace): add team/experiment/session × timestamp indexes&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-2-replace-team__slug-join-with-team_id-in-tracetableview">Task 2: Replace <code>team__slug</code> join with <code>team_id</code> in TraceTableView</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/trace/views.py:40-46</code>
+- Test: <code>apps/trace/tests/test_views.py</code> (create)</p>
+<ul>
+<li>[ ] <strong>Step 1: Create a view-level test</strong></li>
+</ul>
+<p>Create <code>apps/trace/tests/test_views.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.urls</span> <span class="kn">import</span> <span class="n">reverse</span>
+
+<span class="kn">import</span> <span class="nn">pytest</span>
+
+<span class="kn">from</span> <span class="nn">apps.trace.models</span> <span class="kn">import</span> <span class="n">TraceStatus</span>
+<span class="kn">from</span> <span class="nn">apps.utils.factories.experiment</span> <span class="kn">import</span> <span class="n">ExperimentFactory</span><span class="p">,</span> <span class="n">ParticipantFactory</span>
+<span class="kn">from</span> <span class="nn">apps.utils.factories.team</span> <span class="kn">import</span> <span class="n">TeamFactory</span>
+<span class="kn">from</span> <span class="nn">apps.utils.factories.traces</span> <span class="kn">import</span> <span class="n">TraceFactory</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_trace_table_view_returns_only_team_traces</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Smoke check that the trace list view filters by team and renders successfully.&quot;&quot;&quot;</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">other_team</span> <span class="o">=</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+
+    <span class="n">experiment</span> <span class="o">=</span> <span class="n">ExperimentFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+    <span class="n">participant</span> <span class="o">=</span> <span class="n">ParticipantFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+    <span class="n">own_trace</span> <span class="o">=</span> <span class="n">TraceFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span> <span class="n">participant</span><span class="o">=</span><span class="n">participant</span><span class="p">,</span>
+        <span class="n">status</span><span class="o">=</span><span class="n">TraceStatus</span><span class="o">.</span><span class="n">SUCCESS</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">foreign_trace</span> <span class="o">=</span> <span class="n">TraceFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">team</span><span class="o">=</span><span class="n">other_team</span><span class="p">,</span>
+        <span class="n">experiment</span><span class="o">=</span><span class="n">ExperimentFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">other_team</span><span class="p">),</span>
+        <span class="n">participant</span><span class="o">=</span><span class="n">ParticipantFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">other_team</span><span class="p">),</span>
+        <span class="n">status</span><span class="o">=</span><span class="n">TraceStatus</span><span class="o">.</span><span class="n">SUCCESS</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">client</span><span class="o">.</span><span class="n">force_login</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;trace:table&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">[</span><span class="n">team</span><span class="o">.</span><span class="n">slug</span><span class="p">]))</span>
+
+    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+    <span class="n">visible_ids</span> <span class="o">=</span> <span class="p">{</span><span class="n">row</span><span class="o">.</span><span class="n">record</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">context_data</span><span class="p">[</span><span class="s2">&quot;table&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">rows</span><span class="p">}</span>
+    <span class="k">assert</span> <span class="n">own_trace</span><span class="o">.</span><span class="n">id</span> <span class="ow">in</span> <span class="n">visible_ids</span>
+    <span class="k">assert</span> <span class="n">foreign_trace</span><span class="o">.</span><span class="n">id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">visible_ids</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the test to verify it passes against the current code</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/trace/tests/test_views.py -v</code></p>
+<p>Expected: PASS. We are characterising existing behaviour before refactoring.</p>
+<ul>
+<li>[ ] <strong>Step 3: Replace the <code>team__slug</code> lookup</strong></li>
+</ul>
+<p>In <code>apps/trace/views.py</code>, change <code>TraceTableView.get_queryset</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">TraceTableView</span><span class="p">(</span><span class="n">LoginAndTeamRequiredMixin</span><span class="p">,</span> <span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">SingleTableView</span><span class="p">):</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s2">&quot;table/single_table.html&quot;</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Trace</span>
+    <span class="n">table_class</span> <span class="o">=</span> <span class="n">TraceTable</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s2">&quot;trace.view_trace&quot;</span>
+
+    <span class="k">def</span> <span class="nf">get_queryset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">Trace</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;participant&quot;</span><span class="p">,</span> <span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;session&quot;</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="n">TraceStatus</span><span class="o">.</span><span class="n">PENDING</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;-timestamp&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">timezone</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;detected_tz&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">trace_filter</span> <span class="o">=</span> <span class="n">TraceFilter</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">trace_filter</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">queryset</span><span class="p">,</span> <span class="n">filter_params</span><span class="o">=</span><span class="n">FilterParams</span><span class="o">.</span><span class="n">from_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="p">),</span> <span class="n">timezone</span><span class="o">=</span><span class="n">timezone</span><span class="p">)</span>
+</code></pre></div>
+<p>The single change is <code>team__slug=self.request.team.slug</code> → <code>team=self.request.team</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the test to verify it still passes</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/trace/tests/test_views.py -v</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 5: Lint and commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/trace/views.py apps/trace/tests/test_views.py --fix</code>
+Run: <code>uv run ruff format apps/trace/views.py apps/trace/tests/test_views.py</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/trace/views.py<span class="w"> </span>apps/trace/tests/test_views.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(trace): use team= instead of team__slug= in TraceTableView&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-3-add-team-last_activity_at-index-on-experimentsession">Task 3: Add <code>(team, -last_activity_at)</code> index on ExperimentSession</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/experiments/models.py:1446-1448</code> (<code>ExperimentSession.Meta</code>)
+- Create: <code>apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py</code>
+- Test: <code>apps/experiments/tests/test_models.py</code> (append)</p>
+<ul>
+<li>[ ] <strong>Step 1: Add a regression test for index presence</strong></li>
+</ul>
+<p>Append to <code>apps/experiments/tests/test_models.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.db</span> <span class="kn">import</span> <span class="n">connection</span>
+
+<span class="kn">import</span> <span class="nn">pytest</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_experimentsession_team_lastactivity_index_exists</span><span class="p">():</span>
+    <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="s2">&quot;SELECT indexname FROM pg_indexes WHERE tablename = &#39;experiments_experimentsession&#39;&quot;</span>
+        <span class="p">)</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()}</span>
+
+    <span class="k">assert</span> <span class="s2">&quot;expsession_team_lastactivity_idx&quot;</span> <span class="ow">in</span> <span class="n">names</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_models.py::test_experimentsession_team_lastactivity_index_exists -v</code></p>
+<p>Expected: FAIL — index does not exist.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add the index to <code>ExperimentSession.Meta</code></strong></li>
+</ul>
+<p>In <code>apps/experiments/models.py</code>, update the <code>ExperimentSession.Meta</code> class:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">class</span> <span class="nc">Meta</span><span class="p">:</span>
+        <span class="n">ordering</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;-created_at&quot;</span><span class="p">]</span>
+        <span class="n">indexes</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat&quot;</span><span class="p">,</span> <span class="s2">&quot;team&quot;</span><span class="p">]),</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat&quot;</span><span class="p">,</span> <span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;ended_at&quot;</span><span class="p">]),</span>
+            <span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;-last_activity_at&quot;</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;expsession_team_lastactivity_idx&quot;</span><span class="p">),</span>
+        <span class="p">]</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 4: Generate the migration</strong></li>
+</ul>
+<p>Run: <code>uv run python manage.py makemigrations experiments --name expsession_team_lastactivity_idx</code></p>
+<p>This produces <code>apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py</code>.</p>
+<ul>
+<li>[ ] <strong>Step 5: Convert the migration to concurrent</strong></li>
+</ul>
+<p>Replace the contents of <code>apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py</code> with:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.contrib.postgres.operations</span> <span class="kn">import</span> <span class="n">AddIndexConcurrently</span>
+<span class="kn">from</span> <span class="nn">django.db</span> <span class="kn">import</span> <span class="n">migrations</span><span class="p">,</span> <span class="n">models</span>
+
+
+<span class="k">class</span> <span class="nc">Migration</span><span class="p">(</span><span class="n">migrations</span><span class="o">.</span><span class="n">Migration</span><span class="p">):</span>
+    <span class="n">atomic</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="n">dependencies</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;experiments&quot;</span><span class="p">,</span> <span class="s2">&quot;0133_alter_syntheticvoice_service&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="n">operations</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">AddIndexConcurrently</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;experimentsession&quot;</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">models</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
+                <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;-last_activity_at&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;expsession_team_lastactivity_idx&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 6: Apply, run tests, commit</strong></li>
+</ul>
+<p>Run: <code>uv run python manage.py migrate experiments</code>
+Run: <code>uv run pytest apps/experiments/tests/test_models.py::test_experimentsession_team_lastactivity_index_exists -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run: <code>uv run ruff check apps/experiments/models.py apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py apps/experiments/tests/test_models.py --fix</code>
+Run: <code>uv run ruff format apps/experiments/models.py apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py apps/experiments/tests/test_models.py</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/experiments/models.py<span class="w"> </span>apps/experiments/migrations/0134_expsession_team_lastactivity_idx.py<span class="w"> </span>apps/experiments/tests/test_models.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(experiments): add (team, -last_activity_at) index on ExperimentSession&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-4-add-no-duplicate-regression-tests-for-chatmessagetagsfilter">Task 4: Add no-duplicate regression tests for <code>ChatMessageTagsFilter</code></h2>
+<p>This task only adds tests. They pass under the current <code>DISTINCT</code>-everything code; they are the safety net for tasks 5 and 9.</p>
+<p><strong>Files:</strong>
+- Modify: <code>apps/experiments/tests/test_filters.py</code></p>
+<ul>
+<li>[ ] <strong>Step 1: Add a fixture and three tests</strong></li>
+</ul>
+<p>Append to <code>apps/experiments/tests/test_filters.py</code>, inside <code>class TestExperimentSessionFilters</code> (above the existing tests):</p>
+<div class="highlight"><pre><span></span><code>    <span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">session_with_many_message_tags</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;One session whose chat contains multiple messages, each with multiple tags.</span>
+
+<span class="sd">        A naive JOIN-based filter on `chat__messages__tags__name` returns the</span>
+<span class="sd">        session N×M times (N matching messages × M matching tags) — a regression</span>
+<span class="sd">        guard for the EXISTS rewrite.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="n">ExperimentSessionFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+        <span class="n">team</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">team</span>
+        <span class="n">important</span> <span class="o">=</span> <span class="n">_get_tag</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;important&quot;</span><span class="p">)</span>
+        <span class="n">urgent</span> <span class="o">=</span> <span class="n">_get_tag</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;urgent&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">content</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;first&quot;</span><span class="p">,</span> <span class="s2">&quot;second&quot;</span><span class="p">,</span> <span class="s2">&quot;third&quot;</span><span class="p">):</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">ChatMessage</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+                <span class="n">chat</span><span class="o">=</span><span class="n">session</span><span class="o">.</span><span class="n">chat</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">message_type</span><span class="o">=</span><span class="n">ChatMessageType</span><span class="o">.</span><span class="n">HUMAN</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">msg</span><span class="o">.</span><span class="n">add_tags</span><span class="p">([</span><span class="n">important</span><span class="p">,</span> <span class="n">urgent</span><span class="p">],</span> <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">added_by</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">session</span><span class="p">,</span> <span class="p">[</span><span class="n">important</span><span class="p">,</span> <span class="n">urgent</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">test_message_tags_any_of_returns_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session_with_many_message_tags</span><span class="p">):</span>
+        <span class="n">session</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">session_with_many_message_tags</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filter_0_column&quot;</span><span class="p">:</span> <span class="s2">&quot;tags&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_operator&quot;</span><span class="p">:</span> <span class="n">Operators</span><span class="o">.</span><span class="n">ANY_OF</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_value&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="s2">&quot;important&quot;</span><span class="p">,</span> <span class="s2">&quot;urgent&quot;</span><span class="p">]),</span>
+        <span class="p">}</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">sessions</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> <span class="n">FilterParams</span><span class="p">(</span><span class="n">_get_querydict</span><span class="p">(</span><span class="n">params</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">filtered</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">session</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">test_message_tags_all_of_returns_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session_with_many_message_tags</span><span class="p">):</span>
+        <span class="n">session</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">session_with_many_message_tags</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filter_0_column&quot;</span><span class="p">:</span> <span class="s2">&quot;tags&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_operator&quot;</span><span class="p">:</span> <span class="n">Operators</span><span class="o">.</span><span class="n">ALL_OF</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_value&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="s2">&quot;important&quot;</span><span class="p">,</span> <span class="s2">&quot;urgent&quot;</span><span class="p">]),</span>
+        <span class="p">}</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">sessions</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> <span class="n">FilterParams</span><span class="p">(</span><span class="n">_get_querydict</span><span class="p">(</span><span class="n">params</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">filtered</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">session</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">test_message_tags_excludes_returns_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session_with_many_message_tags</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exclude a tag that no message has — both sessions should remain, each exactly once.</span>
+
+<span class="sd">        The bug being guarded against is `session` appearing 3 times (one per</span>
+<span class="sd">        tagged message) when the global `.distinct()` is removed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">session</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">session_with_many_message_tags</span>
+        <span class="n">other</span> <span class="o">=</span> <span class="n">ExperimentSessionFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">session</span><span class="o">.</span><span class="n">experiment</span><span class="p">)</span>
+
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filter_0_column&quot;</span><span class="p">:</span> <span class="s2">&quot;tags&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_operator&quot;</span><span class="p">:</span> <span class="n">Operators</span><span class="o">.</span><span class="n">EXCLUDES</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_value&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="s2">&quot;nonexistent&quot;</span><span class="p">]),</span>
+        <span class="p">}</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">sessions</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> <span class="n">FilterParams</span><span class="p">(</span><span class="n">_get_querydict</span><span class="p">(</span><span class="n">params</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">filtered</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">2</span>
+        <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="n">session</span><span class="p">,</span> <span class="n">other</span><span class="p">}</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the new tests to verify they pass under current code</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py -v -k "no_duplicates"</code></p>
+<p>Expected: PASS (current code's unconditional <code>.distinct()</code> masks duplicates).</p>
+<ul>
+<li>[ ] <strong>Step 3: Lint and commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/experiments/tests/test_filters.py --fix</code>
+Run: <code>uv run ruff format apps/experiments/tests/test_filters.py</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/experiments/tests/test_filters.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;test(experiments): add no-duplicate regression tests for ChatMessageTagsFilter&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-5-rewrite-chatmessagetagsfilterapply_any_of-and-apply_excludes-as-exists">Task 5: Rewrite <code>ChatMessageTagsFilter.apply_any_of</code> and <code>apply_excludes</code> as EXISTS</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/experiments/filters.py:60-93</code>
+- Test: existing tests from Task 4 + Task 9</p>
+<ul>
+<li>[ ] <strong>Step 1: Rewrite <code>apply_any_of</code> and <code>apply_excludes</code> to use <code>Exists</code> subqueries</strong></li>
+</ul>
+<p>In <code>apps/experiments/filters.py</code>, replace <code>ChatMessageTagsFilter.apply_any_of</code> and <code>apply_excludes</code> with:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">def</span> <span class="nf">apply_any_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">chat_content_type</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Chat</span><span class="p">)</span>
+        <span class="n">chat_message_content_type</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">ChatMessage</span><span class="p">)</span>
+        <span class="n">chat_tag_exists</span> <span class="o">=</span> <span class="n">Exists</span><span class="p">(</span>
+            <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="s2">&quot;chat_id&quot;</span><span class="p">),</span>
+                <span class="n">content_type_id</span><span class="o">=</span><span class="n">chat_content_type</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="n">tag__name__in</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">message_tag_exists</span> <span class="o">=</span> <span class="n">Exists</span><span class="p">(</span>
+            <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">content_type_id</span><span class="o">=</span><span class="n">chat_message_content_type</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="n">tag__name__in</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+                <span class="n">object_id__in</span><span class="o">=</span><span class="n">Subquery</span><span class="p">(</span>
+                    <span class="n">ChatMessage</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">chat_id</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="n">OuterRef</span><span class="p">(</span><span class="s2">&quot;chat_id&quot;</span><span class="p">)))</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">chat_tag_exists</span> <span class="o">|</span> <span class="n">message_tag_exists</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply_excludes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">chat_content_type</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Chat</span><span class="p">)</span>
+        <span class="n">chat_message_content_type</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">ChatMessage</span><span class="p">)</span>
+        <span class="n">chat_tag_exists</span> <span class="o">=</span> <span class="n">Exists</span><span class="p">(</span>
+            <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="s2">&quot;chat_id&quot;</span><span class="p">),</span>
+                <span class="n">content_type_id</span><span class="o">=</span><span class="n">chat_content_type</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="n">tag__name__in</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">message_tag_exists</span> <span class="o">=</span> <span class="n">Exists</span><span class="p">(</span>
+            <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">content_type_id</span><span class="o">=</span><span class="n">chat_message_content_type</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="n">tag__name__in</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+                <span class="n">object_id__in</span><span class="o">=</span><span class="n">Subquery</span><span class="p">(</span>
+                    <span class="n">ChatMessage</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">chat_id</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="n">OuterRef</span><span class="p">(</span><span class="s2">&quot;chat_id&quot;</span><span class="p">)))</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="n">chat_tag_exists</span> <span class="o">|</span> <span class="n">message_tag_exists</span><span class="p">)</span>
+</code></pre></div>
+<p><code>apply_all_of</code> is unchanged — it already uses <code>Exists</code>. The imports <code>ContentType, Exists, OuterRef, Subquery, CustomTaggedItem, Chat, ChatMessage</code> are already present in this file.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run the regression tests from Task 4 and the existing tag tests</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py -v -k "tag"</code></p>
+<p>Expected: PASS — all tag-related tests, including the no-duplicate regressions, still pass.</p>
+<ul>
+<li>[ ] <strong>Step 3: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/experiments/filters.py --fix</code>
+Run: <code>uv run ruff format apps/experiments/filters.py</code>
+Run: <code>uv run ty check apps/experiments/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/experiments/filters.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(experiments): rewrite ChatMessageTagsFilter any_of/excludes as EXISTS&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-6-add-messagetimestampfilter-exists-and-swap-usage-in-experimentsessionfilter">Task 6: Add <code>MessageTimestampFilter</code> (EXISTS) and swap usage in ExperimentSessionFilter</h2>
+<p>The current "Message Date" timestamp filter applies on column <code>chat__messages__created_at</code> — a one-to-many traversal that multiplies rows. We add a dedicated subclass that uses <code>EXISTS</code> and replace the one usage.</p>
+<p><strong>Files:</strong>
+- Modify: <code>apps/web/dynamic_filters/column_filters.py:82-141</code> (<code>TimestampFilter</code> import path stays the same; new subclass lives next to it)
+- Modify: <code>apps/experiments/filters.py:200-205</code> (the <code>TimestampFilter("Message Date", ...)</code> instantiation)
+- Test: <code>apps/experiments/tests/test_filters.py</code> (append)</p>
+<ul>
+<li>[ ] <strong>Step 1: Add a no-duplicate regression test for <code>message_date</code> filter</strong></li>
+</ul>
+<p>Append to <code>apps/experiments/tests/test_filters.py</code>, inside <code>class TestExperimentSessionFilters</code>:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">def</span> <span class="nf">test_message_date_filter_returns_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session_with_many_message_tags</span><span class="p">):</span>
+        <span class="n">session</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">session_with_many_message_tags</span>
+        <span class="c1"># All three messages were created at &quot;now&quot;; filter for that date.</span>
+        <span class="n">today</span> <span class="o">=</span> <span class="n">timezone</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">date</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>
+
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filter_0_column&quot;</span><span class="p">:</span> <span class="s2">&quot;message_date&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_operator&quot;</span><span class="p">:</span> <span class="n">Operators</span><span class="o">.</span><span class="n">ON</span><span class="p">,</span>
+            <span class="s2">&quot;filter_0_value&quot;</span><span class="p">:</span> <span class="n">today</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">sessions</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span> <span class="n">FilterParams</span><span class="p">(</span><span class="n">_get_querydict</span><span class="p">(</span><span class="n">params</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">filtered</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">session</span><span class="p">]</span>
+</code></pre></div>
+<p>The fixture <code>session_with_many_message_tags</code> already creates three messages on the same day; this guarantees a one-to-many JOIN would yield 3 rows.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run it — should pass under current <code>.distinct()</code></strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py::TestExperimentSessionFilters::test_message_date_filter_returns_no_duplicates -v</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add <code>MessageTimestampFilter</code> next to <code>TimestampFilter</code></strong></li>
+</ul>
+<p>In <code>apps/web/dynamic_filters/column_filters.py</code>, after the <code>TimestampFilter</code> class, add:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">MessageTimestampFilter</span><span class="p">(</span><span class="n">TimestampFilter</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Timestamp filter that traverses chat__messages without multiplying rows.</span>
+
+<span class="sd">    Uses `Exists(ChatMessage.objects.filter(...))` instead of a JOIN through</span>
+<span class="sd">    `chat__messages__created_at`, so callers do not need a trailing `.distinct()`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">chatmessage_lookups</span><span class="p">):</span>
+        <span class="c1"># Local import — avoids a top-level chat→dynamic_filters cycle.</span>
+        <span class="kn">from</span> <span class="nn">django.db.models</span> <span class="kn">import</span> <span class="n">Exists</span><span class="p">,</span> <span class="n">OuterRef</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.chat.models</span> <span class="kn">import</span> <span class="n">ChatMessage</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="k">return</span> <span class="n">Exists</span><span class="p">(</span>
+            <span class="n">ChatMessage</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">chat_id</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="s2">&quot;chat_id&quot;</span><span class="p">),</span> <span class="o">**</span><span class="n">chatmessage_lookups</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply_on</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QuerySet</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">date_value</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_date_as_utc</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="n">created_at__date</span><span class="o">=</span><span class="n">date_value</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">queryset</span>
+
+    <span class="k">def</span> <span class="nf">apply_before</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QuerySet</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">date_value</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_date_as_utc</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="n">created_at__date__lt</span><span class="o">=</span><span class="n">date_value</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">queryset</span>
+
+    <span class="k">def</span> <span class="nf">apply_after</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QuerySet</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">date_value</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_date_as_utc</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="n">created_at__date__gt</span><span class="o">=</span><span class="n">date_value</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">queryset</span>
+
+    <span class="k">def</span> <span class="nf">apply_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QuerySet</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">client_tz</span> <span class="o">=</span> <span class="n">pytz</span><span class="o">.</span><span class="n">timezone</span><span class="p">(</span><span class="n">timezone</span><span class="p">)</span> <span class="k">if</span> <span class="n">timezone</span> <span class="k">else</span> <span class="n">pytz</span><span class="o">.</span><span class="n">UTC</span>
+            <span class="n">now_client</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">client_tz</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">,</span> <span class="s2">&quot;m&quot;</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="n">queryset</span>
+            <span class="n">num</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;h&quot;</span><span class="p">:</span>
+                <span class="n">delta</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="n">num</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;d&quot;</span><span class="p">:</span>
+                <span class="n">delta</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">num</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;m&quot;</span><span class="p">:</span>
+                <span class="n">delta</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">minutes</span><span class="o">=</span><span class="n">num</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">queryset</span>
+            <span class="n">range_starting_utc_time</span> <span class="o">=</span> <span class="p">(</span><span class="n">now_client</span> <span class="o">-</span> <span class="n">delta</span><span class="p">)</span><span class="o">.</span><span class="n">astimezone</span><span class="p">(</span><span class="n">pytz</span><span class="o">.</span><span class="n">UTC</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="n">created_at__gte</span><span class="o">=</span><span class="n">range_starting_utc_time</span><span class="p">))</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="n">pytz</span><span class="o">.</span><span class="n">UnknownTimeZoneError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">queryset</span>
+</code></pre></div>
+<p>Notes:
+- The local import inside <code>_exists</code> avoids creating a top-level <code>chat → dynamic_filters</code> cycle. Top-level imports are the project default; the local import is a deliberate exception per AGENTS.md.
+- The class assumes the queryset is over a model with a <code>chat_id</code> foreign key. This is the only place we need it (<code>ExperimentSession</code>); generalising further is YAGNI.</p>
+<ul>
+<li>[ ] <strong>Step 4: Use the new filter in <code>ExperimentSessionFilter</code></strong></li>
+</ul>
+<p>In <code>apps/experiments/filters.py</code>, change the import:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">apps.web.dynamic_filters.column_filters</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ExperimentFilter</span><span class="p">,</span>
+    <span class="n">MessageTimestampFilter</span><span class="p">,</span>
+    <span class="n">ParticipantFilter</span><span class="p">,</span>
+    <span class="n">RemoteIdFilter</span><span class="p">,</span>
+    <span class="n">SessionIdFilter</span><span class="p">,</span>
+    <span class="n">SessionStatusFilter</span><span class="p">,</span>
+    <span class="n">TimestampFilter</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Then replace the "Message Date" <code>TimestampFilter</code> instantiation in <code>ExperimentSessionFilter.filters</code>:</p>
+<div class="highlight"><pre><span></span><code>        <span class="n">MessageTimestampFilter</span><span class="p">(</span>
+            <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Message Date&quot;</span><span class="p">,</span>
+            <span class="n">column</span><span class="o">=</span><span class="s2">&quot;chat__messages__created_at&quot;</span><span class="p">,</span>  <span class="c1"># retained for schema/UX, unused at query time</span>
+            <span class="n">query_param</span><span class="o">=</span><span class="s2">&quot;message_date&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Filter by message date&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+</code></pre></div>
+<p>The other two <code>TimestampFilter</code> instantiations (<code>last_message</code>, <code>first_message</code>) target columns directly on <code>ExperimentSession</code> and remain unchanged.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run the regression test</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py::TestExperimentSessionFilters::test_message_date_filter_returns_no_duplicates -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py -v</code></p>
+<p>Expected: PASS — all session filter tests still pass.</p>
+<ul>
+<li>[ ] <strong>Step 6: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/web/dynamic_filters/column_filters.py apps/experiments/filters.py apps/experiments/tests/test_filters.py --fix</code>
+Run: <code>uv run ruff format apps/web/dynamic_filters/column_filters.py apps/experiments/filters.py apps/experiments/tests/test_filters.py</code>
+Run: <code>uv run ty check apps/web/dynamic_filters/ apps/experiments/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/web/dynamic_filters/column_filters.py<span class="w"> </span>apps/experiments/filters.py<span class="w"> </span>apps/experiments/tests/test_filters.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(filters): EXISTS-based MessageTimestampFilter for chat__messages traversal&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-7-add-no-duplicate-regression-tests-for-trace-messagetagsfilter">Task 7: Add no-duplicate regression tests for trace <code>MessageTagsFilter</code></h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/trace/tests/test_filters.py</code></p>
+<ul>
+<li>[ ] <strong>Step 1: Add a fixture and three tests</strong></li>
+</ul>
+<p>Append inside <code>class TestTraceFilter</code> in <code>apps/trace/tests/test_filters.py</code>:</p>
+<div class="highlight"><pre><span></span><code>    <span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">trace_with_many_message_tags</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">experiment</span><span class="p">,</span> <span class="n">participant</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A trace whose input_message has multiple tags — would multiply under JOIN.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">apps.chat.models</span> <span class="kn">import</span> <span class="n">Chat</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="n">chat</span> <span class="o">=</span> <span class="n">Chat</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t&quot;</span><span class="p">)</span>
+        <span class="n">input_message</span> <span class="o">=</span> <span class="n">ChatMessage</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">chat</span><span class="o">=</span><span class="n">chat</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="s2">&quot;hi&quot;</span><span class="p">,</span> <span class="n">message_type</span><span class="o">=</span><span class="n">ChatMessageType</span><span class="o">.</span><span class="n">HUMAN</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">important</span> <span class="o">=</span> <span class="n">Tag</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;important&quot;</span><span class="p">)</span>
+        <span class="n">urgent</span> <span class="o">=</span> <span class="n">Tag</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;urgent&quot;</span><span class="p">)</span>
+        <span class="n">input_message</span><span class="o">.</span><span class="n">add_tags</span><span class="p">([</span><span class="n">important</span><span class="p">,</span> <span class="n">urgent</span><span class="p">],</span> <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">added_by</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">trace</span> <span class="o">=</span> <span class="n">TraceFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span> <span class="n">participant</span><span class="o">=</span><span class="n">participant</span><span class="p">,</span>
+            <span class="n">status</span><span class="o">=</span><span class="n">TraceStatus</span><span class="o">.</span><span class="n">SUCCESS</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+            <span class="n">input_message</span><span class="o">=</span><span class="n">input_message</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">trace</span>
+
+    <span class="k">def</span> <span class="nf">test_trace_message_tags_any_of_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trace_with_many_message_tags</span><span class="p">,</span> <span class="n">team</span><span class="p">):</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="n">Trace</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_filter_and_apply</span><span class="p">(</span>
+            <span class="n">queryset</span><span class="p">,</span> <span class="s2">&quot;message_tags&quot;</span><span class="p">,</span> <span class="n">Operators</span><span class="o">.</span><span class="n">ANY_OF</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="s2">&quot;important&quot;</span><span class="p">,</span> <span class="s2">&quot;urgent&quot;</span><span class="p">]),</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">trace_with_many_message_tags</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">test_trace_message_tags_all_of_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trace_with_many_message_tags</span><span class="p">,</span> <span class="n">team</span><span class="p">):</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="n">Trace</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_filter_and_apply</span><span class="p">(</span>
+            <span class="n">queryset</span><span class="p">,</span> <span class="s2">&quot;message_tags&quot;</span><span class="p">,</span> <span class="n">Operators</span><span class="o">.</span><span class="n">ALL_OF</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="s2">&quot;important&quot;</span><span class="p">,</span> <span class="s2">&quot;urgent&quot;</span><span class="p">]),</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">trace_with_many_message_tags</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">test_trace_message_tags_excludes_no_duplicates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trace_with_many_message_tags</span><span class="p">,</span> <span class="n">team</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exclude a tag that no message has — the trace should remain exactly once.</span>
+
+<span class="sd">        The bug being guarded against is the trace appearing 2 times (one per</span>
+<span class="sd">        tag on its input_message) when the global `.distinct()` is removed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="n">Trace</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_filter_and_apply</span><span class="p">(</span>
+            <span class="n">queryset</span><span class="p">,</span> <span class="s2">&quot;message_tags&quot;</span><span class="p">,</span> <span class="n">Operators</span><span class="o">.</span><span class="n">EXCLUDES</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="s2">&quot;nonexistent&quot;</span><span class="p">]),</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">count</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">trace_with_many_message_tags</span><span class="p">]</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run them — should pass under current code</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/trace/tests/test_filters.py -v -k "no_duplicates"</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 3: Lint and commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/trace/tests/test_filters.py --fix</code>
+Run: <code>uv run ruff format apps/trace/tests/test_filters.py</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/trace/tests/test_filters.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;test(trace): add no-duplicate regression tests for MessageTagsFilter&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-8-rewrite-trace-messagetagsfilter-operators-as-exists">Task 8: Rewrite trace <code>MessageTagsFilter</code> operators as EXISTS</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/trace/filters.py:35-60</code></p>
+<ul>
+<li>[ ] <strong>Step 1: Rewrite all three operator methods to use <code>EXISTS</code></strong></li>
+</ul>
+<p>In <code>apps/trace/filters.py</code>, replace <code>MessageTagsFilter</code> with:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">MessageTagsFilter</span><span class="p">(</span><span class="n">ChoiceColumnFilter</span><span class="p">):</span>
+    <span class="n">query_param</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;message_tags&quot;</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Message Tags&quot;</span>
+    <span class="nb">type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">TYPE_CHOICE</span>
+
+    <span class="k">def</span> <span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="o">**</span><span class="n">_</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="n">team</span><span class="o">.</span><span class="n">tag_set</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">is_system_tag</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">values_list</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="n">flat</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">distinct</span><span class="p">()</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message_field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tag_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build an EXISTS clause matching tags on the message referenced by `message_field`.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">django.contrib.contenttypes.models</span> <span class="kn">import</span> <span class="n">ContentType</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">django.db.models</span> <span class="kn">import</span> <span class="n">Exists</span><span class="p">,</span> <span class="n">OuterRef</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.annotations.models</span> <span class="kn">import</span> <span class="n">CustomTaggedItem</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.chat.models</span> <span class="kn">import</span> <span class="n">ChatMessage</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">chat_message_content_type</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">ChatMessage</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Exists</span><span class="p">(</span>
+            <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">content_type_id</span><span class="o">=</span><span class="n">chat_message_content_type</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="n">tag__name__in</span><span class="o">=</span><span class="n">tag_names</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="n">message_field</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply_any_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="s2">&quot;input_message_id&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="s2">&quot;output_message_id&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">apply_all_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">tag</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+            <span class="n">queryset</span> <span class="o">=</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="s2">&quot;input_message_id&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">tag</span><span class="p">])</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="s2">&quot;output_message_id&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">tag</span><span class="p">])</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">queryset</span>
+
+    <span class="k">def</span> <span class="nf">apply_excludes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="s2">&quot;input_message_id&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exists</span><span class="p">(</span><span class="s2">&quot;output_message_id&quot;</span><span class="p">,</span> <span class="n">value</span><span class="p">))</span>
+</code></pre></div>
+<p>Notes:
+- The previous implementation called <code>.distinct()</code> explicitly on <code>apply_any_of</code> and <code>apply_all_of</code>. Both calls are removed — <code>EXISTS</code> does not multiply rows.
+- The previous <code>apply_excludes</code> did not call <code>.distinct()</code> but did inherit the global one (Task 9 removes that). The <code>EXISTS</code> form is still correct: "exclude rows where any matching tag exists".
+- Local imports keep us out of an annotations→trace cycle.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run the regression tests from Task 7 and the existing tests</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/trace/tests/test_filters.py -v</code></p>
+<p>Expected: PASS — all trace filter tests, including the no-duplicate regressions, pass.</p>
+<ul>
+<li>[ ] <strong>Step 3: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/trace/filters.py --fix</code>
+Run: <code>uv run ruff format apps/trace/filters.py</code>
+Run: <code>uv run ty check apps/trace/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/trace/filters.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(trace): rewrite MessageTagsFilter operators as EXISTS, drop manual distinct()&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-9-remove-unconditional-distinct-from-multicolumnfilterapply">Task 9: Remove unconditional <code>.distinct()</code> from <code>MultiColumnFilter.apply</code></h2>
+<p>This is the load-bearing change. Tasks 5/6/8 prepared every row-multiplying filter so this is now safe.</p>
+<p><strong>Files:</strong>
+- Modify: <code>apps/web/dynamic_filters/base.py:105-112</code>
+- Test: <code>apps/web/dynamic_filters/tests/test_base.py</code> (create)</p>
+<ul>
+<li>[ ] <strong>Step 1: Create a SQL-shape test</strong></li>
+</ul>
+<p>Create <code>apps/web/dynamic_filters/tests/__init__.py</code> if it does not exist (empty file).</p>
+<p>Create <code>apps/web/dynamic_filters/tests/test_base.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">pytest</span>
+
+<span class="kn">from</span> <span class="nn">apps.experiments.filters</span> <span class="kn">import</span> <span class="n">ExperimentSessionFilter</span>
+<span class="kn">from</span> <span class="nn">apps.utils.factories.experiment</span> <span class="kn">import</span> <span class="n">ExperimentSessionFactory</span>
+<span class="kn">from</span> <span class="nn">apps.web.dynamic_filters.datastructures</span> <span class="kn">import</span> <span class="n">FilterParams</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_apply_does_not_emit_distinct_when_no_filters_applied</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The filter base class must not unconditionally add SELECT DISTINCT.&quot;&quot;&quot;</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="n">ExperimentSessionFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">queryset</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">experiment</span><span class="o">.</span><span class="n">sessions</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="n">filtered</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">queryset</span><span class="p">,</span> <span class="n">FilterParams</span><span class="p">())</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">filtered</span><span class="o">.</span><span class="n">query</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;DISTINCT&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sql</span><span class="p">,</span> <span class="n">sql</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/web/dynamic_filters/tests/test_base.py -v</code></p>
+<p>Expected: FAIL — current code emits <code>SELECT DISTINCT</code>.</p>
+<ul>
+<li>[ ] <strong>Step 3: Drop the unconditional <code>.distinct()</code></strong></li>
+</ul>
+<p>In <code>apps/web/dynamic_filters/base.py</code>, change <code>MultiColumnFilter.apply</code>:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queryset</span><span class="p">:</span> <span class="n">QuerySet</span><span class="p">,</span> <span class="n">filter_params</span><span class="p">:</span> <span class="n">FilterParams</span><span class="p">,</span> <span class="n">timezone</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QuerySet</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Applies the filters to the given queryset based on the `self.filter_params`.&quot;&quot;&quot;</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prepare_queryset</span><span class="p">(</span><span class="n">queryset</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">filter_component</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">filters</span><span class="p">:</span>
+            <span class="n">queryset</span> <span class="o">=</span> <span class="n">filter_component</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">queryset</span><span class="p">,</span> <span class="n">filter_params</span><span class="p">,</span> <span class="n">timezone</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">queryset</span>
+</code></pre></div>
+<p>Single-line removal: drop <code>.distinct()</code> from the trailing <code>return</code>.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the SQL-shape test, the per-filter regression tests, and the broader filter tests</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/web/dynamic_filters/tests/test_base.py -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py apps/trace/tests/test_filters.py apps/human_annotations/tests/ -v</code></p>
+<p>Expected: PASS — all four downstream filter test suites, including the no-duplicate regressions added in Tasks 4, 6, and 7, pass without DISTINCT.</p>
+<ul>
+<li>[ ] <strong>Step 5: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/web/dynamic_filters/ --fix</code>
+Run: <code>uv run ruff format apps/web/dynamic_filters/</code>
+Run: <code>uv run ty check apps/web/dynamic_filters/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/web/dynamic_filters/base.py<span class="w"> </span>apps/web/dynamic_filters/tests/__init__.py<span class="w"> </span>apps/web/dynamic_filters/tests/test_base.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(filters): drop unconditional .distinct() in MultiColumnFilter.apply&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-10-bound-customtaggeditem-prefetch-to-the-visible-page">Task 10: Bound <code>CustomTaggedItem</code> prefetch to the visible page</h2>
+<p>The session list's prefetch fires across the whole filtered queryset before pagination. Move the prefetch onto the page slice — the same shape <code>ChatbotExperimentTableView</code> already uses for its trend data.</p>
+<p><strong>Files:</strong>
+- Modify: <code>apps/experiments/models.py:1395-1407</code> (<code>get_table_queryset</code>) — drop the prefetch
+- Modify: <code>apps/chatbots/views.py:509-533</code> (<code>ChatbotSessionsTableView</code>) — add <code>get_table_data</code> with page-bounded prefetch
+- Modify: <code>apps/human_annotations/views/queue_views.py:218-238</code> (<code>AnnotationQueueSessionsTableView</code>) — same shape
+- Test: <code>apps/chatbots/tests/test_chatbot_views.py</code> (append)</p>
+<ul>
+<li>[ ] <strong>Step 1: Write a query-count assertion test</strong></li>
+</ul>
+<p>Append to <code>apps/chatbots/tests/test_chatbot_views.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.db</span> <span class="kn">import</span> <span class="n">connection</span>
+<span class="kn">from</span> <span class="nn">django.test.utils</span> <span class="kn">import</span> <span class="n">CaptureQueriesContext</span>
+
+<span class="kn">from</span> <span class="nn">apps.annotations.models</span> <span class="kn">import</span> <span class="n">Tag</span>
+
+
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_session_table_prefetch_is_page_bounded</span><span class="p">(</span><span class="n">team_with_users</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Adding more sessions than fit on one page must not increase the number of</span>
+<span class="sd">    queries fired for the tag prefetch — the prefetch should target only the</span>
+<span class="sd">    sessions visible on the current page.&quot;&quot;&quot;</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">experiment</span> <span class="o">=</span> <span class="n">ExperimentFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+
+    <span class="c1"># Two sessions, both tagged. Page size is 25 by default; both fit on one page.</span>
+    <span class="n">tag</span> <span class="o">=</span> <span class="n">Tag</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">ExperimentSessionFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">)</span>
+        <span class="n">s</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">add_tag</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">added_by</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="n">factory</span> <span class="o">=</span> <span class="n">RequestFactory</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">do_request</span><span class="p">():</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="n">factory</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;chatbots:sessions-list&quot;</span><span class="p">,</span>
+                    <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team</span><span class="o">.</span><span class="n">slug</span><span class="p">,</span> <span class="s2">&quot;experiment_id&quot;</span><span class="p">:</span> <span class="n">experiment</span><span class="o">.</span><span class="n">id</span><span class="p">})</span>
+        <span class="p">)</span>
+        <span class="n">request</span><span class="o">.</span><span class="n">user</span> <span class="o">=</span> <span class="n">user</span>
+        <span class="n">request</span><span class="o">.</span><span class="n">team</span> <span class="o">=</span> <span class="n">team</span>
+        <span class="n">request</span><span class="o">.</span><span class="n">team_membership</span> <span class="o">=</span> <span class="n">get_team_membership_for_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">attach_session_middleware_to_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">set_current_team</span><span class="p">(</span><span class="n">team</span><span class="p">)</span>
+        <span class="n">view</span> <span class="o">=</span> <span class="n">ChatbotSessionsTableView</span><span class="o">.</span><span class="n">as_view</span><span class="p">()</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">view</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">team_slug</span><span class="o">=</span><span class="n">team</span><span class="o">.</span><span class="n">slug</span><span class="p">,</span> <span class="n">experiment_id</span><span class="o">=</span><span class="n">experiment</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+        <span class="c1"># Force evaluation of the table data</span>
+        <span class="nb">list</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">context_data</span><span class="p">[</span><span class="s2">&quot;table&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">rows</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">with</span> <span class="n">CaptureQueriesContext</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span> <span class="k">as</span> <span class="n">ctx_two</span><span class="p">:</span>
+        <span class="n">do_request</span><span class="p">()</span>
+    <span class="n">queries_for_two</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ctx_two</span><span class="o">.</span><span class="n">captured_queries</span><span class="p">)</span>
+
+    <span class="c1"># Add another 30 tagged sessions — far beyond one page.</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">30</span><span class="p">):</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">ExperimentSessionFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">)</span>
+        <span class="n">s</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">add_tag</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">,</span> <span class="n">added_by</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="n">CaptureQueriesContext</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span> <span class="k">as</span> <span class="n">ctx_many</span><span class="p">:</span>
+        <span class="n">do_request</span><span class="p">()</span>
+    <span class="n">queries_for_many</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ctx_many</span><span class="o">.</span><span class="n">captured_queries</span><span class="p">)</span>
+
+    <span class="c1"># Adding off-page rows must not bloat the prefetch.</span>
+    <span class="c1"># Allow a small slack for the COUNT(*) plan growing slightly.</span>
+    <span class="k">assert</span> <span class="n">queries_for_many</span> <span class="o">&lt;=</span> <span class="n">queries_for_two</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Prefetch is not page-bounded: 2 sessions = </span><span class="si">{</span><span class="n">queries_for_two</span><span class="si">}</span><span class="s2"> queries, &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;32 sessions = </span><span class="si">{</span><span class="n">queries_for_many</span><span class="si">}</span><span class="s2"> queries&quot;</span>
+    <span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the test — should fail today</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/chatbots/tests/test_chatbot_views.py::test_session_table_prefetch_is_page_bounded -v</code></p>
+<p>Expected: FAIL — query count grows with off-page sessions because the prefetch is unbounded.</p>
+<ul>
+<li>[ ] <strong>Step 3: Drop the prefetch from <code>get_table_queryset</code></strong></li>
+</ul>
+<p>In <code>apps/experiments/models.py</code>, change <code>ExperimentSessionObjectManager.get_table_queryset</code>:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">def</span> <span class="nf">get_table_queryset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team</span><span class="p">,</span> <span class="n">experiment_id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_queryset</span><span class="p">()</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">team</span><span class="o">=</span><span class="n">team</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">experiment_id</span><span class="p">:</span>
+            <span class="n">queryset</span> <span class="o">=</span> <span class="n">queryset</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">experiment__id</span><span class="o">=</span><span class="n">experiment_id</span><span class="p">)</span>
+
+        <span class="n">queryset</span> <span class="o">=</span> <span class="n">queryset</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="s2">&quot;participant__user&quot;</span><span class="p">,</span> <span class="s2">&quot;chat&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">queryset</span><span class="o">.</span><span class="n">annotate_with_message_count</span><span class="p">()</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">F</span><span class="p">(</span><span class="s2">&quot;last_activity_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">desc</span><span class="p">(</span><span class="n">nulls_last</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</code></pre></div>
+<p>The <code>.prefetch_related(Prefetch("chat__tagged_items", ...))</code> call is removed; callers that need tag chips on the rendered page apply the prefetch themselves on the page slice.</p>
+<ul>
+<li>[ ] <strong>Step 4: Add page-bounded prefetch to <code>ChatbotSessionsTableView</code></strong></li>
+</ul>
+<p>In <code>apps/chatbots/views.py</code>, update <code>ChatbotSessionsTableView</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">ChatbotSessionsTableView</span><span class="p">(</span><span class="n">LoginAndTeamRequiredMixin</span><span class="p">,</span> <span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">SingleTableView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;View for rendering chatbot sessions table with filtering support.&quot;&quot;&quot;</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">ExperimentSession</span>
+    <span class="n">table_class</span> <span class="o">=</span> <span class="n">ChatbotSessionsTable</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s2">&quot;table/single_table.html&quot;</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s2">&quot;experiments.view_experimentsession&quot;</span>
+
+    <span class="k">def</span> <span class="nf">get_queryset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">experiment_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;experiment_id&quot;</span><span class="p">)</span>
+        <span class="n">query_set</span> <span class="o">=</span> <span class="n">ExperimentSession</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_table_queryset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span><span class="p">,</span> <span class="n">experiment_id</span><span class="p">)</span>
+        <span class="n">timezone</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;detected_tz&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">session_filter</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">session_filter</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="n">query_set</span><span class="p">,</span> <span class="n">filter_params</span><span class="o">=</span><span class="n">FilterParams</span><span class="o">.</span><span class="n">from_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="p">),</span> <span class="n">timezone</span><span class="o">=</span><span class="n">timezone</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_table_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Materialise the page-sized slice, then attach the tag prefetch only to those rows.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">django.contrib.contenttypes.models</span> <span class="kn">import</span> <span class="n">ContentType</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.annotations.models</span> <span class="kn">import</span> <span class="n">CustomTaggedItem</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.chat.models</span> <span class="kn">import</span> <span class="n">Chat</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get_table_data</span><span class="p">())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">rows</span>
+        <span class="n">chat_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="o">.</span><span class="n">chat_id</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">tagged_by_chat</span> <span class="o">=</span> <span class="p">{</span><span class="n">chat_id</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">chat_id</span> <span class="ow">in</span> <span class="n">chat_ids</span><span class="p">}</span>
+        <span class="n">chat_ct</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Chat</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="n">content_type</span><span class="o">=</span><span class="n">chat_ct</span><span class="p">,</span> <span class="n">object_id__in</span><span class="o">=</span><span class="n">chat_ids</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;tag&quot;</span><span class="p">,</span> <span class="s2">&quot;user&quot;</span><span class="p">):</span>
+            <span class="n">tagged_by_chat</span><span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">object_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="n">row</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">prefetched_tagged_items</span> <span class="o">=</span> <span class="n">tagged_by_chat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">chat_id</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">return</span> <span class="n">rows</span>
+
+    <span class="k">def</span> <span class="nf">get_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;When viewing sessions for a specific chatbot, hide the chatbot column.&quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;experiment_id&quot;</span><span class="p">):</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">exclude</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;chatbot&quot;</span><span class="p">,)</span>
+        <span class="k">return</span> <span class="n">table</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 5: Apply the same shape to <code>AnnotationQueueSessionsTableView</code></strong></li>
+</ul>
+<p>In <code>apps/human_annotations/views/queue_views.py</code>, update <code>AnnotationQueueSessionsTableView.get_queryset</code> and add a <code>get_table_data</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">AnnotationQueueSessionsTableView</span><span class="p">(</span><span class="n">LoginAndTeamRequiredMixin</span><span class="p">,</span> <span class="n">PermissionRequiredMixin</span><span class="p">,</span> <span class="n">SingleTableView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Filterable, paginated session table for selecting sessions to add to a queue.&quot;&quot;&quot;</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">ExperimentSession</span>
+    <span class="n">table_class</span> <span class="o">=</span> <span class="n">AnnotationSessionsSelectionTable</span>
+    <span class="n">template_name</span> <span class="o">=</span> <span class="s2">&quot;table/single_table_lazy_pagination.html&quot;</span>
+    <span class="n">permission_required</span> <span class="o">=</span> <span class="s2">&quot;human_annotations.add_annotationitem&quot;</span>
+    <span class="n">paginator_class</span> <span class="o">=</span> <span class="n">LazyPaginator</span>
+
+    <span class="k">def</span> <span class="nf">get_queryset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">get_object_or_404</span><span class="p">(</span><span class="n">AnnotationQueue</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;pk&quot;</span><span class="p">],</span> <span class="n">team</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">team</span><span class="p">)</span>
+        <span class="n">queryset</span> <span class="o">=</span> <span class="n">_get_available_sessions_queryset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;pk&quot;</span><span class="p">])</span>
+        <span class="n">message_count_sq</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">ChatMessage</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">chat</span><span class="o">=</span><span class="n">OuterRef</span><span class="p">(</span><span class="s2">&quot;chat&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="s2">&quot;chat&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="n">Count</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">queryset</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">message_count</span><span class="o">=</span><span class="n">Coalesce</span><span class="p">(</span><span class="n">Subquery</span><span class="p">(</span><span class="n">message_count_sq</span><span class="p">),</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;team&quot;</span><span class="p">,</span> <span class="s2">&quot;participant__user&quot;</span><span class="p">,</span> <span class="s2">&quot;chat&quot;</span><span class="p">,</span> <span class="s2">&quot;experiment&quot;</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;-last_activity_at&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_table_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Page-bounded tag prefetch — see ChatbotSessionsTableView for rationale.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">django.contrib.contenttypes.models</span> <span class="kn">import</span> <span class="n">ContentType</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.annotations.models</span> <span class="kn">import</span> <span class="n">CustomTaggedItem</span>  <span class="c1"># noqa: PLC0415</span>
+        <span class="kn">from</span> <span class="nn">apps.chat.models</span> <span class="kn">import</span> <span class="n">Chat</span>  <span class="c1"># noqa: PLC0415</span>
+
+        <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get_table_data</span><span class="p">())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">rows</span>
+        <span class="n">chat_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="o">.</span><span class="n">chat_id</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">tagged_by_chat</span> <span class="o">=</span> <span class="p">{</span><span class="n">chat_id</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">chat_id</span> <span class="ow">in</span> <span class="n">chat_ids</span><span class="p">}</span>
+        <span class="n">chat_ct</span> <span class="o">=</span> <span class="n">ContentType</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_for_model</span><span class="p">(</span><span class="n">Chat</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">CustomTaggedItem</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="n">content_type</span><span class="o">=</span><span class="n">chat_ct</span><span class="p">,</span> <span class="n">object_id__in</span><span class="o">=</span><span class="n">chat_ids</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">select_related</span><span class="p">(</span><span class="s2">&quot;tag&quot;</span><span class="p">,</span> <span class="s2">&quot;user&quot;</span><span class="p">):</span>
+            <span class="n">tagged_by_chat</span><span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">object_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="n">row</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">prefetched_tagged_items</span> <span class="o">=</span> <span class="n">tagged_by_chat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">chat_id</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">return</span> <span class="n">rows</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 6: Run the page-bounded test and the existing session view tests</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/chatbots/tests/test_chatbot_views.py::test_session_table_prefetch_is_page_bounded -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run: <code>uv run pytest apps/chatbots/tests/test_chatbot_views.py apps/human_annotations/tests/ -v</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 7: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check apps/experiments/models.py apps/chatbots/views.py apps/human_annotations/views/queue_views.py apps/chatbots/tests/test_chatbot_views.py --fix</code>
+Run: <code>uv run ruff format apps/experiments/models.py apps/chatbots/views.py apps/human_annotations/views/queue_views.py apps/chatbots/tests/test_chatbot_views.py</code>
+Run: <code>uv run ty check apps/experiments/ apps/chatbots/ apps/human_annotations/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/experiments/models.py<span class="w"> </span>apps/chatbots/views.py<span class="w"> </span>apps/human_annotations/views/queue_views.py<span class="w"> </span>apps/chatbots/tests/test_chatbot_views.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(sessions): bound CustomTaggedItem prefetch to visible page&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-11-investigate-and-remove-the-stray-experiment_channel-left-join">Task 11: Investigate and remove the stray <code>experiment_channel</code> LEFT JOIN</h2>
+<p><code>pg_stat_statements</code> shows the session-list <code>COUNT(*)</code> running with <code>LEFT OUTER JOIN channels_experimentchannel</code> even when no filter or display path needs it. We hunt down the source and remove it.</p>
+<p><strong>Files (one of):</strong>
+- <code>apps/experiments/models.py:1395-1407</code> (<code>get_table_queryset</code> — an unintended <code>select_related</code> / <code>order_by</code> on <code>experiment_channel</code>)
+- <code>apps/chatbots/tables.py</code> (a column accessor traversing <code>experiment_channel</code>)
+- <code>apps/experiments/filters.py</code> (<code>ChannelsFilter</code> or a sibling using <code>experiment_channel__platform</code>)
+- Test: <code>apps/experiments/tests/test_filters.py</code> (append)</p>
+<p>Step 1 below identifies which one. Step 4 has a concrete fix recipe per candidate.</p>
+<ul>
+<li>[ ] <strong>Step 1: Reproduce the JOIN locally</strong></li>
+</ul>
+<p>Run a Django shell that builds the same queryset the view uses, in the same order:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;</span>
+<span class="s2">from django.db import connection</span>
+<span class="s2">from apps.chatbots.views import ChatbotSessionsTableView</span>
+<span class="s2">from apps.experiments.filters import ExperimentSessionFilter</span>
+<span class="s2">from apps.experiments.models import ExperimentSession</span>
+<span class="s2">from apps.web.dynamic_filters.datastructures import FilterParams</span>
+<span class="s2">from apps.teams.models import Team</span>
+
+<span class="s2">team = Team.objects.first()</span>
+<span class="s2">qs = ExperimentSession.objects.get_table_queryset(team)</span>
+<span class="s2">qs = ExperimentSessionFilter().apply(qs, FilterParams())</span>
+<span class="s2">print(qs.query)</span>
+<span class="s2">print(&#39;---&#39;)</span>
+<span class="s2">print(qs.values(&#39;id&#39;).query)  # mimics .count() shape</span>
+<span class="s2">&quot;</span>
+</code></pre></div>
+<p>Expected: SQL output. Search it for <code>experiment_channel</code>. The match identifies which clause inserts the join.</p>
+<ul>
+<li>[ ] <strong>Step 2: Write a regression test</strong></li>
+</ul>
+<p>Append to <code>apps/experiments/tests/test_filters.py</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">test_session_filter_default_query_does_not_join_experiment_channel</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;No filter, no display column references experiment_channel — confirm the COUNT</span>
+<span class="sd">    does not pull it in unnecessarily.&quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">ExperimentSession</span>  <span class="c1"># noqa: PLC0415</span>
+    <span class="kn">from</span> <span class="nn">apps.teams.models</span> <span class="kn">import</span> <span class="n">Team</span>  <span class="c1"># noqa: PLC0415</span>
+
+    <span class="n">team</span> <span class="o">=</span> <span class="n">Team</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">first</span><span class="p">()</span> <span class="ow">or</span> <span class="n">TeamFactory</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="n">qs</span> <span class="o">=</span> <span class="n">ExperimentSession</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get_table_queryset</span><span class="p">(</span><span class="n">team</span><span class="p">)</span>
+    <span class="n">qs</span> <span class="o">=</span> <span class="n">ExperimentSessionFilter</span><span class="p">()</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">qs</span><span class="p">,</span> <span class="n">FilterParams</span><span class="p">())</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">qs</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;channels_experimentchannel&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sql</span><span class="p">,</span> <span class="n">sql</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 3: Run the test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py::test_session_filter_default_query_does_not_join_experiment_channel -v</code></p>
+<p>Expected: FAIL.</p>
+<ul>
+<li>[ ] <strong>Step 4: Apply the fix identified in Step 1</strong></li>
+</ul>
+<p>The fix depends on what Step 1 finds — the most likely candidates and what to do about each:</p>
+<ul>
+<li><strong>If <code>select_related</code> includes <code>experiment_channel</code>:</strong> remove it from the <code>select_related</code> chain in <code>apps/experiments/models.py:1400</code>.</li>
+<li><strong>If a column accessor in <code>ChatbotSessionsTable</code> traverses <code>experiment_channel</code>:</strong> narrow the accessor or render via a callable that uses the existing FK-id only.</li>
+<li><strong>If <code>ChannelsFilter</code> is somehow joining via <code>experiment_channel__platform</code>:</strong> confirm the filter is using <code>column = "platform"</code> (the column on <code>ExperimentSession</code> itself, set on session save). If a stray <code>experiment_channel__</code> reference is found, change it to <code>platform</code>.</li>
+<li><strong>If the table's <code>Meta.fields</code> references a deferred attribute that triggers the join:</strong> remove or rename the field.</li>
+</ul>
+<p>Whichever it is, make the smallest possible change.</p>
+<ul>
+<li>[ ] <strong>Step 5: Run the test to verify it passes</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/experiments/tests/test_filters.py::test_session_filter_default_query_does_not_join_experiment_channel -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run the full session-related test suite as a regression check:</p>
+<p>Run: <code>uv run pytest apps/chatbots/tests/test_chatbot_views.py apps/experiments/tests/test_filters.py apps/human_annotations/tests/ -v</code></p>
+<p>Expected: PASS.</p>
+<ul>
+<li>[ ] <strong>Step 6: Lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check &lt;file_modified&gt; apps/experiments/tests/test_filters.py --fix</code>
+Run: <code>uv run ruff format &lt;file_modified&gt; apps/experiments/tests/test_filters.py</code>
+Run: <code>uv run ty check apps/experiments/ apps/chatbots/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>&lt;file_modified&gt;<span class="w"> </span>apps/experiments/tests/test_filters.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(sessions): drop stray experiment_channel join from default queryset&quot;</span>
+</code></pre></div>
+<p>(The committer fills in <code>&lt;file_modified&gt;</code> based on Step 1. The commit message is intentionally specific — if the fix turns out to be elsewhere than the queryset, edit accordingly.)</p>
+<hr />
+<h2 id="task-12-audit-experimentobjectsget_all-for-the-chatbot-list-select-distinct">Task 12: Audit <code>Experiment.objects.get_all()</code> for the chatbot list <code>SELECT DISTINCT</code></h2>
+<p>Final low-effort audit: the chatbot-list query emits <code>SELECT DISTINCT experiment</code> per pg_stat. Confirm whether the <code>DISTINCT</code> is needed and remove it if not.</p>
+<p><strong>Files:</strong>
+- Read: <code>apps/experiments/models.py</code> (look at the <code>Experiment</code> manager / <code>get_all</code> / version-related querysets)
+- Modify: depends on findings</p>
+<ul>
+<li>[ ] <strong>Step 1: Find the source of <code>DISTINCT</code></strong></li>
+</ul>
+<p>Run: `uv run python manage.py shell -c "
+from apps.experiments.models import Experiment
+from apps.teams.models import Team</p>
+<p>team = Team.objects.first()
+qs = (Experiment.objects.get_all()
+      .filter(team=team, working_version__isnull=True, pipeline__isnull=False)
+      .filter(is_archived=False))
+print(qs.query)
+"`</p>
+<p>Search the SQL for <code>DISTINCT</code>. If absent, the DISTINCT we saw in pg_stat originates from an annotation, similarity_search, or a specific filter path — note where, and exit Step 1 documenting the finding.</p>
+<ul>
+<li>
+<p>[ ] <strong>Step 2: Make the appropriate decision</strong></p>
+</li>
+<li>
+<p><strong>If the DISTINCT is from a join the view does not need</strong> (e.g. the manager joins through versions and dedupes), narrow the manager method or filter the queryset to avoid the join. Add a SQL-shape test asserting <code>DISTINCT</code> is absent from the chatbot-list queryset.</p>
+</li>
+<li>
+<p><strong>If the DISTINCT is needed for correctness</strong> (e.g. it dedupes after a real one-to-many traversal that we cannot avoid without a behaviour change), document this in a one-line comment at the source and close the task with no code change. Add a comment in <code>apps/chatbots/views.py</code> referencing this finding so future readers don't repeat the audit.</p>
+</li>
+<li>
+<p>[ ] <strong>Step 3: If a code change was made, write a regression test</strong></p>
+</li>
+</ul>
+<p>Append to <code>apps/chatbots/tests/test_chatbot_views.py</code> (only if Step 2 produced a code change):</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">test_chatbot_list_queryset_has_no_select_distinct</span><span class="p">(</span><span class="n">team_with_users</span><span class="p">):</span>
+    <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+    <span class="n">user</span> <span class="o">=</span> <span class="n">team</span><span class="o">.</span><span class="n">members</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+    <span class="n">factory</span> <span class="o">=</span> <span class="n">RequestFactory</span><span class="p">()</span>
+    <span class="n">request</span> <span class="o">=</span> <span class="n">factory</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">reverse</span><span class="p">(</span><span class="s2">&quot;chatbots:table&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">[</span><span class="n">team</span><span class="o">.</span><span class="n">slug</span><span class="p">]))</span>
+    <span class="n">request</span><span class="o">.</span><span class="n">user</span> <span class="o">=</span> <span class="n">user</span>
+    <span class="n">request</span><span class="o">.</span><span class="n">team</span> <span class="o">=</span> <span class="n">team</span>
+    <span class="n">request</span><span class="o">.</span><span class="n">team_membership</span> <span class="o">=</span> <span class="n">get_team_membership_for_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+    <span class="n">attach_session_middleware_to_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+    <span class="n">set_current_team</span><span class="p">(</span><span class="n">team</span><span class="p">)</span>
+
+    <span class="n">view</span> <span class="o">=</span> <span class="n">ChatbotExperimentTableView</span><span class="p">()</span>
+    <span class="n">view</span><span class="o">.</span><span class="n">request</span> <span class="o">=</span> <span class="n">request</span>
+    <span class="n">view</span><span class="o">.</span><span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;team_slug&quot;</span><span class="p">:</span> <span class="n">team</span><span class="o">.</span><span class="n">slug</span><span class="p">}</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">view</span><span class="o">.</span><span class="n">get_queryset</span><span class="p">()</span><span class="o">.</span><span class="n">query</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;distinct&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sql</span><span class="p">,</span> <span class="n">sql</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 4: Run tests, lint, type-check, commit</strong></li>
+</ul>
+<p>Run: <code>uv run pytest apps/chatbots/tests/test_chatbot_views.py -v</code></p>
+<p>Expected: PASS.</p>
+<p>Run: <code>uv run ruff check &lt;files_modified&gt; --fix</code>
+Run: <code>uv run ruff format &lt;files_modified&gt;</code>
+Run: <code>uv run ty check apps/chatbots/ apps/experiments/</code></p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>&lt;files_modified&gt;
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;perf(chatbots): drop unused DISTINCT from list queryset&quot;</span><span class="w">   </span><span class="c1"># or: &quot;docs(chatbots): note why list queryset retains DISTINCT&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="measurement">Measurement</h2>
+<p>After each task, append a row to <code>docs/superpowers/specs/2026-04-30-list-view-performance-results.md</code> with the format below. Create the file before the first measurement.</p>
+<div class="highlight"><pre><span></span><code><span class="gu">## Task &lt;N&gt; — &lt;short title&gt;</span>
+
+<span class="gs">**Date:**</span> YYYY-MM-DD
+<span class="gs">**pg_stat_statements deltas (mean / total / calls):**</span>
+<span class="k">-</span><span class="w"> </span><span class="sb">`SELECT trace_trace …`</span>: before X / Y / Z, after X&#39; / Y&#39; / Z&#39;
+<span class="k">-</span><span class="w"> </span><span class="sb">`COUNT(*) … DISTINCT experimentsession …`</span>: before / after
+<span class="k">-</span><span class="w"> </span><span class="sb">`customtaggeditem …`</span>: before / after
+
+<span class="gs">**Sentry transaction p95 deltas:**</span>
+<span class="k">-</span><span class="w"> </span><span class="sb">`chatbots:table`</span>: before / after
+<span class="k">-</span><span class="w"> </span><span class="sb">`chatbots:sessions-list`</span>: before / after
+<span class="k">-</span><span class="w"> </span><span class="sb">`trace:table`</span>: before / after
+<span class="k">-</span><span class="w"> </span><span class="sb">`human_annotations:queue_sessions_table`</span>: before / after
+
+<span class="gs">**Notes:**</span> any surprises; whether the change moved the right numbers.
+</code></pre></div>
+<p>After Task 9 ships, do a full re-snapshot of <code>pg_stat_statements</code> for the four tracked queries and compare against the success criteria in the spec:</p>
+<ul>
+<li>Trace list main query mean execution time drops by ≥80%</li>
+<li>Session list <code>COUNT(*) … DISTINCT</code> total time drops by ≥50%</li>
+<li>No new duplicate-row regressions in test or staging QA</li>
+<li>Trace / ExperimentSession insert latency unchanged within ±10%</li>
+</ul>
+<p>If gates pass, Approach 1 is complete. Otherwise, re-investigate before continuing to Tasks 10–12, and capture the residual hotspots — they feed into Approach 2.</p>
+<hr />
+<h2 id="self-review-notes">Self-review notes</h2>
+<p>Read this section last; it is for the implementer to confirm the plan still makes sense before starting.</p>
+<ul>
+<li><strong>Spec coverage:</strong> every "in scope" bullet from the spec maps to at least one task. Trace indexes → Task 1; team__slug → Task 2; ExperimentSession index → Task 3; DISTINCT removal + EXISTS → Tasks 4–9; CustomTaggedItem prefetch → Task 10; experiment_channel JOIN → Task 11; chatbot list DISTINCT audit → Task 12.</li>
+<li><strong>Test order:</strong> Tasks 4 and 7 land regression tests that pass under current code, so they cannot prove the rewrites. The proof comes in Task 9, where the global <code>.distinct()</code> is removed and the same regression tests must still pass. Each task is still independently shippable because EXISTS is behaviour-preserving on its own.</li>
+<li><strong>Local imports:</strong> Tasks 6, 8, 10, 11, 12 each include local imports inside method bodies. Per <code>AGENTS.md</code>, top-level imports are the project default; the local form is used only to avoid a circular import or, for <code>MessageTimestampFilter._exists</code>, to keep <code>apps.web.dynamic_filters</code> from importing <code>apps.chat</code> at module load.</li>
+<li><strong>Migration numbers:</strong> <code>apps/trace/migrations/0012_…</code> follows <code>0011_add_trace_metrics.py</code>; <code>apps/experiments/migrations/0134_…</code> follows <code>0133_alter_syntheticvoice_service.py</code>. Confirm at the start of Tasks 1 and 3 in case of merges in the meantime.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

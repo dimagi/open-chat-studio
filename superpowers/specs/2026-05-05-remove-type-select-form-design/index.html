@@ -1,0 +1,1378 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/superpowers/specs/2026-05-05-remove-type-select-form-design/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Remove TypeSelectForm pattern - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#remove-typeselectform-pattern" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Remove TypeSelectForm pattern
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goal
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      Current state
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Current state">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#appsgenericstype_select_formpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      apps/generics/type_select_form.py
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#service-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Service providers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#events-event-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Events / Event actions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#service-providers-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      Service providers — design
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Service providers — design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#url-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      URL routing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#view" class="md-nav__link">
+    <span class="md-ellipsis">
+      View
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template" class="md-nav__link">
+    <span class="md-ellipsis">
+      Template
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-new-dropdown-menu" class="md-nav__link">
+    <span class="md-ellipsis">
+      "Add new" → dropdown menu
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#subtype-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      Subtype filtering
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backwards-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backwards compatibility
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#events-event-actions-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      Events / Event actions — design
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Events / Event actions — design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#url-routing_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      URL routing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#form-refactor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Form refactor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#view-refactor" class="md-nav__link">
+    <span class="md-ellipsis">
+      View refactor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#template-refactor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Template refactor
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fragment-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fragment endpoint
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cleanup-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cleanup checklist
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tests
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      Out of scope
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="remove-typeselectform-pattern">Remove TypeSelectForm pattern</h1>
+<p>Tracks GitHub issue <a href="https://github.com/dimagi/open-chat-studio/issues/3286">#3286</a>.</p>
+<h2 id="goal">Goal</h2>
+<p>Replace the <code>TypeSelectForm</code> abstraction (<code>apps/generics/type_select_form.py</code>)
+with simpler, type-specific flows. The current pattern renders all secondary
+forms on the page and relies on Alpine.js (<code>x-show</code>, <code>x-bind:disabled</code>,
+<code>x-bind:required</code>) to fake the active form. After this change:</p>
+<ul>
+<li>Service providers: type is chosen <em>before</em> the form via a dropdown, and the
+  create view renders a single static form for that type.</li>
+<li>Events / Event actions: the action-type field swaps in a single secondary
+  form fragment via HTMX, instead of all forms being present at once.</li>
+</ul>
+<p>When done, <code>TypeSelectForm</code>, <code>BaseTypeSelectFormView</code>,
+<code>templates/generic/type_select_form.html</code>, and <code>apps/generics/exceptions.py</code>
+are deleted.</p>
+<h2 id="current-state">Current state</h2>
+<h3 id="appsgenericstype_select_formpy"><code>apps/generics/type_select_form.py</code></h3>
+<p><code>TypeSelectForm</code> bundles a primary <code>ModelForm</code> and a dict of secondary forms
+keyed by the value of one field on the primary form (<code>secondary_key_field</code>).
+On instantiation it injects <code>x-model="type"</code> on the type select and
+<code>x-bind:required</code> / <code>x-bind:disabled</code> on every field of every secondary form
+so only the active form's fields submit.</p>
+<h3 id="service-providers">Service providers</h3>
+<ul>
+<li><code>apps/service_providers/utils.py:get_service_provider_config_form</code> builds
+  the <code>TypeSelectForm</code>.</li>
+<li><code>apps/service_providers/views.py:CreateServiceProvider</code> extends
+  <code>BaseTypeSelectFormView</code>. URLs:</li>
+<li><code>&lt;provider_type&gt;/create/</code> (single create URL for any subtype)</li>
+<li><code>&lt;provider_type&gt;/&lt;int:pk&gt;/</code> (edit)</li>
+<li><code>templates/generic/type_select_form.html</code> renders the primary form, then
+  loops over secondary forms inside <code>x-show</code> divs.</li>
+<li><code>templates/service_providers/llm_provider_form.html</code> extends that template
+  via <code>{% block pre_secondary_form %}</code> / <code>{% block post_form %}</code> to add the
+  default/custom/embedding model panels and the new-custom-model dialog.</li>
+<li>Subtype filtering: <code>flag_open_ai_voice_engine</code> (Waffle) hides
+  <code>VoiceProviderType.openai_voice_engine</code>; <code>settings.SLACK_ENABLED</code> hides
+  <code>MessagingProviderType.slack</code>.</li>
+</ul>
+<h3 id="events-event-actions">Events / Event actions</h3>
+<ul>
+<li><code>apps/events/forms.py:EventActionTypeSelectForm</code> subclasses <code>TypeSelectForm</code>
+  and overrides <code>save()</code> to write <code>cleaned_data</code> from the active secondary
+  form into <code>EventAction.params</code> (a JSONField).</li>
+<li><code>get_action_params_form()</code> builds the form with five secondaries: <code>log</code>
+  (EmptyForm), <code>send_message_to_bot</code>, <code>end_conversation</code> (EmptyForm),
+  <code>schedule_trigger</code>, <code>pipeline_start</code>.</li>
+<li><code>apps/events/views.py:_create_event_view</code> / <code>_edit_event_view</code> pair the
+  action form with a trigger form (<code>StaticTriggerForm</code> or
+  <code>TimeoutTriggerForm</code>) and render <code>templates/events/manage_event.html</code>.</li>
+<li><code>manage_event.html</code> loops the action form's secondaries inside <code>x-show</code>
+  divs and contains an Alpine block that disables the
+  <code>send_message_to_bot</code> / <code>schedule_trigger</code> action options when the static
+  trigger type is <code>new_bot_message</code>.</li>
+</ul>
+<h2 id="service-providers-design">Service providers — design</h2>
+<h3 id="url-routing">URL routing</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># apps/service_providers/urls.py</span>
+<span class="n">path</span><span class="p">(</span><span class="s2">&quot;&lt;slug:provider_type&gt;/create/&lt;str:subtype&gt;/&quot;</span><span class="p">,</span> <span class="n">views</span><span class="o">.</span><span class="n">CreateServiceProvider</span><span class="o">.</span><span class="n">as_view</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;new&quot;</span><span class="p">),</span>
+<span class="n">path</span><span class="p">(</span><span class="s2">&quot;&lt;slug:provider_type&gt;/&lt;int:pk&gt;/&quot;</span><span class="p">,</span> <span class="n">views</span><span class="o">.</span><span class="n">EditServiceProvider</span><span class="o">.</span><span class="n">as_view</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;edit&quot;</span><span class="p">),</span>
+</code></pre></div>
+<p>The <code>service_providers:new</code> reverse signature gains a <code>subtype</code> argument.
+<code>service_providers:edit</code> is unchanged.</p>
+<p>The LLM extra context (default/custom/embedding model panels, new-model
+form) is shared between create and edit, so both views use the same template
+and context-building logic for the LLM provider type.</p>
+<h3 id="view">View</h3>
+<p>A single <code>CreateOrEditServiceProvider</code> view (kept as one class because
+create and edit share most of the work and the existing view is also a
+single class) replaces <code>BaseTypeSelectFormView</code>. Responsibilities:</p>
+<ol>
+<li>Resolve <code>provider_type</code> from the URL slug (existing
+   <code>ServiceProviderMixin</code>).</li>
+<li>Resolve <code>subtype</code>:</li>
+<li>Create: from URL kwarg. 404 if it's not a valid subtype, or if it's
+     filtered out by the same flags that filter the dropdown menu (see
+     "Subtype filtering" below).</li>
+<li>Edit: from <code>instance.type</code>. Filtering is <strong>not</strong> applied on edit —
+     existing providers of an excluded subtype must remain editable
+     (e.g. an existing Slack messaging provider should still be editable
+     after <code>SLACK_ENABLED</code> is turned off).</li>
+<li>Build:</li>
+<li><code>primary_form</code> = <code>ModelForm</code> for the provider model with
+     <code>provider.primary_fields</code> (e.g. <code>["name", "type"]</code>). The <code>type</code> field
+     is rendered as a hidden input pre-filled with <code>subtype</code> (and
+     <code>disabled</code> on edit, matching the current behavior).</li>
+<li><code>config_form</code> = <code>subtype.form_cls(team=..., data=..., initial=...)</code>.</li>
+<li>Validate both. On success, save the model instance, then call
+   <code>config_form.save(instance)</code> (existing protocol).</li>
+<li>The LLM template still gets the model panels in context.</li>
+</ol>
+<p>The current <code>form_valid</code> extras (file formset, voice post-save warnings,
+team assignment) all carry over.</p>
+<h3 id="template">Template</h3>
+<p>Replace <code>templates/generic/type_select_form.html</code> with a new template
+<code>templates/service_providers/provider_form.html</code> (one form, no Alpine
+type-switching). The LLM template extends that one for its extra panels and
+new-custom-model dialog. The <code>x-data="{ type: '...' }"</code> wrapper goes away;
+the new-model dialog hidden <code>&lt;input name="type"&gt;</code> is set to the static
+subtype value rather than <code>x-model="type"</code>.</p>
+<h3 id="add-new-dropdown-menu">"Add new" → dropdown menu</h3>
+<p><code>templates/generic/object_home_content.html</code> currently renders a single
+"Add new" anchor when <code>new_object_url</code> is provided. Add an optional
+<code>new_object_choices</code> context variable: a list of <code>(label, url)</code> tuples.
+When provided, render a daisyUI dropdown menu instead of the plain link;
+otherwise behavior is unchanged so other call sites keep working.</p>
+<p><code>templates/service_providers/service_provider_home.html</code> builds the
+choices list — one entry per subtype, using
+<code>reverse("service_providers:new", args=[team.slug, provider_type, subtype])</code>
+— and passes it as <code>new_object_choices</code>. This is also the place where
+flag-based filtering is applied.</p>
+<h3 id="subtype-filtering">Subtype filtering</h3>
+<p>Move the existing exclusion logic out of <code>CreateServiceProvider.get_form</code>
+into a single helper, e.g.
+<code>utils.get_available_subtypes(provider, request) -&gt; list[Enum]</code>, used by:</p>
+<ul>
+<li><code>service_provider_home.html</code>'s context (which subtypes appear in the
+  dropdown).</li>
+<li>The create view (404 if the URL kwarg subtype is not in the available
+  list).</li>
+</ul>
+<p>Filters today:</p>
+<ul>
+<li><code>not flag_is_active(request, "flag_open_ai_voice_engine")</code> →
+  exclude <code>VoiceProviderType.openai_voice_engine</code>.</li>
+<li><code>not settings.SLACK_ENABLED</code> → exclude <code>MessagingProviderType.slack</code>.</li>
+</ul>
+<h3 id="backwards-compatibility">Backwards compatibility</h3>
+<ul>
+<li><code>service_providers:new</code> reverses now require a <code>subtype</code> arg. Update all
+  call sites:</li>
+<li><code>apps/slack/slack_app.py:144</code>
+    (<code>reverse("service_providers:new", args=[team.slug, MESSAGING])</code>).</li>
+<li><code>templates/experiments/components/prompt_builder_toolbox.html</code> link to
+    <code>service_providers:new ... "llm"</code>.</li>
+<li>Any existing tests
+    (<code>apps/service_providers/tests/test_intron.py:89</code>,
+    <code>test_views.py:62</code>).</li>
+<li>Old bookmarks pointing at <code>&lt;provider_type&gt;/create/</code> (no subtype) will</li>
+<li>This is acceptable for an admin-only page; no redirect needed.</li>
+</ul>
+<h2 id="events-event-actions-design">Events / Event actions — design</h2>
+<h3 id="url-routing_1">URL routing</h3>
+<p>Add one new endpoint:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># apps/events/urls.py</span>
+<span class="n">path</span><span class="p">(</span>
+    <span class="s2">&quot;experiments/&lt;int:experiment_id&gt;/events/action-params/&quot;</span><span class="p">,</span>
+    <span class="n">views</span><span class="o">.</span><span class="n">action_params_form_view</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;action_params_form&quot;</span><span class="p">,</span>
+<span class="p">),</span>
+</code></pre></div>
+<p>Returns the rendered HTML for the secondary form matching <code>action_type</code> (a
+GET query param). This is an HTMX fragment — no surrounding layout.</p>
+<h3 id="form-refactor">Form refactor</h3>
+<p>Delete <code>EventActionTypeSelectForm</code>. Move its <code>save()</code> semantics (write
+<code>cleaned_data</code> into <code>EventAction.params</code>) into either <code>EventActionForm</code>
+itself, or the view. Recommendation: keep it in the view, since the
+secondary form is a separate object and the view already orchestrates
+multiple forms.</p>
+<p><code>get_action_params_form</code> is replaced by two helpers:</p>
+<ul>
+<li><code>get_action_secondary_form_class(action_type) -&gt; type[forms.Form]</code></li>
+<li><code>build_action_secondary_form(action_type, *, data=None, initial=None,
+  team_id, experiment_id) -&gt; forms.Form</code></li>
+</ul>
+<p>A small registry dict keeps the mapping in one place:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ACTION_PARAMS_FORMS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;log&quot;</span><span class="p">:</span> <span class="n">EmptyForm</span><span class="p">,</span>
+    <span class="s2">&quot;send_message_to_bot&quot;</span><span class="p">:</span> <span class="n">SendMessageToBotForm</span><span class="p">,</span>
+    <span class="s2">&quot;end_conversation&quot;</span><span class="p">:</span> <span class="n">EmptyForm</span><span class="p">,</span>
+    <span class="s2">&quot;schedule_trigger&quot;</span><span class="p">:</span> <span class="n">ScheduledMessageConfigForm</span><span class="p">,</span>
+    <span class="s2">&quot;pipeline_start&quot;</span><span class="p">:</span> <span class="n">PipelineStartForm</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="view-refactor">View refactor</h3>
+<p><code>_create_event_view</code> and <code>_edit_event_view</code> build three forms:</p>
+<ol>
+<li><code>trigger_form</code> (unchanged).</li>
+<li><code>action_primary_form</code> = <code>EventActionForm(...)</code>.</li>
+<li><code>action_params_form</code> = <code>build_action_secondary_form(action_type, ...)</code>
+   where <code>action_type</code> is taken from <code>request.POST["action_type"]</code> (POST)
+   or from <code>instance.action_type</code> / the first valid choice (GET).</li>
+</ol>
+<p>On POST: validate all three; on success, save the trigger and the action
+(with <code>params = action_params_form.cleaned_data</code>). On the
+<code>new_bot_message</code> × <code>send_message_to_bot|schedule_trigger</code> invalid combo,
+keep the existing validation in <code>EventActionForm.clean</code>.</p>
+<h3 id="template-refactor">Template refactor</h3>
+<p><code>templates/events/manage_event.html</code>:</p>
+<ul>
+<li>Drop the <code>{% for key, form in action_form.secondary.items %}</code> loop and
+  the surrounding <code>x-show</code> divs.</li>
+<li>Add <code>&lt;div id="action-params"&gt;</code> containing the <em>current</em> action's
+  secondary form (rendered server-side on initial load).</li>
+<li>The <code>action_type</code> <code>&lt;select&gt;</code> gets HTMX:
+  <div class="highlight"><pre><span></span><code>hx-get=&quot;{% url &#39;events:action_params_form&#39; experiment.id %}&quot;
+hx-target=&quot;#action-params&quot;
+hx-swap=&quot;innerHTML&quot;
+hx-trigger=&quot;change&quot;
+hx-include=&quot;[name=action_type]&quot;
+</code></pre></div></li>
+<li>Trigger-type filtering of action options: keep the existing Alpine block
+  that disables <code>send_message_to_bot</code> / <code>schedule_trigger</code> options when
+  the static trigger type is <code>new_bot_message</code>. It only manipulates the
+  options of the action <code>&lt;select&gt;</code>, which remains. After the action
+  options change, fire a <code>change</code> event on the select so HTMX reloads the
+  params form.</li>
+</ul>
+<h3 id="fragment-endpoint">Fragment endpoint</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># apps/events/views.py</span>
+<span class="nd">@login_and_team_required</span>
+<span class="k">def</span> <span class="nf">action_params_form_view</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">team_slug</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">experiment_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="c1"># No extra permission — this only renders form HTML and is reachable</span>
+    <span class="c1"># from the same pages that already require event create/change perms.</span>
+    <span class="n">action_type</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">GET</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action_type&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">action_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ACTION_PARAMS_FORMS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">HttpResponseBadRequest</span><span class="p">()</span>
+    <span class="n">form</span> <span class="o">=</span> <span class="n">build_action_secondary_form</span><span class="p">(</span>
+        <span class="n">action_type</span><span class="p">,</span>
+        <span class="n">team_id</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">team</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+        <span class="n">experiment_id</span><span class="o">=</span><span class="n">experiment_id</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;events/_action_params_form.html&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;form&quot;</span><span class="p">:</span> <span class="n">form</span><span class="p">})</span>
+</code></pre></div>
+<p><code>_action_params_form.html</code> is a tiny partial — just
+<code>{% render_form_fields form %}</code> plus non-field errors.</p>
+<h2 id="cleanup-checklist">Cleanup checklist</h2>
+<p>After both refactors are in place, remove:</p>
+<ul>
+<li><code>apps/generics/type_select_form.py</code></li>
+<li><code>apps/generics/exceptions.py</code> (<code>TypeSelectFormError</code> is the only thing in
+  it; check no other modules import from it).</li>
+<li><code>BaseTypeSelectFormView</code> in <code>apps/generics/views.py</code> (and unused imports
+  it pulls in).</li>
+<li><code>templates/generic/type_select_form.html</code></li>
+<li>All <code>x-bind:disabled</code> / <code>x-bind:required</code> / <code>x-model="type"</code> injection
+  is gone with the dataclass.</li>
+</ul>
+<h2 id="tests">Tests</h2>
+<ul>
+<li>Update <code>apps/service_providers/tests/test_views.py</code> — <code>service_providers:new</code>
+  now needs a <code>subtype</code> argument.</li>
+<li>Update <code>apps/service_providers/tests/test_intron.py:89</code> similarly.</li>
+<li>Add a test that the create-URL 404s for a flag-excluded subtype
+  (<code>flag_open_ai_voice_engine</code> off, hitting the openai-voice-engine URL).</li>
+<li>Add a test for <code>action_params_form_view</code> covering each <code>action_type</code>.</li>
+<li>Existing event-creation tests should keep passing as long as the form
+  layout stays equivalent; expect to update template assertions that look
+  for hidden secondary forms.</li>
+</ul>
+<h2 id="out-of-scope">Out of scope</h2>
+<ul>
+<li>No changes to the underlying provider/action models or stored data.</li>
+<li>No changes to subtype filtering rules (the existing two filters carry
+  over verbatim).</li>
+<li>No changes to permissions.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>

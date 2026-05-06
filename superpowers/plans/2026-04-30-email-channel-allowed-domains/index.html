@@ -1,0 +1,1900 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://developers.openchatstudio.com/superpowers/plans/2026-04-30-email-channel-allowed-domains/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Email Channel Allowed Domains Implementation Plan - Open Chat Studio Developer Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#email-channel-allowed-domains-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-header__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Open Chat Studio Developer Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Email Channel Allowed Domains Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../contributing/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../developer_guides/igor/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Developer Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../hosting/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Self-Hosting
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin_guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Admin Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Open Chat Studio Developer Documentation" class="md-nav__button md-logo" aria-label="Open Chat Studio Developer Documentation" data-md-component="logo">
+      
+  <img src="../../../assets/logo.png" alt="logo">
+
+    </a>
+    Open Chat Studio Developer Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dimagi/open-chat-studio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../contributing/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../getting-started/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../architecture/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    
+  
+  
+  
+    <a href="../../../developer_guides/igor/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Developer Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../hosting/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    <li class="md-nav__item md-nav__item--pruned md-nav__item--nested">
+      
+        
+  
+  
+  
+    <a href="../../../admin_guides/" class="md-nav__link">
+      
+  
+  
+  <span class="md-ellipsis">
+    Admin Guides
+    
+  </span>
+  
+
+      
+        <span class="md-nav__icon md-icon"></span>
+      
+    </a>
+  
+
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-1-add-the-django-setting-document-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 1: Add the Django setting + document it
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-2-add-domain-helpers-in-appschannelsutilspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 2: Add domain helpers in apps/channels/utils.py
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-3-wire-the-inbound-pre-filter-into-email_inbound_handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 3: Wire the inbound pre-filter into email_inbound_handler
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-4-form-validation-help-text-hint-in-emailchannelform" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 4: Form validation + help-text hint in EmailChannelForm
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-5-audit-other-email-channel-tests-for-fail-closed-regressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 5: Audit other email-channel tests for fail-closed regressions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#task-6-final-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Task 6: Final verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#self-review-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Self-Review Notes
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="email-channel-allowed-domains-implementation-plan">Email Channel Allowed Domains Implementation Plan</h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Restrict the email channel to a configured set of domains via a single
+Django setting (<code>EMAIL_CHANNEL_ALLOWED_DOMAINS</code>), enforcing the rule both in the
+inbound webhook handler (drop mail to disallowed <code>to_address</code>) and in the
+<code>EmailChannelForm</code> (reject saves with disallowed <code>email_address</code> /
+<code>from_address</code>, surface allowed list in help text).</p>
+<p><strong>Architecture:</strong> Single env-var-backed list in <code>config/settings.py</code>, parsed via
+<code>env.list(...)</code>. Two helper functions in <code>apps/channels/utils.py</code>
+(<code>is_email_domain_allowed</code>, <code>get_allowed_email_domains</code>) reuse the existing
+<code>match_domain_pattern</code> (which already handles <code>*.example.com</code> wildcards). Form
+adds <code>clean_email_address</code> / <code>clean_from_address</code> plus help-text injection in
+<code>__init__</code>. Inbound handler adds a pre-filter call after the parse step.
+Fail-closed: empty/unset setting rejects everything.</p>
+<p><strong>Tech Stack:</strong> Django 5, django-environ for env parsing, pytest + pytest-django
+for tests, <code>@override_settings</code> for per-test domain configs.</p>
+<hr />
+<h2 id="file-structure">File Structure</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Change</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config/settings.py</code></td>
+<td>Modify</td>
+<td>Define <code>EMAIL_CHANNEL_ALLOWED_DOMAINS</code> from env.</td>
+</tr>
+<tr>
+<td><code>.env.example</code></td>
+<td>Modify</td>
+<td>Document the new env var.</td>
+</tr>
+<tr>
+<td><code>apps/channels/utils.py</code></td>
+<td>Modify</td>
+<td>Add <code>is_email_domain_allowed</code> + <code>get_allowed_email_domains</code>.</td>
+</tr>
+<tr>
+<td><code>apps/channels/forms.py</code></td>
+<td>Modify</td>
+<td><code>EmailChannelForm</code>: validators + help text.</td>
+</tr>
+<tr>
+<td><code>apps/channels/channels_v2/email_channel.py</code></td>
+<td>Modify</td>
+<td>Pre-filter in <code>email_inbound_handler</code>.</td>
+</tr>
+<tr>
+<td><code>apps/channels/tests/test_email_channel.py</code></td>
+<td>Modify</td>
+<td>New tests + <code>@override_settings</code> on existing tests so they keep passing under fail-closed default.</td>
+</tr>
+</tbody>
+</table>
+<p>No new files. No DB migration. No template changes.</p>
+<hr />
+<h2 id="task-1-add-the-django-setting-document-it">Task 1: Add the Django setting + document it</h2>
+<p><strong>Files:</strong>
+- Modify: <code>config/settings.py:401-410</code> (the existing email block)
+- Modify: <code>.env.example:45-58</code> (the existing email config block)</p>
+<ul>
+<li>[ ] <strong>Step 1: Add the setting in config/settings.py</strong></li>
+</ul>
+<p>Open <code>config/settings.py</code>. After line 410 (the <code>ANYMAIL_WEBHOOK_SECRET</code> block),
+add:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Inbound email channel restrictions.</span>
+<span class="c1"># Comma-separated list of domains the email channel will accept.</span>
+<span class="c1"># Supports wildcard subdomains (e.g. &quot;*.example.com&quot;).</span>
+<span class="c1"># Empty / unset =&gt; fail-closed: no inbound email is processed and no email</span>
+<span class="c1"># channel can be saved via the form.</span>
+<span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="s2">&quot;EMAIL_CHANNEL_ALLOWED_DOMAINS&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="p">[])</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Document the env var in .env.example</strong></li>
+</ul>
+<p>In <code>.env.example</code>, after line 58 (end of <code>## Production Email Config</code> block),
+append:</p>
+<div class="highlight"><pre><span></span><code>## Inbound email channel
+## Comma-separated list of domains the email channel will accept (inbound to_address
+## and channel-form email_address/from_address). Supports wildcards like *.example.com.
+## Empty/unset =&gt; fail-closed (no inbound mail processed, no form saves).
+# EMAIL_CHANNEL_ALLOWED_DOMAINS=chat.openchatstudio.com,*.example.com
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 3: Verify the setting loads cleanly</strong></li>
+</ul>
+<p>Run:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from django.conf import settings; import django; django.setup(); print(repr(settings.EMAIL_CHANNEL_ALLOWED_DOMAINS))&quot;</span>
+</code></pre></div>
+<p>Expected output: <code>[]</code> (empty list, since the env var is not set in the dev env).</p>
+<ul>
+<li>[ ] <strong>Step 4: Lint and format</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>config/settings.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>config/settings.py
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>config/settings.py<span class="w"> </span>.env.example
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add EMAIL_CHANNEL_ALLOWED_DOMAINS setting&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-2-add-domain-helpers-in-appschannelsutilspy">Task 2: Add domain helpers in apps/channels/utils.py</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/channels/utils.py</code> (add 2 functions, 1 import)
+- Modify: <code>apps/channels/tests/test_utils.py</code> if it exists, otherwise add to <code>apps/channels/tests/test_email_channel.py</code></p>
+<p>First, check whether a utils test module exists:</p>
+<div class="highlight"><pre><span></span><code>ls<span class="w"> </span>apps/channels/tests/<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-i<span class="w"> </span>util
+</code></pre></div>
+<p>If a <code>test_utils.py</code> exists, add the new test class there. Otherwise, add a new
+test class <code>TestEmailDomainAllowlist</code> to <code>apps/channels/tests/test_email_channel.py</code>
+right after <code>TestEmailMessageParse</code> (around line 142). The instructions below
+assume the latter location; adapt the file path if a <code>test_utils.py</code> exists.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write failing tests for <code>is_email_domain_allowed</code> and <code>get_allowed_email_domains</code></strong></li>
+</ul>
+<p>Open <code>apps/channels/tests/test_email_channel.py</code>. Add this import near the
+existing imports at the top (don't duplicate existing imports):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">django.test</span> <span class="kn">import</span> <span class="n">override_settings</span>
+</code></pre></div>
+<p>Then add the new test class. Place it after <code>class TestEmailMessageParse</code>
+(currently ends near line 142):</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">TestEmailDomainAllowlist</span><span class="p">:</span>
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;*.foo.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_exact_match_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;*.foo.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_wildcard_match_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;user@mail.foo.com&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;*.foo.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_bare_domain_does_not_match_wildcard</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="c1"># *.foo.com matches subdomains, not the bare domain.</span>
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;user@foo.com&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_disallowed_domain_rejected</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;user@bar.com&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[])</span>
+    <span class="k">def</span> <span class="nf">test_empty_setting_rejects_everything</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_malformed_address_rejected</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;not-an-email&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_case_insensitive_match</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+
+        <span class="k">assert</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="s2">&quot;user@Example.COM&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">True</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;*.foo.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_get_allowed_email_domains_returns_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">get_allowed_email_domains</span>
+
+        <span class="k">assert</span> <span class="n">get_allowed_email_domains</span><span class="p">()</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;*.foo.com&quot;</span><span class="p">]</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[])</span>
+    <span class="k">def</span> <span class="nf">test_get_allowed_email_domains_returns_empty_list_when_unset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">get_allowed_email_domains</span>
+
+        <span class="k">assert</span> <span class="n">get_allowed_email_domains</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+</code></pre></div>
+<p>(The <code>from apps.channels.utils import ...</code> is intentionally inside each test
+body for the moment so the <em>first</em> test run fails on import — this is the
+failing-test step. We move imports to the top in step 4.)</p>
+<ul>
+<li>[ ] <strong>Step 2: Run the new tests to confirm they fail</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailDomainAllowlist<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: each test fails with <code>ImportError</code> or <code>AttributeError</code> because
+<code>is_email_domain_allowed</code> / <code>get_allowed_email_domains</code> don't exist yet.</p>
+<ul>
+<li>[ ] <strong>Step 3: Implement the helpers in apps/channels/utils.py</strong></li>
+</ul>
+<p>Open <code>apps/channels/utils.py</code>. The file currently starts with:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlparse</span>
+
+<span class="kn">from</span> <span class="nn">django.core.cache</span> <span class="kn">import</span> <span class="n">cache</span>
+<span class="kn">from</span> <span class="nn">django.core.validators</span> <span class="kn">import</span> <span class="n">validate_domain_name</span>  <span class="c1"># ty: ignore[unresolved-import]</span>
+
+<span class="kn">from</span> <span class="nn">apps.channels.exceptions</span> <span class="kn">import</span> <span class="n">ExperimentChannelException</span>
+<span class="kn">from</span> <span class="nn">apps.channels.models</span> <span class="kn">import</span> <span class="n">ChannelPlatform</span>
+<span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">ExperimentSession</span>
+</code></pre></div>
+<p>Add <code>from django.conf import settings</code> immediately after the <code>from urllib.parse import urlparse</code> line, so the imports become:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlparse</span>
+
+<span class="kn">from</span> <span class="nn">django.conf</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">django.core.cache</span> <span class="kn">import</span> <span class="n">cache</span>
+<span class="kn">from</span> <span class="nn">django.core.validators</span> <span class="kn">import</span> <span class="n">validate_domain_name</span>  <span class="c1"># ty: ignore[unresolved-import]</span>
+
+<span class="kn">from</span> <span class="nn">apps.channels.exceptions</span> <span class="kn">import</span> <span class="n">ExperimentChannelException</span>
+<span class="kn">from</span> <span class="nn">apps.channels.models</span> <span class="kn">import</span> <span class="n">ChannelPlatform</span>
+<span class="kn">from</span> <span class="nn">apps.experiments.models</span> <span class="kn">import</span> <span class="n">Experiment</span><span class="p">,</span> <span class="n">ExperimentSession</span>
+</code></pre></div>
+<p>Then, after the existing <code>validate_domain</code> function (currently lines 40-44),
+add:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">is_email_domain_allowed</span><span class="p">(</span><span class="n">email_address</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return True if email_address is on a domain in EMAIL_CHANNEL_ALLOWED_DOMAINS.</span>
+
+<span class="sd">    Returns False for malformed addresses (no &#39;@&#39;) and when the setting is</span>
+<span class="sd">    empty/unset (fail-closed).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">email_address</span> <span class="ow">or</span> <span class="s2">&quot;@&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">email_address</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="n">domain</span> <span class="o">=</span> <span class="n">email_address</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;@&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="n">allowed</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">allowed</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">match_domain_pattern</span><span class="p">(</span><span class="n">domain</span><span class="p">,</span> <span class="n">pattern</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span> <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">allowed</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_allowed_email_domains</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the configured allowed-domains list, for UI display.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 4: Move the per-test imports to the top of the test file</strong></li>
+</ul>
+<p>In <code>apps/channels/tests/test_email_channel.py</code>, remove the <code>from apps.channels.utils import ...</code>
+lines from inside each test body and add a single import at the top of the file
+(near the existing <code>from apps.channels.utils ...</code> if any, otherwise grouped
+with the other <code>apps.channels</code> imports):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">get_allowed_email_domains</span><span class="p">,</span> <span class="n">is_email_domain_allowed</span>
+</code></pre></div>
+<p>The test bodies now use the imported names directly (e.g., <code>assert is_email_domain_allowed("user@example.com") is True</code>).</p>
+<ul>
+<li>[ ] <strong>Step 5: Run the tests to confirm they pass</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailDomainAllowlist<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: all 9 tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 6: Lint, format, type-check</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/channels/utils.py<span class="w"> </span>apps/channels/tests/test_email_channel.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>apps/channels/utils.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/channels/utils.py
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 7: Commit</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/channels/utils.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: add is_email_domain_allowed helper for email channel allowlist&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-3-wire-the-inbound-pre-filter-into-email_inbound_handler">Task 3: Wire the inbound pre-filter into email_inbound_handler</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/channels/channels_v2/email_channel.py:254-304</code> (the <code>email_inbound_handler</code> function)
+- Modify: <code>apps/channels/tests/test_email_channel.py</code> (add new tests, update existing tests with <code>@override_settings</code>)</p>
+<p>This task changes inbound behavior. The existing <code>TestEmailInboundHandler</code> tests
+(currently lines 474-545) call <code>email_inbound_handler</code> with <code>to_email</code>s on
+<code>chat.openchatstudio.com</code> and <code>nowhere.com</code> and expect specific
+called/not-called outcomes. With the fail-closed default they will all break.
+We update them with <code>@override_settings</code> first (so they keep testing what they
+were meant to test), then add new coverage for the allowlist itself.</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the new failing tests</strong></li>
+</ul>
+<p>Add the following to <code>class TestEmailInboundHandler</code> in
+<code>apps/channels/tests/test_email_channel.py</code> (append at the end of the existing
+class, after <code>test_parse_failure_does_not_raise</code>):</p>
+<div class="highlight"><pre><span></span><code>    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_to_address_on_disallowed_domain_dropped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+        <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+        <span class="n">_make_email_channel</span><span class="p">(</span><span class="n">team</span><span class="p">,</span> <span class="n">email_address</span><span class="o">=</span><span class="s2">&quot;bot@chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="n">is_default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span><span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;someone@evil.example.com&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_not_called</span><span class="p">()</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*.example.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_to_address_wildcard_match_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+        <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+        <span class="n">_make_email_channel</span><span class="p">(</span><span class="n">team</span><span class="p">,</span> <span class="n">email_address</span><span class="o">=</span><span class="s2">&quot;bot@mail.example.com&quot;</span><span class="p">)</span>
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span><span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;bot@mail.example.com&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_called_once</span><span class="p">()</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[])</span>
+    <span class="k">def</span> <span class="nf">test_empty_setting_drops_inbound</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+        <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+        <span class="n">_make_email_channel</span><span class="p">(</span><span class="n">team</span><span class="p">,</span> <span class="n">email_address</span><span class="o">=</span><span class="s2">&quot;bot@chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="n">is_default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span><span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;bot@chat.openchatstudio.com&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_not_called</span><span class="p">()</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_thread_reply_to_disallowed_domain_still_dropped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Even an existing-thread reply is dropped if to_address is not allowed.&quot;&quot;&quot;</span>
+        <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+        <span class="n">channel</span> <span class="o">=</span> <span class="n">_make_email_channel</span><span class="p">(</span><span class="n">team</span><span class="p">,</span> <span class="n">email_address</span><span class="o">=</span><span class="s2">&quot;bot@chat.openchatstudio.com&quot;</span><span class="p">)</span>
+        <span class="n">_make_session</span><span class="p">(</span><span class="n">team</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="s2">&quot;&lt;outbound-1@chat.openchatstudio.com&gt;&quot;</span><span class="p">)</span>
+
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span>
+            <span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;reply@evil.example.com&quot;</span><span class="p">,</span>
+            <span class="n">in_reply_to</span><span class="o">=</span><span class="s2">&quot;&lt;outbound-1@chat.openchatstudio.com&gt;&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_not_called</span><span class="p">()</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_malformed_to_address_dropped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+        <span class="n">team</span> <span class="o">=</span> <span class="n">team_with_users</span>
+        <span class="n">_make_email_channel</span><span class="p">(</span><span class="n">team</span><span class="p">,</span> <span class="n">email_address</span><span class="o">=</span><span class="s2">&quot;bot@chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="n">is_default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span><span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;not-an-email&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_not_called</span><span class="p">()</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the new tests to confirm they fail</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailInboundHandler<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: the 5 new tests fail (mock_task.delay is called when we expected it
+not to be, because the pre-filter doesn't exist yet). The pre-existing
+<code>TestEmailInboundHandler</code> tests should still pass at this point — they don't
+depend on the new setting.</p>
+<ul>
+<li>[ ] <strong>Step 3: Add the pre-filter in email_inbound_handler</strong></li>
+</ul>
+<p>Open <code>apps/channels/channels_v2/email_channel.py</code>. In the imports at the top of
+the file (around line 16-22), add:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="n">is_email_domain_allowed</span>
+</code></pre></div>
+<p>Then in <code>email_inbound_handler</code> (currently line 254), insert the domain check
+<strong>after</strong> the parse block and <strong>before</strong> the existing <code>has_existing_session</code>
+pre-filter. The existing code block:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">try</span><span class="p">:</span>
+        <span class="n">email_msg</span> <span class="o">=</span> <span class="n">EmailMessageDatamodel</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Failed to parse inbound email&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Best-effort pre-filter: enqueue if any email channel could handle this.</span>
+</code></pre></div>
+<p>Becomes:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">try</span><span class="p">:</span>
+        <span class="n">email_msg</span> <span class="o">=</span> <span class="n">EmailMessageDatamodel</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Failed to parse inbound email&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="n">email_msg</span><span class="o">.</span><span class="n">to_address</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Rejecting inbound email: to-domain not allowed (to=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+            <span class="n">email_msg</span><span class="o">.</span><span class="n">to_address</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Best-effort pre-filter: enqueue if any email channel could handle this.</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 4: Run the new tests to confirm they pass</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailInboundHandler<span class="w"> </span>-v<span class="w"> </span>-k<span class="w"> </span><span class="s2">&quot;to_address_on_disallowed or wildcard_match or empty_setting_drops or thread_reply_to_disallowed or malformed_to_address&quot;</span>
+</code></pre></div>
+<p>Expected: all 5 new tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Update existing TestEmailInboundHandler tests with @override_settings</strong></li>
+</ul>
+<p>The 6 existing tests in <code>TestEmailInboundHandler</code> (around lines 475-545) will
+now mostly fail because <code>EMAIL_CHANNEL_ALLOWED_DOMAINS</code> is empty by default.</p>
+<p>Apply a class-level decorator. Change:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">TestEmailInboundHandler</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">test_enqueues_task</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+</code></pre></div>
+<p>To:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+<span class="k">class</span> <span class="nc">TestEmailInboundHandler</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">test_enqueues_task</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">team_with_users</span><span class="p">):</span>
+</code></pre></div>
+<p>The <code>test_no_channel_silently_ignored</code> test currently uses
+<code>to_email="unknown@nowhere.com"</code>. Under the new behavior the email is dropped
+because <code>nowhere.com</code> is not in the allowlist, <strong>not</strong> because no channel
+exists. Update that test so it still proves what it claims to prove. Replace:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">def</span> <span class="nf">test_no_channel_silently_ignored</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Unmatched email is silently ignored (no bounce loop).&quot;&quot;&quot;</span>
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span><span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;unknown@nowhere.com&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_not_called</span><span class="p">()</span>
+</code></pre></div>
+<p>With:</p>
+<div class="highlight"><pre><span></span><code>    <span class="k">def</span> <span class="nf">test_no_channel_silently_ignored</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Unmatched email is silently ignored (no bounce loop).</span>
+
+<span class="sd">        Allowed domain but no channel exists -&gt; the existing has_channel</span>
+<span class="sd">        pre-filter drops it.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">inbound</span> <span class="o">=</span> <span class="n">_make_inbound_message</span><span class="p">(</span><span class="n">to_email</span><span class="o">=</span><span class="s2">&quot;unknown@chat.openchatstudio.com&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">patch</span><span class="p">(</span><span class="s2">&quot;apps.channels.tasks.handle_email_message&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_task</span><span class="p">:</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="n">MagicMock</span><span class="p">()</span>
+            <span class="n">email_inbound_handler</span><span class="p">(</span><span class="n">sender</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">event</span><span class="o">=</span><span class="n">MagicMock</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">inbound</span><span class="p">))</span>
+            <span class="n">mock_task</span><span class="o">.</span><span class="n">delay</span><span class="o">.</span><span class="n">assert_not_called</span><span class="p">()</span>
+</code></pre></div>
+<p>(The class-level <code>@override_settings</code> makes <code>chat.openchatstudio.com</code> allowed,
+so this now exercises the no-channel branch rather than the new domain branch.)</p>
+<ul>
+<li>[ ] <strong>Step 6: Run the entire TestEmailInboundHandler class</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailInboundHandler<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: all tests pass (existing 6 + new 5 = 11).</p>
+<ul>
+<li>[ ] <strong>Step 7: Lint, format, type-check</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/channels/channels_v2/email_channel.py<span class="w"> </span>apps/channels/tests/test_email_channel.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>apps/channels/channels_v2/email_channel.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/channels/channels_v2/email_channel.py
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 8: Commit</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/channels/channels_v2/email_channel.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: drop inbound email when to-domain is not allowed&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-4-form-validation-help-text-hint-in-emailchannelform">Task 4: Form validation + help-text hint in EmailChannelForm</h2>
+<p><strong>Files:</strong>
+- Modify: <code>apps/channels/forms.py:660-690</code> (<code>EmailChannelForm</code>)
+- Modify: <code>apps/channels/tests/test_email_channel.py</code> (add new tests, update existing form tests with <code>@override_settings</code>)</p>
+<ul>
+<li>[ ] <strong>Step 1: Write the failing form tests</strong></li>
+</ul>
+<p>Append the following tests to <code>class TestEmailChannelForm</code> in
+<code>apps/channels/tests/test_email_channel.py</code> (after the existing
+<code>test_duplicate_default_allowed_when_editing_same_channel</code>, around line 203):</p>
+<div class="highlight"><pre><span></span><code>    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_email_address_on_allowed_domain_accepted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span>
+            <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="s2">&quot;support@chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_email_address_on_allowed_wildcard_accepted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span>
+            <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="s2">&quot;support@chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_email_address_on_disallowed_domain_rejected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span>
+            <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="s2">&quot;support@evil.example.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">&quot;email_address&quot;</span> <span class="ow">in</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+        <span class="c1"># Error message should mention the allowed list so admins can self-serve.</span>
+        <span class="k">assert</span> <span class="s2">&quot;chat.openchatstudio.com&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">form</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;email_address&quot;</span><span class="p">])</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[])</span>
+    <span class="k">def</span> <span class="nf">test_email_address_rejected_when_setting_empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span>
+            <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="s2">&quot;support@chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">&quot;email_address&quot;</span> <span class="ow">in</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+        <span class="k">assert</span> <span class="s2">&quot;no allowed domains&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">form</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="s2">&quot;email_address&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_from_address_validated_when_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span>
+            <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="s2">&quot;support@chat.openchatstudio.com&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;from_address&quot;</span><span class="p">:</span> <span class="s2">&quot;noreply@evil.example.com&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">&quot;from_address&quot;</span> <span class="ow">in</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_from_address_skipped_when_blank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span>
+            <span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;email_address&quot;</span><span class="p">:</span> <span class="s2">&quot;support@chat.openchatstudio.com&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;from_address&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;platform&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">form</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(),</span> <span class="n">form</span><span class="o">.</span><span class="n">errors</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="s2">&quot;*.example.com&quot;</span><span class="p">])</span>
+    <span class="k">def</span> <span class="nf">test_help_text_lists_allowed_domains</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">)</span>
+        <span class="n">help_text</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;email_address&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">help_text</span>
+        <span class="k">assert</span> <span class="s2">&quot;chat.openchatstudio.com&quot;</span> <span class="ow">in</span> <span class="n">help_text</span>
+        <span class="k">assert</span> <span class="s2">&quot;*.example.com&quot;</span> <span class="ow">in</span> <span class="n">help_text</span>
+
+    <span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[])</span>
+    <span class="k">def</span> <span class="nf">test_help_text_warns_when_no_domains_configured</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+        <span class="n">form</span> <span class="o">=</span> <span class="n">EmailChannelForm</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">)</span>
+        <span class="n">help_text</span> <span class="o">=</span> <span class="n">form</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;email_address&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">help_text</span>
+        <span class="k">assert</span> <span class="s2">&quot;no allowed domains&quot;</span> <span class="ow">in</span> <span class="n">help_text</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 2: Run the new form tests to confirm they fail</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailChannelForm<span class="w"> </span>-v<span class="w"> </span>-k<span class="w"> </span><span class="s2">&quot;allowed_domain or allowed_wildcard or disallowed_domain or rejected_when_setting_empty or from_address_validated or from_address_skipped or help_text&quot;</span>
+</code></pre></div>
+<p>Expected: all 8 new tests fail (forms accept disallowed addresses; help text
+doesn't mention domains).</p>
+<ul>
+<li>[ ] <strong>Step 3: Update EmailChannelForm with validators and help-text hint</strong></li>
+</ul>
+<p>Open <code>apps/channels/forms.py</code>. The current <code>EmailChannelForm</code> (line 660) is:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">EmailChannelForm</span><span class="p">(</span><span class="n">ExtraFormBase</span><span class="p">):</span>
+    <span class="n">email_address</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">EmailField</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Email Address&quot;</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;The email address that will receive messages for this channel (e.g., support@chat.openchatstudio.com)&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">from_address</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">EmailField</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;From Address&quot;</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">&quot;Optional: override the From address on outbound replies. Defaults to the system email.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">is_default</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Default fallback channel&quot;</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">&quot;When enabled, this channel receives emails that don&#39;t match any other email channel address.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">clean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cleaned_data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">clean</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;is_default&quot;</span><span class="p">):</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">ExperimentChannel</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">,</span>
+                <span class="n">extra_data__contains</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;is_default&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+                <span class="n">deleted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">:</span>
+                <span class="n">existing</span> <span class="o">=</span> <span class="n">existing</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="n">pk</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">pk</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">existing</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">add_error</span><span class="p">(</span><span class="s2">&quot;is_default&quot;</span><span class="p">,</span> <span class="s2">&quot;Another email channel is already set as the default.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cleaned_data</span>
+</code></pre></div>
+<p>First, ensure the helpers are importable. At the top of <code>forms.py</code>, find the
+existing <code>from apps.channels.utils import ALL_DOMAINS, validate_domain_or_wildcard, validate_platform_availability</code>
+import (around line 18) and extend it:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">apps.channels.utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ALL_DOMAINS</span><span class="p">,</span>
+    <span class="n">get_allowed_email_domains</span><span class="p">,</span>
+    <span class="n">is_email_domain_allowed</span><span class="p">,</span>
+    <span class="n">validate_domain_or_wildcard</span><span class="p">,</span>
+    <span class="n">validate_platform_availability</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Then replace the <code>EmailChannelForm</code> body with:</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span> <span class="nc">EmailChannelForm</span><span class="p">(</span><span class="n">ExtraFormBase</span><span class="p">):</span>
+    <span class="n">email_address</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">EmailField</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Email Address&quot;</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;The email address that will receive messages for this channel (e.g., support@chat.openchatstudio.com)&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">from_address</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">EmailField</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;From Address&quot;</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">&quot;Optional: override the From address on outbound replies. Defaults to the system email.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">is_default</span> <span class="o">=</span> <span class="n">forms</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span>
+        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Default fallback channel&quot;</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">&quot;When enabled, this channel receives emails that don&#39;t match any other email channel address.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">allowed</span> <span class="o">=</span> <span class="n">get_allowed_email_domains</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">allowed</span><span class="p">:</span>
+            <span class="n">hint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; Allowed domains: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">allowed</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">hint</span> <span class="o">=</span> <span class="s2">&quot; No allowed domains are currently configured. Contact your administrator before saving.&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">&quot;email_address&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">help_text</span> <span class="o">+=</span> <span class="n">hint</span>
+
+    <span class="k">def</span> <span class="nf">_validate_domain</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">field_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_email_domain_allowed</span><span class="p">(</span><span class="n">address</span><span class="p">):</span>
+            <span class="n">allowed</span> <span class="o">=</span> <span class="n">get_allowed_email_domains</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">allowed</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Domain is not in the allowed list. Allowed: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">allowed</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="s2">&quot;No allowed domains are currently configured. &quot;</span>
+                    <span class="s2">&quot;Contact your administrator.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">raise</span> <span class="n">ValidationError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">address</span>
+
+    <span class="k">def</span> <span class="nf">clean_email_address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_domain</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cleaned_data</span><span class="p">[</span><span class="s2">&quot;email_address&quot;</span><span class="p">],</span> <span class="s2">&quot;email_address&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">clean_from_address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_address&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_domain</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;from_address&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">clean</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cleaned_data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">clean</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">cleaned_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;is_default&quot;</span><span class="p">):</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">ExperimentChannel</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+                <span class="n">platform</span><span class="o">=</span><span class="n">ChannelPlatform</span><span class="o">.</span><span class="n">EMAIL</span><span class="p">,</span>
+                <span class="n">extra_data__contains</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;is_default&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+                <span class="n">deleted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="p">:</span>
+                <span class="n">existing</span> <span class="o">=</span> <span class="n">existing</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="n">pk</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">channel</span><span class="o">.</span><span class="n">pk</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">existing</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">add_error</span><span class="p">(</span><span class="s2">&quot;is_default&quot;</span><span class="p">,</span> <span class="s2">&quot;Another email channel is already set as the default.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cleaned_data</span>
+</code></pre></div>
+<p>Notes:
+- <code>ValidationError</code> is already imported at the top of <code>forms.py</code> (used by
+  <code>EmbeddedWidgetChannelForm</code>). If your file lacks the import, add
+  <code>from django.core.exceptions import ValidationError</code>.
+- <code>_validate_domain</code> takes <code>field_name</code> for future use / log clarity even
+  though it isn't strictly needed for the message; keep the signature for
+  symmetry with the <code>clean_&lt;field&gt;</code> callers.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the new form tests to confirm they pass</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailChannelForm<span class="w"> </span>-v<span class="w"> </span>-k<span class="w"> </span><span class="s2">&quot;allowed_domain or allowed_wildcard or disallowed_domain or rejected_when_setting_empty or from_address_validated or from_address_skipped or help_text&quot;</span>
+</code></pre></div>
+<p>Expected: all 8 new tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 5: Update existing TestEmailChannelForm tests with @override_settings</strong></li>
+</ul>
+<p>The pre-existing tests in <code>TestEmailChannelForm</code> (currently lines 145-203) all
+use <code>support@chat.openchatstudio.com</code> / <code>first@chat.openchatstudio.com</code> etc.
+They'll fail under the empty default. Apply a class-level override.</p>
+<p>Change:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="k">class</span> <span class="nc">TestEmailChannelForm</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">test_valid_form</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+</code></pre></div>
+<p>To:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">django_db</span><span class="p">()</span>
+<span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">])</span>
+<span class="k">class</span> <span class="nc">TestEmailChannelForm</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">test_valid_form</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">experiment</span><span class="p">):</span>
+</code></pre></div>
+<p>The four new tests that need their <em>own</em> override (because they configure a
+different list, e.g. <code>[]</code> or <code>*.example.com</code>) already have method-level
+<code>@override_settings</code> — Django merges class-level + method-level, with method
+taking precedence, so this works correctly without further changes.</p>
+<ul>
+<li>[ ] <strong>Step 6: Run the entire TestEmailChannelForm class</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py::TestEmailChannelForm<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: all tests pass (existing 6 + new 8 = 14).</p>
+<ul>
+<li>[ ] <strong>Step 7: Lint, format, type-check</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/channels/forms.py<span class="w"> </span>apps/channels/tests/test_email_channel.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>apps/channels/forms.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/channels/forms.py
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 8: Commit</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/channels/forms.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;feat: validate email channel address against allowed-domains setting&quot;</span>
+</code></pre></div>
+<hr />
+<h2 id="task-5-audit-other-email-channel-tests-for-fail-closed-regressions">Task 5: Audit other email-channel tests for fail-closed regressions</h2>
+<p>The fail-closed default may have broken other test classes that build
+<code>EmailChannel</code>s or post inbound emails. We sweep them now.</p>
+<p><strong>Files:</strong>
+- Modify: <code>apps/channels/tests/test_email_channel.py</code> — <code>TestEmailRouting</code>,
+  <code>TestEmailSessionThreading</code>, <code>TestEmailEndToEnd</code>, <code>TestHandleEmailMessageTask</code>
+  (and any other class that triggers inbound or saves an <code>EmailChannelForm</code>).</p>
+<ul>
+<li>[ ] <strong>Step 1: Run the full email test module to surface failures</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: tests in <code>TestEmailRouting</code>, <code>TestEmailSessionThreading</code>,
+<code>TestEmailEndToEnd</code>, and <code>TestHandleEmailMessageTask</code> may fail because they
+either (a) construct an inbound message that flows through
+<code>email_inbound_handler</code> or (b) save an <code>EmailChannelForm</code>. Tests that work
+purely with model objects bypassing both code paths will continue to pass.</p>
+<ul>
+<li>[ ] <strong>Step 2: For each failing class, add @override_settings</strong></li>
+</ul>
+<p>For every class whose tests fail because of the new fail-closed default, add a
+class-level decorator:</p>
+<div class="highlight"><pre><span></span><code><span class="nd">@override_settings</span><span class="p">(</span><span class="n">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat.openchatstudio.com&quot;</span><span class="p">,</span> <span class="s2">&quot;example.com&quot;</span><span class="p">])</span>
+</code></pre></div>
+<p>Use <code>["chat.openchatstudio.com", "example.com"]</code> (covers both the bot-side
+addresses and <code>example.com</code> participant addresses used in the helpers). If a
+class already has another decorator (e.g., <code>@pytest.mark.django_db()</code>), the
+new decorator goes on a separate line above or below — both work.</p>
+<p>For tests that already exercise the rejection path explicitly (none in the
+existing suite at the time of writing — but verify), do not override.</p>
+<ul>
+<li>[ ] <strong>Step 3: Re-run the entire email test module</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/tests/test_email_channel.py<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: every test in the module passes.</p>
+<ul>
+<li>[ ] <strong>Step 4: Run the entire channels test suite to catch other affected tests</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: every test passes. If anything else fails because of the new
+setting, apply <code>@override_settings</code> at the class or test level as appropriate.</p>
+<ul>
+<li>[ ] <strong>Step 5: Lint and format</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>apps/channels/tests/test_email_channel.py<span class="w"> </span>--fix
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>apps/channels/tests/test_email_channel.py
+</code></pre></div>
+<ul>
+<li>[ ] <strong>Step 6: Commit (only if step 2 or 4 made changes)</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>add<span class="w"> </span>apps/channels/tests/test_email_channel.py
+git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;test: keep existing email tests passing under fail-closed allowlist default&quot;</span>
+</code></pre></div>
+<p>If no changes were needed, skip the commit.</p>
+<hr />
+<h2 id="task-6-final-verification">Task 6: Final verification</h2>
+<ul>
+<li>[ ] <strong>Step 1: Run the full project test suite (or at least the channels + forms scope)</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>apps/channels/<span class="w"> </span>apps/experiments/<span class="w"> </span>-v
+</code></pre></div>
+<p>Expected: all tests pass.</p>
+<ul>
+<li>[ ] <strong>Step 2: Run ruff and ty over all modified files</strong></li>
+</ul>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>config/settings.py<span class="w"> </span>apps/channels/utils.py<span class="w"> </span>apps/channels/forms.py<span class="w"> </span>apps/channels/channels_v2/email_channel.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>--check<span class="w"> </span>config/settings.py<span class="w"> </span>apps/channels/utils.py<span class="w"> </span>apps/channels/forms.py<span class="w"> </span>apps/channels/channels_v2/email_channel.py<span class="w"> </span>apps/channels/tests/test_email_channel.py
+uv<span class="w"> </span>run<span class="w"> </span>ty<span class="w"> </span>check<span class="w"> </span>apps/channels/
+</code></pre></div>
+<p>Expected: no lint or type errors.</p>
+<ul>
+<li>[ ] <strong>Step 3: Manual smoke test the form</strong></li>
+</ul>
+<p>Start the dev server:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>inv<span class="w"> </span>runserver
+</code></pre></div>
+<p>In a new shell, set the allowed-domains env var and restart so it loads:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">EMAIL_CHANNEL_ALLOWED_DOMAINS</span><span class="o">=</span>chat.openchatstudio.com,*.example.com<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>inv<span class="w"> </span>runserver
+</code></pre></div>
+<p>Navigate to an experiment, add a new Email channel, and verify:
+- Help text under "Email Address" shows: <code>... Allowed domains: chat.openchatstudio.com, *.example.com.</code>
+- Saving with <code>support@chat.openchatstudio.com</code> works.
+- Saving with <code>support@evil.com</code> shows the inline error mentioning the allowed domains.</p>
+<p>Stop the server, restart with <code>EMAIL_CHANNEL_ALLOWED_DOMAINS=</code> (empty) and
+verify the form help text shows the "No allowed domains are currently
+configured" message.</p>
+<ul>
+<li>[ ] <strong>Step 4: Push and open a PR</strong></li>
+</ul>
+<p>Use <code>.github/pull_request_template.md</code> for the description. Highlight in the
+<strong>Migrations</strong> / risk section that <strong>deploying without setting
+<code>EMAIL_CHANNEL_ALLOWED_DOMAINS</code> will block all inbound email and prevent
+saving email channels</strong> — operators must set the env var before merge rolls
+out.</p>
+<hr />
+<h2 id="self-review-notes">Self-Review Notes</h2>
+<p>Coverage check vs spec:</p>
+<table>
+<thead>
+<tr>
+<th>Spec section</th>
+<th>Plan task</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Setting in config/settings.py</td>
+<td>Task 1</td>
+<td>Includes <code>.env.example</code> doc</td>
+</tr>
+<tr>
+<td>Helpers <code>is_email_domain_allowed</code> / <code>get_allowed_email_domains</code></td>
+<td>Task 2</td>
+<td>TDD</td>
+</tr>
+<tr>
+<td>Inbound pre-filter in <code>email_inbound_handler</code></td>
+<td>Task 3</td>
+<td>TDD + retrofitted existing test class</td>
+</tr>
+<tr>
+<td>Form <code>clean_email_address</code> / <code>clean_from_address</code></td>
+<td>Task 4</td>
+<td>TDD</td>
+</tr>
+<tr>
+<td>Form help-text hint (configured + empty cases)</td>
+<td>Task 4</td>
+<td>TDD</td>
+</tr>
+<tr>
+<td>Tests for form (8 cases)</td>
+<td>Task 4</td>
+<td>All present</td>
+</tr>
+<tr>
+<td>Tests for inbound (5 cases)</td>
+<td>Task 3</td>
+<td>All present</td>
+</tr>
+<tr>
+<td>Tests for helper (9 cases)</td>
+<td>Task 2</td>
+<td>All present</td>
+</tr>
+<tr>
+<td>Empty setting fail-closed</td>
+<td>Tasks 2, 3, 4</td>
+<td>Tested at every layer</td>
+</tr>
+<tr>
+<td>Wildcard support</td>
+<td>Tasks 2, 3, 4</td>
+<td>Tested at every layer</td>
+</tr>
+<tr>
+<td><code>from_address</code> validated only when set</td>
+<td>Task 4</td>
+<td><code>test_from_address_skipped_when_blank</code> covers it</td>
+</tr>
+<tr>
+<td>Reply-on-existing-thread still rejected</td>
+<td>Task 3</td>
+<td><code>test_thread_reply_to_disallowed_domain_still_dropped</code></td>
+</tr>
+<tr>
+<td>Existing tests still pass under fail-closed default</td>
+<td>Task 5</td>
+<td>Sweep step</td>
+</tr>
+<tr>
+<td>Manual smoke test</td>
+<td>Task 6</td>
+<td>Step 3</td>
+</tr>
+<tr>
+<td>PR description risk callout</td>
+<td>Task 6</td>
+<td>Step 4</td>
+</tr>
+</tbody>
+</table>
+<p>Type / signature consistency:
+- <code>is_email_domain_allowed(email_address: str) -&gt; bool</code> — used identically in utils, forms, and email_channel.
+- <code>get_allowed_email_domains() -&gt; list[str]</code> — used identically in forms (help text + error message).
+- <code>_validate_domain(self, address: str, field_name: str) -&gt; str</code> — defined and used only inside <code>EmailChannelForm</code>.</p>
+<p>No placeholders. No "implement later" steps. Every code step shows the actual
+code to write.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2024 Dimagi
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.prune", "navigation.sections", "navigation.tabs", "navigation.tabs.sticky", "navigation.tracking", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+    
+  </body>
+</html>
