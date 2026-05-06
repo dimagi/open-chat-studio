@@ -35,6 +35,7 @@ from .tables import make_table
 class ServiceProviderType:
     slug: str
     label: str
+    home_title: str
     model: models.Model
 
     """
@@ -52,11 +53,39 @@ class ServiceProviderType:
 
 
 class ServiceProvider(ServiceProviderType, Enum):
-    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type"]
-    voice = const.VOICE, "Speech Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
-    messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
-    auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
-    tracing = const.TRACING, "Tracing Provider", TraceProvider, TraceProviderType, ["name", "type"]
+    llm = (
+        const.LLM,
+        "LLM Service Provider",
+        "LLM and Embedding Model Service Providers",
+        LlmProvider,
+        LlmProviderTypes,
+        ["name", "type"],
+    )
+    voice = (
+        const.VOICE,
+        "Speech Service Provider",
+        "Speech Service Providers",
+        VoiceProvider,
+        VoiceProviderType,
+        ["name", "type"],
+    )
+    messaging = (
+        const.MESSAGING,
+        "Messaging Provider",
+        "Messaging Providers",
+        MessagingProvider,
+        MessagingProviderType,
+        ["name", "type"],
+    )
+    auth = (
+        const.AUTH,
+        "Authentication Provider",
+        "Authentication Providers",
+        AuthProvider,
+        AuthProviderType,
+        ["name", "type"],
+    )
+    tracing = const.TRACING, "Tracing Provider", "Tracing Providers", TraceProvider, TraceProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:

@@ -6,6 +6,12 @@ from apps.service_providers.utils import ServiceProvider, get_available_subtypes
 register = template.Library()
 
 
+@register.simple_tag()
+def service_provider(provider_type_slug):
+    """Return the ``ServiceProvider`` enum member for the given slug."""
+    return ServiceProvider[provider_type_slug]
+
+
 @register.simple_tag(takes_context=True)
 def service_provider_subtype_choices(context, provider_type_slug):
     """Return a list of ``(label, url)`` tuples for available subtypes.
