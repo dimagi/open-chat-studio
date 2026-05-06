@@ -1,0 +1,26 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block pre_form %}
+  <div class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+    {% blocktranslate trimmed with name=dataset.name mode=dataset.evaluation_mode %}
+      Configuring auto-population for dataset <strong>{{ name }}</strong> ({{ mode }} mode).
+      The periodic ingestion task will append matching {{ mode }}s from the source chatbot
+      to this dataset, skipping any that have already been ingested.
+    {% endblocktranslate %}
+  </div>
+{% endblock pre_form %}
+
+{% block form %}
+  {{ form.non_field_errors }}
+  {% render_form_fields form %}
+{% endblock form %}
+
+{% block form_actions %}
+  <div class="flex gap-2 mt-4">
+    <input type="submit" class="btn btn-primary" value="{{ button_text }}" :disabled="submitted">
+    <a class="btn btn-ghost" href="{% url 'evaluations:dataset_edit' request.team.slug dataset.id %}">
+      {% translate "Cancel" %}
+    </a>
+  </div>
+{% endblock form_actions %}

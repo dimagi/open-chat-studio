@@ -201,6 +201,10 @@
 
   {% endif %}
 
+  {% if auto_population_flag_active %}
+    {% include "evaluations/auto_population_rules_section.html" %}
+  {% endif %}
+
   <dialog id="editMessageModal" class="modal"></dialog>
 {% endblock post_form %}
 

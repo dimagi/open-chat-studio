@@ -4,17 +4,17 @@
 - [x] 1.2 Add `DatasetIngestionEntry` model (FK to `DatasetAutoPopulationRule`, `source_session_id`, `source_message_id`, FK to `EvaluationMessage`, `created_at`); add unique constraints on `(rule, source_message_id)` for message-mode and `(rule, source_session_id)` for session-mode (use partial unique indexes or two indexes).
 - [x] 1.3 Add `EvaluationConfig.auto_run_on_append` boolean field (default `False`).
 - [x] 1.4 Add `EvaluationRunType.DELTA = "delta"` choice and an `EvaluationRun.scoped_messages` M2M to `EvaluationMessage`.
-- [ ] 1.5 Add Waffle flag `evaluations.auto_populate_datasets` and gate rule create/update views and beat-task processing behind it. (Flag registered as `flag_auto_populate_eval_datasets` in chunk A; view/task gating lands with chunks B and C.)
+- [ ] 1.5 Add Waffle flag `evaluations.auto_populate_datasets` and gate rule create/update views and beat-task processing behind it. (Flag registered in chunk A; view-level gating added in chunk B; beat-task gating lands with chunk C.)
 - [x] 1.6 Generate Django migration via `uv run python manage.py makemigrations evaluations`; verify backwards-compatibility (no defaults that require backfill, all new fields nullable or with sane defaults).
 - [x] 1.7 Add admin registrations for `DatasetAutoPopulationRule` and `DatasetIngestionEntry`.
 
 ## 2. Forms, views, and URLs
 
-- [ ] 2.1 Add `DatasetAutoPopulationRuleForm` in `apps/evaluations/forms.py` with validation: source experiment in same team, `evaluation_mode` matches dataset's mode, filter query parses cleanly via `FilterParams(QueryDict(...))`.
-- [ ] 2.2 Add list/create/edit/delete views in `apps/evaluations/views/dataset_views.py` (or a new `auto_population_views.py`) following existing CBV patterns and team scoping.
-- [ ] 2.3 Wire URL patterns in `apps/evaluations/urls.py`; ensure `get_absolute_url` on the rule returns to its dataset.
-- [ ] 2.4 Update dataset detail template to list rules with status fields (last run, status, error, contributed-message count via `DatasetIngestionEntry` count).
-- [ ] 2.5 Add `auto_run_on_append` checkbox to the existing `EvaluationConfig` form with help text describing cost implications.
+- [x] 2.1 Add `DatasetAutoPopulationRuleForm` in `apps/evaluations/forms.py` with validation: source experiment in same team, `evaluation_mode` matches dataset's mode, filter query parses cleanly via `FilterParams(QueryDict(...))`.
+- [x] 2.2 Add list/create/edit/delete views in `apps/evaluations/views/dataset_views.py` (or a new `auto_population_views.py`) following existing CBV patterns and team scoping.
+- [x] 2.3 Wire URL patterns in `apps/evaluations/urls.py`; ensure `get_absolute_url` on the rule returns to its dataset.
+- [x] 2.4 Update dataset detail template to list rules with status fields (last run, status, error, contributed-message count via `DatasetIngestionEntry` count).
+- [x] 2.5 Add `auto_run_on_append` checkbox to the existing `EvaluationConfig` form with help text describing cost implications.
 
 ## 3. Ingestion task
 

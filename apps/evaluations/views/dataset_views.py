@@ -20,6 +20,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
+from waffle import flag_is_active
 
 from apps.chat.models import ChatMessage
 from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
@@ -49,6 +50,7 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -122,6 +124,12 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
         context["celery_job_id"] = self.object.job_id
+        context["auto_population_rules"] = (
+            self.object.auto_population_rules.select_related("source_experiment")
+            .annotate(contributed_message_count=Count("ingestion_entries"))
+            .order_by("-created_at")
+        )
+        context["auto_population_flag_active"] = flag_is_active(self.request, Flags.AUTO_POPULATE_EVAL_DATASETS.slug)
         return context
 
     def form_valid(self, form):

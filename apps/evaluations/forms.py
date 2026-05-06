@@ -13,6 +13,7 @@ from apps.annotations.models import Tag
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
+    DatasetAutoPopulationRule,
     DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
@@ -130,9 +131,17 @@ class EvaluationConfigForm(forms.ModelForm):
             "experiment_version",
             "run_generation",
             "base_experiment",
+            "auto_run_on_append",
         ]
         widgets = {
             "evaluators": EvaluatorCheckboxWidget(),
+        }
+        help_texts = {
+            "auto_run_on_append": (
+                "When enabled, an evaluation run is automatically enqueued for newly appended "
+                "dataset messages. Each auto-run only evaluates the new rows, but still incurs "
+                "LLM costs proportional to the number of evaluators and new messages."
+            ),
         }
 
     def __init__(self, team, *args, **kwargs):
@@ -1004,3 +1013,77 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                     self._save_session_messages_clone(dataset)
 
         return dataset
+
+
+class DatasetAutoPopulationRuleForm(forms.ModelForm):
+    """Form for creating/editing an auto-population rule on a dataset.
+
+    The rule's evaluation_mode is always inherited from the parent dataset, so it is not
+    rendered as a user-editable field.
+    """
+
+    class Meta:
+        model = DatasetAutoPopulationRule
+        fields = [
+            "source_experiment",
+            "filter_query",
+            "is_enabled",
+        ]
+        widgets = {
+            "filter_query": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "class": "textarea w-full font-mono text-sm",
+                    "placeholder": "filter_0_column=tags&filter_0_operator=contains&filter_0_value=...",
+                },
+            ),
+        }
+        help_texts = {
+            "source_experiment": (
+                "The chatbot whose new sessions/messages should be considered for ingestion. "
+                "Only the working version is shown; the ingestion task evaluates against the latest data."
+            ),
+            "filter_query": (
+                "Optional URL-encoded filter (same format used by the manual filter import on this page). "
+                "Leave empty to ingest every new session/message from the source experiment."
+            ),
+            "is_enabled": "When unchecked, the periodic ingestion task skips this rule.",
+        }
+
+    def __init__(self, *args, dataset: EvaluationDataset, team, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.dataset = dataset
+        self.team = team
+        self.fields["source_experiment"].queryset = (
+            Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
+        )
+
+    def clean_filter_query(self):
+        raw = (self.cleaned_data.get("filter_query") or "").strip()
+        if not raw:
+            return ""
+        try:
+            from django.http import QueryDict  # noqa: PLC0415
+
+            from apps.web.dynamic_filters.datastructures import FilterParams  # noqa: PLC0415
+
+            FilterParams(QueryDict(raw))
+        except Exception as exc:
+            raise DjangoValidationError(f"Filter query did not parse: {exc}") from exc
+        return raw
+
+    def clean(self):
+        cleaned = super().clean()
+        source_experiment = cleaned.get("source_experiment")
+        if source_experiment and source_experiment.team_id != self.team.id:
+            self.add_error("source_experiment", "Source chatbot must belong to the current team.")
+        return cleaned
+
+    def save(self, commit=True):
+        instance: DatasetAutoPopulationRule = super().save(commit=False)
+        instance.team = self.team
+        instance.dataset = self.dataset
+        instance.evaluation_mode = self.dataset.evaluation_mode
+        if commit:
+            instance.save()
+        return instance

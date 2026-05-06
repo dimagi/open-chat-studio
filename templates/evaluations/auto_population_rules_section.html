@@ -1,0 +1,90 @@
+{% load i18n %}
+
+<div class="mt-8">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="pg-subtitle">{% translate "Auto-Population Rules" %}</h2>
+    <a class="btn btn-sm btn-primary"
+       href="{% url 'evaluations:auto_population_rule_new' request.team.slug object.id %}">
+      <i class="fa-solid fa-plus mr-1"></i> {% translate "New Rule" %}
+    </a>
+  </div>
+
+  <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+    {% translate "Rules append matching sessions/messages from a source chatbot to this dataset on a periodic schedule. Sources already ingested by a rule are skipped." %}
+  </p>
+
+  {% if auto_population_rules %}
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>{% translate "Source chatbot" %}</th>
+            <th>{% translate "Enabled" %}</th>
+            <th>{% translate "Last run" %}</th>
+            <th>{% translate "Status" %}</th>
+            <th>{% translate "Contributed" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in auto_population_rules %}
+            <tr id="rule-row-{{ rule.id }}">
+              <td>{{ rule.source_experiment.name }}</td>
+              <td>
+                {% if rule.is_enabled %}
+                  <span class="badge badge-success">{% translate "Enabled" %}</span>
+                {% else %}
+                  <span class="badge badge-ghost">{% translate "Disabled" %}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if rule.last_run_at %}
+                  {{ rule.last_run_at|date:"Y-m-d H:i" }}
+                {% else %}
+                  <span class="text-gray-500">{% translate "Never" %}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if rule.last_run_status == 'success' %}
+                  <span class="badge badge-success">{% translate "Success" %}</span>
+                {% elif rule.last_run_status == 'error' %}
+                  <span class="badge badge-error" title="{{ rule.last_error }}">{% translate "Error" %}</span>
+                {% elif rule.last_run_status == 'no_op' %}
+                  <span class="badge badge-ghost">{% translate "No-op" %}</span>
+                {% else %}
+                  <span class="text-gray-500">—</span>
+                {% endif %}
+              </td>
+              <td>{{ rule.contributed_message_count }}</td>
+              <td class="text-right">
+                <a class="btn btn-xs btn-ghost"
+                   href="{% url 'evaluations:auto_population_rule_edit' request.team.slug object.id rule.id %}">
+                  {% translate "Edit" %}
+                </a>
+                <button class="btn btn-xs btn-ghost text-error"
+                        hx-delete="{% url 'evaluations:auto_population_rule_delete' request.team.slug object.id rule.id %}"
+                        hx-confirm='{% translate "Delete this rule? Already-ingested messages stay in the dataset." %}'
+                        hx-target="#rule-row-{{ rule.id }}"
+                        hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+                  {% translate "Delete" %}
+                </button>
+              </td>
+            </tr>
+            {% if rule.last_error and rule.last_run_status == 'error' %}
+              <tr>
+                <td colspan="6" class="text-xs text-error">
+                  <code>{{ rule.last_error|truncatechars:240 }}</code>
+                </td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="text-sm text-gray-500 italic">
+      {% translate "No rules yet. Create one to start auto-populating this dataset." %}
+    </div>
+  {% endif %}
+</div>
