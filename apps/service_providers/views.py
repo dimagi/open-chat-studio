@@ -212,6 +212,7 @@ class CreateServiceProvider(
         ctx = {
             "primary_form": primary_form,
             "config_form": config_form,
+            "provider": self.provider_type,
             "subtype": subtype,
             "object": instance,
             "title": f"Edit {instance.name}" if instance else self.provider_type.label,
