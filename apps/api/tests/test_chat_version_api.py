@@ -112,6 +112,28 @@ def test_start_session_with_nonexistent_version(authed_user, authed_client, expe
 
 
 @pytest.mark.django_db()
+def test_start_session_with_working_version_number(authed_user, authed_client, experiment_with_version):
+    """Passing the working version's own version_number resolves to the working version (not 404)."""
+    url = reverse("api:chat:start-session")
+    working_version_number = experiment_with_version.version_number
+    # Sanity check that this is not the same as any published version's number
+    assert working_version_number != experiment_with_version.versions.first().version_number
+    data = {
+        "chatbot_id": str(experiment_with_version.public_id),
+        "version_number": working_version_number,
+        "participant_remote_id": authed_user.email,
+    }
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201, response.content
+    response_json = response.json()
+    assert response_json["chatbot"]["version_number"] == working_version_number
+
+    session = ExperimentSession.objects.get(external_id=response_json["session_id"])
+    assert session.experiment_id == experiment_with_version.id
+    assert session.chat.metadata.get(Chat.MetadataKeys.EXPERIMENT_VERSION) == working_version_number
+
+
+@pytest.mark.django_db()
 def test_start_session_without_version_uses_working(api_client, experiment):
     """Omitting version_number uses the working version (backward compatible)."""
     url = reverse("api:chat:start-session")
