@@ -1,0 +1,8 @@
+# Stencil-generated files
+components/chat_widget/src/components.d.ts
+components/chat_widget/src/components/**/readme.md
+
+# Build output
+components/chat_widget/dist/
+components/chat_widget/www/
+components/chat_widget/loader/

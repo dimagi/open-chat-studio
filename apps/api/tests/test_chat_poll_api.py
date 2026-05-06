@@ -103,3 +103,40 @@ def test_chat_poll_task_response_processing_with_progress(mock_progress, api_cli
     assert data["status"] == "processing"
     assert data["message"]["content"] == "Thinking..."
     assert data["message"]["role"] == "assistant"
+
+
+@pytest.mark.django_db()
+def test_chat_poll_user_facing_error_returns_400(api_client, mock_session, mock_task_response):
+    """MessageTooLargeError (user_facing_error=True) must return HTTP 400, not 500."""
+    mock_task_response.return_value = {
+        "complete": True,
+        "error_msg": "Your message is too large for this model.",
+        "user_facing_error": True,
+        "message": None,
+    }
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": "test-task-3"})
+    response = api_client.get(url)
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["status"] == "error"
+    assert "too large" in data["error"]
+
+
+@pytest.mark.django_db()
+def test_chat_poll_generic_error_returns_500(api_client, mock_session, mock_task_response):
+    """Non-user-facing errors (internal failures) must return HTTP 500."""
+    mock_task_response.return_value = {
+        "complete": True,
+        "error_msg": "Something went wrong internally.",
+        "user_facing_error": False,
+        "message": None,
+    }
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": "test-task-4"})
+    response = api_client.get(url)
+
+    assert response.status_code == 500
+    data = response.json()
+    assert data["status"] == "error"

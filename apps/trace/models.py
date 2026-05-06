@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 
 from apps.teams.utils import get_slug_for_team
@@ -57,6 +58,23 @@ class Trace(models.Model):
     n_completion_tokens = models.IntegerField(
         null=True, blank=True, help_text="Total output/completion tokens consumed"
     )
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["team", "-timestamp"],
+                name="trace_team_timestamp_idx",
+                condition=~Q(status=TraceStatus.PENDING),
+            ),
+            models.Index(
+                fields=["experiment", "-timestamp"],
+                name="trace_experiment_timestamp_idx",
+            ),
+            models.Index(
+                fields=["session", "-timestamp"],
+                name="trace_session_timestamp_idx",
+            ),
+        ]
 
     def __str__(self):
         return f"Trace {self.experiment} {self.session} {self.duration}ms"

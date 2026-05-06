@@ -3,7 +3,9 @@ import io
 import logging
 
 from django import forms
+from django.utils.html import format_html
 
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, Participant
 from apps.utils.json import PrettyJSONEncoder
 
@@ -11,12 +13,41 @@ logger = logging.getLogger("ocs.participants")
 
 
 class ParticipantForm(forms.ModelForm):
-    identifier = forms.CharField(disabled=True)
-    public_id = forms.CharField(disabled=True)
+    platform = forms.ChoiceField()
 
     class Meta:
         model = Participant
-        fields = ("identifier", "public_id", "user")
+        fields = ("identifier", "platform", "name")
+
+    def __init__(self, *args, team=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.fields["identifier"].required = True
+        self.fields["platform"].choices = self._platform_choices(team)
+
+    @staticmethod
+    def _platform_choices(team):
+        platforms = list(ChannelPlatform.for_dropdown(used_platforms=[], team=team).keys()) if team else []
+        platforms.extend([ChannelPlatform.WEB, ChannelPlatform.API])
+        platforms.sort(key=lambda p: p.value)
+        return [(p.value, p.label) for p in platforms]
+
+    def clean(self):
+        cleaned = super().clean()
+        identifier = cleaned.get("identifier")
+        platform = cleaned.get("platform")
+        if self.team and identifier and platform:
+            existing = Participant.objects.filter(team=self.team, platform=platform, identifier=identifier).first()
+            if existing:
+                raise forms.ValidationError(
+                    format_html(
+                        'A participant with identifier "{}" already exists on this platform: '
+                        '<a class="link" href="{}">view existing participant</a>',
+                        identifier,
+                        existing.get_absolute_url(),
+                    )
+                )
+        return cleaned
 
 
 class ParticipantImportForm(forms.Form):

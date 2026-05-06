@@ -21,12 +21,21 @@ export default function TestMessageBox({
   const currentPipelineId = usePipelineStore(
     (state) => state.currentPipelineId,
   );
+  const maxInputChars = usePipelineStore((state) => state.currentPipeline?.max_char_limit ?? null);
   const setEdgeLabel = usePipelineStore((state) => state.setEdgeLabel);
   const clearEdgeLabels = usePipelineStore((state) => state.clearEdgeLabels);
   const [newMessage, setNewMessage] = useState("");
   const [userMessage, setUserMessage] = useState("");
   const [responseMessage, setResponseMessage] = useState<ResponseMessage>({});
   const [loading, setLoading] = useState(false);
+  const isOverLimit = maxInputChars !== null && newMessage.length > maxInputChars;
+  const counterColor = maxInputChars
+    ? isOverLimit
+      ? "text-red-500"
+      : newMessage.length > maxInputChars * 0.8
+        ? "text-yellow-500"
+        : "text-gray-500"
+    : "text-gray-500";
 
   const setError = (message: string) => {
     setResponseMessage({ message, className: "text-red-500", prefix: "Error:" });
@@ -34,7 +43,7 @@ export default function TestMessageBox({
 
   function sendMessage() {
     const message = newMessage.trim() || userMessage.trim();
-    if (!message) {
+    if (!message || isOverLimit) {
       return;
     }
     setUserMessage(message);
@@ -68,7 +77,6 @@ export default function TestMessageBox({
           response.result &&
           typeof response.result !== "string"
         ) {
-          // The task finished successfully and we receive the response
           const result = response.result;
           if (result.error) {
             setError(result.error);
@@ -86,7 +94,6 @@ export default function TestMessageBox({
           setLoading(false);
           polling = false;
         } else if (response.complete && !response.success) {
-          // The task failed
           if (response.result) {
             const errorMessage =
               typeof response.result === "string"
@@ -94,11 +101,9 @@ export default function TestMessageBox({
                 : response.result.messages[0];
             setError(errorMessage);
           }
-
           setLoading(false);
           polling = false;
         } else if (!response.complete) {
-          // The task has not finishe dyet, wait for 1 second before fetching the response again
           await new Promise((resolve) => setTimeout(resolve, 1000));
         } else {
           polling = false;
@@ -185,13 +190,19 @@ export default function TestMessageBox({
               >
                 <input
                   type="text"
-                  className="input w-full p-2 border rounded-sm mb-2"
+                  className="input w-full p-2 border rounded-sm mb-1"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."
                 />
+                {maxInputChars && (
+                  <div className={`text-xs text-right mb-2 ${counterColor}`}>
+                    {newMessage.length} / {maxInputChars} chars
+                    {isOverLimit && <span className="ml-1">(too long)</span>}
+                  </div>
+                )}
                 <div className="grid grid-cols-2">
-                  <button className="btn btn-primary" type="submit">
+                  <button className="btn btn-primary" type="submit" disabled={isOverLimit}>
                     Send
                   </button>
                   <button className="btn" onClick={onClear}>Clear</button>

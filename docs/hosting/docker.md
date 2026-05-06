@@ -5,6 +5,7 @@ This guide covers deploying Open Chat Studio on a single server or small cluster
 !!! note "For larger deployments"
     For container-orchestrated deployments (ECS, Kubernetes), see the [AWS Fargate](./aws.md) guide instead.
     For managed PaaS hosting, see the [Heroku](./heroku.md) guide.
+    For zero trust access, see the [Zero Trust Access](./zero_trust_access.md) guide.
 
 ## Prerequisites
 

@@ -47,8 +47,8 @@ class Action:
             return ""
 
         template = get_template(self.template)
-        with context.push(self.get_context(request, record, value)):
-            return template.render(context.update(context.flatten()))
+        with context.update(self.get_context(request, record, value)):
+            return template.render(context.flatten())
 
     def get_context(self, request, record, value):
         if self.url_factory:

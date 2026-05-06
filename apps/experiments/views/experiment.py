@@ -78,6 +78,7 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
+from apps.experiments.views.utils import get_max_char_limit
 from apps.files.models import File
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -165,6 +166,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_version_number": experiment_version.version_number,
+        "max_char_limit": get_max_char_limit(experiment_version),
     }
     return TemplateResponse(
         request,

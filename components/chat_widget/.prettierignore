@@ -1,8 +1,1 @@
-# Stencil-generated files
-src/components.d.ts
-src/components/**/readme.md
-
-# Build output
-dist/
-www/
-loader/
+../../.prettierignore

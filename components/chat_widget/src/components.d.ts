@@ -19,7 +19,7 @@ export namespace Components {
         "allowFullScreen": boolean;
         /**
           * The base URL for the API.
-          * @default "https://www.openchatstudio.com"
+          * @default 'https://www.openchatstudio.com'
          */
         "apiBaseUrl"?: string;
         /**
@@ -52,7 +52,7 @@ export namespace Components {
          */
         "language"?: string;
         /**
-          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.
+          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.   The parent element must establish a containing block (e.g. `position: relative`).
           * @default 'standard'
          */
         "mode": 'standard' | 'kiosk';
@@ -101,6 +101,7 @@ export namespace Components {
           * Display name for the user.
          */
         "userName"?: string;
+        "versionNumber"?: number;
         /**
           * Whether the chat widget is visible on load.
           * @default false
@@ -137,7 +138,7 @@ declare namespace LocalJSX {
         "allowFullScreen"?: boolean;
         /**
           * The base URL for the API.
-          * @default "https://www.openchatstudio.com"
+          * @default 'https://www.openchatstudio.com'
          */
         "apiBaseUrl"?: string;
         /**
@@ -170,7 +171,7 @@ declare namespace LocalJSX {
          */
         "language"?: string;
         /**
-          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.
+          * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.   The parent element must establish a containing block (e.g. `position: relative`).
           * @default 'standard'
          */
         "mode"?: 'standard' | 'kiosk';
@@ -219,6 +220,7 @@ declare namespace LocalJSX {
           * Display name for the user.
          */
         "userName"?: string;
+        "versionNumber"?: number;
         /**
           * Whether the chat widget is visible on load.
           * @default false

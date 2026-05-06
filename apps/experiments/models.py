@@ -23,7 +23,6 @@ from django.db.models import (
     Count,
     F,
     OuterRef,
-    Prefetch,
     Q,
     Subquery,
     When,
@@ -37,7 +36,6 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
-from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
@@ -1397,13 +1395,7 @@ class ExperimentSessionObjectManager(models.Manager):
         if experiment_id:
             queryset = queryset.filter(experiment__id=experiment_id)
 
-        queryset = queryset.select_related("experiment", "participant__user", "chat").prefetch_related(
-            Prefetch(
-                "chat__tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            ),
-        )
+        queryset = queryset.select_related("experiment", "participant__user", "chat")
         return queryset.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
 
 
@@ -1445,7 +1437,9 @@ class ExperimentSession(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["chat", "team"]), models.Index(fields=["chat", "team", "ended_at"])]
+        indexes = [
+            models.Index(fields=["team", "-last_activity_at"], name="expsession_team_lastact_idx"),
+        ]
 
     def __str__(self):
         return f"ExperimentSession(id={self.external_id})"

@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import SingleTableView
 
+from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
 from apps.channels.models import ChannelPlatform
 from apps.chatbots.tables import ChatbotSessionsTable
@@ -45,7 +46,11 @@ def single_participant_home_context(team, context: dict, participant_id: int, ex
     sessions = []
 
     if experiment_id:
-        sessions = ExperimentSession.objects.get_table_queryset(team, experiment_id).filter(participant=participant)
+        sessions = (
+            ExperimentSession.objects.get_table_queryset(team, experiment_id)
+            .filter(participant=participant)
+            .prefetch_related(chat_tagged_items_prefetch())
+        )
         context["session_table"] = ChatbotSessionsTable(
             sessions,
             exclude=["participant"],  # remove participant column
@@ -85,9 +90,17 @@ class ParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templa
             "table_url": table_url,
             "actions": [
                 actions.Action(
+                    "participants:participant_new",
+                    label="Add new",
+                    title="Create participant",
+                    button_style="btn-primary",
+                    required_permissions=["experiments.add_participant"],
+                ),
+                actions.Action(
                     "participants:import",
                     label="Import",
                     icon_class="fa-solid fa-file-import",
+                    button_style="btn-primary",
                     title="Import participants",
                     required_permissions=IMPORT_PERMISSIONS,
                 ),
@@ -95,6 +108,7 @@ class ParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templa
                     "participants:export",
                     label="Export",
                     icon_class="fa-solid fa-download",
+                    button_style="btn-primary",
                     required_permissions=["experiments.view_participant", "experiments.view_participantdata"],
                     modal_template="participants/components/export_modal.html",
                     modal_context={
@@ -118,13 +132,20 @@ class CreateParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Crea
         "active_tab": "participants",
     }
 
-    def get_success_url(self):
-        return reverse("participants:participant_home", args=[self.request.team.slug])
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+        return kwargs
 
     def form_valid(self, form):
         form.instance.team = self.request.team
-        form.instance.created_by = self.request.user
         return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse(
+            "participants:single-participant-home",
+            kwargs={"team_slug": self.request.team.slug, "participant_id": self.object.id},
+        )
 
 
 class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):

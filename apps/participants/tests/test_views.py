@@ -6,7 +6,7 @@ from django.http import QueryDict
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import Participant, ParticipantData
 from apps.participants.forms import TriggerBotForm
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
@@ -128,3 +128,80 @@ def test_trigger_bot_form_filters_experiments_by_platform(team_with_users):
     available_experiments = list(TriggerBotForm(participant=participant).fields["experiment"].queryset)
     assert experiment_whatsapp in available_experiments
     assert experiment_telegram not in available_experiments
+
+
+@pytest.mark.django_db()
+def test_create_participant_get(client, team_with_users):
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:participant_new", kwargs={"team_slug": team_with_users.slug})
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert b"Create Participant" in response.content
+
+
+@pytest.mark.django_db()
+def test_create_participant_post_success_redirects_to_detail(client, team_with_users):
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:participant_new", kwargs={"team_slug": team_with_users.slug})
+
+    response = client.post(
+        url,
+        {"identifier": "alice@example.com", "platform": ChannelPlatform.WEB, "name": "Alice"},
+    )
+
+    participant = Participant.objects.get(team=team_with_users, identifier="alice@example.com")
+    assert participant.platform == ChannelPlatform.WEB
+    assert participant.name == "Alice"
+    assert response.status_code == 302
+    assert response["Location"] == reverse(
+        "participants:single-participant-home",
+        kwargs={"team_slug": team_with_users.slug, "participant_id": participant.id},
+    )
+
+
+@pytest.mark.django_db()
+def test_create_participant_duplicate_shows_error_with_link(client, team_with_users):
+    existing = ParticipantFactory.create(
+        team=team_with_users, platform=ChannelPlatform.WEB, identifier="alice@example.com"
+    )
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:participant_new", kwargs={"team_slug": team_with_users.slug})
+
+    response = client.post(
+        url,
+        {"identifier": "alice@example.com", "platform": ChannelPlatform.WEB, "name": "Alice"},
+    )
+
+    assert response.status_code == 200
+    assert existing.get_absolute_url().encode() in response.content
+    assert Participant.objects.filter(team=team_with_users, identifier="alice@example.com").count() == 1
+
+
+@pytest.mark.django_db()
+def test_create_participant_missing_fields_shows_field_errors(client, team_with_users):
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:participant_new", kwargs={"team_slug": team_with_users.slug})
+
+    response = client.post(url, {"identifier": "", "platform": "", "name": ""})
+
+    assert response.status_code == 200
+    assert not Participant.objects.filter(team=team_with_users).exists()
+
+
+@pytest.mark.django_db()
+def test_participant_home_shows_create_action(client, team_with_users):
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:participant_home", kwargs={"team_slug": team_with_users.slug})
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    create_url = reverse("participants:participant_new", kwargs={"team_slug": team_with_users.slug})
+    assert create_url.encode() in response.content

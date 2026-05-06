@@ -39,4 +39,4 @@ urlpatterns = [
     path("<int:participant_id>/trigger_bot/", views.trigger_bot, name="trigger_bot"),
 ]
 
-urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False, new=False))
+urlpatterns.extend(make_crud_urls(views, "Participant", "participant", edit=False, delete=False))

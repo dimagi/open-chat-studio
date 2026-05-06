@@ -90,25 +90,35 @@ class TimestampFilter(ColumnFilter):
             # Convert date to UTC to compare it correctly with stored timestamps
             return date_value.astimezone(pytz.UTC)
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+            # Filter values come from URL query params controlled by the user; an
+            # invalid value should silently no-op (return the unfiltered queryset)
+            # rather than 500 the page or spam logs.
             return None
+
+    def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
+        """Apply ``value`` with the given lookup suffix (e.g. ``"date__lt"``) on ``self.column``.
+
+        Subclasses override to filter via an EXISTS subquery instead of joining
+        through ``self.column`` directly.
+        """
+        return queryset.filter(**{f"{self.column}__{lookup_suffix}": value})
 
     def apply_on(self, queryset, value, timezone=None) -> QuerySet:
         """Filter for timestamps on a specific date"""
         if date_value := self._get_date_as_utc(value):
-            return queryset.filter(**{f"{self.column}__date": date_value})
+            return self._filter_by_lookup(queryset, "date", date_value)
         return queryset
 
     def apply_before(self, queryset, value, timezone=None) -> QuerySet:
         """Filter for timestamps before a specific date"""
         if date_value := self._get_date_as_utc(value):
-            return queryset.filter(**{f"{self.column}__date__lt": date_value})
+            return self._filter_by_lookup(queryset, "date__lt", date_value)
         return queryset
 
     def apply_after(self, queryset, value, timezone=None) -> QuerySet:
         """Filter for timestamps after a specific date"""
         if date_value := self._get_date_as_utc(value):
-            date_value = date_value.astimezone(pytz.UTC)
-            return queryset.filter(**{f"{self.column}__date__gt": date_value})
+            return self._filter_by_lookup(queryset, "date__gt", date_value)
         return queryset
 
     def apply_range(self, queryset, value, timezone=None) -> QuerySet:
@@ -133,8 +143,8 @@ class TimestampFilter(ColumnFilter):
             else:
                 return queryset
 
-            range_starting_client_time = now_client - delta
-            range_starting_utc_time = range_starting_client_time.astimezone(pytz.UTC)
-            return queryset.filter(**{f"{self.column}__gte": range_starting_utc_time})
+            range_starting_utc_time = (now_client - delta).astimezone(pytz.UTC)
+            return self._filter_by_lookup(queryset, "gte", range_starting_utc_time)
         except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+            # User-controlled URL value; silent no-op is preferred over a 500.
             return queryset
