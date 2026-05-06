@@ -74,3 +74,13 @@ Consult these guides when working in the relevant area:
 * `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
 * `docs/developer_guides/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/help_agent_evals.md` — when adding or modifying help agents or their eval tests
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `dimagi/open-chat-studio` via the `gh` CLI.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
