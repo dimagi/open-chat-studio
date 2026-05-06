@@ -190,7 +190,12 @@ class CreateServiceProvider(
         if request.FILES:
             file_formset = get_file_formset(request, formset_cls=config_form.file_formset_form)
 
-        if primary_form.is_valid() and config_form.is_valid() and (not file_formset or file_formset.is_valid()):
+        # Call is_valid() on every form before combining to avoid short-circuiting
+        # away from populating the later forms' errors.
+        primary_valid = primary_form.is_valid()
+        config_valid = config_form.is_valid()
+        file_formset_valid = not file_formset or file_formset.is_valid()
+        if primary_valid and config_valid and file_formset_valid:
             with transaction.atomic():
                 obj = primary_form.save(commit=False)
                 obj.team = request.team
@@ -219,7 +224,10 @@ class CreateServiceProvider(
             "button_text": "Update" if instance else "Create",
             "active_tab": "manage-team",
         }
-        if instance and isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value:
+        is_elevenlabs_voice = (
+            isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value
+        )
+        if is_elevenlabs_voice:
             ctx["sync_voices_url"] = reverse(
                 "service_providers:sync_voices",
                 kwargs={

@@ -44,7 +44,12 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
         )
         trigger_form = trigger_form_class(request.POST)
 
-        if action_primary_form.is_valid() and action_params_form.is_valid() and trigger_form.is_valid():
+        # Call is_valid() on every form before combining to avoid short-circuiting
+        # away from populating the later forms' errors.
+        action_primary_valid = action_primary_form.is_valid()
+        action_params_valid = action_params_form.is_valid()
+        trigger_valid = trigger_form.is_valid()
+        if action_primary_valid and action_params_valid and trigger_valid:
             saved_action = action_primary_form.save(experiment_id=experiment_id)
             saved_action.params = action_params_form.cleaned_data
             saved_action.save()
@@ -125,7 +130,13 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
             experiment_id=experiment_id,
         )
         trigger_form = trigger_form_class(request.POST, instance=trigger)
-        if action_primary_form.is_valid() and action_params_form.is_valid() and trigger_form.is_valid():
+
+        # Call is_valid() on every form before combining to avoid short-circuiting
+        # away from populating the later forms' errors.
+        action_primary_valid = action_primary_form.is_valid()
+        action_params_valid = action_params_form.is_valid()
+        trigger_valid = trigger_form.is_valid()
+        if action_primary_valid and action_params_valid and trigger_valid:
             saved_action = action_primary_form.save(experiment_id=experiment_id)
             saved_action.params = action_params_form.cleaned_data
             saved_action.save()
