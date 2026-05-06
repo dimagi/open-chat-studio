@@ -4,7 +4,7 @@
 - [x] 1.2 Add `DatasetIngestionEntry` model (FK to `DatasetAutoPopulationRule`, `source_session_id`, `source_message_id`, FK to `EvaluationMessage`, `created_at`); add unique constraints on `(rule, source_message_id)` for message-mode and `(rule, source_session_id)` for session-mode (use partial unique indexes or two indexes).
 - [x] 1.3 Add `EvaluationConfig.auto_run_on_append` boolean field (default `False`).
 - [x] 1.4 Add `EvaluationRunType.DELTA = "delta"` choice and an `EvaluationRun.scoped_messages` M2M to `EvaluationMessage`.
-- [ ] 1.5 Add Waffle flag `evaluations.auto_populate_datasets` and gate rule create/update views and beat-task processing behind it. (Flag registered in chunk A; view-level gating added in chunk B; beat-task gating lands with chunk C.)
+- [x] 1.5 Add Waffle flag `evaluations.auto_populate_datasets` and gate rule create/update views and beat-task processing behind it. (Flag registered in chunk A; view-level gating added in chunk B; beat-task gating done in chunk C — only rules belonging to teams in `flag.teams` are processed.)
 - [x] 1.6 Generate Django migration via `uv run python manage.py makemigrations evaluations`; verify backwards-compatibility (no defaults that require backfill, all new fields nullable or with sane defaults).
 - [x] 1.7 Add admin registrations for `DatasetAutoPopulationRule` and `DatasetIngestionEntry`.
 
@@ -18,11 +18,11 @@
 
 ## 3. Ingestion task
 
-- [ ] 3.1 Add `auto_populate_eval_datasets` periodic task in `apps/evaluations/tasks.py`: iterate enabled rules ordered by `last_run_at` ascending, lock each via `select_for_update(skip_locked=True)`, and dispatch to a per-rule helper.
-- [ ] 3.2 Implement `_ingest_rule(rule)` helper: build the appropriate filter (`ChatMessageFilter` for message mode, `ExperimentSessionFilter` for session mode), apply the rule's `filter_query`, restrict to source experiment + team, restrict to `created_at > last_ingested_at - safety_margin`, exclude sources already in `DatasetIngestionEntry` for this rule, batch the matches, and reuse `make_evaluation_messages_from_sessions` to build `EvaluationMessage` rows.
-- [ ] 3.3 In a single transaction per rule: append new `EvaluationMessage` rows to the dataset's M2M, write `DatasetIngestionEntry` rows, bump `last_ingested_at` to `max(source.created_at)` of the batch, set `last_run_status="success"`, reset `consecutive_failure_count`.
-- [ ] 3.4 On exception: set `last_run_status="error"`, store `last_error`, increment `consecutive_failure_count`; if it reaches 3, set `is_enabled=False` and emit a notification via `apps.ocs_notifications`. Catch per-rule so other rules in the tick are unaffected.
-- [ ] 3.5 Register the task in `CELERY_BEAT_SCHEDULE` (or via `django_celery_beat` periodic task fixture/data migration) at a 5-minute interval; gate registration behind the Waffle flag at task entry.
+- [x] 3.1 Add `auto_populate_eval_datasets` periodic task in `apps/evaluations/tasks.py`: iterate enabled rules ordered by `last_run_at` ascending, lock each via `select_for_update(skip_locked=True)`, and dispatch to a per-rule helper.
+- [x] 3.2 Implement `_ingest_rule(rule)` helper: build the appropriate filter (`ChatMessageFilter` for message mode, `ExperimentSessionFilter` for session mode), apply the rule's `filter_query`, restrict to source experiment + team, restrict to `created_at > last_ingested_at - safety_margin`, exclude sources already in `DatasetIngestionEntry` for this rule, batch the matches, and reuse `make_evaluation_messages_from_sessions` to build `EvaluationMessage` rows.
+- [x] 3.3 In a single transaction per rule: append new `EvaluationMessage` rows to the dataset's M2M, write `DatasetIngestionEntry` rows, bump `last_ingested_at` to `max(source.created_at)` of the batch, set `last_run_status="success"`, reset `consecutive_failure_count`.
+- [x] 3.4 On exception: set `last_run_status="error"`, store `last_error`, increment `consecutive_failure_count`; if it reaches 3, set `is_enabled=False` and emit a notification via `apps.ocs_notifications`. Catch per-rule so other rules in the tick are unaffected.
+- [x] 3.5 Register the task in `CELERY_BEAT_SCHEDULE` (or via `django_celery_beat` periodic task fixture/data migration) at a 5-minute interval; gate registration behind the Waffle flag at task entry.
 
 ## 4. Auto-trigger of delta evaluation runs
 

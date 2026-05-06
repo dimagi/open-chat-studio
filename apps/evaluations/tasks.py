@@ -980,3 +980,271 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
         message = "An error occurred while creating session-mode messages"
         _save_dataset_error(dataset, message)
         return {"success": False, "error": message}
+
+
+# ---------------------------------------------------------------------------
+# Auto-population (chunk C of auto-populate-eval-datasets)
+# ---------------------------------------------------------------------------
+
+AUTO_POP_SAFETY_MARGIN_SECONDS = 60
+
+
+@shared_task(base=TaskbadgerTask)
+def auto_populate_eval_datasets():
+    """Periodic task: ingest new sessions/messages for every enabled auto-population rule.
+
+    Each rule is processed in its own transaction with a row-level lock so concurrent
+    workers can't double-process. Failures are recorded per-rule without aborting the tick;
+    after AUTO_DISABLE_FAILURE_THRESHOLD consecutive failures the rule is auto-disabled
+    and the team is notified.
+    """
+    from django.db.models import F  # noqa: PLC0415
+
+    from apps.evaluations.models import DatasetAutoPopulationRule  # noqa: PLC0415
+
+    flag = _resolve_auto_populate_flag()
+    if flag is None:
+        logger.info("Skipping auto_populate_eval_datasets: flag has no row yet (no team has enabled it)")
+        return
+
+    rule_ids = list(
+        DatasetAutoPopulationRule.objects.filter(is_enabled=True, team__in=flag.teams.all())
+        .order_by(F("last_run_at").asc(nulls_first=True))
+        .values_list("id", flat=True)
+    )
+    for rule_id in rule_ids:
+        try:
+            _process_auto_population_rule(rule_id)
+        except Exception:
+            logger.exception("Unexpected error processing auto-population rule %s", rule_id)
+
+
+def _resolve_auto_populate_flag():
+    """Return the persisted Flag row for the auto-populate-eval-datasets feature, or None."""
+    from apps.teams.flags import Flags  # noqa: PLC0415
+    from apps.teams.models import Flag  # noqa: PLC0415
+
+    try:
+        return Flag.objects.prefetch_related("teams").get(name=Flags.AUTO_POPULATE_EVAL_DATASETS.slug)
+    except Flag.DoesNotExist:
+        return None
+
+
+def _process_auto_population_rule(rule_id: int) -> None:
+    """Lock and process a single rule. Caller catches unexpected errors; this fn handles per-rule failures."""
+    from apps.evaluations.models import DatasetAutoPopulationRule  # noqa: PLC0415
+
+    with transaction.atomic():
+        rule = (
+            DatasetAutoPopulationRule.objects.select_for_update(skip_locked=True)
+            .select_related("dataset", "source_experiment", "team")
+            .filter(id=rule_id, is_enabled=True)
+            .first()
+        )
+        if rule is None:
+            return  # locked by another worker, disabled, or deleted
+
+        try:
+            with current_team(rule.team):
+                appended_count = _ingest_auto_population_rule(rule)
+        except Exception as exc:
+            _record_auto_population_rule_failure(rule, exc)
+            return
+
+        from apps.evaluations.models import AutoPopulationRunStatus  # noqa: PLC0415
+
+        rule.last_run_at = timezone.now()
+        rule.last_run_status = AutoPopulationRunStatus.SUCCESS if appended_count > 0 else AutoPopulationRunStatus.NO_OP
+        rule.last_error = ""
+        rule.consecutive_failure_count = 0
+        rule.save(
+            update_fields=[
+                "last_run_at",
+                "last_run_status",
+                "last_error",
+                "consecutive_failure_count",
+                "last_ingested_at",
+                "updated_at",
+            ]
+        )
+
+
+def _ingest_auto_population_rule(rule) -> int:
+    """Build EvaluationMessage rows for new sources matching ``rule`` and append to its dataset.
+
+    Mutates ``rule.last_ingested_at`` to the new high-water mark. Returns the number of
+    EvaluationMessage rows appended (which is also the number of DatasetIngestionEntry
+    rows written).
+    """
+    from apps.evaluations.models import EvaluationMode  # noqa: PLC0415
+
+    cutoff = rule.last_ingested_at - timedelta(seconds=AUTO_POP_SAFETY_MARGIN_SECONDS)
+    if rule.evaluation_mode == EvaluationMode.MESSAGE:
+        return _ingest_message_mode_rule(rule, cutoff)
+    return _ingest_session_mode_rule(rule, cutoff)
+
+
+def _ingest_message_mode_rule(rule, cutoff) -> int:
+    from django.db.models import Q  # noqa: PLC0415
+
+    from apps.evaluations.models import DatasetIngestionEntry  # noqa: PLC0415
+    from apps.evaluations.utils import make_evaluation_messages_from_sessions  # noqa: PLC0415
+    from apps.experiments.filters import ChatMessageFilter  # noqa: PLC0415
+
+    base_qs = (
+        ChatMessage.objects.filter(
+            chat__experiment_session__team_id=rule.team_id,
+            created_at__gt=cutoff,
+        )
+        .filter(
+            Q(chat__experiment_session__experiment_id=rule.source_experiment_id)
+            | Q(chat__experiment_session__experiment__working_version_id=rule.source_experiment_id)
+        )
+        .select_related("chat__experiment_session")
+        .order_by("created_at", "id")
+    )
+
+    if rule.filter_query:
+        base_qs = ChatMessageFilter().apply(base_qs, FilterParams(QueryDict(rule.filter_query)), timezone=None)
+
+    candidates = list(base_qs)
+    if not candidates:
+        return 0
+
+    new_watermark = max(msg.created_at for msg in candidates)
+
+    already_ingested_ids = set(
+        DatasetIngestionEntry.objects.filter(rule=rule, source_message__isnull=False).values_list(
+            "source_message_id", flat=True
+        )
+    )
+    fresh_candidates = [msg for msg in candidates if msg.id not in already_ingested_ids]
+    if not fresh_candidates:
+        rule.last_ingested_at = new_watermark
+        return 0
+
+    message_ids_per_session = defaultdict(list)
+    for msg in fresh_candidates:
+        ext = str(msg.chat.experiment_session.external_id)
+        message_ids_per_session[ext].append(msg.id)
+
+    eval_messages = make_evaluation_messages_from_sessions(message_ids_per_session)
+    if not eval_messages:
+        rule.last_ingested_at = new_watermark
+        return 0
+
+    EvaluationMessage.objects.bulk_create(eval_messages)
+    rule.dataset.messages.add(*eval_messages)
+
+    entries = []
+    for em in eval_messages:
+        for source_message_id in (em.input_chat_message_id, em.expected_output_chat_message_id):
+            if source_message_id is None:
+                continue
+            entries.append(
+                DatasetIngestionEntry(
+                    rule=rule,
+                    evaluation_message=em,
+                    source_session_id=em.session_id,
+                    source_message_id=source_message_id,
+                )
+            )
+    DatasetIngestionEntry.objects.bulk_create(entries, ignore_conflicts=True)
+
+    rule.last_ingested_at = new_watermark
+    return len(eval_messages)
+
+
+def _ingest_session_mode_rule(rule, cutoff) -> int:
+    from django.db.models import Q  # noqa: PLC0415
+
+    from apps.evaluations.models import DatasetIngestionEntry  # noqa: PLC0415
+    from apps.evaluations.utils import make_session_evaluation_messages  # noqa: PLC0415
+    from apps.experiments.filters import ExperimentSessionFilter  # noqa: PLC0415
+
+    base_qs = (
+        ExperimentSession.objects.filter(team_id=rule.team_id, created_at__gt=cutoff)
+        .filter(
+            Q(experiment_id=rule.source_experiment_id) | Q(experiment__working_version_id=rule.source_experiment_id)
+        )
+        .order_by("created_at", "id")
+    )
+
+    if rule.filter_query:
+        base_qs = ExperimentSessionFilter().apply(base_qs, FilterParams(QueryDict(rule.filter_query)), timezone=None)
+
+    candidates = list(base_qs)
+    if not candidates:
+        return 0
+
+    new_watermark = max(s.created_at for s in candidates)
+
+    already_ingested_ids = set(
+        DatasetIngestionEntry.objects.filter(rule=rule, source_message__isnull=True).values_list(
+            "source_session_id", flat=True
+        )
+    )
+    fresh = [s for s in candidates if s.id not in already_ingested_ids]
+    if not fresh:
+        rule.last_ingested_at = new_watermark
+        return 0
+
+    session_ext_ids = [str(s.external_id) for s in fresh]
+    eval_messages = make_session_evaluation_messages(session_ext_ids, team=rule.team)
+    if not eval_messages:
+        rule.last_ingested_at = new_watermark
+        return 0
+
+    EvaluationMessage.objects.bulk_create(eval_messages)
+    rule.dataset.messages.add(*eval_messages)
+
+    entries = [
+        DatasetIngestionEntry(
+            rule=rule,
+            evaluation_message=em,
+            source_session_id=em.session_id,
+            source_message_id=None,
+        )
+        for em in eval_messages
+        if em.session_id is not None
+    ]
+    DatasetIngestionEntry.objects.bulk_create(entries, ignore_conflicts=True)
+
+    rule.last_ingested_at = new_watermark
+    return len(eval_messages)
+
+
+def _record_auto_population_rule_failure(rule, exc: Exception) -> None:
+    from apps.evaluations.models import DatasetAutoPopulationRule  # noqa: PLC0415
+    from apps.ocs_notifications.notifications import (  # noqa: PLC0415
+        dataset_auto_population_rule_auto_disabled_notification,
+    )
+
+    error_message = str(exc) or exc.__class__.__name__
+    from apps.evaluations.models import AutoPopulationRunStatus  # noqa: PLC0415
+
+    rule.last_run_at = timezone.now()
+    rule.last_run_status = AutoPopulationRunStatus.ERROR
+    rule.last_error = error_message[:1000]
+    rule.consecutive_failure_count = (rule.consecutive_failure_count or 0) + 1
+    auto_disable = rule.consecutive_failure_count >= DatasetAutoPopulationRule.AUTO_DISABLE_FAILURE_THRESHOLD
+    update_fields = [
+        "last_run_at",
+        "last_run_status",
+        "last_error",
+        "consecutive_failure_count",
+        "updated_at",
+    ]
+    if auto_disable:
+        rule.is_enabled = False
+        update_fields.append("is_enabled")
+    rule.save(update_fields=update_fields)
+    logger.warning(
+        "Auto-population rule %s failed (%s consecutive)%s: %s",
+        rule.id,
+        rule.consecutive_failure_count,
+        " — auto-disabled" if auto_disable else "",
+        error_message,
+    )
+    if auto_disable:
+        dataset_auto_population_rule_auto_disabled_notification(rule, error_message)

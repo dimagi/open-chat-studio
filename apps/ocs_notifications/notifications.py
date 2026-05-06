@@ -207,6 +207,24 @@ def tool_error_notification(team, tool_name: str, error_message: str, session=No
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create dataset auto-population auto-disabled notification")
+def dataset_auto_population_rule_auto_disabled_notification(rule, last_error: str) -> None:
+    """Notify a team that an auto-population rule was auto-disabled after repeated failures."""
+    create_notification(
+        title="Auto-population rule disabled",
+        message=(
+            f"The auto-population rule for dataset '{rule.dataset.name}' has been disabled "
+            f"after repeated ingestion failures. Last error: {last_error[:200]}"
+        ),
+        level=LevelChoices.ERROR,
+        team=rule.team,
+        slug="auto-population-rule-auto-disabled",
+        event_data={"rule_id": rule.id, "dataset_id": rule.dataset_id},
+        permissions=["evaluations.change_datasetautopopulationrule"],
+        links={"View Dataset": rule.dataset.get_absolute_url()},
+    )
+
+
 @silence_exceptions(logger, log_message="Failed to create deprecated model notification")
 def deprecated_model_notification(
     team,
