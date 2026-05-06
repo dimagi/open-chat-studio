@@ -141,7 +141,10 @@ def _handle_failure(args: FailureArgs) -> BoltResponse:
         status=302,
         headers={
             "Set-Cookie": OAuthStateUtils().build_set_cookie_for_deletion(),
-            "Location": reverse("service_providers:new", args=[team.slug, MESSAGING]),
+            "Location": reverse(
+                "service_providers:new",
+                args=[team.slug, MESSAGING, MessagingProviderType.slack.value],
+            ),
         },
     )
     reason = _get_detailed_error(args.reason)
