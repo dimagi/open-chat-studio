@@ -42,13 +42,6 @@ class EvaluationRunStatus(models.TextChoices):
 class EvaluationRunType(models.TextChoices):
     FULL = "full", "Full"
     PREVIEW = "preview", "Preview"
-    DELTA = "delta", "Delta"
-
-
-class AutoPopulationRunStatus(models.TextChoices):
-    SUCCESS = "success", "Success"
-    ERROR = "error", "Error"
-    NO_OP = "no_op", "No-op"
 
 
 class DatasetCreationStatus(models.TextChoices):
@@ -302,14 +295,6 @@ class EvaluationConfig(BaseTeamModel):
         default=ExperimentVersionSelection.SPECIFIC,
         help_text=("Type of version selection: specific, latest_working, or latest_published"),
     )
-    auto_run_on_append = models.BooleanField(
-        default=False,
-        help_text=(
-            "When enabled, an evaluation run is automatically enqueued for newly appended "
-            "dataset messages. Each auto-run only evaluates the new rows, but still incurs "
-            "LLM costs proportional to the number of evaluators and new messages."
-        ),
-    )
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
@@ -371,15 +356,6 @@ class EvaluationRun(BaseTeamModel):
     status = models.CharField(max_length=20, choices=EvaluationRunStatus.choices, default=EvaluationRunStatus.PENDING)
     type = models.CharField(
         max_length=20, choices=EvaluationRunType.choices, default=EvaluationRunType.FULL, db_index=True
-    )
-    scoped_messages = models.ManyToManyField(
-        EvaluationMessage,
-        blank=True,
-        related_name="scoped_evaluation_runs",
-        help_text=(
-            "When set, this run evaluates only these messages instead of the full dataset. "
-            "Used by delta runs triggered by dataset appends."
-        ),
     )
     job_id = models.CharField(max_length=255, blank=True)
     error_message = models.TextField(blank=True)
@@ -542,106 +518,3 @@ class AppliedTag(BaseTeamModel):
 
     def __str__(self):
         return f"AppliedTag(result={self.evaluation_result_id}, rule={self.rule_id}, tag={self.tag_id})"
-
-
-class DatasetAutoPopulationRule(BaseTeamModel):
-    """A rule that periodically appends matching sessions/messages from a source experiment to a dataset."""
-
-    AUTO_DISABLE_FAILURE_THRESHOLD = 3
-
-    dataset = models.ForeignKey(EvaluationDataset, on_delete=models.CASCADE, related_name="auto_population_rules")
-    source_experiment = models.ForeignKey(
-        "experiments.Experiment",
-        on_delete=models.CASCADE,
-        related_name="dataset_auto_population_rules",
-        help_text="The experiment whose sessions/messages are sampled by this rule.",
-    )
-    evaluation_mode = models.CharField(
-        max_length=10,
-        choices=EvaluationMode.choices,
-        help_text="Must match the target dataset's evaluation_mode.",
-    )
-    filter_query = models.TextField(
-        blank=True,
-        default="",
-        help_text=(
-            "Query-string-encoded FilterParams (same format used by manual filter import). "
-            "Empty means no filter beyond the source experiment scope."
-        ),
-    )
-    is_enabled = models.BooleanField(default=True)
-    last_ingested_at = models.DateTimeField(
-        default=timezone.now,
-        help_text=(
-            "High-water mark: the periodic task only considers sources newer than "
-            "this timestamp (minus a small safety margin) on each run. Initialised to the rule's "
-            "creation time so existing history is not backfilled."
-        ),
-    )
-    last_run_at = models.DateTimeField(null=True, blank=True)
-    last_run_status = models.CharField(
-        max_length=20,
-        choices=AutoPopulationRunStatus.choices,
-        blank=True,
-        default="",
-    )
-    last_error = models.TextField(blank=True, default="")
-    consecutive_failure_count = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["is_enabled", "last_run_at"]),
-        ]
-
-    def __str__(self):
-        return f"AutoPopulationRule(dataset={self.dataset_id}, experiment={self.source_experiment_id})"
-
-    def get_absolute_url(self):
-        return self.dataset.get_absolute_url()
-
-
-class DatasetIngestionEntry(BaseModel):
-    """Provenance record: a specific source session/message was appended to a dataset by a specific rule.
-
-    The unique constraints prevent the same source from being appended twice by the same rule, even
-    across crashes or worker overlap. Message-mode rules use ``source_message`` as the unique key;
-    session-mode rules use ``source_session`` (with ``source_message`` left null).
-    """
-
-    rule = models.ForeignKey(DatasetAutoPopulationRule, on_delete=models.CASCADE, related_name="ingestion_entries")
-    evaluation_message = models.ForeignKey(
-        EvaluationMessage, on_delete=models.CASCADE, related_name="ingestion_entries"
-    )
-    source_session = models.ForeignKey(
-        ExperimentSession,
-        on_delete=models.CASCADE,
-        related_name="ingestion_entries",
-    )
-    source_message = models.ForeignKey(
-        ChatMessage,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="ingestion_entries",
-        help_text="Set for message-mode ingestion; null for session-mode ingestion.",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["rule", "source_message"],
-                condition=models.Q(source_message__isnull=False),
-                name="unique_ingestion_per_rule_message",
-            ),
-            models.UniqueConstraint(
-                fields=["rule", "source_session"],
-                condition=models.Q(source_message__isnull=True),
-                name="unique_ingestion_per_rule_session",
-            ),
-        ]
-        indexes = [
-            models.Index(fields=["rule", "created_at"]),
-        ]
-
-    def __str__(self):
-        return f"DatasetIngestionEntry(rule={self.rule_id}, eval_message={self.evaluation_message_id})"
