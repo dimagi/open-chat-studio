@@ -43,6 +43,14 @@ class Flags(FlagInfo, Enum):
 
     EVALS = ("flag_evaluations", "Chatbot Evaluations (beta)", "evals", [], True)
 
+    AUTO_POPULATE_EVAL_DATASETS = (
+        "flag_auto_populate_eval_datasets",
+        "Auto-populate evaluation datasets from filter rules and auto-run linked evaluations",
+        "evals",
+        ["flag_evaluations"],
+        True,
+    )
+
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
     NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
