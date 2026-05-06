@@ -1,7 +1,7 @@
 {% extends "service_providers/provider_form.html" %}
 {% load form_tags i18n %}
 {% block pre_form %}
-  <div class="my-4 flex flex-col gap-4">
+  <div class="my-4 flex flex-col gap-4" x-data="{ type: '{{ subtype }}' }">
     <div>
       <h2 class="font-bold text-lg">Default LLM Models
         {% blocktranslate asvar help_text %}
@@ -10,7 +10,7 @@
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
-      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type %}
+      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type for_type=subtype %}
     </div>
 
     <div>
@@ -28,7 +28,7 @@
         </div>
       </div>
       <div id="custom_model_list">
-        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type %}
+        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type for_type=subtype %}
       </div>
     </div>
 
@@ -39,7 +39,7 @@
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
-      {% include "service_providers/components/embedding_models.html" with embedding_models_by_type=embedding_models_by_type %}
+      {% include "service_providers/components/embedding_models.html" with embedding_models_by_type=embedding_models_by_type for_type=subtype %}
     </div>
   </div>
 {% endblock pre_form %}
