@@ -1,0 +1,52 @@
+{% load i18n %}
+<section class="mt-6 border rounded p-4">
+  <header class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-medium">{% translate "Auto-population rules" %}</h2>
+    <a class="btn btn-sm btn-primary"
+       href="{% url 'evaluations:auto_population_rule_new' request.team.slug dataset.id %}">
+      {% translate "Add rule" %}
+    </a>
+  </header>
+
+  {% if dataset.auto_population_rules.all %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left">
+          <th>{% translate "Source chatbot" %}</th>
+          <th>{% translate "Enabled" %}</th>
+          <th>{% translate "Last run" %}</th>
+          <th>{% translate "Status" %}</th>
+          <th>{% translate "Last error" %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rule in dataset.auto_population_rules.all %}
+          <tr>
+            <td>{{ rule.source_experiment.name }}</td>
+            <td>{{ rule.is_enabled|yesno:"Yes,No" }}</td>
+            <td>{{ rule.last_run_at|default:"—" }}</td>
+            <td>{{ rule.get_last_run_status_display|default:"—" }}</td>
+            <td class="text-red-600">{{ rule.last_error|truncatechars:60 }}</td>
+            <td class="space-x-2">
+              <a class="link"
+                 href="{% url 'evaluations:auto_population_rule_edit' request.team.slug dataset.id rule.id %}">
+                {% translate "Edit" %}
+              </a>
+              <form method="post"
+                    action="{% url 'evaluations:auto_population_rule_toggle' request.team.slug rule.id %}"
+                    class="inline">
+                {% csrf_token %}
+                <button type="submit" class="link">
+                  {% if rule.is_enabled %}{% translate "Disable" %}{% else %}{% translate "Enable" %}{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="text-sm text-gray-500">{% translate "No auto-population rules configured." %}</p>
+  {% endif %}
+</section>

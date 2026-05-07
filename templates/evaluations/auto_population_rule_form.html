@@ -1,0 +1,18 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block form %}
+  {{ form.non_field_errors }}
+  {% render_form_fields form "source_experiment" "filter_query_string" "is_enabled" %}
+{% endblock form %}
+
+{% block post_form %}
+  <div class="mt-4 alert alert-info">
+    <i class="fa-solid fa-info-circle"></i>
+    <div>
+      <p class="text-sm">
+        {% translate "Leave the filter blank to ingest every session from the source chatbot. To narrow ingestion, configure a filter on the dataset's session list and copy the query string from the URL into the field above." %}
+      </p>
+    </div>
+  </div>
+{% endblock post_form %}
