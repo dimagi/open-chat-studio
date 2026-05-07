@@ -19,8 +19,9 @@ In scope for v1:
 - Per-dataset auto-population rules (1 dataset → N rules) that ingest new
   sessions/messages from one source experiment matching saved filter
   criteria.
-- Periodic Celery Beat task that walks enabled rules, ingests anything newer
-  than the rule's high-water mark, and dedupes against existing dataset rows.
+- Periodic Celery Beat task that walks enabled rules, brute-force scans
+  each rule's source experiment within a bounded lookback window, and
+  dedupes against existing dataset rows.
 - Per-config opt-in (`EvaluationConfig.auto_run_on_append`) that fires a
   delta evaluation run scoped to just the newly appended rows. Only the
   auto-population path triggers this in v1 — manual filter-import and CSV
@@ -56,11 +57,14 @@ Out of scope for v1:
 | `source_experiment` | FK → `experiments.Experiment` (CASCADE) | which bot to ingest from |
 | `filter_query_string` | TextField, blank=True | rehydrated via `FilterParams(QueryDict(...))`. Empty string = "all sessions from this bot" |
 | `is_enabled` | BooleanField, default `True` | manual on/off |
-| `last_ingested_at` | DateTimeField | high-water mark; initialised to `created_at` (forward-only) |
 | `last_run_at` | DateTimeField, null=True | when the polling task last touched this rule |
 | `last_run_status` | choices `success` / `error` / `no_op`, null=True | most recent tick outcome |
 | `last_error` | TextField, blank | error message from last failure |
 | `consecutive_failure_count` | PositiveSmallIntegerField, default 0 | drives auto-disable |
+
+No high-water mark field is needed: the rule's own `created_at` (inherited
+from `BaseTeamModel`) acts as the forward-only floor, and dedup is handled
+at scan time via `NOT IN dataset.messages` (see "Ingestion task").
 
 `clean()` enforces `team` matches both `dataset.team` and
 `source_experiment.team`. Mode-matching (`rule.dataset.evaluation_mode` is
@@ -109,6 +113,12 @@ naturally has nothing to do for non-evaluations teams.
 
 ### `_ingest_rule(rule)`
 
+The rule does **not** carry a high-water mark. Each tick brute-force scans
+the source experiment's recent sessions and relies on `NOT IN dataset` for
+dedup. This catches sessions that gain a matching tag (or other late
+state-change) long after creation, since `CustomTaggedItem` writes don't
+bump `session.updated_at`.
+
 1. Pick filter class by `rule.dataset.evaluation_mode`:
    - `message` → `ChatMessageFilter`
    - `session` → `ExperimentSessionFilter`
@@ -116,8 +126,10 @@ naturally has nothing to do for non-evaluations teams.
    (and child versions, matching how the existing import handles versioned
    experiments).
 3. Apply `FilterParams(QueryDict(rule.filter_query_string))` if non-empty.
-4. Apply the timestamp window:
-   `created_at > rule.last_ingested_at - safety_margin` (60s).
+4. Apply the lookback window:
+   `created_at > MAX(rule.created_at, now() - LOOKBACK_DAYS)`. `LOOKBACK_DAYS`
+   is a Django setting (default 30); `rule.created_at` is the forward-only
+   floor (a brand-new rule never picks up sessions older than itself).
 5. Apply NOT IN dedup against `rule.dataset.messages`:
    - session mode → exclude sessions whose `id` is already in
      `dataset.messages.values_list("session_id")`.
@@ -128,11 +140,9 @@ naturally has nothing to do for non-evaluations teams.
 6. Build `EvaluationMessage` rows via the existing helpers
    (`make_session_evaluation_messages` for session mode,
    `EvaluationMessage.create_from_sessions` for message mode).
-7. If batch is empty → record `last_run_status = no_op`, do **not** advance
-   `last_ingested_at`, return.
+7. If batch is empty → record `last_run_status = no_op`, return.
 8. Otherwise, in the same transaction:
    - `bulk_create` messages, append to `dataset.messages`.
-   - advance `last_ingested_at` to `max(source.created_at)` of the batch.
    - set `last_run_status = success`, `last_run_at = now()`, reset
      `consecutive_failure_count`.
 9. After commit, invoke the auto-trigger (see "Auto-trigger" below) with
@@ -230,16 +240,27 @@ New "Auto-population rules" panel:
 
 ## Open questions
 
-1. **Timestamp safety-margin semantics.** A `last_ingested_at - 60s` window
-   covers normal clock skew but does not catch sessions that gain a
-   matching tag arbitrarily far in the future. The NOT IN dedup is correct
-   on the *next* tick, but only if the tag-changing event also brings the
-   session back into the rule's filter at some later tick. Acceptable for
-   v1, or do we want the rule to scan the whole history each tick (slower
-   but catches any post-hoc change)? **Decision deferred — revisit after
-   v1 is in front of users.**
-
-2. **Filter-on-dataset vs filter-on-eval-config.** Issue notes this should
+1. **Filter-on-dataset vs filter-on-eval-config.** Issue notes this should
    be confirmed with the Connect team. v1 picks dataset-level (matches the
    issue's lean and our recent answers) but the question stays open until
    the Connect team confirms.
+
+2. **`LOOKBACK_DAYS` default.** Starting at 30 days. If a tag is added more
+   than 30 days after a session was created, the rule will not ingest it.
+   Revisit after we see real usage; the brute-force scan cost grows
+   linearly with this value.
+
+## Future changes (not v1)
+
+- **Event-based triggers (Option B in design discussion).** Hook
+  `CustomTaggedItem` post_save / post_delete and
+  `apps.evaluations.tagging.apply_rules_to_result` to enqueue immediate
+  rule-checks for affected datasets. Lets us drop or shrink `LOOKBACK_DAYS`
+  while still catching post-hoc tag changes. Keep in mind the issue
+  explicitly calls out "auto-eval finishes" as one of the two practical
+  entry points; this is where it would land.
+- **Sampling.** Per-rule "ingest only N% of matching sessions" knob.
+- **Lifecycle-hook trigger on `ExperimentSession.end()`** — for
+  near-real-time ingestion when the polling cadence is too slow.
+- **Manual / CSV import path auto-triggering** — make the trigger optional
+  on those paths so users can opt in per dataset or per import.
