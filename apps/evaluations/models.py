@@ -342,7 +342,7 @@ class EvaluationConfig(BaseTeamModel):
             status=EvaluationRunStatus.PENDING,
             type=run_type,
         )
-        if scoped_messages:
+        if scoped_messages is not None:
             run.scoped_messages.add(*scoped_messages)
 
         from apps.evaluations.tasks import (  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models

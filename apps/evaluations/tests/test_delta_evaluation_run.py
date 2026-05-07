@@ -56,7 +56,8 @@ def test_run_with_scoped_messages_persists_scope():
 @pytest.mark.django_db()
 def test_run_without_scoped_messages_has_empty_scope():
     config = EvaluationConfigFactory.create()
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
+    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
         run = config.run()
     assert run.type == EvaluationRunType.FULL
     assert run.scoped_messages.count() == 0
+    mock_delay.assert_called_once_with(run.id)
