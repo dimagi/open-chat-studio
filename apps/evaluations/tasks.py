@@ -1010,20 +1010,15 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
         appended = _ingest_rule_message_mode(rule, created_floor)
 
     rule.last_run_at = timezone.now()
+    update_fields = ["last_run_at", "last_run_status"]
     if appended:
         rule.last_run_status = AutoPopulationRunStatus.SUCCESS
         rule.consecutive_failure_count = 0
         rule.last_error = ""
+        update_fields += ["consecutive_failure_count", "last_error"]
     else:
         rule.last_run_status = AutoPopulationRunStatus.NO_OP
-    rule.save(
-        update_fields=[
-            "last_run_at",
-            "last_run_status",
-            "consecutive_failure_count",
-            "last_error",
-        ]
-    )
+    rule.save(update_fields=update_fields)
     return appended
 
 

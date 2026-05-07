@@ -47,3 +47,5 @@ def test_ingest_rule_no_op_when_no_matches():
     assert dataset.messages.count() == 0
     assert rule.last_run_status == AutoPopulationRunStatus.NO_OP
     assert rule.last_run_at is not None
+    assert rule.last_error == ""
+    assert rule.consecutive_failure_count == 0
