@@ -133,6 +133,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "experiment_version",
             "run_generation",
             "base_experiment",
+            "auto_run_on_append",
         ]
         widgets = {
             "evaluators": EvaluatorCheckboxWidget(),
