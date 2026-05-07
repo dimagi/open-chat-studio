@@ -31,8 +31,9 @@ def test_rule_clean_rejects_dataset_team_mismatch():
         dataset=dataset,
         source_experiment=experiment,
     )
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         rule.full_clean()
+    assert "dataset" in exc_info.value.message_dict
 
 
 @pytest.mark.django_db()
@@ -44,5 +45,6 @@ def test_rule_clean_rejects_source_experiment_team_mismatch():
         dataset=dataset,
         source_experiment=experiment,
     )
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         rule.full_clean()
+    assert "source_experiment" in exc_info.value.message_dict
