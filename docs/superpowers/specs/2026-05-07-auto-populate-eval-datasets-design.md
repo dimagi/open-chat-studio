@@ -76,9 +76,9 @@ the rule.
 
 ### Waffle flag
 
-`flag_auto_populate_eval_datasets`, gated under the existing
-`flag_evaluations`. Used to gate rule create/update views and the polling
-task entry. No DB-state startup gate — the flag is the toggle.
+No new flag. The whole feature is gated by the existing `flag_evaluations`
+— a team that has access to the evaluations app gets auto-population
+without a separate opt-in.
 
 ### Migration
 
@@ -103,7 +103,9 @@ for rule in DatasetAutoPopulationRule.objects.filter(is_enabled=True).order_by("
         handle_failure(rule, e)
 ```
 
-Task entry first checks the Waffle flag and returns immediately if disabled.
+The polling task itself does not check the Waffle flag — only teams with
+`flag_evaluations` enabled can create rules in the first place, so a tick
+naturally has nothing to do for non-evaluations teams.
 
 ### `_ingest_rule(rule)`
 
