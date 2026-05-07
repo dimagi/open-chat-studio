@@ -41,6 +41,15 @@
                   {% if rule.is_enabled %}{% translate "Disable" %}{% else %}{% translate "Enable" %}{% endif %}
                 </button>
               </form>
+              <form method="post"
+                    action="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
+                    class="inline"
+                    hx-post="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
+                    hx-confirm="{% translate "Delete this rule?" %}"
+                    hx-on::after-request="if (event.detail.successful) location.reload();">
+                {% csrf_token %}
+                <button type="submit" class="link text-red-600">{% translate "Delete" %}</button>
+              </form>
             </td>
           </tr>
         {% endfor %}

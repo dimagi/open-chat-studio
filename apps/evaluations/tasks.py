@@ -247,7 +247,7 @@ def run_evaluation_task(evaluation_run_id):
 
             if evaluation_run.type == EvaluationRunType.PREVIEW:
                 messages = list(config.dataset.messages.all()[:PREVIEW_SAMPLE_SIZE])
-            elif evaluation_run.scoped_messages.exists():
+            elif evaluation_run.type == EvaluationRunType.DELTA:
                 messages = list(evaluation_run.scoped_messages.all())
             else:
                 messages = list(config.dataset.messages.all())
@@ -1023,7 +1023,7 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
     rule.save(update_fields=update_fields)
 
     if appended:
-        _trigger_delta_runs_for_dataset(dataset, appended)
+        transaction.on_commit(lambda: _trigger_delta_runs_for_dataset(dataset, appended))
     return appended
 
 

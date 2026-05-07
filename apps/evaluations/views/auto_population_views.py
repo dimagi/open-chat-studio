@@ -63,6 +63,12 @@ class DeleteAutoPopulationRule(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     def get_queryset(self):
         return DatasetAutoPopulationRule.objects.filter(team=self.request.team)
 
+    def get_success_url(self):
+        return reverse(
+            "evaluations:dataset_edit",
+            args=[self.request.team.slug, self.get_object().dataset_id],
+        )
+
     def delete(self, request, *args, **kwargs):
         self.get_object().delete()
         return HttpResponse(status=200)

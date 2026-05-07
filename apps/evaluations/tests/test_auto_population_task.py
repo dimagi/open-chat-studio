@@ -106,7 +106,7 @@ def test_ingest_rule_message_mode_appends_message_pairs():
     assert msg.expected_output_chat_message_id is not None
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=True)
 def test_ingest_rule_triggers_delta_runs_only_for_opted_in_configs():
     team = TeamFactory.create()
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset 5", evaluation_mode=EvaluationMode.SESSION)
