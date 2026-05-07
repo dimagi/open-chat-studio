@@ -10,8 +10,9 @@ from typing import cast
 from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
+from django.conf import settings
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -23,10 +24,13 @@ from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
+    AutoPopulationRunStatus,
+    DatasetAutoPopulationRule,
     DatasetCreationStatus,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
+    EvaluationMode,
     EvaluationResult,
     EvaluationRun,
     EvaluationRunStatus,
@@ -36,6 +40,7 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.tagging import apply_rules_to_result
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
+from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
 from apps.teams.utils import current_team
@@ -982,3 +987,69 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
         message = "An error occurred while creating session-mode messages"
         _save_dataset_error(dataset, message)
         return {"success": False, "error": message}
+
+
+def _versions_of(experiment):
+    """Return a queryset including this experiment and all of its versions."""
+    base_id = experiment.working_version_id or experiment.id
+    return type(experiment).objects.filter(Q(id=base_id) | Q(working_version_id=base_id))
+
+
+def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
+    """Scan the rule's source experiment for new sessions, append matches to the dataset.
+
+    Returns the list of newly appended EvaluationMessage rows.
+    """
+    dataset = rule.dataset
+    lookback_floor = timezone.now() - timedelta(days=settings.EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS)
+    created_floor = max(rule.created_at, lookback_floor)
+
+    if dataset.evaluation_mode == EvaluationMode.SESSION:
+        appended = _ingest_rule_session_mode(rule, created_floor)
+    else:
+        appended = _ingest_rule_message_mode(rule, created_floor)
+
+    rule.last_run_at = timezone.now()
+    if appended:
+        rule.last_run_status = AutoPopulationRunStatus.SUCCESS
+        rule.consecutive_failure_count = 0
+        rule.last_error = ""
+    else:
+        rule.last_run_status = AutoPopulationRunStatus.NO_OP
+    rule.save(
+        update_fields=[
+            "last_run_at",
+            "last_run_status",
+            "consecutive_failure_count",
+            "last_error",
+        ]
+    )
+    return appended
+
+
+def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
+    qs = ExperimentSession.objects.filter(
+        team=rule.team,
+        experiment__in=_versions_of(rule.source_experiment),
+        created_at__gt=created_floor,
+    ).exclude(id__in=rule.dataset.messages.filter(session__isnull=False).values_list("session_id", flat=True))
+
+    if rule.filter_query_string:
+        params = FilterParams(QueryDict(rule.filter_query_string))
+        qs = ExperimentSessionFilter().apply(qs, params, timezone=None)
+
+    session_external_ids = list(qs.values_list("external_id", flat=True))
+    if not session_external_ids:
+        return []
+
+    eval_messages = make_session_evaluation_messages(session_external_ids, team=rule.team)
+    if not eval_messages:
+        return []
+    created = EvaluationMessage.objects.bulk_create(eval_messages)
+    rule.dataset.messages.add(*created)
+    return list(created)
+
+
+def _ingest_rule_message_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
+    # Implemented in Task 9.
+    return []
