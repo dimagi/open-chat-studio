@@ -110,6 +110,20 @@ class EvaluationRunTable(tables.Table):
         template_name="evaluations/evaluation_run_status_column.html", verbose_name="Status", orderable=False
     )
 
+    type = TemplateColumn(
+        template_code=(
+            "{% if record.type == 'delta' %}"
+            "<span class='badge badge-info'>delta · {{ record.scoped_messages.count }}</span>"
+            "{% elif record.type == 'preview' %}"
+            "<span class='badge'>preview</span>"
+            "{% else %}"
+            "<span class='badge badge-ghost'>full</span>"
+            "{% endif %}"
+        ),
+        verbose_name="Type",
+        orderable=False,
+    )
+
     results = columns.Column(accessor="results__count", verbose_name="Result count", orderable=False)
 
     actions = actions.ActionsColumn(
@@ -128,7 +142,7 @@ class EvaluationRunTable(tables.Table):
 
     class Meta:
         model = EvaluationRun
-        fields = ("created_at", "status", "finished_at", "results", "actions")
+        fields = ("created_at", "type", "status", "finished_at", "results", "actions")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No runs found."
