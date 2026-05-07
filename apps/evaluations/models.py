@@ -324,8 +324,16 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
 
-    def run(self, run_type=EvaluationRunType.FULL) -> EvaluationRun:
-        """Runs the evaluation asynchronously using Celery"""
+    def run(
+        self,
+        run_type: EvaluationRunType = EvaluationRunType.FULL,
+        scoped_messages: list[EvaluationMessage] | None = None,
+    ) -> EvaluationRun:
+        """Runs the evaluation asynchronously using Celery.
+
+        When `scoped_messages` is provided, the run only evaluates those
+        messages instead of the dataset's full membership.
+        """
         generation_experiment = self.get_generation_experiment_version()
         run = EvaluationRun.objects.create(
             team=self.team,
@@ -334,6 +342,8 @@ class EvaluationConfig(BaseTeamModel):
             status=EvaluationRunStatus.PENDING,
             type=run_type,
         )
+        if scoped_messages:
+            run.scoped_messages.add(*scoped_messages)
 
         from apps.evaluations.tasks import (  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
             run_evaluation_task,
