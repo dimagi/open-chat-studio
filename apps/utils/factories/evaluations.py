@@ -6,6 +6,7 @@ from apps.chat.models import ChatMessageType
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
+    DatasetAutoPopulationRule,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
@@ -14,7 +15,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
-from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -171,3 +172,12 @@ class EvaluationResultFactory(DjangoModelFactory):
     message = factory.SubFactory(EvaluationMessageFactory)
     run = factory.SubFactory(EvaluationRunFactory)
     output = {}
+
+
+class DatasetAutoPopulationRuleFactory(DjangoModelFactory):
+    class Meta:
+        model = DatasetAutoPopulationRule
+
+    team = factory.SubFactory(TeamFactory)
+    dataset = factory.SubFactory(EvaluationDatasetFactory, team=factory.SelfAttribute("..team"))
+    source_experiment = factory.SubFactory(ExperimentFactory, team=factory.SelfAttribute("..team"))

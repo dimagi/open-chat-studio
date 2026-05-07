@@ -269,6 +269,62 @@ class EvaluationDataset(BaseTeamModel):
         unique_together = ("name", "team")
 
 
+class AutoPopulationRunStatus(models.TextChoices):
+    SUCCESS = "success", "Success"
+    ERROR = "error", "Error"
+    NO_OP = "no_op", "No-op"
+
+
+class DatasetAutoPopulationRule(BaseTeamModel):
+    """A continuous-ingestion rule that pulls new sessions from a source experiment
+    into an evaluation dataset on each polling tick."""
+
+    AUTO_DISABLE_FAILURE_THRESHOLD = 3
+
+    dataset = models.ForeignKey(
+        EvaluationDataset,
+        on_delete=models.CASCADE,
+        related_name="auto_population_rules",
+    )
+    source_experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        related_name="auto_population_rules",
+        help_text="Sessions from this chatbot are considered for auto-population.",
+    )
+    filter_query_string = models.TextField(
+        blank=True,
+        help_text=(
+            "Filter criteria as a query string; empty means 'all sessions from this bot'. "
+            "Format matches FilterParams used elsewhere."
+        ),
+    )
+    is_enabled = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_run_status = models.CharField(max_length=10, choices=AutoPopulationRunStatus.choices, blank=True)
+    last_error = models.TextField(blank=True)
+    consecutive_failure_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        indexes = [models.Index(fields=["is_enabled", "last_run_at"])]
+
+    def __str__(self) -> str:
+        return f"AutoPopRule({self.source_experiment_id} -> dataset {self.dataset_id})"
+
+    def clean(self):
+        super().clean()
+        if self.team_id and self.dataset_id and self.dataset.team_id != self.team_id:
+            raise ValidationError({"dataset": "Dataset must belong to the same team as the rule."})
+        if self.team_id and self.source_experiment_id and self.source_experiment.team_id != self.team_id:
+            raise ValidationError({"source_experiment": "Source chatbot must belong to the same team as the rule."})
+
+    def get_absolute_url(self):
+        return reverse(
+            "evaluations:auto_population_rule_edit",
+            args=[get_slug_for_team(self.team_id), self.id],
+        )
+
+
 class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
