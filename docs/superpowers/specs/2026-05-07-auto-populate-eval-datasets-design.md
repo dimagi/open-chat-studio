@@ -22,9 +22,9 @@ In scope for v1:
 - Periodic Celery Beat task that walks enabled rules, ingests anything newer
   than the rule's high-water mark, and dedupes against existing dataset rows.
 - Per-config opt-in (`EvaluationConfig.auto_run_on_append`) that fires a
-  delta evaluation run scoped to just the newly appended rows.
-- Manual filter-import paths also fire the auto-trigger (so the dataset is
-  the unit of "fresh rows arrived"). CSV import does not.
+  delta evaluation run scoped to just the newly appended rows. Only the
+  auto-population path triggers this in v1 — manual filter-import and CSV
+  import do not.
 - UI surfacing: rule list/edit on dataset detail; auto-run toggle on
   evaluation config; run-type badge + scoped count on run history.
 
@@ -36,7 +36,10 @@ Out of scope for v1:
   sessions are picked up by the next polling tick *if* they fall back into
   the rule's filter and were not previously ingested into this dataset.
 - Sampling sessions (the issue mentions it but it is deferred).
-- CSV imports auto-triggering linked evals.
+- Manual filter-import or CSV-import paths auto-triggering linked evals.
+  (Could be made optional later — the issue's design says any append should
+  trigger, but for v1 we keep the auto-trigger scoped to auto-population
+  only so manual workflows are unaffected.)
 - Backfilling historical traffic when a rule is created (forward-only).
 - Rolling-window dataset size caps, retention, eviction.
 - Real-time (push) ingestion.
@@ -126,12 +129,12 @@ Task entry first checks the Waffle flag and returns immediately if disabled.
 7. If batch is empty → record `last_run_status = no_op`, do **not** advance
    `last_ingested_at`, return.
 8. Otherwise, in the same transaction:
-   - bulk_create messages, append to `dataset.messages` via the
-     `append_messages_to_dataset` helper (see "Auto-trigger" below).
+   - `bulk_create` messages, append to `dataset.messages`.
    - advance `last_ingested_at` to `max(source.created_at)` of the batch.
    - set `last_run_status = success`, `last_run_at = now()`, reset
      `consecutive_failure_count`.
-9. After commit, `append_messages_to_dataset` invokes the auto-trigger.
+9. After commit, invoke the auto-trigger (see "Auto-trigger" below) with
+   the appended messages.
 
 ### Failure handling
 
@@ -147,17 +150,13 @@ tick.
 
 ## Auto-trigger of delta evaluation runs
 
-Extract a helper `append_messages_to_dataset(dataset, messages)` in
-`apps/evaluations/tasks.py`. All append paths route through it:
+The auto-trigger is wired only into `_ingest_rule`; manual filter-import
+and CSV-import paths are intentionally left untouched in v1. Existing
+append code in `create_dataset_from_sessions_task` and
+`create_dataset_from_session_messages_task` is **not** refactored — making
+those paths trigger evaluations is a future, opt-in change.
 
-- `_ingest_rule` (new).
-- `create_dataset_from_sessions_task` (refactored to use the helper).
-- `create_dataset_from_session_messages_task` (refactored to use the
-  helper).
-- CSV import path does **not** route through the helper — operator-driven,
-  no auto-trigger by design.
-
-After a successful append the helper queries:
+After a successful auto-population append `_ingest_rule` queries:
 
 ```python
 configs = EvaluationConfig.objects.filter(dataset=dataset, auto_run_on_append=True)
@@ -223,8 +222,9 @@ New "Auto-population rules" panel:
   ticks process a rule at most once.
 - Delta run scope is preserved when more rows are appended to the dataset
   mid-flight (the run still evaluates only the original scope).
-- Auto-trigger fires for opted-in configs only; manual filter-import path
-  fires it; CSV import path does not.
+- Auto-trigger fires for opted-in configs only when the auto-population
+  task appends rows; manual filter-import and CSV-import paths do **not**
+  fire the auto-trigger.
 
 ## Open questions
 
