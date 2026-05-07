@@ -455,12 +455,16 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        results = (
+        results_qs = (
             self.results.select_related("message__session__experiment", "evaluator", "session")
             .prefetch_related("applied_tags__tag")
             .order_by("created_at")
-            .all()
         )
+        if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
+            scoped_ids = self.scoped_messages.values_list("id", flat=True)
+            results_qs = results_qs.filter(message_id__in=scoped_ids)
+
+        results = results_qs.all()
         table_by_message = defaultdict(dict)
         tags_by_message = defaultdict(set)
         for result in results:

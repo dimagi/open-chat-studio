@@ -2,12 +2,13 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.evaluations.models import EvaluationRun, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import run_evaluation_task
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
     EvaluationRunFactory,
+    EvaluatorFactory,
 )
 
 
@@ -107,3 +108,36 @@ def test_run_evaluation_task_evaluates_only_scoped_messages_for_delta(monkeypatc
     run_evaluation_task(run.id)
 
     assert dispatched_message_ids == [in_scope.id]
+
+
+@pytest.mark.django_db()
+def test_get_table_data_delta_only_returns_scoped_messages():
+    config = EvaluationConfigFactory.create()
+    evaluator = EvaluatorFactory.create(team=config.team)
+    config.evaluators.add(evaluator)
+
+    in_scope = EvaluationMessageFactory.create()
+    out_of_scope = EvaluationMessageFactory.create()
+    config.dataset.messages.add(in_scope, out_of_scope)
+
+    run = EvaluationRun.objects.create(team=config.team, config=config, type=EvaluationRunType.DELTA)
+    run.scoped_messages.add(in_scope)
+
+    EvaluationResult.objects.create(
+        team=config.team,
+        run=run,
+        evaluator=evaluator,
+        message=in_scope,
+        output={"message": {"input": {"content": "hi"}, "output": {"content": "hello"}}},
+    )
+    EvaluationResult.objects.create(
+        team=config.team,
+        run=run,
+        evaluator=evaluator,
+        message=out_of_scope,
+        output={"message": {"input": {"content": "n/a"}, "output": {"content": "n/a"}}},
+    )
+
+    rows = run.get_table_data()
+    message_ids = {row["message_id"] for row in rows}
+    assert message_ids == {in_scope.id}
