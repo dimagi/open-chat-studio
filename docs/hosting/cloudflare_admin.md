@@ -208,14 +208,14 @@ docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml resta
 |---|---|
 | Add device serial | Settings → WARP Client → Device posture |
 | Remove device serial | Settings → WARP Client → Device posture |
-| Add user email | Access → Applications → [app] → Policies |
-| Remove user email | Access → Applications → [app] → Policies |
-| Revoke active session | Zero Trust → My Team → Users → [user] → Revoke |
+| Add user email | Access → Applications → `[app]` → Policies |
+| Remove user email | Access → Applications → `[app]` → Policies |
+| Revoke active session | Zero Trust → My Team → Users → `[user]` → Revoke |
 | Check who connected | Logs → Access |
 | Check network activity | Logs → Gateway |
 | Export logs | Logs → Logpush |
 | Check tunnel health | Networks → Tunnels |
-| Change app session duration | Access → Applications → [app] → Session duration |
+| Change app session duration | Access → Applications → `[app]` → Session duration |
 | Change WARP session duration | Settings → WARP Client → Global settings |
 | Configure Local Domain Fallback | Settings → WARP Client → Device profiles → Default → Local Domain Fallback |
 | Enable Gateway Proxy | Traffic policies → Traffic settings → Proxy and inspection |
