@@ -27,6 +27,7 @@ from apps.evaluations.models import (
     AutoPopulationRunStatus,
     DatasetAutoPopulationRule,
     DatasetCreationStatus,
+    EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
@@ -1019,7 +1020,17 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
     else:
         rule.last_run_status = AutoPopulationRunStatus.NO_OP
     rule.save(update_fields=update_fields)
+
+    if appended:
+        _trigger_delta_runs_for_dataset(dataset, appended)
     return appended
+
+
+def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended: list[EvaluationMessage]) -> None:
+    """Enqueue a DELTA evaluation run for each opted-in config on this dataset."""
+    configs = EvaluationConfig.objects.filter(dataset=dataset, auto_run_on_append=True)
+    for config in configs:
+        config.run(run_type=EvaluationRunType.DELTA, scoped_messages=appended)
 
 
 def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:

@@ -1,4 +1,5 @@
 from datetime import timedelta as _td
+from unittest.mock import patch
 
 import pytest
 
@@ -6,9 +7,10 @@ from apps.evaluations.models import (
     AutoPopulationRunStatus,
     EvaluationDataset,
     EvaluationMode,
+    EvaluationRunType,
 )
 from apps.evaluations.tasks import _ingest_rule
-from apps.utils.factories.evaluations import DatasetAutoPopulationRuleFactory
+from apps.utils.factories.evaluations import DatasetAutoPopulationRuleFactory, EvaluationConfigFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -100,3 +102,39 @@ def test_ingest_rule_message_mode_appends_message_pairs():
     msg = dataset.messages.first()
     assert msg.input_chat_message_id is not None
     assert msg.expected_output_chat_message_id is not None
+
+
+@pytest.mark.django_db()
+def test_ingest_rule_triggers_delta_runs_only_for_opted_in_configs():
+    team = TeamFactory.create()
+    dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset 5", evaluation_mode=EvaluationMode.SESSION)
+    rule = DatasetAutoPopulationRuleFactory.create(team=team, dataset=dataset)
+    opted_in = EvaluationConfigFactory.create(team=team, dataset=dataset, auto_run_on_append=True)
+    opted_out = EvaluationConfigFactory.create(team=team, dataset=dataset, auto_run_on_append=False)
+    session = ExperimentSessionFactory.create(experiment=rule.source_experiment, team=team)
+    session.chat.messages.create(message_type="human", content="x")
+    session.chat.messages.create(message_type="ai", content="y")
+
+    with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
+        _ingest_rule(rule)
+
+    runs_for_opted_in = opted_in.evaluationrun_set.filter(type=EvaluationRunType.DELTA)
+    runs_for_opted_out = opted_out.evaluationrun_set.filter(type=EvaluationRunType.DELTA)
+    assert runs_for_opted_in.count() == 1
+    assert runs_for_opted_out.count() == 0
+
+    delta_run = runs_for_opted_in.first()
+    assert delta_run.scoped_messages.count() == 1
+
+
+@pytest.mark.django_db()
+def test_ingest_rule_no_appends_no_runs():
+    team = TeamFactory.create()
+    dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset 6", evaluation_mode=EvaluationMode.SESSION)
+    rule = DatasetAutoPopulationRuleFactory.create(team=team, dataset=dataset)
+    EvaluationConfigFactory.create(team=team, dataset=dataset, auto_run_on_append=True)
+
+    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
+        _ingest_rule(rule)
+
+    mock_delay.assert_not_called()
