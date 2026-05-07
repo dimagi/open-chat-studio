@@ -42,6 +42,7 @@ class EvaluationRunStatus(models.TextChoices):
 class EvaluationRunType(models.TextChoices):
     FULL = "full", "Full"
     PREVIEW = "preview", "Preview"
+    DELTA = "delta", "Delta"
 
 
 class DatasetCreationStatus(models.TextChoices):
@@ -359,6 +360,12 @@ class EvaluationRun(BaseTeamModel):
     )
     job_id = models.CharField(max_length=255, blank=True)
     error_message = models.TextField(blank=True)
+    scoped_messages = models.ManyToManyField(
+        EvaluationMessage,
+        blank=True,
+        related_name="scoping_runs",
+        help_text="Subset of dataset messages this run evaluated. Empty for FULL/PREVIEW.",
+    )
 
     def __str__(self):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
