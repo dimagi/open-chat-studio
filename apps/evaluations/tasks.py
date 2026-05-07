@@ -1046,5 +1046,46 @@ def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) ->
 
 
 def _ingest_rule_message_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
-    # Implemented in Task 9.
-    return []
+    base_qs = ExperimentSession.objects.filter(
+        team=rule.team,
+        experiment__in=_versions_of(rule.source_experiment),
+        created_at__gt=created_floor,
+    )
+    session_external_ids = list(base_qs.values_list("external_id", flat=True))
+    if not session_external_ids:
+        return []
+
+    # `EvaluationMessage.create_from_sessions` has two independent branches:
+    # `external_session_ids` (no filter) and `filtered_session_ids` + `filter_params`
+    # (with filter). Pick the right one based on whether the rule has a filter.
+    if rule.filter_query_string:
+        eval_messages = EvaluationMessage.create_from_sessions(
+            team=rule.team,
+            external_session_ids=None,
+            filtered_session_ids=session_external_ids,
+            filter_params=FilterParams(QueryDict(rule.filter_query_string)),
+            timezone=None,
+        )
+    else:
+        eval_messages = EvaluationMessage.create_from_sessions(
+            team=rule.team,
+            external_session_ids=session_external_ids,
+        )
+
+    if not eval_messages:
+        return []
+
+    existing_pairs = set(
+        rule.dataset.messages.filter(
+            input_chat_message_id__isnull=False,
+            expected_output_chat_message_id__isnull=False,
+        ).values_list("input_chat_message_id", "expected_output_chat_message_id")
+    )
+    fresh = [
+        m for m in eval_messages if (m.input_chat_message_id, m.expected_output_chat_message_id) not in existing_pairs
+    ]
+    if not fresh:
+        return []
+    created = EvaluationMessage.objects.bulk_create(fresh)
+    rule.dataset.messages.add(*created)
+    return list(created)
