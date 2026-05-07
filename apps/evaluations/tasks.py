@@ -12,7 +12,7 @@ from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import F, Prefetch, Q
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -1126,3 +1126,35 @@ def _ingest_rule_message_mode(rule: DatasetAutoPopulationRule, created_floor) ->
     created = EvaluationMessage.objects.bulk_create(fresh)
     rule.dataset.messages.add(*created)
     return list(created)
+
+
+@shared_task(base=TaskbadgerTask)
+def auto_populate_eval_datasets():
+    """Periodic task: walk enabled DatasetAutoPopulationRules and ingest matches.
+
+    Each rule is processed inside its own transaction with a row-level lock
+    (`select_for_update(skip_locked=True)`) so two beat workers cannot
+    double-process the same rule. A failure on one rule never blocks others.
+    """
+    rule_ids = list(
+        DatasetAutoPopulationRule.objects.filter(is_enabled=True)
+        .order_by(F("last_run_at").asc(nulls_first=True))
+        .values_list("id", flat=True)
+    )
+    for rule_id in rule_ids:
+        try:
+            with transaction.atomic():
+                rule = (
+                    DatasetAutoPopulationRule.objects.select_for_update(skip_locked=True)
+                    .filter(id=rule_id, is_enabled=True)
+                    .first()
+                )
+                if rule is None:
+                    continue  # locked by another worker, or disabled mid-tick
+                try:
+                    _ingest_rule(rule)
+                except Exception as e:  # noqa: BLE001 - per-rule isolation is the point
+                    logger.exception("Auto-population rule %s failed: %s", rule.id, e)
+                    _handle_rule_failure(rule, e)
+        except Exception:  # noqa: BLE001 - last-resort guard
+            logger.exception("Unexpected outer error processing auto-population rule %s", rule_id)

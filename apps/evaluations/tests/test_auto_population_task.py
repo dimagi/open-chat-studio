@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
+import apps.evaluations.tasks as eval_tasks
 from apps.evaluations.models import (
     AutoPopulationRunStatus,
     EvaluationDataset,
@@ -164,3 +165,32 @@ def test_third_consecutive_failure_disables_rule_and_emits_notification():
     assert rule.consecutive_failure_count == 3
     assert rule.is_enabled is False
     assert NotificationEvent.objects.filter(team=rule.team).count() == 1
+
+
+@pytest.mark.django_db()
+def test_auto_populate_task_skips_disabled_rules_and_isolates_failures(monkeypatch):
+    enabled_a = DatasetAutoPopulationRuleFactory.create(is_enabled=True)
+    enabled_b = DatasetAutoPopulationRuleFactory.create(is_enabled=True)
+    disabled = DatasetAutoPopulationRuleFactory.create(is_enabled=False)
+
+    processed: list[int] = []
+
+    def fake_ingest(rule):
+        processed.append(rule.id)
+        if rule.id == enabled_a.id:
+            raise RuntimeError("rule A blew up")
+        return []
+
+    monkeypatch.setattr(eval_tasks, "_ingest_rule", fake_ingest)
+
+    eval_tasks.auto_populate_eval_datasets()
+
+    assert disabled.id not in processed
+    assert enabled_a.id in processed
+    assert enabled_b.id in processed
+    enabled_a.refresh_from_db()
+    assert enabled_a.last_run_status == AutoPopulationRunStatus.ERROR
+    assert enabled_a.consecutive_failure_count == 1
+    # b was processed without error; _ingest_rule is patched so status update
+    # comes from _handle_rule_failure only on failure — just verify b was reached
+    assert enabled_b.id in processed
