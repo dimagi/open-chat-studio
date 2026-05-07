@@ -296,6 +296,13 @@ class EvaluationConfig(BaseTeamModel):
         default=ExperimentVersionSelection.SPECIFIC,
         help_text=("Type of version selection: specific, latest_working, or latest_published"),
     )
+    auto_run_on_append = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, every time the dataset receives newly auto-populated rows "
+            "this evaluation runs automatically over only those rows. May incur LLM cost."
+        ),
+    )
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
