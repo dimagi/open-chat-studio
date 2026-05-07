@@ -9,7 +9,8 @@ from apps.evaluations.models import (
     EvaluationMode,
     EvaluationRunType,
 )
-from apps.evaluations.tasks import _ingest_rule
+from apps.evaluations.tasks import _handle_rule_failure, _ingest_rule
+from apps.ocs_notifications.models import NotificationEvent
 from apps.utils.factories.evaluations import DatasetAutoPopulationRuleFactory, EvaluationConfigFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
@@ -138,3 +139,28 @@ def test_ingest_rule_no_appends_no_runs():
         _ingest_rule(rule)
 
     mock_delay.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_handle_rule_failure_increments_counter_and_records_error():
+    rule = DatasetAutoPopulationRuleFactory.create()
+
+    _handle_rule_failure(rule, RuntimeError("boom"))
+
+    rule.refresh_from_db()
+    assert rule.consecutive_failure_count == 1
+    assert rule.last_run_status == AutoPopulationRunStatus.ERROR
+    assert "boom" in rule.last_error
+    assert rule.is_enabled is True
+
+
+@pytest.mark.django_db()
+def test_third_consecutive_failure_disables_rule_and_emits_notification():
+    rule = DatasetAutoPopulationRuleFactory.create(consecutive_failure_count=2)
+
+    _handle_rule_failure(rule, RuntimeError("third strike"))
+
+    rule.refresh_from_db()
+    assert rule.consecutive_failure_count == 3
+    assert rule.is_enabled is False
+    assert NotificationEvent.objects.filter(team=rule.team).count() == 1

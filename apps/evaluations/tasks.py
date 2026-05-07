@@ -39,6 +39,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.evaluations.notifications import auto_population_rule_disabled_notification
 from apps.evaluations.tagging import apply_rules_to_result
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.filters import ExperimentSessionFilter
@@ -1031,6 +1032,31 @@ def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended: list[E
     configs = EvaluationConfig.objects.filter(dataset=dataset, auto_run_on_append=True)
     for config in configs:
         config.run(run_type=EvaluationRunType.DELTA, scoped_messages=appended)
+
+
+def _handle_rule_failure(rule: DatasetAutoPopulationRule, exception: Exception) -> None:
+    """Record a failure on the rule; auto-disable after the configured threshold."""
+    rule.consecutive_failure_count = (rule.consecutive_failure_count or 0) + 1
+    rule.last_run_status = AutoPopulationRunStatus.ERROR
+    rule.last_run_at = timezone.now()
+    rule.last_error = str(exception)[:1000]
+
+    update_fields = [
+        "consecutive_failure_count",
+        "last_run_status",
+        "last_run_at",
+        "last_error",
+    ]
+    if rule.consecutive_failure_count >= DatasetAutoPopulationRule.AUTO_DISABLE_FAILURE_THRESHOLD:
+        rule.is_enabled = False
+        update_fields.append("is_enabled")
+
+    rule.save(update_fields=update_fields)
+
+    if not rule.is_enabled:
+        auto_population_rule_disabled_notification(
+            rule, reason=f"{rule.consecutive_failure_count} consecutive failures"
+        )
 
 
 def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
