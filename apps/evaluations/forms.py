@@ -7,12 +7,14 @@ from django import forms
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
+from django.http import QueryDict
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import Tag
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
+    DatasetAutoPopulationRule,
     DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
@@ -32,6 +34,7 @@ from apps.evaluations.tasks import (
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
@@ -1004,3 +1007,43 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                     self._save_session_messages_clone(dataset)
 
         return dataset
+
+
+class DatasetAutoPopulationRuleForm(forms.ModelForm):
+    class Meta:
+        model = DatasetAutoPopulationRule
+        fields = ["source_experiment", "filter_query_string", "is_enabled"]
+
+    def __init__(self, *args, team, dataset, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.dataset = dataset
+        self.fields["source_experiment"].queryset = (
+            Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
+        )
+
+    def clean_filter_query_string(self):
+        raw = self.cleaned_data.get("filter_query_string", "")
+        if not raw:
+            return raw
+        try:
+            params = FilterParams(QueryDict(raw))
+        except Exception as e:  # noqa: BLE001 - surface as a form error
+            raise forms.ValidationError(f"Invalid filter query: {e}") from e
+        if not params.filters:
+            raise forms.ValidationError("Filter query is malformed: no complete column/operator/value triples found.")
+        return raw
+
+    def clean_source_experiment(self):
+        experiment = self.cleaned_data.get("source_experiment")
+        if experiment and experiment.team_id != self.team.id:
+            raise forms.ValidationError("Source chatbot must belong to your team.")
+        return experiment
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.team = self.team
+        instance.dataset = self.dataset
+        if commit:
+            instance.save()
+        return instance
