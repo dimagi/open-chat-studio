@@ -237,11 +237,13 @@ def run_evaluation_task(evaluation_run_id):
         with current_team(evaluation_run.team):
             config = evaluation_run.config
             evaluators = list(cast(Iterable[Evaluator], config.evaluators.all()))
-            message_queryset = config.dataset.messages.all()
+
             if evaluation_run.type == EvaluationRunType.PREVIEW:
-                messages = list(message_queryset[:PREVIEW_SAMPLE_SIZE])
+                messages = list(config.dataset.messages.all()[:PREVIEW_SAMPLE_SIZE])
+            elif evaluation_run.scoped_messages.exists():
+                messages = list(evaluation_run.scoped_messages.all())
             else:
-                messages = list(message_queryset)
+                messages = list(config.dataset.messages.all())
 
             if len(evaluators) == 0 or len(messages) == 0:
                 evaluation_run.job_id = ""

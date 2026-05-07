@@ -2,7 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.evaluations.models import EvaluationRunType
+from apps.evaluations.models import EvaluationRun, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.tasks import run_evaluation_task
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -61,3 +62,48 @@ def test_run_without_scoped_messages_has_empty_scope():
     assert run.type == EvaluationRunType.FULL
     assert run.scoped_messages.count() == 0
     mock_delay.assert_called_once_with(run.id)
+
+
+@pytest.mark.django_db()
+def test_run_evaluation_task_evaluates_only_scoped_messages_for_delta(monkeypatch):
+    """Delta runs only fan out per scoped message, ignoring other dataset rows."""
+    config = EvaluationConfigFactory.create()
+    in_scope = EvaluationMessageFactory.create()
+    out_of_scope = EvaluationMessageFactory.create()
+    config.dataset.messages.add(in_scope, out_of_scope)
+
+    run = EvaluationRun.objects.create(
+        team=config.team,
+        config=config,
+        status=EvaluationRunStatus.PENDING,
+        type=EvaluationRunType.DELTA,
+    )
+    run.scoped_messages.add(in_scope)
+
+    dispatched_message_ids: list[int] = []
+
+    def fake_chunks(chunked_args, _chunk_size):
+        for _evaluation_run_id, _evaluator_ids, message_id in chunked_args:
+            dispatched_message_ids.append(message_id)
+
+        class _Group:
+            def group(self):
+                return self
+
+        return _Group()
+
+    class _ChordResult:
+        parent = type("Parent", (), {"id": "fake", "save": lambda self: None})()
+
+    def fake_chord(_g):
+        def _runner(_callback):
+            return _ChordResult()
+
+        return _runner
+
+    monkeypatch.setattr("apps.evaluations.tasks.evaluate_single_message_task.chunks", fake_chunks)
+    monkeypatch.setattr("apps.evaluations.tasks.chord", fake_chord)
+
+    run_evaluation_task(run.id)
+
+    assert dispatched_message_ids == [in_scope.id]
