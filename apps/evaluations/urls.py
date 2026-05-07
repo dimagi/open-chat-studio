@@ -2,7 +2,7 @@ from django.urls import path
 
 from apps.generics.urls import make_crud_urls
 
-from .views import dataset_views, evaluation_config_views, evaluator_views
+from .views import auto_population_views, dataset_views, evaluation_config_views, evaluator_views
 
 app_name = "evaluations"
 
@@ -116,6 +116,26 @@ urlpatterns = [
         "dataset/<int:pk>/upload/",
         dataset_views.upload_dataset_csv,
         name="dataset_upload",
+    ),
+    path(
+        "dataset/<int:dataset_id>/auto_population/new/",
+        auto_population_views.CreateAutoPopulationRule.as_view(),
+        name="auto_population_rule_new",
+    ),
+    path(
+        "dataset/<int:dataset_id>/auto_population/<int:pk>/",
+        auto_population_views.EditAutoPopulationRule.as_view(),
+        name="auto_population_rule_edit",
+    ),
+    path(
+        "dataset/<int:dataset_id>/auto_population/<int:pk>/delete/",
+        auto_population_views.DeleteAutoPopulationRule.as_view(),
+        name="auto_population_rule_delete",
+    ),
+    path(
+        "auto_population/<int:pk>/toggle/",
+        auto_population_views.toggle_auto_population_rule,
+        name="auto_population_rule_toggle",
     ),
 ]
 
