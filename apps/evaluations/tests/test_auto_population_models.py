@@ -2,6 +2,8 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.evaluations.models import DatasetAutoPopulationRule
+from apps.evaluations.notifications import auto_population_rule_disabled_notification
+from apps.ocs_notifications.models import NotificationEvent
 from apps.utils.factories.evaluations import (
     DatasetAutoPopulationRuleFactory,
     EvaluationDatasetFactory,
@@ -48,3 +50,15 @@ def test_rule_clean_rejects_source_experiment_team_mismatch():
     with pytest.raises(ValidationError) as exc_info:
         rule.full_clean()
     assert "source_experiment" in exc_info.value.message_dict
+
+
+@pytest.mark.django_db()
+def test_auto_disable_notification_creates_event():
+    rule = DatasetAutoPopulationRuleFactory.create()
+    auto_population_rule_disabled_notification(rule, reason="three consecutive failures")
+
+    events = NotificationEvent.objects.filter(team=rule.team)
+    assert events.count() == 1
+    event = events.first()
+    assert "auto-population" in event.title.lower()
+    assert str(rule.dataset.name) in event.message

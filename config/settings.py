@@ -940,3 +940,7 @@ MB = 1_048_576  # 1 MB
 RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 5 * MB
 RESTRICTED_HTTP_MAX_REQUEST_BYTES = MB
 RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES = 25 * MB
+
+# Evaluations settings
+# How far back the auto-populate-eval-datasets task scans for new sessions per rule.
+EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS = env.int("EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS", default=30)
