@@ -714,3 +714,51 @@ def test_generate_bot_message_auto_creates_participant(ConnectClient, experiment
     else:
         connect_client_mock.send_message_to_user.assert_not_called()
         assert not ExperimentSession.objects.filter(participant=participant, experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_generate_bot_message_for_email_channel(experiment):
+    """Regression: trigger_bot_message_task must work for the v2 EmailChannel.
+
+    Previously raised AttributeError because v2 ChannelBase lacked
+    ``ensure_session_exists_for_participant``.
+    """
+    from django.core import mail  # noqa: PLC0415
+
+    ExperimentChannelFactory.create(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.EMAIL,
+        extra_data={"email_address": "bot@chat.openchatstudio.com"},
+    )
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+
+    data = {
+        "identifier": "user@example.com",
+        "platform": ChannelPlatform.EMAIL,
+        "experiment": str(experiment.public_id),
+        "prompt_text": "Say hello",
+    }
+    url = reverse("api:trigger_bot")
+    with mock_llm(["Hello from the bot"], [0]):
+        response = client.post(url, json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 200
+
+    # Session was created and tied to the email participant
+    participant = Participant.objects.get(identifier="user@example.com", platform=ChannelPlatform.EMAIL)
+    session = ExperimentSession.objects.get(participant=participant, experiment=experiment)
+    assert session.chat.messages.count() == 1
+    bot_message = session.chat.messages.first()
+    assert bot_message.message_type == "ai"
+    assert bot_message.content == "Hello from the bot"
+
+    # Email actually delivered through the EmailSender
+    assert len(mail.outbox) == 1
+    sent = mail.outbox[0]
+    assert sent.body == "Hello from the bot"
+    assert sent.to == ["user@example.com"]
+    assert sent.from_email == "bot@chat.openchatstudio.com"

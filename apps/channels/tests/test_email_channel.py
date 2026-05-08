@@ -547,6 +547,59 @@ class TestEmailChannel:
 
 
 @pytest.mark.django_db()
+class TestEnsureSessionExistsForParticipant:
+    """Covers the bot-initiated session resolution path used by trigger_bot_message_task."""
+
+    def test_creates_session_when_none_exists(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com")
+
+        assert email_channel.experiment_session is not None
+        assert email_channel.experiment_session.participant.identifier == "user@example.com"
+        assert email_channel.experiment_session.experiment_channel == channel
+
+    def test_reuses_existing_active_session(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com")
+
+        assert email_channel.experiment_session.id == existing.id
+        assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 1
+
+    def test_new_session_ends_existing_and_creates_fresh(self, team_with_users):
+        from apps.experiments.models import SessionStatus  # noqa: PLC0415
+
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com", new_session=True)
+
+        existing.refresh_from_db()
+        assert existing.status == SessionStatus.PENDING_REVIEW
+        assert email_channel.experiment_session.id != existing.id
+        assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 2
+
+    def test_mismatched_identifier_raises(self, team_with_users):
+        from apps.chat.exceptions import ChannelException  # noqa: PLC0415
+
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel, existing)
+
+        with pytest.raises(ChannelException, match="Participant identifier does not match"):
+            email_channel.ensure_session_exists_for_participant("other@example.com")
+
+
+@pytest.mark.django_db()
 class TestHandleEmailMessageTask:
     def test_routes_and_processes_message(self, team_with_users):
         team = team_with_users

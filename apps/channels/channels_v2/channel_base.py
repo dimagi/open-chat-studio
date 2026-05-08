@@ -24,7 +24,12 @@ from apps.channels.channels_v2.stages.terminal import (
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
+from apps.chat.channels import _start_experiment_session
+from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
+from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.events.models import StaticTriggerType
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TracingService
 from apps.teams.utils import current_team
@@ -34,7 +39,7 @@ if TYPE_CHECKING:
     from apps.channels.channels_v2.sender import ChannelSender
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
-    from apps.experiments.models import Experiment, ExperimentSession
+    from apps.experiments.models import Experiment
 
 logger = logging.getLogger("ocs.channels")
 
@@ -155,6 +160,48 @@ class ChannelBase(ABC):
     @abstractmethod
     def _get_sender(self) -> ChannelSender:
         """Return channel-specific sender."""
+
+    def ensure_session_exists_for_participant(self, identifier: str, new_session: bool = False) -> None:
+        """Ensure an experiment session exists for the given participant identifier.
+
+        Used when the bot initiates a conversation (e.g. ``trigger_bot_message_task``) and
+        no inbound message is available to drive the regular pipeline. The resolved session
+        is assigned to ``self.experiment_session``.
+
+        If ``new_session`` is True, any existing non-completed session for this participant
+        is ended and a fresh one is created.
+
+        Raises:
+            ChannelException: when ``self.experiment_session`` already references a different
+                participant.
+        """
+        if self.experiment_session and self.experiment_session.participant.identifier != identifier:
+            raise ChannelException("Participant identifier does not match the existing one")
+
+        working_experiment = self.experiment.get_working_version()
+        existing_session = (
+            ExperimentSession.objects.filter(
+                experiment=working_experiment,
+                participant__identifier=str(identifier),
+            )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if new_session and existing_session:
+            existing_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
+            existing_session = None
+
+        if existing_session is None:
+            existing_session = _start_experiment_session(
+                working_experiment=working_experiment,
+                experiment_channel=self.experiment_channel,
+                participant_identifier=identifier,
+                session_status=SessionStatus.SETUP,
+            )
+
+        self.experiment_session = existing_session
 
     def send_message_to_user(self, bot_message: str, files: list | None = None):
         """Send a bot-generated message to the user outside the normal pipeline.
