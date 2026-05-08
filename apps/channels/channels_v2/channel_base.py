@@ -26,7 +26,6 @@ from apps.channels.channels_v2.stages.terminal import (
 )
 from apps.chat.channels import _start_experiment_session
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession, SessionStatus
@@ -170,13 +169,10 @@ class ChannelBase(ABC):
 
         If ``new_session`` is True, any existing non-completed session for this participant
         is ended and a fresh one is created.
-
-        Raises:
-            ChannelException: when ``self.experiment_session`` already references a different
-                participant.
         """
-        if self.experiment_session and self.experiment_session.participant.identifier != identifier:
-            raise ChannelException("Participant identifier does not match the existing one")
+        assert self.experiment_session is None or self.experiment_session.participant.identifier == identifier, (
+            "Participant identifier does not match the existing session"
+        )
 
         working_experiment = self.experiment.get_working_version()
         existing_session = (

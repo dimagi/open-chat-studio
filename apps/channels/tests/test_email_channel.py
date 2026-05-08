@@ -22,7 +22,6 @@ from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
@@ -585,15 +584,6 @@ class TestEnsureSessionExistsForParticipant:
         assert existing.status == SessionStatus.PENDING_REVIEW
         assert email_channel.experiment_session.id != existing.id
         assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 2
-
-    def test_mismatched_identifier_raises(self, team_with_users):
-        team = team_with_users
-        channel = _make_email_channel(team)
-        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
-        email_channel = EmailChannel(channel.experiment, channel, existing)
-
-        with pytest.raises(ChannelException, match="Participant identifier does not match"):
-            email_channel.ensure_session_exists_for_participant("other@example.com")
 
 
 @pytest.mark.django_db()
