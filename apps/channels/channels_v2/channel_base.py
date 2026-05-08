@@ -183,6 +183,7 @@ class ChannelBase(ABC):
             ExperimentSession.objects.filter(
                 experiment=working_experiment,
                 participant__identifier=str(identifier),
+                experiment_channel__platform=self.experiment_channel.platform,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .order_by("-created_at")

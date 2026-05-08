@@ -22,8 +22,9 @@ from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
+from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
-from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -573,8 +574,6 @@ class TestEnsureSessionExistsForParticipant:
         assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 1
 
     def test_new_session_ends_existing_and_creates_fresh(self, team_with_users):
-        from apps.experiments.models import SessionStatus  # noqa: PLC0415
-
         team = team_with_users
         channel = _make_email_channel(team)
         existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
@@ -588,8 +587,6 @@ class TestEnsureSessionExistsForParticipant:
         assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 2
 
     def test_mismatched_identifier_raises(self, team_with_users):
-        from apps.chat.exceptions import ChannelException  # noqa: PLC0415
-
         team = team_with_users
         channel = _make_email_channel(team)
         existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
