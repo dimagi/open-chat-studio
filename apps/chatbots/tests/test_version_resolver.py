@@ -50,3 +50,35 @@ class TestResolveLatestWorking:
         snapshot = family.create_new_version()
         with pytest.raises(ValueError, match="family-head"):
             resolve_chatbot_version(snapshot, VersionSelectionRule.LATEST_WORKING)
+
+
+@pytest.mark.django_db()
+class TestResolveLatestPublished:
+    def test_returns_default_version_when_one_exists(self):
+        family = ExperimentFactory()
+        v1 = family.create_new_version()  # first snapshot becomes default automatically
+        result = resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
+        assert result == v1
+        assert result.is_default_version
+
+    def test_returns_latest_default_when_promoted(self):
+        family = ExperimentFactory()
+        family.create_new_version()  # v1 is default
+        v2 = family.create_new_version(make_default=True)  # v2 promoted, v1 demoted
+        result = resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
+        assert result == v2
+
+    def test_raises_when_family_has_no_snapshots(self):
+        family = ExperimentFactory()  # working version only, no snapshots
+        with pytest.raises(NoPublishedVersion):
+            resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
+
+    def test_raises_when_snapshots_exist_but_none_is_default(self):
+        # Reachable when a previously-default snapshot has been demoted manually
+        # (e.g. a team archives or unpublishes the default without promoting another).
+        family = ExperimentFactory()
+        v1 = family.create_new_version()  # auto-defaulted because version_number == 1
+        v1.is_default_version = False
+        v1.save(update_fields=["is_default_version"])
+        with pytest.raises(NoPublishedVersion):
+            resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)

@@ -58,4 +58,10 @@ def resolve_chatbot_version(
     if rule == VersionSelectionRule.LATEST_WORKING:
         return family.get_working_version()
 
+    if rule == VersionSelectionRule.LATEST_PUBLISHED:
+        published = family.versions.filter(is_default_version=True).first()
+        if published is None:
+            raise NoPublishedVersion(f"Chatbot family {family.id} has no Published Version")
+        return published
+
     raise NotImplementedError(f"Rule {rule} not implemented yet")
