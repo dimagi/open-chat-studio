@@ -159,6 +159,12 @@ class GPT52Parameters(LLMModelParamBase):
         return value
 
 
+class GPT55Parameters(GPT52Parameters):
+    # gpt-5.5 shares the same parameter schema as GPT52Parameters:
+    # reasoning.effort supports none, low, medium (default), high, xhigh
+    pass
+
+
 class GPT5ProParameters(LLMModelParamBase):
     # gpt-5-pro only supports high effort, which is also its default
     verbosity: OpenAIVerbosityParameter = Field(
