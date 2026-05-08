@@ -1,18 +1,82 @@
-# Managing LLM Model Lifecycle
+# Managing LLM Models
 
-This guide covers two distinct processes for managing LLM models that are being retired:
+This guide covers the full lifecycle of LLM models in Open Chat Studio: adding new models, deprecating models that are being phased out, and fully deleting models.
 
-- **Deprecating** a model: the model is kept in the system but flagged as deprecated. Users see a warning in the UI and are notified of the recommended replacement so they can update before the model is deleted.
-- **Deleting** a model: the model is fully removed from the platform. Any remaining references are auto-migrated to a replacement if one is specified, and affected teams are notified.
+| | Adding | Deprecation | Deletion |
+|---|---|---|---|
+| Added to `DEFAULT_LLM_PROVIDER_MODELS` | Yes | Already present (marked `deprecated=True`) | No (removed) |
+| Added to `DELETED_MODELS` | No | No | Yes |
+| Model seeded in DB | Yes (via migration) | Already in DB | No (removed) |
+| Auto-migration to replacement | N/A | No | Optional |
+| User notification | No | Optional | Yes |
 
-| | Deprecation | Deletion |
-|---|---|---|
-| Removed from `DEFAULT_LLM_PROVIDER_MODELS` | No (marked `deprecated=True`) | Yes |
-| Added to `DELETED_MODELS` | No | Yes |
-| Model removed from DB | No | Yes |
-| Auto-migration to replacement | No | Optional |
-| Maintenance step to clean up list | No | Yes |
-| User notification | Optional | Yes |
+---
+
+## Adding a Model
+
+### Step 1: Define parameters (if needed)
+
+If the new model has a distinct set of configurable parameters (e.g. a different reasoning effort range), add a new parameters class in `apps/service_providers/llm_service/model_parameters.py`:
+
+```python
+class GPT55Parameters(LLMModelParamBase):
+    # reasoning.effort: none, low, medium (default), high, xhigh
+    effort: GPT52ReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default=GPT52ReasoningEffortParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT52ReasoningEffortParameter.labels),
+    )
+    # ... other fields
+```
+
+If an existing parameter class fits, reuse it directly.
+
+### Step 2: Register the model
+
+In `apps/service_providers/llm_service/default_models.py`, add the model to the relevant provider list(s). The `token_limit` should reflect the model's context window:
+
+```python
+DEFAULT_LLM_PROVIDER_MODELS = {
+    "openai": [
+        # ...
+        Model("gpt-5.5", 1050000, parameters=GPT55Parameters),
+    ],
+}
+```
+
+Import the parameters class at the top of the file if you created a new one.
+
+### Step 3: Create a Django migration
+
+```python
+from django.db import migrations
+
+from apps.service_providers.migration_utils import llm_model_migration
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("service_providers", "0052_previous_migration"),
+    ]
+
+    operations = [
+        # Seeds the new model into LlmProviderModel for all teams
+        llm_model_migration(),
+    ]
+```
+
+### Step 4: Remove `llm_model_migration()` from previous migrations
+
+`llm_model_migration()` re-syncs the entire model list each time it runs. It should only run **once per deployment** — in the newest migration. Strip it from all earlier migrations that still call it:
+
+```bash
+grep -rl "llm_model_migration\|notify_deprecated_models\|remove_deprecated_models" \
+    apps/service_providers/migrations/
+```
+
+For each migration in that list (except your new one), remove the call and its import, leaving `operations = []` if nothing else remains.
+
+> **Why?** Data migrations like `notify_deprecated_models` and `remove_deprecated_models` would fire multiple times, sending duplicate notifications to teams.
 
 ---
 
@@ -58,32 +122,12 @@ class Migration(migrations.Migration):
 
 ### Step 3: Remove these operations from all previous migrations
 
-`llm_model_migration()` and the data migrations (`notify_deprecated_models`, `remove_deprecated_models`) should only run **once per deployment** — in the newest migration. Any earlier migration that calls them should have those operations removed (leaving `operations = []` if nothing else remains).
-
-Find all affected migrations:
+Same rule as when adding — `llm_model_migration()` and data migrations should only run once per deployment. Find and strip them from earlier migrations:
 
 ```bash
 grep -rl "llm_model_migration\|notify_deprecated_models\|remove_deprecated_models" \
     apps/service_providers/migrations/
 ```
-
-For each one (except your new migration), remove the relevant operations and their imports. For example:
-
-```python
-# Before
-from apps.service_providers.migration_utils import llm_model_migration
-
-class Migration(migrations.Migration):
-    operations = [
-        llm_model_migration(),
-    ]
-
-# After
-class Migration(migrations.Migration):
-    operations = []
-```
-
-> **Why?** Each call to `llm_model_migration()` re-syncs the entire model list. Running it multiple times in a single deployment is harmless but wasteful. More importantly, data migrations like `notify_deprecated_models` would fire multiple times, sending duplicate notifications to teams.
 
 ---
 
@@ -142,14 +186,7 @@ class Migration(migrations.Migration):
 
 ### Step 3: Remove these operations from all previous migrations
 
-Same as for deprecation — `llm_model_migration()` and data migrations should only run once per deployment. Strip them from all earlier migrations:
-
-```bash
-grep -rl "llm_model_migration\|notify_deprecated_models\|remove_deprecated_models" \
-    apps/service_providers/migrations/
-```
-
-Remove the operations (and unused imports) from every migration in that list except your new one.
+Same as for deprecation — strip `llm_model_migration()` and data migrations from all earlier migrations except your new one.
 
 ---
 
