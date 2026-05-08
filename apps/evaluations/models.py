@@ -14,7 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.chatbots.version_resolver import VersionSelectionRule
+from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.rule_validation import (
     ConditionType,
     validate_condition,
@@ -293,18 +293,20 @@ class EvaluationConfig(BaseTeamModel):
         return f"EvaluationConfig ({self.name})"
 
     def get_generation_experiment_version(self):
-        """Resolve the actual experiment version based on selection type"""
+        """Resolve the actual experiment version based on selection type.
+
+        SPECIFIC short-circuits to the stored FK (no family-and-number round-trip).
+        Other rules delegate to the resolver. Returns None when the config is
+        incompletely configured; the resolver raises on programmer errors.
+        """
         if self.version_selection_type == VersionSelectionRule.SPECIFIC:
             return self.experiment_version
-
-        if not self.base_experiment:
+        if self.base_experiment_id is None:
             return None
-
-        if self.version_selection_type == VersionSelectionRule.LATEST_WORKING:
-            return self.base_experiment.get_working_version()
-        elif self.version_selection_type == VersionSelectionRule.LATEST_PUBLISHED:
-            return self.base_experiment.default_version
-        return None
+        return resolve_chatbot_version(
+            self.base_experiment,
+            self.version_selection_type,
+        )
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
