@@ -1,8 +1,12 @@
+import pytest
+
 from apps.chatbots.version_resolver import (
     NoPublishedVersion,
     VersionNotFound,
     VersionSelectionRule,
+    resolve_chatbot_version,
 )
+from apps.utils.factories.experiment import ExperimentFactory
 
 
 class TestVersionSelectionRule:
@@ -25,3 +29,24 @@ class TestExceptionsAreImportable:
         # can `except ValueError`.
         assert issubclass(VersionNotFound, ValueError)
         assert issubclass(NoPublishedVersion, ValueError)
+
+
+@pytest.mark.django_db()
+class TestResolveLatestWorking:
+    def test_returns_family_head_when_called_on_family_head(self):
+        family = ExperimentFactory()  # working version, no snapshots
+        result = resolve_chatbot_version(family, VersionSelectionRule.LATEST_WORKING)
+        assert result == family
+
+    def test_returns_family_head_when_family_has_snapshots(self):
+        family = ExperimentFactory()
+        family.create_new_version()  # makes a snapshot, family head still editable
+        result = resolve_chatbot_version(family, VersionSelectionRule.LATEST_WORKING)
+        assert result == family
+        assert result.is_working_version
+
+    def test_raises_when_family_is_a_snapshot(self):
+        family = ExperimentFactory()
+        snapshot = family.create_new_version()
+        with pytest.raises(ValueError, match="family-head"):
+            resolve_chatbot_version(snapshot, VersionSelectionRule.LATEST_WORKING)
