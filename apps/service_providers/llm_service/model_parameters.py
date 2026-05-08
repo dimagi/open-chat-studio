@@ -159,61 +159,10 @@ class GPT52Parameters(LLMModelParamBase):
         return value
 
 
-class GPT55Parameters(LLMModelParamBase):
-    # gpt-5.5: reasoning.effort supports none, low, medium (default), high, xhigh
-    effort: GPT52ReasoningEffortParameter = Field(
-        title="Reasoning Effort",
-        default=GPT52ReasoningEffortParameter.MEDIUM,
-        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT52ReasoningEffortParameter.labels),
-    )
-
-    verbosity: OpenAIVerbosityParameter = Field(
-        title="Verbosity",
-        default=OpenAIVerbosityParameter.MEDIUM,
-        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=OpenAIVerbosityParameter.labels),
-    )
-
-    temperature: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=2.0,
-        title="Temperature",
-        json_schema_extra=UiSchema(
-            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=0.7
-        ),
-    )
-
-    top_p: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        title="Top P",
-        json_schema_extra=UiSchema(
-            widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=1.0
-        ),
-    )
-
-    @field_validator("temperature", mode="before")
-    def validate_temperature(cls, value: float, info):
-        if value is not None and info.data.get("effort") != "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Temperature can only be set when reasoning effort is 'none'",
-            )
-        elif value is None and info.data.get("effort") == "none":
-            return 0.7
-        return value
-
-    @field_validator("top_p", mode="before")
-    def validate_top_p(cls, value: float, info):
-        if value is not None and info.data.get("effort") != "none":
-            raise PydanticCustomError(
-                "invalid_model_parameters",
-                "Top P can only be set when reasoning effort is 'none'",
-            )
-        elif value is None and info.data.get("effort") == "none":
-            return 1.0
-        return value
+class GPT55Parameters(GPT52Parameters):
+    # gpt-5.5 shares the same parameter schema as GPT52Parameters:
+    # reasoning.effort supports none, low, medium (default), high, xhigh
+    pass
 
 
 class GPT5ProParameters(LLMModelParamBase):
