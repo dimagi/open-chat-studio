@@ -3,14 +3,14 @@ from unittest.mock import patch
 
 import pytest
 
-import apps.evaluations.tasks as eval_tasks
+import apps.evaluations.auto_population as eval_tasks
+from apps.evaluations.auto_population import _handle_rule_failure, _ingest_rule
 from apps.evaluations.models import (
     AutoPopulationRunStatus,
     EvaluationDataset,
     EvaluationMode,
     EvaluationRunType,
 )
-from apps.evaluations.tasks import _handle_rule_failure, _ingest_rule
 from apps.ocs_notifications.models import NotificationEvent
 from apps.utils.factories.evaluations import DatasetAutoPopulationRuleFactory, EvaluationConfigFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory

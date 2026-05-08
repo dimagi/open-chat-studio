@@ -519,8 +519,8 @@ SCHEDULED_TASKS = {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
         "schedule": timedelta(days=1),
     },
-    "evaluations.tasks.auto_populate_eval_datasets": {
-        "task": "apps.evaluations.tasks.auto_populate_eval_datasets",
+    "evaluations.auto_population.auto_populate_eval_datasets": {
+        "task": "apps.evaluations.auto_population.auto_populate_eval_datasets",
         "schedule": timedelta(minutes=5),
     },
 }
