@@ -64,4 +64,14 @@ def resolve_chatbot_version(
             raise NoPublishedVersion(f"Chatbot family {family.id} has no Published Version")
         return published
 
-    raise NotImplementedError(f"Rule {rule} not implemented yet")
+    if rule == VersionSelectionRule.SPECIFIC:
+        if version_number is None:
+            raise VersionNotFound("SPECIFIC rule requires a version_number")
+        if family.version_number == version_number:
+            return family
+        try:
+            return family.versions.get(version_number=version_number)
+        except family.versions.model.DoesNotExist:
+            raise VersionNotFound(f"Family {family.id} has no version with version_number={version_number}") from None
+
+    raise ValueError(f"Unknown rule: {rule}")  # defensive; enum values exhausted above
