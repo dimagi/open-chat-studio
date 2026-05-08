@@ -4,9 +4,8 @@ See `CONTEXT.md` for the domain vocabulary. The rule values mirror the strings
 that already live in `evaluations_evaluationconfig.version_selection_type`, so
 this enum can be moved without a data migration.
 
-`VersionSelectionRule` supersedes `apps.evaluations.models.ExperimentVersionSelection`
-(same string values). The legacy enum is removed and all imports redirected here
-in a follow-up commit; until then the two coexist.
+`VersionSelectionRule` replaced `apps.evaluations.models.ExperimentVersionSelection`
+(same string values, no DB migration). All imports now resolve here.
 """
 
 from __future__ import annotations

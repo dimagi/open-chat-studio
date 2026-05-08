@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.rule_validation import (
     ConditionType,
     validate_condition,
@@ -49,14 +50,6 @@ class DatasetCreationStatus(models.TextChoices):
     PROCESSING = "processing", "Processing"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
-
-
-class ExperimentVersionSelection(models.TextChoices):
-    """Choices for experiment version selection including sentinel values"""
-
-    SPECIFIC = "specific", "Specific Version"
-    LATEST_WORKING = "latest_working", "Latest Working Version"
-    LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
 class EvaluationMode(models.TextChoices):
@@ -291,8 +284,8 @@ class EvaluationConfig(BaseTeamModel):
     # Store sentinel value if using latest working/published
     version_selection_type = models.CharField(
         max_length=50,
-        choices=ExperimentVersionSelection.choices,
-        default=ExperimentVersionSelection.SPECIFIC,
+        choices=VersionSelectionRule.choices,
+        default=VersionSelectionRule.SPECIFIC,
         help_text=("Type of version selection: specific, latest_working, or latest_published"),
     )
 
@@ -301,15 +294,15 @@ class EvaluationConfig(BaseTeamModel):
 
     def get_generation_experiment_version(self):
         """Resolve the actual experiment version based on selection type"""
-        if self.version_selection_type == ExperimentVersionSelection.SPECIFIC:
+        if self.version_selection_type == VersionSelectionRule.SPECIFIC:
             return self.experiment_version
 
         if not self.base_experiment:
             return None
 
-        if self.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+        if self.version_selection_type == VersionSelectionRule.LATEST_WORKING:
             return self.base_experiment.get_working_version()
-        elif self.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+        elif self.version_selection_type == VersionSelectionRule.LATEST_PUBLISHED:
             return self.base_experiment.default_version
         return None
 
