@@ -5,6 +5,7 @@ from apps.chatbots.version_resolver import (
     VersionNotFound,
     VersionSelectionRule,
     resolve_chatbot_version,
+    resolve_published_or_working,
 )
 from apps.utils.factories.experiment import ExperimentFactory
 
@@ -122,3 +123,27 @@ class TestResolveSpecific:
         family = ExperimentFactory()
         with pytest.raises(VersionNotFound):
             resolve_chatbot_version(family, VersionSelectionRule.SPECIFIC)
+
+
+@pytest.mark.django_db()
+class TestResolvePublishedOrWorking:
+    def test_returns_published_when_one_exists(self):
+        family = ExperimentFactory()
+        v1 = family.create_new_version()  # auto-defaulted
+        result = resolve_published_or_working(family)
+        assert result == v1
+
+    def test_falls_back_to_working_when_no_published(self):
+        family = ExperimentFactory()  # no snapshots
+        result = resolve_published_or_working(family)
+        assert result == family
+        assert result.is_working_version
+
+    def test_falls_back_when_snapshots_exist_but_none_default(self):
+        # Reachable when default has been demoted manually
+        family = ExperimentFactory()
+        v1 = family.create_new_version()
+        v1.is_default_version = False
+        v1.save(update_fields=["is_default_version"])
+        result = resolve_published_or_working(family)
+        assert result == family  # working head, not v1

@@ -5,11 +5,7 @@ from django.db.models import Subquery
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
-from apps.chatbots.version_resolver import (
-    NoPublishedVersion,
-    VersionSelectionRule,
-    resolve_chatbot_version,
-)
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
@@ -100,10 +96,7 @@ def trigger_bot_message_task(data):
     experiment = Experiment.objects.get(public_id=experiment_public_id)
     experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
 
-    try:
-        target_experiment = resolve_chatbot_version(experiment, VersionSelectionRule.LATEST_PUBLISHED)
-    except NoPublishedVersion:
-        target_experiment = resolve_chatbot_version(experiment, VersionSelectionRule.LATEST_WORKING)
+    target_experiment = resolve_published_or_working(experiment)
     ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
     channel = ChannelClass(experiment=target_experiment, experiment_channel=experiment_channel)
 

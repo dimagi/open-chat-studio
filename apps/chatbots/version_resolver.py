@@ -74,3 +74,17 @@ def resolve_chatbot_version(
             raise VersionNotFound(f"Family {family.id} has no version with version_number={version_number}") from None
 
     raise ValueError(f"Unknown rule: {rule}")  # defensive; enum values exhausted above
+
+
+def resolve_published_or_working(family: Experiment) -> Experiment:
+    """Resolve to the Published Version, falling back to the Working Version if absent.
+
+    Mirrors the legacy `Experiment.default_version` semantics for inbound entry points
+    (channel webhooks, public API) that must keep working for unpublished Chatbots.
+    Strict callers should use `resolve_chatbot_version` directly with LATEST_PUBLISHED
+    and handle `NoPublishedVersion` themselves.
+    """
+    try:
+        return resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
+    except NoPublishedVersion:
+        return resolve_chatbot_version(family, VersionSelectionRule.LATEST_WORKING)
