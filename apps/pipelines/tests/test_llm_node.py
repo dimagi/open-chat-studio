@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
@@ -40,6 +40,33 @@ class TestMessageSizeValidationMiddleware:
     def test_zero_token_limit_skips_validation(self):
         middleware = MessageSizeValidationMiddleware(token_limit=0)
         middleware.before_model(self._state(HumanMessage(content="word " * 10000)), runtime=None)
+
+    def test_large_tool_message_does_not_raise(self):
+        # Regression: tool outputs inflated count and blocked legitimate conversations.
+        # Only the last HumanMessage should be checked, not ToolMessages.
+        middleware = MessageSizeValidationMiddleware(token_limit=50)
+        state = self._state(
+            HumanMessage(content="hi"),
+            AIMessage(content="", tool_calls=[{"id": "t1", "name": "search", "args": {}}]),
+            ToolMessage(content="word " * 5000, tool_call_id="t1"),
+        )
+        middleware.before_model(state, runtime=None)
+
+    def test_no_human_message_skips_validation(self):
+        # Guard: if the state has no HumanMessage (shouldn't happen normally) don't raise.
+        middleware = MessageSizeValidationMiddleware(token_limit=5)
+        state = self._state(SystemMessage(content="system prompt"))
+        middleware.before_model(state, runtime=None)
+
+    def test_only_last_human_message_is_checked(self):
+        # History messages don't count — only the latest user input.
+        middleware = MessageSizeValidationMiddleware(token_limit=20)
+        state = self._state(
+            HumanMessage(content="word " * 100),  # old, large message — must not trigger
+            AIMessage(content="reply"),
+            HumanMessage(content="hi"),  # current, small message
+        )
+        middleware.before_model(state, runtime=None)
 
     # --- _build_size_validation_middleware ---
 

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.summarization import SummarizationMiddleware
-from langchain_core.messages import BaseMessage, RemoveMessage
+from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
@@ -134,10 +134,11 @@ class MaxHistoryLengthHistoryMiddleware(BaseNodeHistoryMiddleware):
 
 
 class MessageSizeValidationMiddleware(AgentMiddleware):
-    """Raises MessageTooLargeError before the model call if the full context exceeds the token budget.
+    """Raises MessageTooLargeError if the current user message exceeds the token budget.
 
-    Runs after history compression and includes all messages in state
-    (history + current user input + any attachments).
+    Only validates the last HumanMessage in state. ToolMessages and prior conversation
+    history are intentionally excluded — large tool responses are a separate concern,
+    and history size is managed by the compression middleware that runs before this one.
     """
 
     def __init__(self, token_limit: int):
@@ -146,10 +147,14 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
     def before_model(self, state, runtime):
         if not self._token_limit:
             return None
-        token_count = count_tokens_approximately(state["messages"])
+        human_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
+        if not human_messages:
+            return None
+        token_count = count_tokens_approximately(human_messages[-1:])
         if token_count > self._token_limit:
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "
-                f"It uses approximately {token_count} tokens, but only {self._token_limit} tokens are available."
+                f"It uses approximately {token_count} tokens, but only {self._token_limit} tokens are available "
+                f"after accounting for the system prompt."
             )
         return None
