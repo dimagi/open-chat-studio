@@ -455,20 +455,7 @@ describe('ocs-chat', () => {
   });
 
   describe('Character Limit', () => {
-    it('should not render counter when maxCharLimit is not set', async () => {
-      const page = await newSpecPage({
-        components: [OcsChat],
-        html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>`,
-      });
-      const component = page.rootInstance as OcsChat;
-      component.sessionId = 'test-session';
-      await page.waitForChanges();
-
-      const counter = page.root?.shadowRoot?.querySelector('.char-counter');
-      expect(counter).toBeNull();
-    });
-
-    it('should render counter and allow send when message is within limit', async () => {
+    it('should not show error state when message is within limit', async () => {
       const page = await newSpecPage({
         components: [OcsChat],
         html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true" max-char-limit="100"></open-chat-studio-widget>`,
@@ -478,30 +465,12 @@ describe('ocs-chat', () => {
       component.messageInput = 'short message';
       await page.waitForChanges();
 
-      const counter = page.root?.shadowRoot?.querySelector('.char-counter');
-      expect(counter).toBeTruthy();
-      expect(counter?.classList.contains('char-counter-error')).toBe(false);
-      expect(counter?.classList.contains('char-counter-warning')).toBe(false);
+      const textarea = page.root?.shadowRoot?.querySelector('.message-textarea-error');
+      expect(textarea).toBeNull();
 
-      const sendBtn = page.root?.shadowRoot?.querySelector('button[title]') as HTMLButtonElement | null;
-      // send button should not be disabled due to char limit alone (message is short)
-      expect(component.messageTooLong).toBe(false);
-    });
-
-    it('should show warning state when message exceeds 80% of limit', async () => {
-      const page = await newSpecPage({
-        components: [OcsChat],
-        html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true" max-char-limit="10"></open-chat-studio-widget>`,
-      });
-      const component = page.rootInstance as OcsChat;
-      component.sessionId = 'test-session';
-      component.messageInput = '12345678'; // 80% of 10
-      await page.waitForChanges();
-
-      const counter = page.root?.shadowRoot?.querySelector('.char-counter');
-      expect(counter?.classList.contains('char-counter-warning')).toBe(true);
-      expect(counter?.classList.contains('char-counter-error')).toBe(false);
-      expect(component.messageTooLong).toBe(false);
+      const sendBtn = page.root?.shadowRoot?.querySelector('button.send-button-disabled') as HTMLButtonElement | null;
+      // send button should not be in disabled-state due to char limit (message is within limit)
+      expect(sendBtn).toBeNull();
     });
 
     it('should show error state and block send when message exceeds limit', async () => {
@@ -514,12 +483,11 @@ describe('ocs-chat', () => {
       component.messageInput = 'this is too long';
       await page.waitForChanges();
 
-      const counter = page.root?.shadowRoot?.querySelector('.char-counter');
-      expect(counter?.classList.contains('char-counter-error')).toBe(true);
-      expect(component.messageTooLong).toBe(true);
+      const textarea = page.root?.shadowRoot?.querySelector('.message-textarea-error');
+      expect(textarea).toBeTruthy();
 
-      const sendButton = page.root?.shadowRoot?.querySelector('button.send-button') as HTMLButtonElement | null;
-      expect(sendButton?.disabled).toBe(true);
+      const sendButton = page.root?.shadowRoot?.querySelector('button.send-button-disabled') as HTMLButtonElement | null;
+      expect(sendButton).toBeTruthy();
     });
   });
 });

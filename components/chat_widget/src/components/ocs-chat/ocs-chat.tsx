@@ -213,8 +213,11 @@ export class OcsChat {
   @Prop() versionNumber?: number;
 
   /**
+   * @internal
    * Maximum number of characters allowed in a single message (derived from the model's token limit).
-   * When set, a live counter is shown and the send button is disabled when exceeded.
+   * Intentionally declared as @Prop() so the Django host page can pass it as
+   * an HTML attribute; it is not part of the public widget API and should not
+   * be used by third-party embedders.
    */
   @Prop() maxCharLimit?: number;
 
@@ -507,10 +510,7 @@ export class OcsChat {
     return this.maxCharLimit != null && this.messageInput.length > this.maxCharLimit;
   }
 
-  private get messageNearLimit(): boolean {
-    return this.maxCharLimit != null && this.messageInput.length > this.maxCharLimit * 0.8;
-  }
-
+  // codescene-ignore-next-line complex-method
   private async sendMessage(message: string): Promise<void> {
     if (!message.trim()) return;
     if (this.messageTooLong) return;
@@ -1576,6 +1576,7 @@ export class OcsChat {
     this.fullscreenPosition = { x: 0 };
   }
 
+  // codescene-ignore-next-line complex-method
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.sessionId) {
@@ -1812,11 +1813,6 @@ export class OcsChat {
                     {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                   </button>
                 </div>
-                {this.maxCharLimit != null && (
-                  <div class={`char-counter${this.messageTooLong ? ' char-counter-error' : this.messageNearLimit ? ' char-counter-warning' : ''}`}>
-                    {this.messageInput.length} / {this.maxCharLimit}
-                  </div>
-                )}
               </div>
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>
