@@ -9,7 +9,7 @@ from django.urls import reverse
 from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.content_type import detect_content_type, detect_content_type_from_file
+from apps.files.content_type import DEFAULT_CONTENT_TYPE, detect_content_type, detect_content_type_from_file
 from apps.generics.chips import Chip
 from apps.service_providers.file_limits import FILE_SENDABILITY_CHECKERS
 from apps.teams.models import BaseTeamModel
@@ -89,7 +89,7 @@ class File(BaseTeamModel, VersionsMixin):
         content = file_obj.read() if file_obj else None
 
         if not content_type:
-            content_type = detect_content_type(content or b"", filename=filename)
+            content_type = detect_content_type(content or b"", filename=filename) or DEFAULT_CONTENT_TYPE
 
         if content_type and not pathlib.Path(filename).suffix:
             extension = mimetypes.guess_extension(content_type)
