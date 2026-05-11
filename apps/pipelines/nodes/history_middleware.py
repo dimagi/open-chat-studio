@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, cast
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage
-from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
@@ -141,8 +140,9 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
     and history size is managed by the compression middleware that runs before this one.
     """
 
-    def __init__(self, token_limit: int | None):
+    def __init__(self, token_limit: int | None, model):
         self._token_limit = token_limit
+        self._model = model
 
     def before_model(self, state, runtime):
         if self._token_limit is None:
@@ -150,7 +150,7 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
         human_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
         if not human_messages:
             return None
-        token_count = count_tokens_approximately(human_messages[-1:])
+        token_count = self._model.get_num_tokens_from_messages([human_messages[-1]])
         if token_count > self._token_limit:
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "

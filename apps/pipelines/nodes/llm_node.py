@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Annotated, cast
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
 from langchain_core.messages import AIMessage
-from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
@@ -100,16 +99,17 @@ def build_node_agent(
     prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
+    model = node.get_chat_model()
 
     middleware = []
     if history_middleware := node.build_history_middleware(system_message=system_message):
         middleware.append(history_middleware)
-    if size_middleware := _build_size_validation_middleware(node, system_message):
+    if size_middleware := _build_size_validation_middleware(node, system_message, model):
         middleware.append(size_middleware)
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
-        model=node.get_chat_model(),
+        model=model,
         tools=tools,
         system_prompt=system_message,
         middleware=middleware,
@@ -117,13 +117,15 @@ def build_node_agent(
     )
 
 
-def _build_size_validation_middleware(node: PipelineNode, system_message) -> MessageSizeValidationMiddleware | None:
+def _build_size_validation_middleware(
+    node: PipelineNode, system_message, model
+) -> MessageSizeValidationMiddleware | None:
     max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
     if not max_token_limit:
         return None
-    system_tokens = count_tokens_approximately([system_message])
+    system_tokens = model.get_num_tokens_from_messages([system_message])
     effective_limit = max(max_token_limit - system_tokens, 0)
-    return MessageSizeValidationMiddleware(token_limit=effective_limit)
+    return MessageSizeValidationMiddleware(token_limit=effective_limit, model=model)
 
 
 def _process_files(node: PipelineNode, cited_files: set[File], generated_files: set[File]) -> dict:
