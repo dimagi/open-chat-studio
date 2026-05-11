@@ -147,16 +147,16 @@
     const megabyte_in_bytes = 1048576;
     const byte_limit = megabyte_in_bytes * 512;
     const code_interpreter_max_files = 20
-    const maxCharLimit = {{ max_char_limit|default:"null" }};
     Alpine.data('fileUploads', () => ({
       message: "",
+      maxCharLimit: {{ max_char_limit|default:"null" }},
       code_interpreter_files: [],
       file_search_files: [],
       ocs_attachments: [],
       total_upload_size_bytes: 0,
       disableCodeInterpreterUpload: false,
       get messageTooLong() {
-        return maxCharLimit !== null && this.message.length > maxCharLimit;
+        return this.maxCharLimit !== null && this.message.length > this.maxCharLimit;
       },
       init() {
         let fieldsToWatch = ['message'];
