@@ -1,0 +1,52 @@
+{# Service provider create / edit. Replaces generic/type_select_form.html. #}
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'single_team:manage_team' request.team.slug %}">Manage Team</a></li>
+      <li><a href="{% url 'single_team:manage_team' request.team.slug %}#{{ provider.home_title|slugify }}">{{ provider.label }}</a></li>
+      {% if object.id %}
+        <li class="pg-breadcrumb-active" aria-current="page">Edit</li>
+      {% else %}
+        <li class="pg-breadcrumb-active" aria-current="page">Create</li>
+      {% endif %}
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <h1 class="pg-title">{{ title }}</h1>
+    {% block pre_form %}{% endblock %}
+    <form method="post" class="my-2" enctype="multipart/form-data">
+      {% csrf_token %}
+      {% render_form_fields primary_form %}
+      {% if config_form.custom_template %}
+        {% include config_form.custom_template with object=object form=config_form %}
+      {% else %}
+        {% render_form_fields config_form %}
+
+        {% if config_form.allow_file_upload %}
+          <hr class="my-4">
+          {% if not object.id %}
+            {% include "files/partials/file_formset.html" %}
+          {% else %}
+            {% with delete_url=object.remove_file_url upload_url=object.add_file_url %}
+              {% include "files/partials/file_list.html" with files=object.get_files nested=True %}
+            {% endwith %}
+          {% endif %}
+        {% endif %}
+      {% endif %}
+      <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
+    </form>
+    {% block post_form %}
+      {% if sync_voices_url %}
+        <form method="post" action="{{ sync_voices_url }}" class="mt-4">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline">Sync Voices from ElevenLabs</button>
+        </form>
+      {% endif %}
+    {% endblock post_form %}
+  </div>
+{% endblock app %}

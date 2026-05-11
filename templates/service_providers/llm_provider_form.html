@@ -1,7 +1,7 @@
-{% extends "generic/type_select_form.html" %}
+{% extends "service_providers/provider_form.html" %}
 {% load form_tags i18n %}
-{% block pre_secondary_form %}
-  <div class="my-4 flex flex-col gap-4">
+{% block pre_form %}
+  <div class="my-4 flex flex-col gap-4" x-data="{ type: '{{ subtype }}' }">
     <div>
       <h2 class="font-bold text-lg">Default LLM Models
         {% blocktranslate asvar help_text %}
@@ -10,7 +10,7 @@
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
-      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type %}
+      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type for_type=subtype %}
     </div>
 
     <div>
@@ -28,7 +28,7 @@
         </div>
       </div>
       <div id="custom_model_list">
-        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type %}
+        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type for_type=subtype %}
       </div>
     </div>
 
@@ -39,18 +39,18 @@
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
-      {% include "service_providers/components/embedding_models.html" with embedding_models_by_type=embedding_models_by_type %}
+      {% include "service_providers/components/embedding_models.html" with embedding_models_by_type=embedding_models_by_type for_type=subtype %}
     </div>
   </div>
-{% endblock pre_secondary_form %}
+{% endblock pre_form %}
 
 {% block post_form %}
-  {# put this outside the form to prevent interaction between the forms #}
+  {{ block.super }}
   <dialog id="new_custom_model" class="modal">
     <div class="modal-box">
       <h3 class="text-lg font-bold">Create a new Custom Model</h3>
       <div id="new_model_form">
-        <input name="type" type="hidden" x-model="type" id="id_type">
+        <input name="type" type="hidden" value="{{ subtype }}" id="id_type">
         {% render_form_fields new_model_form "name" "max_token_limit" %}
       </div>
       <div class="modal-action">

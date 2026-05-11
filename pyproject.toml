@@ -175,7 +175,7 @@ dev = [
     "ty==0.0.33",
 ]
 docs = [
-    "mkdocs-material>=9.6.12",
+    "zensical>=0.0.40",
 ]
 
 prod = [

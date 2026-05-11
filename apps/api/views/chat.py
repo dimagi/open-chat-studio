@@ -267,9 +267,10 @@ def chat_start_session(request):
             )
 
         if version_number != Experiment.DEFAULT_VERSION_NUMBER:
-            experiment_version = get_object_or_404(
-                Experiment, working_version_id=experiment.id, version_number=version_number
-            )
+            try:
+                experiment_version = experiment.get_version(version_number)
+            except Experiment.DoesNotExist:
+                raise NotFound(f"Experiment with version {version_number} not found") from None
 
     team = experiment.team
 
@@ -414,9 +415,10 @@ def chat_send_message(request, session_id):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if version_number != Experiment.DEFAULT_VERSION_NUMBER:
-            experiment_version = get_object_or_404(
-                Experiment, working_version_id=session.experiment.id, version_number=version_number
-            )
+            try:
+                experiment_version = session.experiment.get_version(version_number)
+            except Experiment.DoesNotExist:
+                raise NotFound(f"Experiment with version {version_number} not found") from None
         else:
             experiment_version = session.experiment_version
     else:
