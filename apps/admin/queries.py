@@ -63,18 +63,25 @@ def get_usage_data(start: datetime, end: datetime):
 
 def get_whatsapp_numbers():
     return _write_data_to_csv(
-        ["Team", "Experiment", "Messaging Provider", "Account", "Number"], get_whatsapp_number_data()
+        ["Team", "Chatbot", "Messaging Provider", "Account", "Number", "Channel Active"], get_whatsapp_number_data()
     )
 
 
 def get_whatsapp_number_data():
-    channels = ExperimentChannel.objects.filter(deleted=False, platform=ChannelPlatform.WHATSAPP).values(
-        "extra_data",
-        "team__name",
-        "experiment__name",
-        "messaging_provider__name",
-        "messaging_provider__type",
-        "messaging_provider__config",
+    # Use unfiltered queryset so deleted channels are included; the default manager
+    # hides them, which would make the "Channel Active" column always True.
+    channels = (
+        ExperimentChannel.objects.get_unfiltered_queryset()
+        .filter(platform=ChannelPlatform.WHATSAPP)
+        .values(
+            "deleted",
+            "extra_data",
+            "team__name",
+            "experiment__name",
+            "messaging_provider__name",
+            "messaging_provider__type",
+            "messaging_provider__config",
+        )
     )
     for channel in channels:
         account = "---"
@@ -99,6 +106,7 @@ def get_whatsapp_number_data():
             provider_name,
             account,
             channel["extra_data"].get("number", "---"),
+            not channel["deleted"],
         )
 
 
@@ -110,13 +118,13 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
             chat__experiment_session__experiment_channel__platform=ChannelPlatform.WHATSAPP,
             message_type__in=["human", "ai"],
         )
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
         .values(
             "chat__team__name",
             "chat__team__slug",
             "chat__experiment_session__experiment__id",
             "chat__experiment_session__experiment__name",
             "chat__experiment_session__experiment_channel__extra_data",
+            "chat__experiment_session__experiment_channel__deleted",
             "message_type",
         )
         .annotate(count=Count("id"))
@@ -130,12 +138,18 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
         team_slug = row["chat__team__slug"]
         experiment_id = row["chat__experiment_session__experiment__id"]
         extra_data = row["chat__experiment_session__experiment_channel__extra_data"] or {}
+        deleted = row["chat__experiment_session__experiment_channel__deleted"]
         number = extra_data.get("number", "---")
         key = (team_slug, experiment_id, number)
         pivot[key][row["message_type"]] += row["count"]
+        # If a channel was deleted and recreated for the same (team, experiment, number),
+        # the query returns separate rows per deleted status. Treat the pivot as active
+        # if any underlying channel is active.
+        existing = key_metadata.get(key)
         key_metadata[key] = {
             "team_name": row["chat__team__name"],
             "experiment_name": row["chat__experiment_session__experiment__name"],
+            "channel_active": (existing["channel_active"] if existing else False) or not deleted,
         }
 
     results = [
@@ -144,6 +158,7 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
             "team_slug": team_slug,
             "experiment": key_metadata[key]["experiment_name"],
             "experiment_id": experiment_id,
+            "channel_active": key_metadata[key]["channel_active"],
             "number": number,
             "human_count": counts["human"],
             "ai_count": counts["ai"],
@@ -294,13 +309,17 @@ def top_teams_to_csv(start: datetime, end: datetime):
 def top_experiments_to_csv(start: datetime, end: datetime):
     data = get_top_experiments(start, end)
     rows = ((d["team"], d["experiment"], d["msg_count"], d["session_count"]) for d in data)
-    return _write_data_to_csv(["Team", "Experiment", "Messages", "Sessions"], rows)
+    return _write_data_to_csv(["Team", "Chatbot", "Messages", "Sessions"], rows)
 
 
 def whatsapp_message_stats_to_csv(start: datetime, end: datetime):
     stats = get_whatsapp_message_stats(start, end)
-    rows = ((s["team"], s["experiment"], s["number"], s["human_count"], s["ai_count"]) for s in stats)
-    return _write_data_to_csv(["Team", "Experiment", "Channel Number", "Human Messages", "AI Messages"], rows)
+    rows = (
+        (s["team"], s["experiment"], s["number"], s["human_count"], s["ai_count"], s["channel_active"]) for s in stats
+    )
+    return _write_data_to_csv(
+        ["Team", "Chatbot", "Channel Number", "Human Messages", "AI Messages", "Channel Active"], rows
+    )
 
 
 def _write_data_to_csv(headers, rows):
