@@ -679,12 +679,13 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         )
 
         # Build the agent
+        model = self.get_chat_model()
         middleware = []
-        if history_middleware := self.build_history_middleware(system_message=system_message):
+        if history_middleware := self.build_history_middleware(system_message=system_message, model=model):
             middleware.append(history_middleware)
 
         agent = create_agent(
-            model=self.get_chat_model(),
+            model=model,
             system_prompt=system_message,
             middleware=middleware,
             response_format=self._create_router_schema(),

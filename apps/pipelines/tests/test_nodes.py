@@ -257,16 +257,12 @@ class TestHistoryMixin:
         middleware = node.build_history_middleware(SystemMessage(content="system"))
         assert isinstance(middleware, MaxHistoryLengthHistoryMiddleware)
 
-    @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
-    @patch("apps.pipelines.nodes.mixins.count_tokens_approximately")
     def test_build_history_middleware_uses_summarize_mode(
         self,
-        count_tokens,
-        get_chat_model,
         history_node_factory,
     ):
-        get_chat_model.return_value = Mock()
-        count_tokens.return_value = 50
+        model = Mock()
+        model.get_num_tokens_from_messages.return_value = 50
 
         mock_repo = Mock()
         mock_repo.get_llm_provider_model.return_value = Mock(max_token_limit=8192)
@@ -278,34 +274,36 @@ class TestHistoryMixin:
 
         system_message = SystemMessage(content="system")
 
-        middleware = node.build_history_middleware(system_message)
+        middleware = node.build_history_middleware(system_message, model=model)
 
         assert isinstance(middleware, SummarizeHistoryMiddleware)
-        count_tokens.assert_called_once_with([system_message])
+        model.get_num_tokens_from_messages.assert_called_once_with([system_message])
 
     @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
-    @patch("apps.pipelines.nodes.mixins.count_tokens_approximately")
     def test_build_history_middleware_uses_truncate_tokens_mode(
         self,
-        count_tokens,
         get_chat_model,
         history_node_factory,
     ):
         get_chat_model.return_value = Mock()
-        count_tokens.return_value = 80
+        model = Mock()
+        model.get_num_tokens_from_messages.return_value = 80
 
+        mock_repo = Mock()
+        mock_repo.get_llm_provider_model.return_value = Mock(max_token_limit=8192)
         node = history_node_factory(
             history_type=PipelineChatHistoryTypes.NODE,
             history_mode=PipelineChatHistoryModes.TRUNCATE_TOKENS,
             user_max_token_limit=200,
+            repo=mock_repo,
         )
 
         system_message = SystemMessage(content="system")
 
-        middleware = node.build_history_middleware(system_message)
+        middleware = node.build_history_middleware(system_message, model=model)
 
         assert isinstance(middleware, TruncateTokensHistoryMiddleware)
-        count_tokens.assert_called_once_with([system_message])
+        model.get_num_tokens_from_messages.assert_called_once_with([system_message])
 
 
 @pytest.mark.django_db()

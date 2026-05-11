@@ -102,7 +102,7 @@ def build_node_agent(
     model = node.get_chat_model()
 
     middleware = []
-    if history_middleware := node.build_history_middleware(system_message=system_message):
+    if history_middleware := node.build_history_middleware(system_message=system_message, model=model):
         middleware.append(history_middleware)
     if size_middleware := _build_size_validation_middleware(node, system_message, model):
         middleware.append(size_middleware)

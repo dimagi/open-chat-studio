@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
 from langchain_core.messages import BaseMessage
-from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -222,7 +221,7 @@ class HistoryMixin(LLMResponseMixin):
             history_mode=self.get_history_mode(),
         )
 
-    def build_history_middleware(self, system_message: BaseMessage) -> BaseNodeHistoryMiddleware | None:
+    def build_history_middleware(self, system_message: BaseMessage, model=None) -> BaseNodeHistoryMiddleware | None:
         """Construct the history compression middleware configured for this node."""
         if self.history_is_disabled:
             return None
@@ -242,7 +241,7 @@ class HistoryMixin(LLMResponseMixin):
         )
 
         # Reserve space for the system message so trigger/keep thresholds reflect usable context
-        system_message_tokens = count_tokens_approximately([system_message])
+        system_message_tokens = model.get_num_tokens_from_messages([system_message]) if model is not None else 0
         token_limit = max(specified_token_limit - system_message_tokens, 100)
 
         if history_mode == PipelineChatHistoryModes.SUMMARIZE:

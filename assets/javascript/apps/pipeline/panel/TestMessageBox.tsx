@@ -21,21 +21,12 @@ export default function TestMessageBox({
   const currentPipelineId = usePipelineStore(
     (state) => state.currentPipelineId,
   );
-  const maxInputChars = usePipelineStore((state) => state.currentPipeline?.max_char_limit ?? null);
   const setEdgeLabel = usePipelineStore((state) => state.setEdgeLabel);
   const clearEdgeLabels = usePipelineStore((state) => state.clearEdgeLabels);
   const [newMessage, setNewMessage] = useState("");
   const [userMessage, setUserMessage] = useState("");
   const [responseMessage, setResponseMessage] = useState<ResponseMessage>({});
   const [loading, setLoading] = useState(false);
-  const isOverLimit = maxInputChars !== null && newMessage.length > maxInputChars;
-  const counterColor = maxInputChars
-    ? isOverLimit
-      ? "text-red-500"
-      : newMessage.length > maxInputChars * 0.8
-        ? "text-yellow-500"
-        : "text-gray-500"
-    : "text-gray-500";
 
   const setError = (message: string) => {
     setResponseMessage({ message, className: "text-red-500", prefix: "Error:" });
@@ -43,7 +34,7 @@ export default function TestMessageBox({
 
   function sendMessage() {
     const message = newMessage.trim() || userMessage.trim();
-    if (!message || isOverLimit) {
+    if (!message) {
       return;
     }
     setUserMessage(message);
@@ -195,14 +186,8 @@ export default function TestMessageBox({
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type your message..."
                 />
-                {maxInputChars && (
-                  <div className={`text-xs text-right mb-2 ${counterColor}`}>
-                    {newMessage.length} / {maxInputChars} chars
-                    {isOverLimit && <span className="ml-1">(too long)</span>}
-                  </div>
-                )}
                 <div className="grid grid-cols-2">
-                  <button className="btn btn-primary" type="submit" disabled={isOverLimit}>
+                  <button className="btn btn-primary" type="submit">
                     Send
                   </button>
                   <button className="btn" onClick={onClear}>Clear</button>
