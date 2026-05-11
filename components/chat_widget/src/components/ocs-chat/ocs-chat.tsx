@@ -206,9 +206,7 @@ export class OcsChat {
   /**
    * @internal
    * Optional version number of the chatbot to use. Requires authentication.
-   * Intentionally declared as @Prop() so the Django host page can pass it as
-   * an HTML attribute; it is not part of the public widget API and should not
-   * be used by third-party embedders.
+   * This is for internal use only and is not intended for public-facing widgets.
    */
   @Prop() versionNumber?: number;
 
@@ -497,7 +495,6 @@ export class OcsChat {
     }
   }
 
-  // codescene-ignore-next-line complex-method
   private async sendMessage(message: string): Promise<void> {
     if (!message.trim()) return;
     const epoch = this.sessionEpoch;
@@ -1562,7 +1559,6 @@ export class OcsChat {
     this.fullscreenPosition = { x: 0 };
   }
 
-  // codescene-ignore-next-line complex-method
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.sessionId) {
