@@ -52,10 +52,6 @@ export namespace Components {
          */
         "language"?: string;
         /**
-          * Maximum number of characters allowed in a single message (derived from the model's token limit). When set, a live counter is shown and the send button is disabled when exceeded.
-         */
-        "maxCharLimit"?: number;
-        /**
           * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.   The parent element must establish a containing block (e.g. `position: relative`).
           * @default 'standard'
          */
@@ -174,10 +170,6 @@ declare namespace LocalJSX {
           * The language code for the widget UI (e.g., 'en', 'es', 'fr'). Defaults to en
          */
         "language"?: string;
-        /**
-          * Maximum number of characters allowed in a single message (derived from the model's token limit). When set, a live counter is shown and the send button is disabled when exceeded.
-         */
-        "maxCharLimit"?: number;
         /**
           * The operating mode of the widget. - 'standard': Default floating window with launcher button. - 'kiosk': Fills parent container, always visible, no header or launcher button.   The parent element must establish a containing block (e.g. `position: relative`).
           * @default 'standard'

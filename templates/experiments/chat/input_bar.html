@@ -84,11 +84,9 @@
       {% endif %}
       <div class="flex flex-col flex-1 gap-1">
         <input x-model="message" name="message" type="text" placeholder="Type your message..." aria-label="Message" autocomplete="off"
-               :maxlength="maxCharLimit || false"
-               :class="messageTooLong ? 'input input-error w-full' : 'input input-primary w-full'">
+               class="input input-primary w-full">
       </div>
-      <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled
-              :title="messageTooLong ? 'Message is too long' : ''">Send</button>
+      <button type="submit" id="message-submit" class="ml-2 btn btn-primary" disabled>Send</button>
     </div>
     {% if assistant %}
       <div class="flex flex-col gap-2 text-slate-500">
@@ -149,15 +147,11 @@
     const code_interpreter_max_files = 20
     Alpine.data('fileUploads', () => ({
       message: "",
-      maxCharLimit: {{ max_char_limit|default:"null" }},
       code_interpreter_files: [],
       file_search_files: [],
       ocs_attachments: [],
       total_upload_size_bytes: 0,
       disableCodeInterpreterUpload: false,
-      get messageTooLong() {
-        return this.maxCharLimit !== null && this.message.length > this.maxCharLimit;
-      },
       init() {
         let fieldsToWatch = ['message'];
         if (this.$refs.fileSearch) {
@@ -172,7 +166,7 @@
         this.$watchMany(fieldsToWatch, (...args) => {
           const submitButton = document.getElementById('message-submit');
           const hasContent = args.some(Boolean);
-          if (hasContent && !this.messageTooLong) {
+          if (hasContent) {
             submitButton.removeAttribute('disabled');
           } else {
             submitButton.setAttribute('disabled', 'disabled');

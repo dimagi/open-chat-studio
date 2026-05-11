@@ -582,13 +582,6 @@
     }
   }
 
-  .message-textarea-error {
-    border-color: var(--error-text-color);
-    &:focus {
-      outline-color: var(--error-text-color);
-    }
-  }
-
   .send-button {
     @apply rounded-md font-medium transition-colors duration-200;
     padding: 0.5em 1em;
