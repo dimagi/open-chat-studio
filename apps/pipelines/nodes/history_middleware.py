@@ -141,11 +141,11 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
     and history size is managed by the compression middleware that runs before this one.
     """
 
-    def __init__(self, token_limit: int):
+    def __init__(self, token_limit: int | None):
         self._token_limit = token_limit
 
     def before_model(self, state, runtime):
-        if not self._token_limit:
+        if self._token_limit is None:
             return None
         human_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
         if not human_messages:

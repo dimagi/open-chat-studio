@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.exceptions import MessageTooLargeError, PipelineNodeRunError
 from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
 from apps.pipelines.nodes.llm_node import _build_size_validation_middleware
 from apps.pipelines.repository import RepositoryLookupError
@@ -37,8 +37,14 @@ class TestMessageSizeValidationMiddleware:
                 runtime=None,
             )
 
-    def test_zero_token_limit_skips_validation(self):
+    def test_zero_token_limit_rejects_any_message(self):
+        # token_limit=0 means the system prompt consumed the entire budget; any user message should be rejected.
         middleware = MessageSizeValidationMiddleware(token_limit=0)
+        with pytest.raises(MessageTooLargeError):
+            middleware.before_model(self._state(HumanMessage(content="hi")), runtime=None)
+
+    def test_none_token_limit_skips_validation(self):
+        middleware = MessageSizeValidationMiddleware(token_limit=None)
         middleware.before_model(self._state(HumanMessage(content="word " * 10000)), runtime=None)
 
     def test_large_tool_message_does_not_raise(self):
