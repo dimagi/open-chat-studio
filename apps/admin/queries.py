@@ -68,14 +68,20 @@ def get_whatsapp_numbers():
 
 
 def get_whatsapp_number_data():
-    channels = ExperimentChannel.objects.filter(platform=ChannelPlatform.WHATSAPP).values(
-        "deleted",
-        "extra_data",
-        "team__name",
-        "experiment__name",
-        "messaging_provider__name",
-        "messaging_provider__type",
-        "messaging_provider__config",
+    # Use unfiltered queryset so deleted channels are included; the default manager
+    # hides them, which would make the "Channel Active" column always True.
+    channels = (
+        ExperimentChannel.objects.get_unfiltered_queryset()
+        .filter(platform=ChannelPlatform.WHATSAPP)
+        .values(
+            "deleted",
+            "extra_data",
+            "team__name",
+            "experiment__name",
+            "messaging_provider__name",
+            "messaging_provider__type",
+            "messaging_provider__config",
+        )
     )
     for channel in channels:
         account = "---"

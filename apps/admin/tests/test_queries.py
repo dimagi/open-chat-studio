@@ -10,6 +10,7 @@ from apps.admin.queries import (
     get_top_experiments,
     get_top_teams,
     get_whatsapp_message_stats,
+    get_whatsapp_number_data,
 )
 from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
@@ -227,6 +228,35 @@ class TestGetWhatsappMessageStats:
         rows = [r for r in results if r["number"] == number]
         assert len(rows) == 1
         assert rows[0]["channel_active"] is False
+
+
+@pytest.mark.django_db()
+class TestGetWhatsappNumberData:
+    def test_includes_deleted_channels_with_correct_active_flag(self):
+        # The default ExperimentChannel manager filters out deleted rows, so the export
+        # must bypass it to show both active and deleted channels accurately.
+        team = TeamFactory.create(name="WA Numbers")
+
+        active_channel = ExperimentChannelFactory.create(
+            team=team,
+            platform=ChannelPlatform.WHATSAPP,
+            extra_data={"number": "+15550003333"},
+        )
+        deleted_channel = ExperimentChannelFactory.create(
+            team=team,
+            platform=ChannelPlatform.WHATSAPP,
+            extra_data={"number": "+15550004444"},
+        )
+        deleted_channel.deleted = True
+        deleted_channel.save()
+
+        rows_by_number = {row[4]: row for row in get_whatsapp_number_data()}
+        assert "+15550003333" in rows_by_number
+        assert "+15550004444" in rows_by_number
+        assert rows_by_number["+15550003333"][5] is True  # active channel
+        assert rows_by_number["+15550004444"][5] is False  # deleted channel
+        assert rows_by_number["+15550003333"][1] == active_channel.experiment.name
+        assert rows_by_number["+15550004444"][1] == deleted_channel.experiment.name
 
 
 class TestComputeGrowth:
