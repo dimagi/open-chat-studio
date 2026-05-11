@@ -136,10 +136,14 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
         number = extra_data.get("number", "---")
         key = (team_slug, experiment_id, number)
         pivot[key][row["message_type"]] += row["count"]
+        # If a channel was deleted and recreated for the same (team, experiment, number),
+        # the query returns separate rows per deleted status. Treat the pivot as active
+        # if any underlying channel is active.
+        existing = key_metadata.get(key)
         key_metadata[key] = {
             "team_name": row["chat__team__name"],
             "experiment_name": row["chat__experiment_session__experiment__name"],
-            "channel_active": not deleted,
+            "channel_active": (existing["channel_active"] if existing else False) or not deleted,
         }
 
     results = [

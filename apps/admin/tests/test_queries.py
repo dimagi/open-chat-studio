@@ -9,6 +9,7 @@ from apps.admin.queries import (
     get_team_activity_summary,
     get_top_experiments,
     get_top_teams,
+    get_whatsapp_message_stats,
 )
 from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
@@ -152,6 +153,80 @@ class TestGetTopExperiments:
         result = get_top_experiments(start, end, limit=2)
         assert len(result) == 2
         assert result[0]["msg_count"] >= result[1]["msg_count"]
+
+
+@pytest.mark.django_db()
+class TestGetWhatsappMessageStats:
+    def test_pivot_marks_channel_active_when_any_channel_active(self, date_range):
+        # When a WhatsApp channel for a number is deleted and recreated, the query returns
+        # separate rows per deleted status. The pivoted result should report the channel
+        # as active if any underlying channel is active.
+        start, end = date_range
+        team = TeamFactory.create(name="WA Team")
+        number = "+15550001111"
+
+        deleted_channel = ExperimentChannelFactory.create(
+            team=team,
+            platform=ChannelPlatform.WHATSAPP,
+            extra_data={"number": number},
+        )
+        active_channel = ExperimentChannelFactory.create(
+            team=team,
+            experiment=deleted_channel.experiment,
+            platform=ChannelPlatform.WHATSAPP,
+            extra_data={"number": number},
+        )
+        deleted_channel.deleted = True
+        deleted_channel.save()
+
+        deleted_session = ExperimentSessionFactory.create(
+            team=team,
+            experiment=deleted_channel.experiment,
+            experiment_channel=deleted_channel,
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        active_session = ExperimentSessionFactory.create(
+            team=team,
+            experiment=active_channel.experiment,
+            experiment_channel=active_channel,
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        ChatMessageFactory.create(chat=deleted_session.chat, message_type="human", content="old")
+        ChatMessageFactory.create(chat=active_session.chat, message_type="human", content="new")
+        ChatMessageFactory.create(chat=active_session.chat, message_type="ai", content="reply")
+
+        results = get_whatsapp_message_stats(start, end)
+        rows = [r for r in results if r["number"] == number]
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["channel_active"] is True
+        assert row["human_count"] == 2
+        assert row["ai_count"] == 1
+
+    def test_pivot_marks_channel_inactive_when_all_channels_deleted(self, date_range):
+        start, end = date_range
+        team = TeamFactory.create(name="WA Team 2")
+        number = "+15550002222"
+
+        channel = ExperimentChannelFactory.create(
+            team=team,
+            platform=ChannelPlatform.WHATSAPP,
+            extra_data={"number": number},
+        )
+        session = ExperimentSessionFactory.create(
+            team=team,
+            experiment=channel.experiment,
+            experiment_channel=channel,
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+        channel.deleted = True
+        channel.save()
+
+        results = get_whatsapp_message_stats(start, end)
+        rows = [r for r in results if r["number"] == number]
+        assert len(rows) == 1
+        assert rows[0]["channel_active"] is False
 
 
 class TestComputeGrowth:
