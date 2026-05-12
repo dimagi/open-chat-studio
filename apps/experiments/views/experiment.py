@@ -466,8 +466,8 @@ def _record_consent_and_redirect(
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    default_version = resolve_published_or_working(request.experiment)
-    consent = default_version.consent_form
+    published_version = resolve_published_or_working(request.experiment)
+    consent = published_version.consent_form
 
     initial = {
         "participant_id": request.experiment_session.participant.id,
@@ -489,15 +489,15 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
 
     consent_notice = consent.get_rendered_content()
     version_specific_vars = {
-        "experiment_name": default_version.name,
-        "experiment_description": default_version.description,
+        "experiment_name": published_version.name,
+        "experiment_description": published_version.description,
     }
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
         {
             "active_tab": "experiments",
-            "experiment": default_version,
+            "experiment": published_version,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
             **version_specific_vars,
@@ -522,12 +522,12 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
     else:
         form = SurveyCompletedForm()
 
-    default_version = resolve_published_or_working(request.experiment)
+    published_version = resolve_published_or_working(request.experiment)
     experiment_session = request.experiment_session
     version_specific_vars = {
-        "experiment_name": default_version.name,
-        "experiment_description": default_version.description,
-        "pre_survey_link": experiment_session.get_pre_survey_link(default_version),
+        "experiment_name": published_version.name,
+        "experiment_description": published_version.description,
+        "pre_survey_link": experiment_session.get_pre_survey_link(published_version),
     }
     return TemplateResponse(
         request,
