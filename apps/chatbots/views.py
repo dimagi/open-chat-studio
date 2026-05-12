@@ -28,6 +28,7 @@ from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -306,9 +307,8 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
 
     channels, available_platforms = get_channels_context(experiment)
 
-    deployed_version = None
-    if experiment != experiment.default_version:
-        deployed_version = experiment.default_version.version_number
+    published = resolve_published_or_working(experiment)
+    deployed_version = published.version_number if experiment != published else None
 
     context = {
         "active_tab": "chatbots",
@@ -763,7 +763,7 @@ def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, sessio
 
 
 def _chatbot_chat_ui(request, embedded=False):
-    chatbot_version = request.experiment.default_version
+    chatbot_version = resolve_published_or_working(request.experiment)
     version_specific_vars = {
         "assistant": chatbot_version.get_assistant(),
         "chatbot_name": chatbot_version.name,
