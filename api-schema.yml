@@ -430,8 +430,52 @@ paths:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
   /api/participants:
+    get:
+      operationId: list_participants
+      description: 'GET: list participants for the team. POST: update/create participant
+        data.'
+      summary: List Participants
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: identifier
+        schema:
+          type: string
+        description: Filter by participant identifier
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: platform
+        schema:
+          type: string
+        description: Filter by platform (e.g. api, telegram, whatsapp)
+      tags:
+      - Participants
+      security:
+      - OAuth2:
+        - participants:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedParticipantDetailList'
+          description: ''
     post:
       operationId: update_participant_data
+      description: 'GET: list participants for the team. POST: update/create participant
+        data.'
       summary: Update Participant Data
       tags:
       - Participants
@@ -475,12 +519,37 @@ paths:
         required: true
       security:
       - OAuth2:
-        - participants:write
+        - participants:read
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
         '200':
           description: No response body
+  /api/participants/{id}:
+    get:
+      operationId: retrieve_participant
+      summary: Retrieve Participant
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Participants
+      security:
+      - OAuth2:
+        - participants:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantDetail'
+          description: ''
   /api/sessions/:
     get:
       operationId: session_list
@@ -1365,6 +1434,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExperimentSession'
+    PaginatedParticipantDetailList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDetail'
     Participant:
       type: object
       properties:
@@ -1374,6 +1462,16 @@ components:
         remote_id:
           type: string
           maxLength: 255
+    ParticipantDataEntry:
+      type: object
+      properties:
+        experiment:
+          type: string
+          format: uuid
+          readOnly: true
+        data: {}
+      required:
+      - experiment
     ParticipantDataUpdateRequest:
       type: object
       properties:
@@ -1395,6 +1493,34 @@ components:
       required:
       - data
       - identifier
+    ParticipantDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        identifier:
+          type: string
+          maxLength: 320
+        name:
+          type: string
+          maxLength: 320
+        platform:
+          type: string
+          maxLength: 32
+        remote_id:
+          type: string
+          maxLength: 255
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDataEntry'
+          readOnly: true
+      required:
+      - data
+      - id
+      - platform
     ParticipantExperimentData:
       type: object
       properties:
@@ -1576,6 +1702,7 @@ components:
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions
             files:read: Download file content
+            participants:read: Read Participant Data
             participants:write: Update Participant Data
     apiKeyAuth:
       type: apiKey
