@@ -117,20 +117,6 @@ class PromptObjectManager(AuditingManager):
 
 
 class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_default_or_working(self, family_member: Experiment):
-        """
-        Returns the default version of the family of experiments relating to `family_member` or if there is no default,
-        the working experiment.
-        """
-        if family_member.is_default_version:
-            return family_member
-
-        working_version_id = family_member.working_version_id or family_member.id
-        experiment = self.filter(
-            working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
-        ).first()
-        return experiment if experiment else family_member
-
     def get_version_names(self, team, working_version=None) -> list[str]:
         qs = self.get_queryset().filter(team=team)
         if working_version:
@@ -727,11 +713,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def trends_cache_key(self) -> str:
         return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
-
-    @cached_property
-    def default_version(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
-        return Experiment.objects.get_default_or_working(self)
 
     def as_chip(self) -> Chip:
         label = self.name
