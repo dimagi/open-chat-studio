@@ -16,4 +16,5 @@ urlpatterns = [
     path("timeout/<int:trigger_id>/logs", views.timeout_logs_view, name="timeout_logs_view"),
     path("static/<int:trigger_id>/toggle-active", views.toggle_static_active_status, name="static_event_toggle"),
     path("timeout/<int:trigger_id>/toggle-active", views.toggle_timeout_active_status, name="timeout_event_toggle"),
+    path("action-params/", views.action_params_form_view, name="action_params_form"),
 ]

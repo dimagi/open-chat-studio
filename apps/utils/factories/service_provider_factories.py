@@ -9,7 +9,9 @@ from apps.service_providers.models import (
     LlmProviderModel,
     LlmProviderTypes,
     MessagingProvider,
+    MessagingProviderType,
     TraceProvider,
+    TraceProviderType,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -22,6 +24,8 @@ class MessagingProviderFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Test Messaging Provider {n}")
     team = factory.SubFactory(TeamFactory)
+    type = MessagingProviderType.twilio
+    config = {}
 
 
 class LlmProviderFactory(factory.django.DjangoModelFactory):
@@ -79,5 +83,5 @@ class TraceProviderFactory(factory.django.DjangoModelFactory):
 
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"Test Trace Provider {n}")
-    type = AuthProviderType.commcare
+    type = TraceProviderType.langfuse
     config = {"public_key": "123", "secret_key": "***", "host": "https://example.com"}

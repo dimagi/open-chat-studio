@@ -58,8 +58,16 @@ def test_table_view(provider, team_with_users, authed_client):
 @pytest.mark.django_db()
 def test_create_view(provider, team_with_users, authed_client):
     """Test that the create view renders without error."""
+    subtype = next(iter(provider.subtype))
     response = authed_client.get(
-        reverse("service_providers:new", kwargs={"team_slug": team_with_users.slug, "provider_type": provider.slug})
+        reverse(
+            "service_providers:new",
+            kwargs={
+                "team_slug": team_with_users.slug,
+                "provider_type": provider.slug,
+                "subtype": str(subtype),
+            },
+        )
     )
     assert response.status_code == 200
 
@@ -117,3 +125,20 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 
     assert response.status_code == 302
     mock_sync.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_create_view_404_for_filtered_subtype(team_with_users, authed_client, settings):
+    """openai_voice_engine is gated by the flag_open_ai_voice_engine flag."""
+    settings.SLACK_ENABLED = True  # ensure unrelated filter is off
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={
+                "team_slug": team_with_users.slug,
+                "provider_type": "voice",
+                "subtype": VoiceProviderType.openai_voice_engine.value,
+            },
+        )
+    )
+    assert response.status_code == 404

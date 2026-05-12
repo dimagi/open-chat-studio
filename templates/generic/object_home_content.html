@@ -39,7 +39,18 @@
     </div>
     {% if allow_new|default_if_none:True or actions %}
       <div class="justify-self-end join">
-        {% if new_object_url %}
+        {% if new_object_choices %}
+          <details class="dropdown dropdown-end" data-cy="btn-new-dropdown">
+            <summary data-cy="btn-new" class="btn btn-sm {{ button_style|default:"btn-primary" }}">Add new
+              <i class="fa-solid fa-caret-down ml-1"></i>
+            </summary>
+            <ul class="menu dropdown-content rounded-box bg-base-100 z-1 w-64 p-2 shadow-sm">
+              {% for label, url in new_object_choices %}
+                <li><a href="{{ url }}">{{ label }}</a></li>
+              {% endfor %}
+            </ul>
+          </details>
+        {% elif new_object_url %}
           <a data-cy="btn-new" class="btn btn-sm {{ button_style|default:"btn-primary" }}"
              href="{{ new_object_url }}">Add new
           </a>

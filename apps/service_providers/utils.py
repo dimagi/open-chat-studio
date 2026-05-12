@@ -5,11 +5,12 @@ from enum import Enum
 from typing import Any, Literal
 
 from django import forms
+from django.conf import settings
 from django.db import models
 from django.db.models import Field
+from django.http import HttpRequest
 from django_tables2 import tables
-
-from apps.generics.type_select_form import TypeSelectForm
+from waffle import flag_is_active
 
 from . import const
 from .llm_service.default_models import get_default_model
@@ -34,6 +35,7 @@ from .tables import make_table
 class ServiceProviderType:
     slug: str
     label: str
+    home_title: str
     model: models.Model
 
     """
@@ -41,7 +43,7 @@ class ServiceProviderType:
     It is required that the enum has a `form_cls` property which returns
     the config form class for that subtype.
     """
-    subtype: Enum
+    subtype: type[Enum]
 
     primary_fields: list[str]
 
@@ -51,11 +53,39 @@ class ServiceProviderType:
 
 
 class ServiceProvider(ServiceProviderType, Enum):
-    llm = const.LLM, "LLM Service Provider", LlmProvider, LlmProviderTypes, ["name", "type"]
-    voice = const.VOICE, "Speech Service Provider", VoiceProvider, VoiceProviderType, ["name", "type"]
-    messaging = const.MESSAGING, "Messaging Provider", MessagingProvider, MessagingProviderType, ["name", "type"]
-    auth = const.AUTH, "Authentication Provider", AuthProvider, AuthProviderType, ["name", "type"]
-    tracing = const.TRACING, "Tracing Provider", TraceProvider, TraceProviderType, ["name", "type"]
+    llm = (
+        const.LLM,
+        "LLM Service Provider",
+        "LLM and Embedding Model Service Providers",
+        LlmProvider,
+        LlmProviderTypes,
+        ["name", "type"],
+    )
+    voice = (
+        const.VOICE,
+        "Speech Service Provider",
+        "Speech Service Providers",
+        VoiceProvider,
+        VoiceProviderType,
+        ["name", "type"],
+    )
+    messaging = (
+        const.MESSAGING,
+        "Messaging Provider",
+        "Messaging Providers",
+        MessagingProvider,
+        MessagingProviderType,
+        ["name", "type"],
+    )
+    auth = (
+        const.AUTH,
+        "Authentication Provider",
+        "Authentication Providers",
+        AuthProvider,
+        AuthProviderType,
+        ["name", "type"],
+    )
+    tracing = const.TRACING, "Tracing Provider", "Tracing Providers", TraceProvider, TraceProviderType, ["name", "type"]
 
     @property
     def table(self) -> tables.Table:
@@ -71,44 +101,59 @@ class ServiceProvider(ServiceProviderType, Enum):
         return instance.config
 
 
-def get_service_provider_config_form(
-    provider: ServiceProvider, team, exclude_forms: list, data=None, instance=None
-) -> TypeSelectForm:
-    """Return the form for the service provider. This is a 'type select form' which will include the main form
-    and the config form for the selected provider type.
+def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> list:
+    """Return the subtypes for ``provider`` available to the given request.
+
+    Filters out subtypes gated by feature flags / settings.
+    """
+    excluded = []
+    if provider == ServiceProvider.voice and not flag_is_active(request, "flag_open_ai_voice_engine"):
+        excluded.append(VoiceProviderType.openai_voice_engine)
+    if provider == ServiceProvider.messaging and not settings.SLACK_ENABLED:
+        excluded.append(MessagingProviderType.slack)
+    return [subtype for subtype in provider.subtype if subtype not in excluded]
+
+
+def get_service_provider_forms(
+    provider: ServiceProvider,
+    team,
+    subtype,
+    *,
+    data=None,
+    instance=None,
+):
+    """Return ``(primary_form, config_form)`` for a service provider create/edit.
+
+    ``subtype`` is the enum member identifying which config form to build.
+    On edit, the subtype is derived from the instance by the caller.
     """
     initial_config = provider.get_form_initial(instance) if instance else None
-
-    excluded_choices = [form.value for form in exclude_forms]
-    main_form = _get_main_form(provider, data=data.copy() if data else None, instance=instance)
-
-    filtered_choices = [
-        choice for choice in main_form.fields[provider.provider_type_field].choices if choice[0] not in excluded_choices
-    ]
-    main_form.fields[provider.provider_type_field].choices = filtered_choices
-
-    return TypeSelectForm(
-        primary=main_form,
-        secondary={
-            str(subtype): subtype.form_cls(team=team, data=data.copy() if data else None, initial=initial_config)
-            for subtype in provider.subtype
-            if subtype not in exclude_forms
-        },
-        secondary_key_field=provider.provider_type_field,
+    primary_form = _get_main_form(provider, instance=instance, data=data, fixed_subtype=subtype)
+    config_form = subtype.form_cls(
+        team=team,
+        data=data.copy() if data else None,
+        initial=initial_config,
     )
+    return primary_form, config_form
 
 
-def _get_main_form(provider: ServiceProvider, instance=None, data=None):
-    """Get the main 'model form' for the service provider which will be used to create the model instance."""
+def _get_main_form(provider: ServiceProvider, *, instance=None, data=None, fixed_subtype: Enum):
+    """Get the main 'model form' for the service provider.
+
+    The provider-type field is rendered as a hidden input pre-filled with
+    the chosen subtype, and is always disabled — its value is fixed by the
+    URL on create and by the instance on edit.
+    """
     form_cls = forms.modelform_factory(
         provider.model,
         fields=provider.primary_fields,
         formfield_callback=functools.partial(formfield_for_dbfield, provider=provider),
     )
-    form = form_cls(data=data, instance=instance)
-    if instance:
-        form.fields[provider.provider_type_field].disabled = True
-
+    initial = {provider.provider_type_field: str(fixed_subtype)}
+    form = form_cls(data=data, instance=instance, initial=initial)
+    type_field = form.fields[provider.provider_type_field]
+    type_field.widget = forms.HiddenInput()
+    type_field.disabled = True
     return form
 
 

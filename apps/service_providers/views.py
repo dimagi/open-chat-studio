@@ -1,27 +1,26 @@
 import logging
 from collections import defaultdict
 
-from django.conf import settings
+from django import views as django_views
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
-from waffle import flag_is_active
 
 from apps.assistants.models import OpenAiAssistant
 from apps.experiments.models import Experiment
+from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.forms import LlmProviderModelForm
 from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProviderModel,
-    MessagingProviderType,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -29,12 +28,19 @@ from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
 from ..generics.referenced_objects import render_referenced_objects_modal
-from ..generics.views import BaseTypeSelectFormView
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
-from .utils import ServiceProvider, get_service_provider_config_form
+from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms
 
 log = logging.getLogger("ocs.service_providers")
+
+
+def _lookup_subtype_by_slug(subtype_enum, slug):
+    """Find the enum member whose ``str()`` form is ``slug``."""
+    for member in subtype_enum:
+        if str(member) == slug:
+            return member
+    raise KeyError(slug)
 
 
 class ServiceProviderMixin:
@@ -132,84 +138,120 @@ def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: i
 
 
 class CreateServiceProvider(
-    LoginAndTeamRequiredMixin, BaseTypeSelectFormView, ServiceProviderMixin, PermissionRequiredMixin
+    LoginAndTeamRequiredMixin, django_views.View, ServiceProviderMixin, PermissionRequiredMixin
 ):
+    template_name = "service_providers/provider_form.html"
+
     def get_permission_required(self):
         if self.kwargs.get("pk"):
             return (self.provider_type.get_permission("change"),)
         return (self.provider_type.get_permission("add"),)
 
-    @property
-    def extra_context(self):
-        context = {"active_tab": "manage-team", "title": self.provider_type.label}
-        obj = self.get_object()
-        if obj and isinstance(obj, VoiceProvider) and obj.type == VoiceProviderType.elevenlabs.value:
-            context["sync_voices_url"] = reverse(
+    def _resolve_subtype(self):
+        instance = self._get_instance()
+        subtype_enum = self.provider_type.subtype
+        if instance:
+            return _lookup_subtype_by_slug(subtype_enum, instance.type)
+        slug = self.kwargs.get("subtype")
+        try:
+            subtype = _lookup_subtype_by_slug(subtype_enum, slug)
+        except KeyError as exc:
+            raise Http404(f"Unknown subtype: {slug}") from exc
+        if subtype not in get_available_subtypes(self.provider_type, self.request):
+            raise Http404("Subtype is not enabled")
+        return subtype
+
+    def _get_instance(self):
+        if not self.kwargs.get("pk"):
+            return None
+        return get_object_or_404(self.provider_type.model, team=self.request.team, pk=self.kwargs["pk"])
+
+    def _template(self):
+        if self.provider_type == ServiceProvider.llm:
+            return "service_providers/llm_provider_form.html"
+        return self.template_name
+
+    def get(self, request, *args, **kwargs):
+        subtype = self._resolve_subtype()
+        instance = self._get_instance()
+        primary_form, config_form = get_service_provider_forms(
+            self.provider_type, team=request.team, subtype=subtype, instance=instance
+        )
+        return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
+
+    def post(self, request, *args, **kwargs):
+        subtype = self._resolve_subtype()
+        instance = self._get_instance()
+        primary_form, config_form = get_service_provider_forms(
+            self.provider_type, team=request.team, subtype=subtype, data=request.POST, instance=instance
+        )
+
+        file_formset = None
+        if request.FILES:
+            file_formset = get_file_formset(request, formset_cls=config_form.file_formset_form)
+
+        # Call is_valid() on every form before combining to avoid short-circuiting
+        # away from populating the later forms' errors.
+        primary_valid = primary_form.is_valid()
+        config_valid = config_form.is_valid()
+        file_formset_valid = not file_formset or file_formset.is_valid()
+        if primary_valid and config_valid and file_formset_valid:
+            with transaction.atomic():
+                obj = primary_form.save(commit=False)
+                obj.team = request.team
+                config_form.save(obj)
+                obj.save()
+                if file_formset:
+                    files = file_formset.save(request)
+                    obj.add_files(files)
+                if isinstance(obj, VoiceProvider):
+                    for warning in obj.run_post_save_hook():
+                        messages.warning(request, warning)
+            return HttpResponseRedirect(self.get_success_url())
+
+        if file_formset and not file_formset.is_valid():
+            messages.error(request, ", ".join(file_formset.non_form_errors()))
+        return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
+
+    def _get_context(self, primary_form, config_form, subtype, instance):
+        ctx = {
+            "primary_form": primary_form,
+            "config_form": config_form,
+            "provider": self.provider_type,
+            "subtype": subtype,
+            "object": instance,
+            "title": f"Edit {instance.name}" if instance else self.provider_type.label,
+            "button_text": "Update" if instance else "Create",
+            "active_tab": "manage-team",
+        }
+        is_elevenlabs_voice = (
+            isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value
+        )
+        if is_elevenlabs_voice:
+            ctx["sync_voices_url"] = reverse(
                 "service_providers:sync_voices",
                 kwargs={
                     "team_slug": self.request.team.slug,
                     "provider_type": "voice",
-                    "pk": obj.pk,
+                    "pk": instance.pk,
                 },
             )
-        return context
-
-    @property
-    def model(self):
-        return self.provider_type.model
-
-    def get_form(self, data=None):
-        forms_to_exclude = []
-        if not flag_is_active(self.request, "flag_open_ai_voice_engine"):
-            forms_to_exclude.append(VoiceProviderType.openai_voice_engine)
-
-        if not settings.SLACK_ENABLED:
-            forms_to_exclude.append(MessagingProviderType.slack)
-
-        return get_service_provider_config_form(
-            self.provider_type,
-            team=self.request.team,
-            data=data,
-            instance=self.get_object(),
-            exclude_forms=forms_to_exclude,
-        )
-
-    @transaction.atomic()
-    def form_valid(self, form, file_formset):
-        instance = form.save()
-        instance.team = self.request.team
-        instance.save()
-        if file_formset:
-            files = file_formset.save(self.request)
-            instance.add_files(files)
-        if isinstance(instance, VoiceProvider):
-            for warning in instance.run_post_save_hook():
-                messages.warning(self.request, warning)
+        if self.provider_type == ServiceProvider.llm:
+            default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
+            embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
+            custom_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
+            ctx.update(
+                {
+                    "default_llm_models_by_type": default_llm_models_by_type,
+                    "custom_llm_models_by_type": custom_llm_models_by_type,
+                    "embedding_models_by_type": embedding_models_by_type,
+                    "new_model_form": LlmProviderModelForm(self.request.team),
+                }
+            )
+        return ctx
 
     def get_success_url(self):
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
-
-
-class LlmProviderView(CreateServiceProvider):
-    template = "service_providers/llm_provider_form.html"
-
-    @property
-    def provider_type(self) -> ServiceProvider:
-        return ServiceProvider.llm
-
-    @property
-    def extra_context(self):
-        default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
-        embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
-        custom_llm_models_type_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
-        return {
-            "active_tab": "manage-team",
-            "title": self.provider_type.label,
-            "default_llm_models_by_type": default_llm_models_by_type,
-            "custom_llm_models_by_type": custom_llm_models_type_type,
-            "embedding_models_by_type": embedding_models_by_type,
-            "new_model_form": LlmProviderModelForm(self.request.team),
-        }
 
 
 def _get_models_by_type(queryset):

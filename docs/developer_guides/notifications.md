@@ -121,7 +121,7 @@ For better code organization and maintainability, **preferably add your notifica
   - **Best practice**: Include minimal identifiers needed for deduplication logic
   - Default: empty dict
 
-- **`permissions`** (list[str]): Django permission codenames to filter recipients
+- **`permissions`** (`list[str]`): Django permission codenames to filter recipients
   - Format: `"app_label.action"` (e.g., `"custom_actions.change_customaction"`)
   - Only team members with **ALL** specified permissions will receive the notification
   - Permissions are checked per-team (combines Django perms + team membership)

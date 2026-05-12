@@ -24,7 +24,7 @@ from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -545,6 +545,46 @@ class TestEmailChannel:
         email_channel = EmailChannel(experiment_mock, channel_mock)
         callbacks = email_channel._get_callbacks()
         assert isinstance(callbacks, ChannelCallbacks)
+
+
+@pytest.mark.django_db()
+class TestEnsureSessionExistsForParticipant:
+    """Covers the bot-initiated session resolution path used by trigger_bot_message_task."""
+
+    def test_creates_session_when_none_exists(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com")
+
+        assert email_channel.experiment_session is not None
+        assert email_channel.experiment_session.participant.identifier == "user@example.com"
+        assert email_channel.experiment_session.experiment_channel == channel
+
+    def test_reuses_existing_active_session(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com")
+
+        assert email_channel.experiment_session.id == existing.id
+        assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 1
+
+    def test_new_session_ends_existing_and_creates_fresh(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com", new_session=True)
+
+        existing.refresh_from_db()
+        assert existing.status == SessionStatus.PENDING_REVIEW
+        assert email_channel.experiment_session.id != existing.id
+        assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 2
 
 
 @pytest.mark.django_db()
