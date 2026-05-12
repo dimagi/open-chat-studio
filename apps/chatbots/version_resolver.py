@@ -56,24 +56,30 @@ def resolve_chatbot_version(
 
     if rule == VersionSelectionRule.LATEST_WORKING:
         return family.get_working_version()
-
     if rule == VersionSelectionRule.LATEST_PUBLISHED:
-        published = family.versions.filter(is_default_version=True).first()
-        if published is None:
-            raise NoPublishedVersion(f"Chatbot family {family.id} has no Published Version")
-        return published
-
+        return _resolve_latest_published(family)
     if rule == VersionSelectionRule.SPECIFIC:
-        if version_number is None:
-            raise VersionNotFound("SPECIFIC rule requires a version_number")
-        if family.version_number == version_number:
-            return family
-        try:
-            return family.versions.get(version_number=version_number)
-        except family.versions.model.DoesNotExist:
-            raise VersionNotFound(f"Family {family.id} has no version with version_number={version_number}") from None
+        return _resolve_specific(family, version_number)
 
     raise ValueError(f"Unknown rule: {rule}")  # defensive; enum values exhausted above
+
+
+def _resolve_latest_published(family: Experiment) -> Experiment:
+    published = family.versions.filter(is_default_version=True).first()
+    if published is None:
+        raise NoPublishedVersion(f"Chatbot family {family.id} has no Published Version")
+    return published
+
+
+def _resolve_specific(family: Experiment, version_number: int | None) -> Experiment:
+    if version_number is None:
+        raise VersionNotFound("SPECIFIC rule requires a version_number")
+    if family.version_number == version_number:
+        return family
+    try:
+        return family.versions.get(version_number=version_number)
+    except family.versions.model.DoesNotExist:
+        raise VersionNotFound(f"Family {family.id} has no version with version_number={version_number}") from None
 
 
 def resolve_published_or_working(family: Experiment) -> Experiment:
