@@ -1,20 +1,83 @@
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiExample, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound
+from rest_framework.generics import RetrieveAPIView
 from rest_framework.views import APIView
 
-from apps.api.serializers import ParticipantDataUpdateRequest
+from apps.api.pagination import CursorPagination
+from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
 from apps.api.tasks import setup_connect_channels_for_bots
 from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
 
 
-class UpdateParticipantDataView(APIView):
-    required_scopes = ("participants:write",)
-    permission_required = "experiments.change_participantdata"
+class ParticipantDetailView(RetrieveAPIView):
+    required_scopes = ("participants:read",)
+    permission_required = "experiments.view_participantdata"
+    serializer_class = ParticipantDetailSerializer
+    lookup_field = "public_id"
+    lookup_url_kwarg = "id"
+
+    @extend_schema(
+        operation_id="retrieve_participant",
+        summary="Retrieve Participant",
+        tags=["Participants"],
+        responses={200: ParticipantDetailSerializer},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return Participant.objects.filter(team=self.request.team).prefetch_related("data_set__experiment")
+
+
+class ParticipantView(APIView):
+    """GET: list participants for the team. POST: update/create participant data."""
+
+    pagination_class = CursorPagination
+    # required_scopes is set per-method in check_permissions
+    required_scopes = ("participants:read",)
+
+    def check_permissions(self, request):
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            self.required_scopes = ("participants:write",)
+        else:
+            self.required_scopes = ("participants:read",)
+        super().check_permissions(request)
+
+    @extend_schema(
+        operation_id="list_participants",
+        summary="List Participants",
+        tags=["Participants"],
+        parameters=[
+            OpenApiParameter(
+                name="identifier",
+                description="Filter by participant identifier",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="platform",
+                description="Filter by platform (e.g. api, telegram, whatsapp)",
+                required=False,
+                type=str,
+            ),
+        ],
+        responses={200: ParticipantDetailSerializer(many=True)},
+    )
+    def get(self, request):
+        qs = Participant.objects.filter(team=request.team).prefetch_related("data_set__experiment")
+        if identifier := request.query_params.get("identifier"):
+            qs = qs.filter(identifier=identifier)
+        if platform := request.query_params.get("platform"):
+            qs = qs.filter(platform=platform)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = ParticipantDetailSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     @extend_schema(
         operation_id="update_participant_data",
