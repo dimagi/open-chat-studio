@@ -671,7 +671,7 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
 @permission_required("experiments.invite_participants", raise_exception=True)
 def chatbot_invitations(request, team_slug: str, experiment_id: int):
     chatbot = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    chatbot_version = chatbot.default_version
+    chatbot_version = resolve_published_or_working(chatbot)
     sessions = chatbot.sessions.order_by("-created_at").filter(
         status__in=["setup", "pending"],
         participant__isnull=False,
@@ -737,7 +737,7 @@ def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: u
         # old links dont have uuids
         raise Http404() from None
 
-    chatbot_version = chatbot.default_version
+    chatbot_version = resolve_published_or_working(chatbot)
     if not chatbot_version.is_public:
         raise Http404
 

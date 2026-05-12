@@ -37,6 +37,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -708,7 +709,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         working_version = self.get_working_version()
         if version == self.DEFAULT_VERSION_NUMBER:
-            return working_version.default_version
+            return resolve_published_or_working(working_version)
         elif working_version.version_number == version:
             return working_version
         return working_version.versions.get(version_number=version)
@@ -1663,7 +1664,7 @@ class ExperimentSession(BaseTeamModel):
     @cached_property
     def experiment_version(self) -> Experiment:
         """Returns the default experiment, or if there is none, the working experiment"""
-        return self.experiment.default_version
+        return resolve_published_or_working(self.experiment)
 
     @cached_property
     def working_experiment(self) -> Experiment:
