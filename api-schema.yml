@@ -1723,5 +1723,5 @@ components:
       scheme: bearer
 tags:
 - name: Chat
-  description: "\n                The Chat API is designed to be used for integrating\
-    \ chatbots into external systems.\n            "
+  description: "\n                The Chat API is designed to be used for integrating
+    chatbots into external systems.\n            "
