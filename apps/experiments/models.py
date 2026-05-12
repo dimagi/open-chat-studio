@@ -1644,12 +1644,12 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
+        """The Chatbot Version this session executes against — Published if one exists, Working otherwise."""
         return resolve_published_or_working(self.experiment)
 
     @cached_property
     def working_experiment(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
+        """The Working Version (family head) of this session's Chatbot."""
         return self.experiment.get_working_version()
 
     def get_experiment_version_number(self) -> int:
