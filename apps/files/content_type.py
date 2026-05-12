@@ -39,16 +39,14 @@ def detect_content_type(
     *,
     filename: str = "",
     fallback: str = "",
-) -> str | None:
+) -> str:
     """Best-effort MIME detection from raw bytes with cascading fallbacks.
 
     Detection precedence:
         1. python-magic applied to the first 2048 bytes of ``content``
         2. ``mimetypes.guess_type(filename)`` when ``filename`` is provided
         3. ``fallback`` (e.g. a claimed Content-Type header from an external source)
-
-    Returns ``None`` if no source produces a value; callers that need a
-    non-empty result should coalesce with :data:`DEFAULT_CONTENT_TYPE`.
+        4. :data:`DEFAULT_CONTENT_TYPE` (``application/octet-stream``)
     """
     if detected := _magic_detect(content):
         return detected
@@ -56,16 +54,15 @@ def detect_content_type(
         guessed, _ = mimetypes.guess_type(filename)
         if guessed:
             return guessed
-    return fallback or None
+    return fallback or DEFAULT_CONTENT_TYPE
 
 
 def detect_content_type_from_file(file_obj: BinaryIO) -> str:
-    """Detect MIME from a file-like object, always returning a non-empty string.
+    """Detect MIME from a file-like object.
 
     Reads up to 2048 bytes from ``file_obj`` (seeking back to 0 afterwards),
     then runs the same cascade as :func:`detect_content_type` using the
-    object's ``name`` attribute as the filename fallback. Falls through to
-    :data:`DEFAULT_CONTENT_TYPE` if every step fails.
+    object's ``name`` attribute as the filename fallback.
     """
     content = b""
     with contextlib.suppress(Exception):
@@ -77,4 +74,4 @@ def detect_content_type_from_file(file_obj: BinaryIO) -> str:
     with contextlib.suppress(Exception):
         name = pathlib.Path(name).name
 
-    return detect_content_type(content, filename=name) or DEFAULT_CONTENT_TYPE
+    return detect_content_type(content, filename=name)

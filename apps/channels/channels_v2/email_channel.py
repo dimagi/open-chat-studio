@@ -20,7 +20,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import is_email_domain_allowed
 from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
-from apps.files.content_type import DEFAULT_CONTENT_TYPE, detect_content_type
+from apps.files.content_type import detect_content_type
 from apps.files.models import File, FilePurpose
 from apps.service_providers.file_limits import (
     EMAIL_BLOCKED_CONTENT_TYPES,
@@ -203,7 +203,7 @@ def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tupl
     for att in raw:
         size = len(att.content_bytes)
         ext = pathlib.Path(att.filename or "").suffix.lstrip(".").lower()
-        detected = detect_content_type(att.content_bytes, fallback=att.content_type) or DEFAULT_CONTENT_TYPE
+        detected = detect_content_type(att.content_bytes, fallback=att.content_type)
 
         if reason := _is_blocked(ext, att.content_type, detected):
             skipped.append({"name": att.filename, "reason": reason, "size": size})

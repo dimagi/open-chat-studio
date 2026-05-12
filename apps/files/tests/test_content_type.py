@@ -35,8 +35,8 @@ class TestDetectContentType:
     def test_falls_back_to_explicit_fallback_when_no_other_signal(self):
         assert detect_content_type(b"", fallback="application/pdf") == "application/pdf"
 
-    def test_returns_none_when_no_signal_at_all(self):
-        assert detect_content_type(b"") is None
+    def test_returns_default_when_no_signal_at_all(self):
+        assert detect_content_type(b"") == DEFAULT_CONTENT_TYPE
 
     def test_magic_takes_priority_over_filename(self, magic_returns):
         with magic_returns("image/png"):
