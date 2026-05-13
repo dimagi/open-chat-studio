@@ -1014,6 +1014,9 @@ class DatasetAutoPopulationRuleForm(forms.ModelForm):
     class Meta:
         model = DatasetAutoPopulationRule
         fields = ["source_experiment", "filter_query_string", "is_enabled"]
+        widgets = {
+            "filter_query_string": forms.HiddenInput(),
+        }
 
     def __init__(self, *args, team, dataset, **kwargs):
         super().__init__(*args, **kwargs)

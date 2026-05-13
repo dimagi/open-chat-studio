@@ -8,7 +8,9 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, UpdateView
 
 from apps.evaluations.forms import DatasetAutoPopulationRuleForm
-from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationDataset
+from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationDataset, EvaluationMode
+from apps.experiments.filters import ChatMessageFilter, ExperimentSessionFilter, get_filter_context_data
+from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -36,6 +38,26 @@ class _RuleViewMixin(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
             "evaluations:dataset_edit",
             args=[self.request.team.slug, self.kwargs["dataset_id"]],
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        dataset = self.get_dataset()
+        team = self.request.team
+        if dataset.evaluation_mode == EvaluationMode.SESSION:
+            filter_class = ExperimentSessionFilter
+        else:
+            filter_class = ChatMessageFilter
+        context.update(
+            get_filter_context_data(
+                team,
+                filter_class.columns(team),
+                filter_class=filter_class,
+                table_url=reverse("evaluations:dataset_sessions_selection_list", args=[team.slug]),
+                table_container_id="sessions-table",
+                table_type=FilterSet.TableType.DATASETS,
+            )
+        )
+        return context
 
 
 class CreateAutoPopulationRule(_RuleViewMixin, CreateView):
