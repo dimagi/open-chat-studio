@@ -225,12 +225,40 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
     return experiment_map
 
 
+def _schedule_external_id(data, experiment, participant):
+    return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
+
+
+def _apply_schedule_update(message, data):
+    message.next_trigger_date = data["date"]
+    message.custom_schedule_params["name"] = data["name"]
+    message.custom_schedule_params["prompt_text"] = data["prompt"]
+    return message
+
+
+def _build_new_scheduled_message(request, experiment, participant, external_id, data):
+    return ScheduledMessage(
+        team=request.team,
+        experiment=experiment,
+        participant=participant,
+        next_trigger_date=data["date"],
+        external_id=external_id,
+        custom_schedule_params={
+            "name": data["name"],
+            "prompt_text": data["prompt"],
+            "repetitions": 1,
+            # these aren't really needed since it's one-off schedule
+            "frequency": 1,
+            "time_period": TimePeriod.DAYS,
+        },
+    )
+
+
 @transaction.atomic()
 def _create_update_schedules(request, experiment, participant, schedule_data):
-    def _get_id(data):
-        return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
-
-    data_by_id = {_get_id(data): data for data in schedule_data if not data.get("delete")}
+    data_by_id = {
+        _schedule_external_id(data, experiment, participant): data for data in schedule_data if not data.get("delete")
+    }
     existing_by_id = {
         message.external_id: message
         for message in ScheduledMessage.objects.filter(
@@ -241,29 +269,9 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
     updated = []
     for external_id, data in data_by_id.items():
         if external_id in existing_by_id:
-            message = existing_by_id[external_id]
-            message.next_trigger_date = data["date"]
-            message.custom_schedule_params["name"] = data["name"]
-            message.custom_schedule_params["prompt_text"] = data["prompt"]
-            updated.append(message)
+            updated.append(_apply_schedule_update(existing_by_id[external_id], data))
         else:
-            new.append(
-                ScheduledMessage(
-                    team=request.team,
-                    experiment=experiment,
-                    participant=participant,
-                    next_trigger_date=data["date"],
-                    external_id=external_id,
-                    custom_schedule_params={
-                        "name": data["name"],
-                        "prompt_text": data["prompt"],
-                        "repetitions": 1,
-                        # these aren't really needed since it's one-off schedule
-                        "frequency": 1,
-                        "time_period": TimePeriod.DAYS,
-                    },
-                )
-            )
+            new.append(_build_new_scheduled_message(request, experiment, participant, external_id, data))
 
     delete_ids = {data["id"] for data in schedule_data if data.get("delete")}
     if delete_ids:
