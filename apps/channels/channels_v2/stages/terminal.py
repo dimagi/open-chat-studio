@@ -168,11 +168,12 @@ class SendingErrorHandlerStage(ProcessingStage):
         # Inspect the original exception inside delivery failure wrappers so
         # platform-specific handling (e.g. Telegram 403 -> consent revocation)
         # still fires for exceptions raised by ChannelSender implementations.
-        underlying = getattr(exc, "original_exc", None)
-        if isinstance(underlying, ApiTelegramException) and self._handle_telegram_block(ctx, underlying):
-            return
-
         if isinstance(exc, MessageDeliveryFailure):
+            if isinstance(exc.original_exc, ApiTelegramException) and self._handle_telegram_block(
+                ctx, exc.original_exc
+            ):
+                return
+
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
                 ctx.experiment,
