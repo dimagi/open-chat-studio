@@ -1,0 +1,226 @@
+{# Always-visible inline variant of the filter editor in templates/experiments/filters.html.
+   Reuses the same Alpine `filterComponent` data so all add/remove/save/NL logic comes for free.
+   Callers must provide the standard df_* context vars (see get_filter_context_data) but may
+   pass empty df_filter_data_source_url / df_filter_data_source_container_id to skip the
+   preview-table HTMX round-trip. #}
+{% load i18n %}
+<div x-data="filterComponent" class="space-y-2"
+     x-init="if (filterData.filters.length === 0) addFilter()">
+  <div class="flex items-center justify-between">
+    <h3 class="text-base font-medium">{% translate "Filter conditions" %}</h3>
+    <div x-show="filterData.loading" x-cloak class="text-sm opacity-60">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+    </div>
+  </div>
+
+  {# Natural-language filter input #}
+  <div class="mb-3" x-show="filterSlug" x-cloak>
+    <div class="flex gap-2">
+      <input
+        type="text"
+        x-model="nlQuery"
+        @keydown.enter.debounce.300ms="generateFiltersFromNL()"
+        placeholder="e.g. sessions from last week excluding WhatsApp"
+        class="input input-sm input-bordered flex-1"
+        :disabled="nlLoading"
+        aria-label="Natural language filter query"
+      >
+      <button
+        type="button"
+        @click="generateFiltersFromNL()"
+        :disabled="!nlQuery.trim() || nlLoading || !filterSlug"
+        class="btn btn-sm btn-primary"
+      >
+        <span x-show="!nlLoading">✨ Generate</span>
+        <span x-show="nlLoading" x-cloak>
+          <i class="fa-solid fa-spinner fa-spin"></i>
+        </span>
+      </button>
+    </div>
+    <div x-show="nlError" x-cloak class="mt-1 text-sm text-error" x-text="nlError" aria-live="polite"></div>
+  </div>
+
+  {# Filter rows #}
+  <div class="space-y-2">
+    <template x-for="(filter, index) in filterData.filters" :key="index">
+      <div class="flex items-center gap-2">
+        <div class="text-gray-500 font-medium w-16">
+          <span x-text="index === 0 ? 'Where' : 'AND'"></span>
+        </div>
+
+        <div class="relative">
+          <div class="dropdown dropdown-bottom">
+            <label tabindex="0" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
+              <span x-text="filter.column ? filterData.columns[filter.column].label : 'Select column'"></span>
+              <i class="fa-solid fa-caret-down fa-sm"></i>
+            </label>
+            <ul tabindex="0" class="dropdown-content z-1 menu mt-1 p-2 bg-base-100 rounded-lg border border-base-200 w-40">
+              <template x-for="(config, column) in filterData.columns" :key="column">
+                <li><a @click="filter.column = column; updateOperatorsByColumn(index)" x-text="config.label"></a></li>
+              </template>
+            </ul>
+          </div>
+        </div>
+
+        <div x-show="filter.column" class="relative">
+          <div class="dropdown dropdown-bottom">
+            <label tabindex="0" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
+              <span x-text="filter.operator || 'Select operator'"></span>
+              <i class="fa-solid fa-caret-down fa-sm"></i>
+            </label>
+            <ul tabindex="0" class="dropdown-content z-1 menu mt-1 p-2 bg-base-100 rounded-lg border border-base-200 w-40">
+              <template x-for="operator in filter.availableOperators" :key="operator">
+                <li><a @click="filter.operator = operator; triggerFilterChange()" x-text="operator"></a></li>
+              </template>
+            </ul>
+          </div>
+        </div>
+
+        <template x-if="filter.operator">
+          <div class="relative">
+            <template x-if="['choice', 'string', 'exclusive_choice'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
+              <div class="relative">
+                <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
+                  <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
+                  <i class="fa-solid fa-caret-down fa-sm"></i>
+                </div>
+                <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
+                  <div class="sticky top-0 bg-base-100 border-b p-2 z-1">
+                    <div class="relative">
+                      <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
+                    </div>
+                  </div>
+                  <div x-show="filter.column === 'tags'" class="border-b p-2 bg-base-50">
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        @click="selectAllTagOptions(index)"
+                        :disabled="areAllTagsSelected(index)"
+                        :class="areAllTagsSelected(index) ? 'btn-disabled' : ''"
+                        class="btn btn-xs btn-outline flex-1">
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        @click="clearAllOptions(index)"
+                        :disabled="filter.selectedValues.length === 0"
+                        :class="filter.selectedValues.length === 0 ? 'btn-disabled' : ''"
+                        class="btn btn-xs btn-outline flex-1">
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                  <div class="py-1">
+                    <template x-for="option in filter.filteredOptions" :key="typeof option === 'object' ? option.id : option">
+                      <label :for="`option-${index}-${typeof option === 'object' ? option.id : option}`" class="flex items-center px-4 py-2 hover:bg-base-200 cursor-pointer text-sm">
+                        <input type="checkbox" :id="`option-${index}-${typeof option === 'object' ? option.id : option}`" :value="typeof option === 'object' ? option.id : option" x-model="filter.selectedValues" @change="triggerFilterChange()" class="checkbox checkbox-xs mr-2">
+                        <span x-text="typeof option === 'object' ? option.label : option"></span>
+                      </label>
+                    </template>
+                    <div x-show="filter.filteredOptions && filter.filteredOptions.length === 0" class="px-4 py-2 text-sm text-gray-500 italic">
+                      No matching options
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="filterData.columns[filter.column]?.type === 'string' && filter.operator !== 'any of'">
+              <input type="text" x-model="filter.value" @input.debounce="triggerFilterChange()" class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm" style="height: 2rem;" placeholder="Enter value...">
+            </template>
+
+            <template x-if="filterData.columns[filter.column]?.type === 'timestamp'">
+              <div>
+                <div
+                  x-data="{ showDateRangeOptions: false }"
+                  x-show="filter.operator === 'range'"
+                  class="relative"
+                >
+                  <div
+                    @click="showDateRangeOptions = !showDateRangeOptions"
+                    class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                    style="height: 2rem;"
+                  >
+                    <span
+                      x-text="dateRangeOptions.find(opt => opt.value === filter.value)?.label || 'Select Date Range'"
+                    ></span>
+                    <i class="fa-solid fa-caret-down fa-sm"></i>
+                  </div>
+                  <div
+                    x-show="showDateRangeOptions"
+                    @click.outside="showDateRangeOptions = false"
+                    class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-40 border border-base-300"
+                    style="z-index: 9999 !important;"
+                  >
+                    <div class="py-1">
+                      <template x-for="option in dateRangeOptions" :key="option.value">
+                        <div
+                          @click="filter.value = option.value; triggerFilterChange(); syncDateRangeDropdown(filter.value); showDateRangeOptions = false;"
+                          class="px-4 py-2 hover:bg-base-200 cursor-pointer text-sm"
+                          :class="{ 'bg-base-200': filter.value === option.value }"
+                        >
+                          <span x-text="option.label"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+                <input
+                  x-show="filter.operator !== 'range'"
+                  type="date"
+                  x-model="filter.value"
+                  @input="triggerFilterChange()"
+                  class="w-40 block px-3 border border-base-200 rounded-lg bg-base-100 text-sm"
+                  style="height: 2rem;"
+                >
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <button type="button" @click="removeFilter(index)" class="btn btn-square btn-sm btn-ghost" aria-label="Remove filter">×</button>
+      </div>
+    </template>
+
+    <div class="flex justify-between items-center gap-2">
+      <button type="button" @click="addFilter()" class="btn btn-sm btn-outline">+ Add Filter</button>
+      <div class="flex gap-1">
+        <button type="button" @click="saveFilterDialog.show()" class="btn btn-sm btn-outline">Create Filter</button>
+        <button type="button" @click="savedFiltersDialog.show()" class="btn btn-sm btn-outline">My Saved Filters</button>
+      </div>
+    </div>
+  </div>
+
+  {# Starred saved filters #}
+  <div class="mt-4">
+    <div class="flex flex-wrap gap-2">
+      <div x-show="starredFilters.length > 0" class="flex flex-col">
+        <div class="flex items-center">
+          <div class="flex p-2 text-gray-500 text-sm">
+            Starred filters
+          </div>
+        </div>
+        <div class="grid grid-cols-4 gap-1">
+          <template x-for="filterSet in starredFilters" :key="filterSet.id">
+            <div
+                class="inline-flex items-center gap-1 px-3 py-1 bg-base-200 rounded-full text-sm cursor-pointer hover:bg-base-300 transition-colors"
+                @click="applyStarredFilter(filterSet.id)">
+              <span class="text-base-content" x-text="filterSet.name"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% include "filters/saved_filters_dialog.html" %}
+  {% include "filters/save_filter_dialog.html" %}
+</div>
+
+{{ df_date_range_options|json_script:"date-range-options" }}
+{{ df_filter_columns|json_script:"filter-columns-data" }}
+<script>
+  const filterColumns = JSON.parse(document.getElementById('filter-columns-data').textContent);
+  const dateRangeOptions = JSON.parse(document.getElementById('date-range-options').textContent);
+</script>
+{% include "filters/_filter_component_alpine.html" %}

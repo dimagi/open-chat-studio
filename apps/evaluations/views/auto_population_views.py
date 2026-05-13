@@ -54,8 +54,8 @@ class _RuleViewMixin(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
                 team,
                 filter_class.columns(team),
                 filter_class=filter_class,
-                table_url=reverse("evaluations:dataset_sessions_selection_list", args=[team.slug]),
-                table_container_id="sessions-table",
+                table_url="",
+                table_container_id="",
                 table_type=FilterSet.TableType.DATASETS,
             )
         )

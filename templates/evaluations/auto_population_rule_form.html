@@ -21,14 +21,10 @@
       })();
     </script>
 
-    {% include "experiments/filters.html" %}
+    {% include "filters/inline_filter_editor.html" %}
 
     {# Hidden input that receives the URL filter params on submit. #}
     {{ form.filter_query_string }}
-  </div>
-
-  <div id="sessions-table" class="mt-4">
-    {# Sessions preview populated by the widget via HTMX. #}
   </div>
 
   <script>
