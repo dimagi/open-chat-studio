@@ -600,8 +600,12 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         filtered_session_ids_str = self.data.get("filtered_session_ids", "")
         filtered_session_ids = {sid for sid in filtered_session_ids_str.split(",") if sid}
 
+        # Session-mode datasets are allowed to start empty (they may be auto-populated
+        # later). Message-mode datasets still need at least one session to clone from.
         if not session_ids and not filtered_session_ids:
-            raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+            if self.cleaned_data.get("evaluation_mode") != EvaluationMode.SESSION:
+                raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+            return session_ids, filtered_session_ids
 
         intersection = session_ids & filtered_session_ids
         if intersection:
