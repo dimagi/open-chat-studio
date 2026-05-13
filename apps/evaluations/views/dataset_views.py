@@ -12,29 +12,38 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
+from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
-from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
+from apps.evaluations.forms import (
+    EvaluationDatasetEditForm,
+    EvaluationDatasetForm,
+    ImportFromAnnotationQueueForm,
+)
 from apps.evaluations.models import (
     DatasetCreationStatus,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
+    EvaluationMode,
 )
 from apps.evaluations.tables import (
     DatasetMessagesTable,
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
-from apps.evaluations.tasks import update_dataset_from_csv_task
+from apps.evaluations.tasks import (
+    create_dataset_from_sessions_task,
+    update_dataset_from_csv_task,
+)
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
     make_evaluation_messages_from_sessions,
@@ -673,3 +682,74 @@ class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
 
         messages.success(request, "Messages added to dataset successfully.")
         return HttpResponse(status=204)
+
+
+class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Import sessions from an annotation queue into an existing dataset.
+
+    Only available for session-mode datasets. The underlying task is idempotent —
+    sessions already present in the dataset are skipped.
+    """
+
+    permission_required = "evaluations.change_evaluationdataset"
+
+    def _get_dataset(self, request, pk):
+        return get_object_or_404(
+            EvaluationDataset,
+            id=pk,
+            team=request.team,
+            evaluation_mode=EvaluationMode.SESSION,
+        )
+
+    def _render_form(self, request, dataset, form):
+        return render(
+            request,
+            "evaluations/import_from_annotation_queue.html",
+            {
+                "dataset": dataset,
+                "form": form,
+                "active_tab": "evaluation_datasets",
+            },
+        )
+
+    def get(self, request, team_slug: str, pk: int):
+        dataset = self._get_dataset(request, pk)
+        form = ImportFromAnnotationQueueForm(team=request.team)
+        return self._render_form(request, dataset, form)
+
+    def post(self, request, team_slug: str, pk: int):
+        dataset = self._get_dataset(request, pk)
+        form = ImportFromAnnotationQueueForm(request.POST, team=request.team)
+        if not form.is_valid():
+            return self._render_form(request, dataset, form)
+
+        queue = form.cleaned_data["queue"]
+        session_external_ids = list(
+            queue.items.filter(session__isnull=False, session__team=request.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+
+        if not session_external_ids:
+            messages.error(request, "No sessions found in the selected queue.")
+            return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)
+
+        # Clear any prior error state before starting the new job.
+        if dataset.is_failed or dataset.error_message:
+            dataset.error_message = ""
+        dataset.status = DatasetCreationStatus.PENDING
+        dataset.save(update_fields=["status", "error_message"])
+
+        task = create_dataset_from_sessions_task.delay(
+            dataset.id,
+            request.team.id,
+            [str(sid) for sid in session_external_ids],
+        )
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
+        messages.success(
+            request,
+            f'Importing {len(session_external_ids)} session(s) from "{queue.name}". Duplicates will be skipped.',
+        )
+        return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)

@@ -117,6 +117,11 @@ urlpatterns = [
         dataset_views.upload_dataset_csv,
         name="dataset_upload",
     ),
+    path(
+        "dataset/<int:pk>/import-from-queue/",
+        dataset_views.ImportFromAnnotationQueue.as_view(),
+        name="dataset_import_from_queue",
+    ),
 ]
 
 urlpatterns.extend(make_crud_urls(evaluation_config_views, "Evaluation", delete=False))

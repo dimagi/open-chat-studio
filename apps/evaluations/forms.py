@@ -32,6 +32,7 @@ from apps.evaluations.tasks import (
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.human_annotations.models import AnnotationQueue, QueueStatus
 
 
 class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
@@ -1004,3 +1005,22 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                     self._save_session_messages_clone(dataset)
 
         return dataset
+
+
+class ImportFromAnnotationQueueForm(forms.Form):
+    """Form to pick an annotation queue to import sessions from into a dataset."""
+
+    queue = forms.ModelChoiceField(
+        queryset=AnnotationQueue.objects.none(),
+        label="Annotation Queue",
+        help_text="Select an annotation queue. Only queues containing sessions are listed.",
+    )
+
+    def __init__(self, *args, team, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["queue"].queryset = (
+            AnnotationQueue.objects.filter(team=team, items__session__isnull=False)
+            .exclude(status=QueueStatus.ARCHIVED)
+            .distinct()
+            .order_by("name")
+        )
