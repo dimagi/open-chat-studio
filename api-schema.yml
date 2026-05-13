@@ -443,6 +443,13 @@ paths:
         schema:
           type: string
       - in: query
+        name: experiment
+        schema:
+          type: string
+          format: uuid
+        description: Filter by chatbot public id; returns participants that have data
+          for the chatbot.
+      - in: query
         name: identifier
         schema:
           type: string

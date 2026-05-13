@@ -1,8 +1,12 @@
+import uuid
+
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
@@ -44,15 +48,30 @@ class ParticipantView(APIView):
                 required=False,
                 type=str,
             ),
+            OpenApiParameter(
+                name="experiment",
+                description="Filter by chatbot public id; returns participants that have data for the chatbot.",
+                required=False,
+                type=OpenApiTypes.UUID,
+            ),
         ],
         responses={200: ParticipantDetailSerializer(many=True)},
     )
     def get(self, request):
-        qs = Participant.objects.filter(team=request.team).prefetch_related("data_set__experiment")
+        data_qs = ParticipantData.objects.select_related("experiment").filter(team=request.team)
+        qs = Participant.objects.filter(team=request.team)
         if identifier := request.query_params.get("identifier"):
             qs = qs.filter(identifier=identifier)
         if platform := request.query_params.get("platform"):
             qs = qs.filter(platform=platform)
+        if experiment_id := request.query_params.get("experiment"):
+            try:
+                experiment_id = uuid.UUID(experiment_id)
+            except ValueError as e:
+                raise ValidationError({"experiment": "Must be a valid UUID."}) from e
+            data_qs = data_qs.filter(experiment__public_id=experiment_id)
+            qs = qs.filter(id__in=data_qs.values_list("participant_id", flat=True))
+        qs = qs.prefetch_related(Prefetch("data_set", queryset=data_qs, to_attr="_prefetched_participant_data"))
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request, view=self)
         serializer = ParticipantDetailSerializer(page, many=True)
