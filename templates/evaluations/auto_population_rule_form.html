@@ -1,6 +1,16 @@
 {% extends "generic/object_form.html" %}
 {% load form_tags i18n %}
 
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:dataset_home' request.team.slug %}">{% translate "Datasets" %}</a></li>
+      <li><a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.id %}">{{ dataset.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ page_title }}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
 {% block form %}
   {{ form.non_field_errors }}
   {% render_form_fields form "source_experiment" "is_enabled" %}
