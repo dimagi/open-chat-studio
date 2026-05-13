@@ -20,6 +20,9 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.aggregation import compute_aggregates_for_run
+from apps.evaluations.auto_population import (
+    auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
+)
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
