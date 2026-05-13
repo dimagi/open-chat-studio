@@ -173,6 +173,7 @@ dev = [
     "prek>=0.3.2",
     "django-types",
     "ty==0.0.33",
+    "honcho>=2.0.0",
 ]
 docs = [
     "zensical>=0.0.40",

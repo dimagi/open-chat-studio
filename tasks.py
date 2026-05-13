@@ -175,7 +175,7 @@ def _get_portless_name(c: Context) -> str:
     return name
 
 
-@task(aliases=["django", "dev"], help={"public": "Expose server publicly via ngrok tunnel"})
+@task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
     has_portless = c.run("which portless", hide=True, warn=True).ok
@@ -223,6 +223,12 @@ def celery(c: Context, gevent=False, beat=False):
     if gevent:
         cprint("Starting celery worker with gevent pool. This will not run celery beat.", "yellow")
     c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=True)
+
+
+@task
+def dev(c: Context):
+    """Run Django, Celery, and the webpack asset watcher together via honcho."""
+    c.run("uv run honcho -f Procfile.dev start", echo=True, pty=True)
 
 
 @task(
