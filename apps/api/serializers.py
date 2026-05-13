@@ -267,3 +267,19 @@ class TriggerBotMessageRequest(serializers.Serializer):
         required=False,
         default=dict,
     )
+
+
+class SendMessageToParticipantRequest(serializers.Serializer):
+    identifier = serializers.CharField(label="Participant Identifier")
+    platform = serializers.ChoiceField(choices=ChannelPlatform.choices, label="Participant Platform")
+    experiment = serializers.UUIDField(label="Experiment ID")
+    message_text = serializers.CharField(label="Message text to send verbatim to the participant")
+    start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)
+    session_data = serializers.DictField(
+        help_text="Update session data. This will be merged with existing session data", required=False, default=dict
+    )
+    participant_data = serializers.DictField(
+        help_text="Update Participant data. This will be merged with existing participant data",
+        required=False,
+        default=dict,
+    )

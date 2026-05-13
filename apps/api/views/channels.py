@@ -14,8 +14,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView, Request
 
 from apps.api.permissions import verify_hmac
-from apps.api.serializers import TriggerBotMessageRequest
-from apps.api.tasks import create_connect_channel_for_participant, trigger_bot_message_task
+from apps.api.serializers import SendMessageToParticipantRequest, TriggerBotMessageRequest
+from apps.api.tasks import create_connect_channel_for_participant, send_message_to_participant_task, trigger_bot_message_task
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, Participant, ParticipantData
@@ -217,5 +217,138 @@ class TriggerBotMessageView(APIView):
                 return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
         trigger_bot_message_task.delay(data)
+
+        return Response(status=status.HTTP_200_OK)
+
+
+class SendMessageToParticipantView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    @extend_schema(
+        operation_id="send_message_to_participant",
+        summary="Send a pre-composed message directly to a participant (no LLM)",
+        tags=["Channels"],
+        request=SendMessageToParticipantRequest(),
+        responses={
+            200: {},
+            400: {"description": "Bad Request"},
+            404: {"description": "Not Found"},
+        },
+        examples=[
+            OpenApiExample(
+                name="SendMessageDirectly",
+                summary="Send a pre-written message to a participant (auto-creates participant if needed).",
+                value={
+                    "identifier": "+15556793",
+                    "experiment": "exp1",
+                    "platform": "whatsapp",
+                    "message_text": "Your appointment is confirmed for tomorrow at 10am.",
+                    "session_data": {"key": "value"},
+                    "participant_data": {"key": "value"},
+                },
+                status_codes=[200],
+            ),
+            OpenApiExample(
+                name="ExperimentChannelNotFound",
+                summary="Experiment cannot send messages on the specified channel",
+                value={"detail": "Experiment cannot send messages on the connect_messaging channel"},
+                status_codes=[404],
+            ),
+            OpenApiExample(
+                name="ConsentNotGiven",
+                summary="User has not given consent",
+                value={"detail": "User has not given consent"},
+                status_codes=[400],
+            ),
+        ],
+    )
+    @transaction.atomic
+    def post(self, request):
+        """
+        Send a pre-composed message directly to a participant's outbound channel,
+        bypassing the LLM/bot pipeline entirely.
+        """
+        serializer = SendMessageToParticipantRequest(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.data
+        platform = data["platform"]
+        identifier = data["identifier"]
+        identifier = ChannelPlatform(platform).normalize_identifier(identifier)
+        experiment_public_id = data["experiment"]
+
+        experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
+
+        channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
+        if not channel:
+            return JsonResponse(
+                {"detail": f"Experiment cannot send messages on the {platform} channel. Create the channel first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        participant_data = ParticipantData.objects.filter(
+            participant__identifier=identifier,
+            participant__platform=platform,
+            experiment=experiment.id,
+        ).first()
+
+        if not participant_data:
+            participant, _ = Participant.objects.get_or_create(
+                identifier=identifier, platform=platform, team=request.team
+            )
+            participant_data, created = ParticipantData.objects.get_or_create(
+                participant=participant,
+                experiment=experiment,
+                defaults={"team": request.team, "data": data.get("participant_data") or {}},
+            )
+            if not created and data.get("participant_data"):
+                merged_data = {**participant_data.data, **data["participant_data"]}
+                if merged_data != participant_data.data:
+                    participant_data.data = merged_data
+                    participant_data.save(update_fields=["data"])
+        elif data.get("participant_data"):
+            merged_data = {**participant_data.data, **data["participant_data"]}
+            if merged_data != participant_data.data:
+                participant_data.data = merged_data
+                participant_data.save(update_fields=["data"])
+
+        if platform == ChannelPlatform.COMMCARE_CONNECT:
+            if not participant_data.system_metadata.get("commcare_connect_channel_id"):
+                connect_client = CommCareConnectClient()
+                try:
+                    create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+                except httpx.HTTPStatusError as e:
+                    connect_logger.error(
+                        f"Failed to create CommCare Connect channel for participant {identifier}: "
+                        f"HTTP {e.response.status_code} - {e.response.text}"
+                    )
+                    if e.response.status_code == 404:
+                        return JsonResponse(
+                            {"detail": "Failed to create channel: Participant not found in CommCare Connect"},
+                            status=status.HTTP_404_NOT_FOUND,
+                        )
+                    elif e.response.status_code >= 500:
+                        return JsonResponse(
+                            {"detail": "Failed to create channel: CommCare Connect service error"},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        )
+                    else:
+                        return JsonResponse(
+                            {"detail": f"Failed to create channel: {e.response.text}"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                except httpx.HTTPError as e:
+                    connect_logger.error(
+                        f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}"
+                    )
+                    return JsonResponse(
+                        {"detail": "Failed to create channel: Unable to connect to CommCare Connect service"},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+
+            if not participant_data.has_consented():
+                return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+
+        send_message_to_participant_task.delay(data)
 
         return Response(status=status.HTTP_200_OK)

@@ -762,3 +762,139 @@ def test_generate_bot_message_for_email_channel(experiment):
     assert sent.body == "Hello from the bot"
     assert sent.to == ["user@example.com"]
     assert sent.from_email == "bot@chat.openchatstudio.com"
+
+
+# ── send_message_to_participant tests ──────────────────────────────────────────
+
+
+@pytest.mark.django_db()
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
+)
+@patch("apps.api.views.channels.CommCareConnectClient")
+@patch("apps.chat.channels.CommCareConnectClient")
+@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+def test_send_message_to_participant(ConnectClientChat, ConnectClientView, experiment, auth_method):
+    """
+    Test that a message is sent directly to a participant without going through the LLM.
+    """
+    connect_client_mock = ConnectClientChat.return_value
+
+    connect_id = uuid.uuid4().hex
+    commcare_connect_channel_id = uuid.uuid4().hex
+    encryption_key = os.urandom(32).hex()
+    participant_data = _setup_participant_data(
+        experiment,
+        connect_id=connect_id,
+        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": True},
+        encryption_key=encryption_key,
+    )
+    ExperimentChannelFactory.create(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
+    )
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team, auth_method=auth_method)
+
+    message = "Your appointment is confirmed for tomorrow at 10am."
+    data: dict[str, Any] = {
+        "identifier": connect_id,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
+        "experiment": str(experiment.public_id),
+        "message_text": message,
+    }
+    url = reverse("api:send_message_to_participant")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+
+    # Message delivered via channel, not via LLM
+    connect_client_mock.send_message_to_user.assert_called()
+    kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
+    assert kwargs["message"] == message
+
+    # Message recorded in chat history as an AI message
+    session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
+    assert session.chat.messages.count() == 1
+    saved_msg = session.chat.messages.first()
+    assert saved_msg.message_type == "ai"
+    assert saved_msg.content == message
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_send_message_to_participant_for_email_channel(experiment):
+    """
+    send_message_to_participant must work for the EmailChannel (delivers via email, no LLM).
+    """
+    from django.core import mail  # noqa: PLC0415
+
+    ExperimentChannelFactory.create(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.EMAIL,
+        extra_data={"email_address": "bot@chat.openchatstudio.com"},
+    )
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+
+    message = "Hello from the platform!"
+    data = {
+        "identifier": "user@example.com",
+        "platform": ChannelPlatform.EMAIL,
+        "experiment": str(experiment.public_id),
+        "message_text": message,
+    }
+    url = reverse("api:send_message_to_participant")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200
+
+    # Session and message created
+    participant = Participant.objects.get(identifier="user@example.com", platform=ChannelPlatform.EMAIL)
+    session = ExperimentSession.objects.get(participant=participant, experiment=experiment)
+    assert session.chat.messages.count() == 1
+    saved_msg = session.chat.messages.first()
+    assert saved_msg.message_type == "ai"
+    assert saved_msg.content == message
+
+    # Email delivered directly
+    assert len(mail.outbox) == 1
+    sent = mail.outbox[0]
+    assert sent.body == message
+    assert sent.to == ["user@example.com"]
+
+
+@pytest.mark.django_db()
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
+)
+@patch("apps.api.views.channels.CommCareConnectClient")
+@patch("apps.chat.channels.CommCareConnectClient")
+def test_send_message_to_participant_consent_required(ConnectClientChat, ConnectClientView, experiment, httpx_mock):
+    """
+    send_message_to_participant should return 400 when the participant has not consented (CCC platform).
+    """
+    connect_id = uuid.uuid4().hex
+    commcare_connect_channel_id = uuid.uuid4().hex
+    _setup_participant_data(
+        experiment,
+        connect_id=connect_id,
+        system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": False},
+    )
+    ExperimentChannelFactory.create(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
+    )
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+
+    data = {
+        "identifier": connect_id,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
+        "experiment": str(experiment.public_id),
+        "message_text": "This should not be delivered.",
+    }
+    url = reverse("api:send_message_to_participant")
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "User has not given consent"

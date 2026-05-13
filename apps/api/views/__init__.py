@@ -1,4 +1,4 @@
-from .channels import TriggerBotMessageView, callback, consent, generate_key
+from .channels import SendMessageToParticipantView, TriggerBotMessageView, callback, consent, generate_key
 from .chat import chat_poll_response, chat_poll_task_response, chat_send_message, chat_start_session, chat_upload_file
 from .experiments import ExperimentViewSet
 from .files import FileContentView
@@ -14,6 +14,7 @@ __all__ = [
     "UpdateParticipantDataView",
     "UpdateParticipantDataOldView",
     "FileContentView",
+    "SendMessageToParticipantView",
     "TriggerBotMessageView",
     "generate_key",
     "callback",

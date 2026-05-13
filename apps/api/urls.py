@@ -40,6 +40,7 @@ urlpatterns = [
     path("files/<int:pk>/content", views.FileContentView.as_view(), name="file-content"),
     path("commcare_connect/", include((connect_patterns, "commcare-connect"))),
     path("trigger_bot", views.TriggerBotMessageView.as_view(), name="trigger_bot"),
+    path("send_message_to_participant", views.SendMessageToParticipantView.as_view(), name="send_message_to_participant"),
     path("chat/", include((chat_patterns, "chat"))),
     path("", include(router.urls)),
 ]
