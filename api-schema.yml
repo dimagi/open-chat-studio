@@ -1698,6 +1698,8 @@ components:
     tokenAuth:
       type: http
       scheme: bearer
+servers:
+- url: https://www.openchatstudio.com
 tags:
 - name: Chat
   description: "\n                The Chat API is designed to be used for integrating
