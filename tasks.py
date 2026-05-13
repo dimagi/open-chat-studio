@@ -207,10 +207,10 @@ def runserver(c: Context, public=False):
 @task(
     help={
         "gevent": "Use gevent pool for async tasks (disables beat scheduler)",
-        "beat": "Include beat scheduler for periodic tasks (default: True)",
+        "beat": "Include beat scheduler for periodic tasks (default: False)",
     }
 )
-def celery(c: Context, gevent=False, beat=True):
+def celery(c: Context, gevent=False, beat=False):
     """Start Celery worker with auto-reload on code changes."""
     cmd = "celery -A config worker -l INFO"
     if gevent:
