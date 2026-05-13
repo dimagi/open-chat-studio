@@ -160,6 +160,29 @@ class ChannelBase(ABC):
     def _get_sender(self) -> ChannelSender:
         """Return channel-specific sender."""
 
+    @classmethod
+    def start_new_session(
+        cls,
+        working_experiment: Experiment,
+        experiment_channel: ExperimentChannel,
+        participant_identifier: str,
+        participant_user=None,
+        session_status: SessionStatus = SessionStatus.ACTIVE,
+        timezone: str | None = None,
+        session_external_id: str | None = None,
+        metadata: dict | None = None,
+    ) -> ExperimentSession:
+        return _start_experiment_session(
+            working_experiment,
+            experiment_channel,
+            participant_identifier,
+            participant_user,
+            session_status,
+            timezone,
+            session_external_id,
+            metadata,
+        )
+
     def ensure_session_exists_for_participant(self, identifier: str, new_session: bool = False) -> None:
         """Ensure an experiment session exists for the given participant identifier.
 
