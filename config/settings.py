@@ -444,7 +444,6 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Experiments with AI, GPT and LLMs",
     "VERSION": "1",
     "SERVE_INCLUDE_SCHEMA": False,
-    "SERVERS": [{"url": env("API_SERVER_URL", default="https://www.openchatstudio.com")}],
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
