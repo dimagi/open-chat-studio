@@ -1,8 +1,10 @@
-{# Always-visible inline variant of the filter editor in templates/experiments/filters.html.
-   Reuses the same Alpine `filterComponent` data so all add/remove/save/NL logic comes for free.
-   Callers must provide the standard df_* context vars (see get_filter_context_data) but may
-   pass empty df_filter_data_source_url / df_filter_data_source_container_id to skip the
-   preview-table HTMX round-trip. #}
+{% comment %}
+  Always-visible inline variant of the filter editor in templates/experiments/filters.html.
+  Reuses the same Alpine `filterComponent` data so all add/remove/save/NL logic comes for free.
+  Callers must provide the standard df_* context vars (see get_filter_context_data) but may
+  pass empty df_filter_data_source_url / df_filter_data_source_container_id to skip the
+  preview-table HTMX round-trip.
+{% endcomment %}
 {% load i18n %}
 <div x-data="filterComponent" class="space-y-2"
      x-init="if (filterData.filters.length === 0) addFilter()">

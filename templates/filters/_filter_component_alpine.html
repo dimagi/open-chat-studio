@@ -1,6 +1,8 @@
-{# Shared Alpine.data registration for filterComponent.
-   Must be included AFTER filterColumns and dateRangeOptions are defined in JS scope.
-   Both experiments/filters.html and filters/inline_filter_editor.html include this. #}
+{% comment %}
+  Shared Alpine.data registration for filterComponent.
+  Must be included AFTER filterColumns and dateRangeOptions are defined in JS scope.
+  Both experiments/filters.html and filters/inline_filter_editor.html include this.
+{% endcomment %}
 <script>
   document.addEventListener('alpine:init', () => {
     Alpine.data('filterComponent', () => ({
