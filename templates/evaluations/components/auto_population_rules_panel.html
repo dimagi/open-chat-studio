@@ -4,74 +4,76 @@
 {% translate "Enable" as enable_label %}
 {% translate "Delete" as delete_label %}
 {% translate "Delete this rule?" as delete_confirm %}
-<section class="mt-6 mb-8 border rounded p-4">
-  <header class="flex items-center justify-between mb-3">
-    <h2 class="text-lg font-medium">{% translate "Auto-population rules" %}</h2>
+<section class="mb-8">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="pg-subtitle mb-0">{% translate "Auto-population rules" %}</h2>
     <a class="btn btn-sm btn-primary"
        href="{% url 'evaluations:auto_population_rule_new' request.team.slug dataset.id %}">
       {% translate "Add rule" %}
     </a>
-  </header>
+  </div>
 
   {% if dataset.auto_population_rules.all %}
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="text-left">
-          <th>{% translate "Source chatbot" %}</th>
-          <th>{% translate "Enabled" %}</th>
-          <th>{% translate "Last run" %}</th>
-          <th>{% translate "Status" %}</th>
-          <th>{% translate "Last error" %}</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for rule in dataset.auto_population_rules.all %}
+    <div class="table-container">
+      <table class="table">
+        <thead>
           <tr>
-            <td>{{ rule.source_experiment.name }}</td>
-            <td>{{ rule.is_enabled|yesno:"Yes,No" }}</td>
-            <td>{{ rule.last_run_at|default:"—" }}</td>
-            <td>{{ rule.get_last_run_status_display|default:"—" }}</td>
-            <td class="text-red-600">{{ rule.last_error|truncatechars:60 }}</td>
-            <td>
-              <div class="join join-vertical lg:join-horizontal">
-                <a class="btn btn-sm join-item btn-ghost"
-                   href="{% url 'evaluations:auto_population_rule_edit' request.team.slug dataset.id rule.id %}"
-                   title="{{ edit_label }}">
-                  <i class="fa-solid fa-pencil"></i>
-                </a>
-                <form method="post"
-                      action="{% url 'evaluations:auto_population_rule_toggle' request.team.slug rule.id %}"
-                      class="join-item">
-                  {% csrf_token %}
-                  {% if rule.is_enabled %}
-                    <button type="submit" class="btn btn-sm join-item btn-ghost" title="{{ disable_label }}">
-                      <i class="fa-solid fa-pause"></i>
-                    </button>
-                  {% else %}
-                    <button type="submit" class="btn btn-sm join-item btn-ghost" title="{{ enable_label }}">
-                      <i class="fa-solid fa-play"></i>
-                    </button>
-                  {% endif %}
-                </form>
-                <form method="post"
-                      action="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
-                      class="join-item"
-                      hx-post="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
-                      hx-confirm="{{ delete_confirm }}"
-                      hx-on::after-request="if (event.detail.successful) location.reload();">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm join-item btn-ghost text-error" title="{{ delete_label }}">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                </form>
-              </div>
-            </td>
+            <th>{% translate "Source chatbot" %}</th>
+            <th>{% translate "Enabled" %}</th>
+            <th>{% translate "Last run" %}</th>
+            <th>{% translate "Status" %}</th>
+            <th>{% translate "Last error" %}</th>
+            <th>{% translate "Actions" %}</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for rule in dataset.auto_population_rules.all %}
+            <tr>
+              <td>{{ rule.source_experiment.name }}</td>
+              <td>{{ rule.is_enabled|yesno:"Yes,No" }}</td>
+              <td>{{ rule.last_run_at|default:"—" }}</td>
+              <td>{{ rule.get_last_run_status_display|default:"—" }}</td>
+              <td class="text-error">{{ rule.last_error|truncatechars:60 }}</td>
+              <td>
+                <div class="join join-vertical lg:join-horizontal">
+                  <a class="btn btn-sm join-item btn-ghost"
+                     href="{% url 'evaluations:auto_population_rule_edit' request.team.slug dataset.id rule.id %}"
+                     title="{{ edit_label }}">
+                    <i class="fa-solid fa-pencil"></i>
+                  </a>
+                  <form method="post"
+                        action="{% url 'evaluations:auto_population_rule_toggle' request.team.slug rule.id %}"
+                        class="join-item">
+                    {% csrf_token %}
+                    {% if rule.is_enabled %}
+                      <button type="submit" class="btn btn-sm join-item btn-ghost" title="{{ disable_label }}">
+                        <i class="fa-solid fa-pause"></i>
+                      </button>
+                    {% else %}
+                      <button type="submit" class="btn btn-sm join-item btn-ghost" title="{{ enable_label }}">
+                        <i class="fa-solid fa-play"></i>
+                      </button>
+                    {% endif %}
+                  </form>
+                  <form method="post"
+                        action="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
+                        class="join-item"
+                        hx-post="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
+                        hx-confirm="{{ delete_confirm }}"
+                        hx-on::after-request="if (event.detail.successful) location.reload();">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm join-item btn-ghost text-error" title="{{ delete_label }}">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p class="text-sm text-gray-500">{% translate "No auto-population rules configured." %}</p>
+    <p class="text-sm text-base-content/70">{% translate "No auto-population rules configured." %}</p>
   {% endif %}
 </section>
