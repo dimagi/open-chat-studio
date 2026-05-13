@@ -4,7 +4,7 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import F
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger.celery import Task as TaskbadgerTask
@@ -25,12 +25,6 @@ from apps.experiments.models import ExperimentSession
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = get_task_logger("ocs.evaluations")
-
-
-def _versions_of(experiment):
-    """Return a queryset including this experiment and all of its versions."""
-    base_id = experiment.working_version_id or experiment.id
-    return type(experiment).objects.filter(Q(id=base_id) | Q(working_version_id=base_id))
 
 
 def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended: list[EvaluationMessage]) -> None:
@@ -68,7 +62,7 @@ def _handle_rule_failure(rule: DatasetAutoPopulationRule, exception: Exception) 
 def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
     qs = ExperimentSession.objects.filter(
         team=rule.team,
-        experiment__in=_versions_of(rule.source_experiment),
+        experiment=rule.source_experiment,
         created_at__gt=created_floor,
     ).exclude(id__in=rule.dataset.messages.filter(session__isnull=False).values_list("session_id", flat=True))
 
@@ -91,7 +85,7 @@ def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) ->
 def _ingest_rule_message_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
     base_qs = ExperimentSession.objects.filter(
         team=rule.team,
-        experiment__in=_versions_of(rule.source_experiment),
+        experiment=rule.source_experiment,
         created_at__gt=created_floor,
     )
     session_external_ids = list(base_qs.values_list("external_id", flat=True))
