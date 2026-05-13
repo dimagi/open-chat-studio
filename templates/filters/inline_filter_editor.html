@@ -82,9 +82,9 @@
           <div class="relative">
             <template x-if="['choice', 'string', 'exclusive_choice'].includes(filterData.columns[filter.column]?.type) && ['any of', 'all of', 'excludes'].includes(filter.operator)">
               <div class="relative">
-                <div @click="filter.showOptions = !filter.showOptions" class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center" style="height: 2rem;">
-                  <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter) : 'Select'"></span>
-                  <i class="fa-solid fa-caret-down fa-sm"></i>
+                <div @click="filter.showOptions = !filter.showOptions" class="min-w-40 max-w-md px-3 py-1 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center gap-2" style="min-height: 2rem;">
+                  <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter, 80) : 'Select'"></span>
+                  <i class="fa-solid fa-caret-down fa-sm shrink-0"></i>
                 </div>
                 <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
                   <div class="sticky top-0 bg-base-100 border-b p-2 z-1">

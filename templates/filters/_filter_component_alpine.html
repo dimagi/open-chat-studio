@@ -167,18 +167,18 @@
         return options && options.length > 0 && typeof options[0] === 'object'
       },
 
-      getSelectedDisplayText(filter) {
+      getSelectedDisplayText(filter, maxChars = 18) {
         if (this.isObjectChoiceFilter(filter)) {
           const displayValues = filter.selectedValues.map(id => {
             const option = this.filterData.columns[filter.column].options.find(exp => exp.id === parseInt(id));
             return option ? option.label : id;
           });
           const text = displayValues.join(', ');
-          return text.length > 18 ? text.substring(0, 18) + '...' : text;
+          return text.length > maxChars ? text.substring(0, maxChars) + '...' : text;
         } else {
           // For other filters, use values directly
           const text = filter.selectedValues.join(', ');
-          return text.length > 18 ? text.substring(0, 18) + '...' : text;
+          return text.length > maxChars ? text.substring(0, maxChars) + '...' : text;
         }
       },
 
