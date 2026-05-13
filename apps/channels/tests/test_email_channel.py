@@ -1026,7 +1026,7 @@ class TestPersistInboundAttachments:
         # size check fires (magic sees b"x"*N as text/plain, causing a
         # spurious mismatch against application/pdf before the size check).
         with patch(
-            "apps.channels.channels_v2.email_channel._detect_content_type",
+            "apps.channels.channels_v2.email_channel.detect_content_type",
             return_value="application/pdf",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1065,7 +1065,7 @@ class TestPersistInboundAttachments:
         # detection-based rejection branch without relying on real libmagic
         # signatures (which can vary by version/platform).
         with patch(
-            "apps.channels.channels_v2.email_channel._detect_content_type",
+            "apps.channels.channels_v2.email_channel.detect_content_type",
             return_value="application/x-msdownload",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1170,10 +1170,10 @@ class TestEmailInboundHandlerWithAttachments:
             [oversized], to_email=channel.extra_data["email_address"], text="Please process"
         )
 
-        # Mock _detect_content_type so the oversized PDF doesn't trip the
+        # Mock detect_content_type so the oversized PDF doesn't trip the
         # mismatch check (libmagic sees a long string of "x" as text/plain).
         with (
-            patch("apps.channels.channels_v2.email_channel._detect_content_type", return_value="application/pdf"),
+            patch("apps.channels.channels_v2.email_channel.detect_content_type", return_value="application/pdf"),
             patch("apps.channels.tasks.handle_email_message.delay") as delay,
         ):
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))
