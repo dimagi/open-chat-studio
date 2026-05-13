@@ -1,4 +1,9 @@
 {% load i18n %}
+{% translate "Edit" as edit_label %}
+{% translate "Disable" as disable_label %}
+{% translate "Enable" as enable_label %}
+{% translate "Delete" as delete_label %}
+{% translate "Delete this rule?" as delete_confirm %}
 <section class="mt-6 border rounded p-4">
   <header class="flex items-center justify-between mb-3">
     <h2 class="text-lg font-medium">{% translate "Auto-population rules" %}</h2>
@@ -28,28 +33,39 @@
             <td>{{ rule.last_run_at|default:"—" }}</td>
             <td>{{ rule.get_last_run_status_display|default:"—" }}</td>
             <td class="text-red-600">{{ rule.last_error|truncatechars:60 }}</td>
-            <td class="space-x-2">
-              <a class="link"
-                 href="{% url 'evaluations:auto_population_rule_edit' request.team.slug dataset.id rule.id %}">
-                {% translate "Edit" %}
-              </a>
-              <form method="post"
-                    action="{% url 'evaluations:auto_population_rule_toggle' request.team.slug rule.id %}"
-                    class="inline">
-                {% csrf_token %}
-                <button type="submit" class="link">
-                  {% if rule.is_enabled %}{% translate "Disable" %}{% else %}{% translate "Enable" %}{% endif %}
-                </button>
-              </form>
-              <form method="post"
-                    action="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
-                    class="inline"
-                    hx-post="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
-                    hx-confirm="{% translate "Delete this rule?" %}"
-                    hx-on::after-request="if (event.detail.successful) location.reload();">
-                {% csrf_token %}
-                <button type="submit" class="link text-red-600">{% translate "Delete" %}</button>
-              </form>
+            <td>
+              <div class="join join-vertical lg:join-horizontal">
+                <a class="btn btn-sm join-item btn-ghost"
+                   href="{% url 'evaluations:auto_population_rule_edit' request.team.slug dataset.id rule.id %}"
+                   title="{{ edit_label }}">
+                  <i class="fa-solid fa-pencil"></i>
+                </a>
+                <form method="post"
+                      action="{% url 'evaluations:auto_population_rule_toggle' request.team.slug rule.id %}"
+                      class="join-item">
+                  {% csrf_token %}
+                  {% if rule.is_enabled %}
+                    <button type="submit" class="btn btn-sm join-item btn-ghost" title="{{ disable_label }}">
+                      <i class="fa-solid fa-pause"></i>
+                    </button>
+                  {% else %}
+                    <button type="submit" class="btn btn-sm join-item btn-ghost" title="{{ enable_label }}">
+                      <i class="fa-solid fa-play"></i>
+                    </button>
+                  {% endif %}
+                </form>
+                <form method="post"
+                      action="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
+                      class="join-item"
+                      hx-post="{% url 'evaluations:auto_population_rule_delete' request.team.slug rule.id %}"
+                      hx-confirm="{{ delete_confirm }}"
+                      hx-on::after-request="if (event.detail.successful) location.reload();">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm join-item btn-ghost text-error" title="{{ delete_label }}">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
         {% endfor %}
