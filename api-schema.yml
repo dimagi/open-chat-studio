@@ -478,6 +478,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedParticipantDetailList'
+              examples:
+                ListParticipants:
+                  value:
+                    next: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+                    previous: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+                    results:
+                    - id: e172ff63-2469-419f-a828-783fc9291bc7
+                      identifier: part1
+                      name: John
+                      platform: api
+                      remote_id: ''
+                      data:
+                      - chatbot: Support Bot
+                        chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
+                        data:
+                          name: John
+                          timezone: Africa/Johannesburg
+                  summary: A participant with their chatbot data
           description: ''
     post:
       operationId: update_participant_data

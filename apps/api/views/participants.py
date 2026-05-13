@@ -56,6 +56,27 @@ class ParticipantView(APIView):
             ),
         ],
         responses={200: ParticipantDetailSerializer(many=True)},
+        examples=[
+            OpenApiExample(
+                name="ListParticipants",
+                summary="A participant with their chatbot data",
+                response_only=True,
+                value={
+                    "id": "e172ff63-2469-419f-a828-783fc9291bc7",
+                    "identifier": "part1",
+                    "name": "John",
+                    "platform": "api",
+                    "remote_id": "",
+                    "data": [
+                        {
+                            "chatbot": "Support Bot",
+                            "chatbot_id": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
+                            "data": {"name": "John", "timezone": "Africa/Johannesburg"},
+                        },
+                    ],
+                },
+            ),
+        ],
     )
     def get(self, request):
         data_qs = ParticipantData.objects.select_related("experiment").filter(team=request.team)
