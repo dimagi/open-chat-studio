@@ -1139,6 +1139,9 @@ class Participant(BaseTeamModel):
     class Meta:
         ordering = ["platform", "identifier"]
         unique_together = [("team", "platform", "identifier")]
+        indexes = [
+            models.Index(fields=["team", "-created_at"], name="participant_team_created_idx"),
+        ]
 
     @classmethod
     def create_anonymous(cls, team: Team, platform: str, remote_id: str = "") -> Participant:

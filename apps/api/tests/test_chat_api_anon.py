@@ -61,7 +61,8 @@ def test_send_message(api_client, session):
 @pytest.mark.django_db()
 def test_task_poll(api_client, session):
     url = reverse("api:chat:task-poll-response", kwargs={"session_id": session.external_id, "task_id": "123"})
-    response = api_client.get(url)
+    with mock.patch("apps.api.views.chat.get_progress_message", return_value=None):
+        response = api_client.get(url)
     response_json = response.json()
     assert response_json == {"message": None, "status": "processing"}
 

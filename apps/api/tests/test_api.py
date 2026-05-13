@@ -126,7 +126,7 @@ def test_create_and_update_participant_data(auth_method):
             {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
         ],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
@@ -166,7 +166,7 @@ def test_update_participant_data_returns_404():
             {"experiment": str(experiment2.public_id), "data": {"name": "Doe"}},
         ],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 404
     assert response.json() == {"errors": [{"message": f"Experiment {experiment2.public_id} not found"}]}
@@ -197,7 +197,7 @@ def test_create_participant_schedules(experiment):
             },
         ],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
@@ -263,7 +263,7 @@ def test_update_participant_schedules(experiment):
             },
         ],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
@@ -379,7 +379,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
             },
         ],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
@@ -424,7 +424,7 @@ def test_register_connect_participant(client, experiment):
             },
         ],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
