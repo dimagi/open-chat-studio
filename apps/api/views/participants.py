@@ -85,12 +85,8 @@ class ParticipantView(APIView):
             qs = qs.filter(identifier=identifier)
         if platform := request.query_params.get("platform"):
             qs = qs.filter(platform=platform)
-        if experiment_id := request.query_params.get("experiment"):
-            try:
-                experiment_id = uuid.UUID(experiment_id)
-            except ValueError as e:
-                raise ValidationError({"experiment": "Must be a valid UUID."}) from e
-            data_qs = data_qs.filter(experiment__public_id=experiment_id)
+        if experiment_uuid := _parse_experiment_uuid(request.query_params.get("experiment")):
+            data_qs = data_qs.filter(experiment__public_id=experiment_uuid)
             qs = qs.filter(id__in=data_qs.values_list("participant_id", flat=True))
         qs = qs.prefetch_related(Prefetch("data_set", queryset=data_qs, to_attr="_prefetched_participant_data"))
         paginator = self.pagination_class()
@@ -154,6 +150,15 @@ class ParticipantView(APIView):
     )
     def post(self, request):
         return _update_participant_data(request)
+
+
+def _parse_experiment_uuid(value):
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except ValueError as e:
+        raise ValidationError({"experiment": "Must be a valid UUID."}) from e
 
 
 @extend_schema(exclude=True)
