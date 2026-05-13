@@ -10,6 +10,16 @@ from apps.channels.channels_v2.stages.terminal import (
 )
 from apps.channels.tests.channels.conftest import make_context
 from apps.experiments.models import ParticipantData
+from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+
+
+def _telegram_blocked_failure() -> MessageDeliveryFailure:
+    api_exc = ApiTelegramException(
+        "sendMessage",
+        MagicMock(status_code=403),
+        {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
+    )
+    return MessageDeliveryFailure(api_exc, context="text message")
 
 
 class TestSendingErrorHandlerStage:
@@ -24,38 +34,42 @@ class TestSendingErrorHandlerStage:
         ctx = make_context(sending_exceptions=[MagicMock()])
         assert self.stage.should_run(ctx) is True
 
-    @patch("apps.experiments.models.ParticipantData.objects")
-    def test_telegram_403_wrapped_in_message_delivery_failure_revokes_consent(self, mock_pd_objects):
-        """Telegram 403 raised by the sender is wrapped as MessageDeliveryFailure by
-        ResponseSendingStage; the handler must still detect and revoke consent."""
-        participant_data = MagicMock()
-        mock_pd_objects.get.return_value = participant_data
-        api_exc = ApiTelegramException(
-            "sendMessage",
-            MagicMock(status_code=403),
-            {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
+    @pytest.mark.django_db()
+    def test_telegram_403_revokes_consent_when_ctx_holds_published_version(self):
+        """Production calls pass experiment.default_version to the channel, so ctx.experiment
+        is a published version. ParticipantData rows are keyed to the working version, so the
+        handler must walk back via ParticipantData.objects.for_experiment()."""
+        working_experiment = ExperimentFactory.create()
+        published_version = working_experiment.create_new_version(make_default=True)
+        assert published_version.is_a_version
+        assert published_version.working_version_id == working_experiment.id
+
+        participant = ParticipantFactory.create(team=working_experiment.team, identifier="blocked_user")
+        participant_data = ParticipantData.objects.create(
+            team=working_experiment.team,
+            experiment=working_experiment,
+            participant=participant,
+            system_metadata={"consent": True},
         )
-        wrapped = MessageDeliveryFailure(api_exc, context="text message")
+
         ctx = make_context(
-            sending_exceptions=[wrapped],
+            experiment=published_version,
+            sending_exceptions=[_telegram_blocked_failure()],
             participant_identifier="blocked_user",
         )
 
         self.stage(ctx)
 
-        participant_data.update_consent.assert_called_once_with(False)
+        participant_data.refresh_from_db()
+        assert participant_data.system_metadata["consent"] is False
+        assert ctx.processing_errors == []
 
-    @patch("apps.experiments.models.ParticipantData.objects")
-    def test_telegram_403_participant_not_found(self, mock_pd_objects):
-        mock_pd_objects.get.side_effect = ParticipantData.DoesNotExist
-        api_exc = ApiTelegramException(
-            "sendMessage",
-            MagicMock(status_code=403),
-            {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
-        )
-        wrapped = MessageDeliveryFailure(api_exc, context="text message")
+    @pytest.mark.django_db()
+    def test_telegram_403_participant_not_found(self):
+        experiment = ExperimentFactory.create()
         ctx = make_context(
-            sending_exceptions=[wrapped],
+            experiment=experiment,
+            sending_exceptions=[_telegram_blocked_failure()],
             participant_identifier="unknown_user",
         )
 

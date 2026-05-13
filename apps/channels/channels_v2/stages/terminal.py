@@ -203,9 +203,8 @@ class SendingErrorHandlerStage(ProcessingStage):
         if exc.error_code != 403 or "bot was blocked by the user" not in exc.description:
             return False
         try:
-            participant_data = ParticipantData.objects.get(
+            participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
                 participant__identifier=ctx.participant_identifier,
-                experiment=ctx.experiment,
             )
             participant_data.update_consent(False)
         except ParticipantData.DoesNotExist:

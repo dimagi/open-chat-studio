@@ -51,7 +51,7 @@ class TestSendVoice:
 
 class TestSendFile:
     @pytest.mark.parametrize(
-        ("content_type", "expected_method_attr", "expected_kwarg"),
+        "case",
         [
             ("image/jpeg", "send_photo", "photo"),
             ("video/mp4", "send_video", "video"),
@@ -61,9 +61,8 @@ class TestSendFile:
             ("", "send_document", "document"),
         ],
     )
-    def test_dispatches_to_correct_telebot_method(
-        self, sender, telebot, content_type, expected_method_attr, expected_kwarg
-    ):
+    def test_dispatches_to_correct_telebot_method(self, sender, telebot, case):
+        content_type, expected_method_attr, expected_kwarg = case
         file = MagicMock()
         file.content_type = content_type
         file.file = b"file-bytes"

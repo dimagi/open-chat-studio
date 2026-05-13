@@ -64,7 +64,7 @@ class TestGetMessageAudio:
             result = callbacks.get_message_audio(self._make_telegram_message("audio-file-id"))
 
         telebot.get_file_url.assert_called_once_with("audio-file-id")
-        mock_get.assert_called_once_with("https://example.com/audio.ogg")
+        mock_get.assert_called_once_with("https://example.com/audio.ogg", timeout=30.0)
         response.raise_for_status.assert_called_once()
         mock_convert.assert_called_once()
         args, kwargs = mock_convert.call_args

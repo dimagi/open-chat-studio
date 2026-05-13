@@ -48,7 +48,7 @@ class TelegramCallbacks(ChannelCallbacks):
     def get_message_audio(self, message: BaseMessage) -> BytesIO:
         assert isinstance(message, TelegramMessage), "TelegramCallbacks requires a TelegramMessage"
         file_url = self.telegram_bot.get_file_url(message.media_id)
-        response = httpx.get(file_url)
+        response = httpx.get(file_url, timeout=30.0)
         response.raise_for_status()
         ogg_audio = BytesIO(response.content)
         return audio.convert_audio(ogg_audio, target_format="wav", source_format="ogg")
