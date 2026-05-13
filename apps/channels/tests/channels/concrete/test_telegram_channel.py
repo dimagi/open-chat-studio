@@ -2,9 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.channels_v2.stages.core import (
     BotInteractionStage,
     ChatMessageCreationStage,
@@ -22,7 +20,7 @@ from apps.channels.channels_v2.stages.terminal import (
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
-from apps.channels.channels_v2.telegram_channel import TelegramCallbacks, TelegramChannel, TelegramSender
+from apps.channels.channels_v2.telegram_channel import TelegramChannel
 from apps.chat.channels import MESSAGE_TYPES
 
 
@@ -80,24 +78,6 @@ class TestTelegramChannelPipeline:
         assert SendingErrorHandlerStage in terminal_types
         assert PersistenceStage in terminal_types
         assert ActivityTrackingStage in terminal_types
-
-
-class TestTelegramChannelSender:
-    def test_get_sender_returns_telegram_sender(self, _patched_telebot):
-        channel = _make_channel(_patched_telebot)
-        sender = channel._get_sender()
-        assert isinstance(sender, ChannelSender)
-        assert isinstance(sender, TelegramSender)
-        assert sender.telegram_bot is channel.telegram_bot
-
-
-class TestTelegramChannelCallbacks:
-    def test_get_callbacks_returns_telegram_callbacks(self, _patched_telebot):
-        channel = _make_channel(_patched_telebot)
-        callbacks = channel._get_callbacks()
-        assert isinstance(callbacks, ChannelCallbacks)
-        assert isinstance(callbacks, TelegramCallbacks)
-        assert callbacks.telegram_bot is channel.telegram_bot
 
 
 class TestTelegramChannelCapabilities:
