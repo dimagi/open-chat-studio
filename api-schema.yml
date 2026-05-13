@@ -481,6 +481,74 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/send_message_to_participant:
+    post:
+      operationId: send_message_to_participant
+      description: |-
+        Send a pre-composed message directly to a participant's outbound channel,
+        bypassing the LLM/bot pipeline entirely.
+      summary: Send a pre-composed message directly to a participant (no LLM)
+      tags:
+      - Channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageToParticipantRequest'
+            examples:
+              SendMessageDirectly:
+                value:
+                  identifier: '+15556793'
+                  experiment: exp1
+                  platform: whatsapp
+                  message_text: Your appointment is confirmed for tomorrow at 10am.
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
+                summary: Send a pre-written message to a participant (auto-creates
+                  participant if needed).
+              ExperimentChannelNotFound:
+                value:
+                  detail: Experiment cannot send messages on the connect_messaging
+                    channel
+                summary: Experiment cannot send messages on the specified channel
+              ConsentNotGiven:
+                value:
+                  detail: User has not given consent
+                summary: User has not given consent
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:interact
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Bad Request
+              examples:
+                ConsentNotGiven:
+                  value:
+                    detail: User has not given consent
+                  summary: User has not given consent
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Not Found
+              examples:
+                ExperimentChannelNotFound:
+                  value:
+                    detail: Experiment cannot send messages on the connect_messaging
+                      channel
+                  summary: Experiment cannot send messages on the specified channel
+          description: ''
   /api/sessions/:
     get:
       operationId: session_list
@@ -1463,6 +1531,42 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    SendMessageToParticipantRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          title: Participant Identifier
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          title: Participant Platform
+        experiment:
+          type: string
+          format: uuid
+          title: Experiment ID
+        message_text:
+          type: string
+          title: Message text to send verbatim to the participant
+        start_new_session:
+          type: boolean
+          default: false
+          title: Starts a new session
+        session_data:
+          type: object
+          additionalProperties: {}
+          description: Update session data. This will be merged with existing session
+            data
+        participant_data:
+          type: object
+          additionalProperties: {}
+          description: Update Participant data. This will be merged with existing
+            participant data
+      required:
+      - experiment
+      - identifier
+      - message_text
+      - platform
     SessionStatusEnum:
       enum:
       - active
