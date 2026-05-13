@@ -118,6 +118,29 @@ def audio_message():
     }
 
 
+def multi_message():
+    """Webhook payload containing multiple text messages from the same contact."""
+    return {
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "ABCDEFGHIJKL_first",
+                "text": {"body": "Hi there!"},
+                "timestamp": "1706709716",
+                "type": "text",
+            },
+            {
+                "from": "27456897512",
+                "id": "ABCDEFGHIJKL_second",
+                "text": {"body": "Are you ready?"},
+                "timestamp": "1706709717",
+                "type": "text",
+            },
+        ],
+    }
+
+
 def voice_message():
     return {
         "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],

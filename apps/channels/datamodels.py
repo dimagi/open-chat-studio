@@ -189,21 +189,45 @@ class TurnWhatsappMessage(BaseMessage):
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
 
-    @staticmethod
-    def parse(message_data: dict):
-        message = message_data["messages"][0]
+    @classmethod
+    def _parse_single(cls, message: dict, contacts: list[dict]) -> "TurnWhatsappMessage":
         message_type = message["type"]
         body = ""
         if message_type == "text":
             body = message["text"]["body"]
 
-        return TurnWhatsappMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
+        return cls(
+            participant_id=cls._resolve_participant_id(message, contacts),
             message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
         )
+
+    @staticmethod
+    def _resolve_participant_id(message: dict, contacts: list[dict]) -> str:
+        # Prefer the sender's wa_id on the message itself so each message in a
+        # batch is attributed to the correct participant; fall back to the
+        # first contact entry for compatibility with older single-message payloads.
+        wa_id = message.get("from")
+        if wa_id:
+            return wa_id
+        return contacts[0]["wa_id"]
+
+    @classmethod
+    def parse_all(cls, message_data: dict) -> list["TurnWhatsappMessage"]:
+        """Parse every message in a webhook payload.
+
+        Meta/Turn.io webhooks can deliver more than one message per payload,
+        so callers must iterate over the returned list to avoid silently
+        dropping messages.
+        """
+        contacts = message_data.get("contacts", [])
+        return [cls._parse_single(message, contacts) for message in message_data.get("messages", [])]
+
+    @classmethod
+    def parse(cls, message_data: dict) -> "TurnWhatsappMessage":
+        return cls.parse_all(message_data)[0]
 
 
 class MetaCloudAPIMessage(TurnWhatsappMessage):
@@ -215,16 +239,15 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
 
     whatsapp_message_id: str | None = Field(default=None)
 
-    @staticmethod
-    def parse(message_data: dict) -> "MetaCloudAPIMessage":
-        message = message_data["messages"][0]
+    @classmethod
+    def _parse_single(cls, message: dict, contacts: list[dict]) -> "MetaCloudAPIMessage":
         message_type = message["type"]
         body = ""
         if message_type == "text":
             body = message["text"]["body"]
 
-        return MetaCloudAPIMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
+        return cls(
+            participant_id=cls._resolve_participant_id(message, contacts),
             message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),

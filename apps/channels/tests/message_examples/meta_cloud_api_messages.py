@@ -65,3 +65,38 @@ def audio_message_value(phone_number_id="12345"):
 
 def audio_message(phone_number_id="12345"):
     return _wrap_in_webhook_payload(audio_message_value(phone_number_id), phone_number_id)
+
+
+def multi_message_value(phone_number_id="12345"):
+    """Webhook value containing multiple text messages from the same contact."""
+    return {
+        "messaging_product": "whatsapp",
+        "metadata": {
+            "display_phone_number": "+15551234567",
+            "phone_number_id": phone_number_id,
+        },
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.first",
+                "timestamp": "1706709716",
+                "text": {"body": "Hello"},
+                "type": "text",
+            },
+            {
+                "from": "27456897512",
+                "id": "wamid.second",
+                "timestamp": "1706709717",
+                "text": {"body": "How are you?"},
+                "type": "text",
+            },
+            {
+                "from": "27456897512",
+                "id": "wamid.third",
+                "timestamp": "1706709718",
+                "text": {"body": "Still there?"},
+                "type": "text",
+            },
+        ],
+    }

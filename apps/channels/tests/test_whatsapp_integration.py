@@ -203,6 +203,21 @@ class TestTurnio:
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
 
+    def test_parse_all_returns_every_message(self):
+        messages = TurnWhatsappMessage.parse_all(turnio_messages.multi_message())
+        assert [m.message_text for m in messages] == ["Hi there!", "Are you ready?"]
+        assert all(m.participant_id == "27456897512" for m in messages)
+
+    @pytest.mark.django_db()
+    @patch("apps.chat.channels.ChannelBase.new_user_message")
+    def test_all_messages_in_batch_are_processed(self, new_user_message_mock, turnio_whatsapp_channel):
+        """A Turn.io webhook delivering multiple messages must hand each to the channel."""
+        incoming_message = turnio_messages.multi_message()
+        handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
+        assert new_user_message_mock.call_count == 2
+        processed_texts = [call.args[0].message_text for call in new_user_message_mock.call_args_list]
+        assert processed_texts == ["Hi there!", "Are you ready?"]
+
     @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
     @patch("apps.channels.tasks.handle_turn_message")
@@ -341,3 +356,30 @@ class TestMetaCloudApi:
             from_="12345",
             message_id="wamid.abc123",
         )
+
+    def test_parse_all_returns_every_message(self):
+        messages = MetaCloudAPIMessage.parse_all(meta_cloud_api_messages.multi_message_value())
+        assert [m.message_text for m in messages] == ["Hello", "How are you?", "Still there?"]
+        assert [m.whatsapp_message_id for m in messages] == ["wamid.first", "wamid.second", "wamid.third"]
+        assert all(m.participant_id == "27456897512" for m in messages)
+
+    @pytest.mark.django_db()
+    @patch("apps.chat.channels.ChannelBase.new_user_message")
+    def test_all_messages_in_batch_are_processed(self, new_user_message_mock, meta_cloud_api_whatsapp_channel):
+        """A Meta Cloud API webhook delivering multiple messages must hand each to the channel."""
+        incoming_message = meta_cloud_api_messages.multi_message_value()
+        handle_meta_cloud_api_message(
+            channel_id=meta_cloud_api_whatsapp_channel.id,
+            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
+            message_data=incoming_message,
+        )
+        assert new_user_message_mock.call_count == 3
+        processed = [
+            (call.args[0].message_text, call.args[0].whatsapp_message_id)
+            for call in new_user_message_mock.call_args_list
+        ]
+        assert processed == [
+            ("Hello", "wamid.first"),
+            ("How are you?", "wamid.second"),
+            ("Still there?", "wamid.third"),
+        ]
