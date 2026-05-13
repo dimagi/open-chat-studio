@@ -158,16 +158,6 @@ def _parse_experiment_uuid(value):
         raise ValidationError({"experiment": "Must be a valid UUID."}) from e
 
 
-@extend_schema(exclude=True)
-class UpdateParticipantDataOldView(APIView):
-    required_scopes = ("participants:write",)
-    permission_required = "experiments.change_participantdata"
-
-    def post(self, request):
-        # This endpoint is kept for backwards compatibility of the path with a trailing "/"
-        return _update_participant_data(request)
-
-
 def _update_participant_data(request):
     """
     Upsert participant data for all specified experiments in the payload

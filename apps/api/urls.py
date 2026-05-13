@@ -24,7 +24,8 @@ chat_patterns = [
 ]
 
 urlpatterns = [
-    path("participants/", views.UpdateParticipantDataOldView.as_view(), name="update-participant-data-old"),
+    # Keep participants/ lying around for backwards compatability
+    path("participants/", views.ParticipantView.as_view(), name="update-participant-data-old"),
     # GET: list participants; POST: update participant data
     path("participants", views.ParticipantView.as_view(), name="participant-data"),
     path(

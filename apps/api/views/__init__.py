@@ -4,7 +4,6 @@ from .experiments import ExperimentViewSet
 from .files import FileContentView
 from .participants import (
     ParticipantView,
-    UpdateParticipantDataOldView,
 )
 from .sessions import ExperimentSessionViewSet
 
@@ -12,7 +11,6 @@ __all__ = [
     "ExperimentViewSet",
     "ExperimentSessionViewSet",
     "ParticipantView",
-    "UpdateParticipantDataOldView",
     "FileContentView",
     "TriggerBotMessageView",
     "generate_key",
