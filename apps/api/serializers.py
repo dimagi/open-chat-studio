@@ -38,11 +38,12 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
 
 class ParticipantDataEntrySerializer(serializers.ModelSerializer):
-    experiment = serializers.UUIDField(source="experiment.public_id", read_only=True)
+    chatbot = serializers.CharField(source="experiment.name", read_only=True)
+    chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
 
     class Meta:
         model = ParticipantData
-        fields = ["experiment", "data"]
+        fields = ["chatbot", "chatbot_id", "data"]
 
 
 class ParticipantDetailSerializer(serializers.ModelSerializer):

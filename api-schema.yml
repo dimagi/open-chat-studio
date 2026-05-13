@@ -1465,13 +1465,17 @@ components:
     ParticipantDataEntry:
       type: object
       properties:
-        experiment:
+        chatbot:
+          type: string
+          readOnly: true
+        chatbot_id:
           type: string
           format: uuid
           readOnly: true
         data: {}
       required:
-      - experiment
+      - chatbot
+      - chatbot_id
     ParticipantDataUpdateRequest:
       type: object
       properties:

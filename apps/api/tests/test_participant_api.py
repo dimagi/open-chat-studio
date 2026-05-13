@@ -24,7 +24,7 @@ def test_list_participants(auth_method):
 
     user = team.members.first()
     client = ApiTestClient(user, team, auth_method=auth_method)
-    response = client.get(reverse("api:update-participant-data"))
+    response = client.get(reverse("api:participant-data"))
     assert response.status_code == 200
     results = response.json()["results"]
     assert len(results) == 1
@@ -32,7 +32,7 @@ def test_list_participants(auth_method):
     assert p["identifier"] == "user1"
     assert p["platform"] == "api"
     assert len(p["data"]) == 2
-    experiment_ids = {str(d["experiment"]) for d in p["data"]}
+    experiment_ids = {str(d["chatbot_id"]) for d in p["data"]}
     assert str(experiment.public_id) in experiment_ids
     assert str(experiment2.public_id) in experiment_ids
 
@@ -49,7 +49,7 @@ def test_list_participants_filter_by_identifier():
 
     user = team.members.first()
     client = ApiTestClient(user, team)
-    url = reverse("api:update-participant-data") + "?identifier=alice"
+    url = reverse("api:participant-data") + "?identifier=alice"
     response = client.get(url)
     assert response.status_code == 200
     results = response.json()["results"]
@@ -66,7 +66,7 @@ def test_list_participants_filter_by_platform():
 
     user = team.members.first()
     client = ApiTestClient(user, team)
-    url = reverse("api:update-participant-data") + "?platform=telegram"
+    url = reverse("api:participant-data") + "?platform=telegram"
     response = client.get(url)
     assert response.status_code == 200
     results = response.json()["results"]
@@ -84,7 +84,7 @@ def test_list_participants_scoped_to_team():
 
     user = team1.members.first()
     client = ApiTestClient(user, team1)
-    response = client.get(reverse("api:update-participant-data"))
+    response = client.get(reverse("api:participant-data"))
     assert response.status_code == 200
     results = response.json()["results"]
     identifiers = [p["identifier"] for p in results]
@@ -110,7 +110,7 @@ def test_retrieve_participant_by_id():
     assert data["id"] == str(participant.public_id)
     assert len(data["data"]) == 1
     assert data["data"][0]["data"] == {"score": 99}
-    assert data["data"][0]["experiment"] == str(experiment.public_id)
+    assert data["data"][0]["chatbot_id"] == str(experiment.public_id)
 
 
 @pytest.mark.django_db()
@@ -137,7 +137,7 @@ def test_read_only_key_cannot_post_participants():
         "platform": "api",
         "data": [{"experiment": str(experiment.public_id), "data": {"x": 1}}],
     }
-    url = reverse("api:update-participant-data")
+    url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 403
 
@@ -147,5 +147,5 @@ def test_read_only_key_can_get_participants():
     team = TeamWithUsersFactory.create()
     user = team.members.first()
     client = ApiTestClient(user, team, read_only=True)
-    response = client.get(reverse("api:update-participant-data"))
+    response = client.get(reverse("api:participant-data"))
     assert response.status_code == 200
