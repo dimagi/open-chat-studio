@@ -3,7 +3,6 @@ from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound
-from rest_framework.generics import RetrieveAPIView
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
@@ -12,26 +11,6 @@ from apps.api.tasks import setup_connect_channels_for_bots
 from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
-
-
-class ParticipantDetailView(RetrieveAPIView):
-    required_scopes = ("participants:read",)
-    permission_required = "experiments.view_participantdata"
-    serializer_class = ParticipantDetailSerializer
-    lookup_field = "public_id"
-    lookup_url_kwarg = "id"
-
-    @extend_schema(
-        operation_id="retrieve_participant",
-        summary="Retrieve Participant",
-        tags=["Participants"],
-        responses={200: ParticipantDetailSerializer},
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    def get_queryset(self):
-        return Participant.objects.filter(team=self.request.team).prefetch_related("data_set__experiment")
 
 
 class ParticipantView(APIView):

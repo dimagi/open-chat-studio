@@ -3,7 +3,6 @@ from .chat import chat_poll_response, chat_poll_task_response, chat_send_message
 from .experiments import ExperimentViewSet
 from .files import FileContentView
 from .participants import (
-    ParticipantDetailView,
     ParticipantView,
     UpdateParticipantDataOldView,
 )
@@ -14,7 +13,6 @@ __all__ = [
     "ExperimentSessionViewSet",
     "ParticipantView",
     "UpdateParticipantDataOldView",
-    "ParticipantDetailView",
     "FileContentView",
     "TriggerBotMessageView",
     "generate_key",

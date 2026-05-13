@@ -1,4 +1,4 @@
-"""Tests for the participant read API endpoints (GET /api/participants and GET /api/participants/<id>)."""
+"""Tests for the participant read API endpoint (GET /api/participants)."""
 
 import json
 
@@ -90,40 +90,6 @@ def test_list_participants_scoped_to_team():
     identifiers = [p["identifier"] for p in results]
     assert "t1user" in identifiers
     assert "t2user" not in identifiers
-
-
-@pytest.mark.django_db()
-def test_retrieve_participant_by_id():
-    team = TeamWithUsersFactory.create()
-    experiment = ExperimentFactory.create(team=team)
-
-    participant = ParticipantFactory.create(team=team, identifier="alice", platform="api")
-    ParticipantData.objects.create(team=team, participant=participant, experiment=experiment, data={"score": 99})
-
-    user = team.members.first()
-    client = ApiTestClient(user, team)
-    url = reverse("api:participant-detail", kwargs={"id": participant.public_id})
-    response = client.get(url)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["identifier"] == "alice"
-    assert data["id"] == str(participant.public_id)
-    assert len(data["data"]) == 1
-    assert data["data"][0]["data"] == {"score": 99}
-    assert data["data"][0]["chatbot_id"] == str(experiment.public_id)
-
-
-@pytest.mark.django_db()
-def test_retrieve_participant_not_found():
-    team = TeamWithUsersFactory.create()
-    other_team = TeamWithUsersFactory.create()
-    participant = ParticipantFactory.create(team=other_team, identifier="outsider", platform="api")
-
-    user = team.members.first()
-    client = ApiTestClient(user, team)
-    url = reverse("api:participant-detail", kwargs={"id": participant.public_id})
-    response = client.get(url)
-    assert response.status_code == 404
 
 
 @pytest.mark.django_db()

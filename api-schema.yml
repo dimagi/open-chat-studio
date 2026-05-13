@@ -525,31 +525,6 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/participants/{id}:
-    get:
-      operationId: retrieve_participant
-      summary: Retrieve Participant
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Participants
-      security:
-      - OAuth2:
-        - participants:read
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParticipantDetail'
-          description: ''
   /api/sessions/:
     get:
       operationId: session_list

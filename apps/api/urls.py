@@ -27,7 +27,6 @@ urlpatterns = [
     path("participants/", views.UpdateParticipantDataOldView.as_view(), name="update-participant-data-old"),
     # GET: list participants; POST: update participant data
     path("participants", views.ParticipantView.as_view(), name="participant-data"),
-    path("participants/<uuid:id>", views.ParticipantDetailView.as_view(), name="participant-detail"),
     path(
         "openai/<uuid:experiment_id>/chat/completions",
         openai.ChatCompletionsView.as_view(),
