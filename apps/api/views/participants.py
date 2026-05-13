@@ -7,29 +7,26 @@ from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
+from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
 from apps.api.tasks import setup_connect_channels_for_bots
 from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
 class ParticipantView(APIView):
     """GET: list participants for the team. POST: update/create participant data."""
 
     pagination_class = CursorPagination
-    # required_scopes is set per-method in check_permissions
-    required_scopes = ("participants:read",)
-
-    def check_permissions(self, request):
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
-            self.required_scopes = ("participants:write",)
-        else:
-            self.required_scopes = ("participants:read",)
-        super().check_permissions(request)
+    permission_classes = [IsAuthenticated, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
+    # base scope; TokenHasOAuthResourceScope appends :read for safe methods, :write otherwise.
+    required_scopes = ("participants",)
 
     @extend_schema(
         operation_id="list_participants",

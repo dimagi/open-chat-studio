@@ -544,7 +544,7 @@ paths:
         required: true
       security:
       - OAuth2:
-        - participants:read
+        - participants:write
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
