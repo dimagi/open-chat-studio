@@ -1,9 +1,7 @@
-import contextlib
 import mimetypes
 import pathlib
 from datetime import datetime
 
-import magic
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
@@ -11,6 +9,7 @@ from django.urls import reverse
 from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.files.content_type import detect_content_type, detect_content_type_from_file
 from apps.generics.chips import Chip
 from apps.service_providers.file_limits import FILE_SENDABILITY_CHECKERS
 from apps.teams.models import BaseTeamModel
@@ -89,13 +88,8 @@ class File(BaseTeamModel, VersionsMixin):
     ):
         content = file_obj.read() if file_obj else None
 
-        if not content_type and content:
-            with contextlib.suppress(Exception):
-                detected = magic.from_buffer(content[:2048], mime=True)
-                if detected and detected != "application/octet-stream":
-                    content_type = detected
-
-        content_type = content_type or mimetypes.guess_type(filename)[0]
+        if not content_type:
+            content_type = detect_content_type(content or b"", filename=filename)
 
         if content_type and not pathlib.Path(filename).suffix:
             extension = mimetypes.guess_extension(content_type)
@@ -126,22 +120,7 @@ class File(BaseTeamModel, VersionsMixin):
     @staticmethod
     def get_content_type(file):
         """Detect content type by inspecting file bytes first, falling back to filename."""
-        with contextlib.suppress(Exception):
-            file.seek(0)
-            header = file.read(2048)
-            file.seek(0)
-            if header:
-                detected = magic.from_buffer(header, mime=True)
-                if detected and detected != "application/octet-stream":
-                    return detected
-
-        filename = file.name
-        with contextlib.suppress(Exception):
-            filename = pathlib.Path(filename).name
-        try:
-            return mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        except Exception:
-            return "application/octet-stream"
+        return detect_content_type_from_file(file)
 
     @property
     def is_image(self):
