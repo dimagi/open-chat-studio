@@ -128,7 +128,7 @@ urlpatterns = [
         name="auto_population_rule_edit",
     ),
     path(
-        "dataset/<int:dataset_id>/auto_population/<int:pk>/delete/",
+        "auto_population/<int:pk>/delete/",
         auto_population_views.DeleteAutoPopulationRule.as_view(),
         name="auto_population_rule_delete",
     ),
