@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
 from apps.evaluations.models import (
+    DatasetAutoPopulationRule,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
@@ -303,6 +304,52 @@ class EvaluationSessionsSelectionTable(tables.Table):
         attrs = {"class": "table w-full"}
         orderable = False
         empty_text = "No sessions available for selection."
+
+
+class DatasetAutoPopulationRuleTable(tables.Table):
+    source_experiment = columns.Column(verbose_name="Source chatbot", orderable=False)
+    is_enabled = columns.BooleanColumn(verbose_name="Enabled", orderable=False, yesno="Yes,No")
+    last_run_at = columns.DateTimeColumn(verbose_name="Last run", orderable=False)
+    last_run_status = columns.Column(
+        accessor="get_last_run_status_display",
+        verbose_name="Status",
+        orderable=False,
+    )
+    last_error = columns.Column(verbose_name="Last error", orderable=False)
+
+    def render_last_error(self, value):
+        return mark_safe(f'<span class="text-error">{value[:60]}</span>') if value else "—"
+
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(
+                url_name="evaluations:auto_population_rule_edit",
+                url_factory=lambda url_name, request, record, _: reverse(
+                    url_name, args=[request.team.slug, record.dataset_id, record.id]
+                ),
+            ),
+            actions.AjaxAction(
+                "evaluations:auto_population_rule_toggle",
+                title="Toggle enabled",
+                icon_class="fa-solid fa-pause",
+                hx_method="post",
+            ),
+            actions.AjaxAction(
+                "evaluations:auto_population_rule_delete",
+                title="Delete",
+                icon_class="fa-solid fa-trash",
+                hx_method="delete",
+                confirm_message="Delete this rule?",
+            ),
+        ]
+    )
+
+    class Meta:
+        model = DatasetAutoPopulationRule
+        fields = ("source_experiment", "is_enabled", "last_run_at", "last_run_status", "last_error", "actions")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No auto-population rules configured."
 
 
 def _row_class_factory(table, record):

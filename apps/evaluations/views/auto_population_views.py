@@ -2,17 +2,19 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, UpdateView
 
 from apps.evaluations.forms import DatasetAutoPopulationRuleForm
 from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationDataset, EvaluationMode
+from apps.evaluations.tables import DatasetAutoPopulationRuleTable
 from apps.experiments.filters import ChatMessageFilter, ExperimentSessionFilter, get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.tables import render_table_row
 
 
 class _RuleViewMixin(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -106,4 +108,4 @@ def toggle_auto_population_rule(request, team_slug: str, pk: int):
         rule.consecutive_failure_count = 0
         rule.last_error = ""
     rule.save(update_fields=["is_enabled", "consecutive_failure_count", "last_error"])
-    return redirect(reverse("evaluations:dataset_edit", args=[team_slug, rule.dataset_id]))
+    return render_table_row(request, DatasetAutoPopulationRuleTable, rule)
