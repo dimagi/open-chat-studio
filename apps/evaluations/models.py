@@ -321,7 +321,7 @@ class DatasetAutoPopulationRule(BaseTeamModel):
     def get_absolute_url(self):
         return reverse(
             "evaluations:auto_population_rule_edit",
-            args=[get_slug_for_team(self.team_id), self.id],
+            args=[get_slug_for_team(self.team_id), self.dataset_id, self.id],
         )
 
 
