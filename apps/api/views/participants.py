@@ -46,7 +46,7 @@ class ParticipantView(APIView):
                 type=str,
             ),
             OpenApiParameter(
-                name="experiment",
+                name="chatbot",
                 description="Filter by chatbot public id; returns participants that have data for the chatbot.",
                 required=False,
                 type=OpenApiTypes.UUID,
