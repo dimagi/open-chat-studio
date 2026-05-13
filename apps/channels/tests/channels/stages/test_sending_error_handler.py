@@ -25,16 +25,19 @@ class TestSendingErrorHandlerStage:
         assert self.stage.should_run(ctx) is True
 
     @patch("apps.experiments.models.ParticipantData.objects")
-    def test_telegram_403_revokes_consent(self, mock_pd_objects):
+    def test_telegram_403_wrapped_in_message_delivery_failure_revokes_consent(self, mock_pd_objects):
+        """Telegram 403 raised by the sender is wrapped as MessageDeliveryFailure by
+        ResponseSendingStage; the handler must still detect and revoke consent."""
         participant_data = MagicMock()
         mock_pd_objects.get.return_value = participant_data
-        exc = ApiTelegramException(
+        api_exc = ApiTelegramException(
             "sendMessage",
             MagicMock(status_code=403),
             {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
         )
+        wrapped = MessageDeliveryFailure(api_exc, context="text message")
         ctx = make_context(
-            sending_exceptions=[exc],
+            sending_exceptions=[wrapped],
             participant_identifier="blocked_user",
         )
 
@@ -45,13 +48,14 @@ class TestSendingErrorHandlerStage:
     @patch("apps.experiments.models.ParticipantData.objects")
     def test_telegram_403_participant_not_found(self, mock_pd_objects):
         mock_pd_objects.get.side_effect = ParticipantData.DoesNotExist
-        exc = ApiTelegramException(
+        api_exc = ApiTelegramException(
             "sendMessage",
             MagicMock(status_code=403),
             {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
         )
+        wrapped = MessageDeliveryFailure(api_exc, context="text message")
         ctx = make_context(
-            sending_exceptions=[exc],
+            sending_exceptions=[wrapped],
             participant_identifier="unknown_user",
         )
 

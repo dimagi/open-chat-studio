@@ -165,6 +165,13 @@ class SendingErrorHandlerStage(ProcessingStage):
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
         """Handle a single sending exception."""
+        # Inspect the original exception inside delivery failure wrappers so
+        # platform-specific handling (e.g. Telegram 403 -> consent revocation)
+        # still fires for exceptions raised by ChannelSender implementations.
+        underlying = getattr(exc, "original_exc", None)
+        if isinstance(underlying, ApiTelegramException) and self._handle_telegram_block(ctx, underlying):
+            return
+
         if isinstance(exc, MessageDeliveryFailure):
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
@@ -185,19 +192,24 @@ class SendingErrorHandlerStage(ProcessingStage):
             )
             return
 
-        if isinstance(exc, ApiTelegramException):
-            if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
-                try:
-                    participant_data = ParticipantData.objects.get(
-                        participant__identifier=ctx.participant_identifier,
-                        experiment=ctx.experiment,
-                    )
-                    participant_data.update_consent(False)
-                except ParticipantData.DoesNotExist:
-                    ctx.processing_errors.append("Participant data not found during consent revocation")
-            return
-
         raise exc  # Unknown exception -- propagate to fail the task
+
+    def _handle_telegram_block(self, ctx: MessageProcessingContext, exc: ApiTelegramException) -> bool:
+        """Revoke participant consent when Telegram reports the bot was blocked.
+
+        Returns True if the exception was a recognized "bot blocked" 403; False otherwise.
+        """
+        if exc.error_code != 403 or "bot was blocked by the user" not in exc.description:
+            return False
+        try:
+            participant_data = ParticipantData.objects.get(
+                participant__identifier=ctx.participant_identifier,
+                experiment=ctx.experiment,
+            )
+            participant_data.update_consent(False)
+        except ParticipantData.DoesNotExist:
+            ctx.processing_errors.append("Participant data not found during consent revocation")
+        return True
 
 
 # ---------------------------------------------------------------------------
