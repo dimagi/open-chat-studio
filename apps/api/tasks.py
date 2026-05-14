@@ -129,7 +129,7 @@ def send_message_to_participant_task(data):
     experiment = Experiment.objects.get(public_id=experiment_public_id)
     experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
 
-    published_experiment = experiment.default_version
+    published_experiment = resolve_published_or_working(experiment)
     ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
     channel = ChannelClass(experiment=published_experiment, experiment_channel=experiment_channel)
 
