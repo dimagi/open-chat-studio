@@ -315,6 +315,8 @@ class DatasetAutoPopulationRule(BaseTeamModel):
         super().clean()
         if self.team_id and self.dataset_id and self.dataset.team_id != self.team_id:
             raise ValidationError({"dataset": "Dataset must belong to the same team as the rule."})
+        if self.dataset_id and self.dataset.evaluation_mode != EvaluationMode.SESSION:
+            raise ValidationError({"dataset": "Auto-population rules are only supported for session-level datasets."})
         if self.team_id and self.source_experiment_id and self.source_experiment.team_id != self.team_id:
             raise ValidationError({"source_experiment": "Source chatbot must belong to the same team as the rule."})
 

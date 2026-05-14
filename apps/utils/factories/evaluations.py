@@ -179,5 +179,10 @@ class DatasetAutoPopulationRuleFactory(DjangoModelFactory):
         model = DatasetAutoPopulationRule
 
     team = factory.SubFactory(TeamFactory)
-    dataset = factory.SubFactory(EvaluationDatasetFactory, team=factory.SelfAttribute("..team"))
+    # Rules are only valid against session-mode datasets.
+    dataset = factory.SubFactory(
+        EvaluationDatasetFactory,
+        team=factory.SelfAttribute("..team"),
+        evaluation_mode="session",
+    )
     source_experiment = factory.SubFactory(ExperimentFactory, team=factory.SelfAttribute("..team"))

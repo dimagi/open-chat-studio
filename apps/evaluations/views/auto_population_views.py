@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, UpdateView
@@ -10,7 +10,7 @@ from django.views.generic import CreateView, DeleteView, UpdateView
 from apps.evaluations.forms import DatasetAutoPopulationRuleForm
 from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationDataset, EvaluationMode
 from apps.evaluations.tables import DatasetAutoPopulationRuleTable
-from apps.experiments.filters import ChatMessageFilter, ExperimentSessionFilter, get_filter_context_data
+from apps.experiments.filters import ExperimentSessionFilter, get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -29,6 +29,16 @@ class _RuleViewMixin(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
     def get_dataset(self):
         return get_object_or_404(EvaluationDataset, id=self.kwargs["dataset_id"], team=self.request.team)
 
+    def dispatch(self, request, *args, **kwargs):
+        dataset = self.get_dataset()
+        if dataset.evaluation_mode != EvaluationMode.SESSION:
+            messages.error(
+                request,
+                "Auto-population rules are only supported for session-level datasets.",
+            )
+            return redirect("evaluations:dataset_edit", request.team.slug, dataset.id)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["team"] = self.request.team
@@ -46,15 +56,11 @@ class _RuleViewMixin(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         dataset = self.get_dataset()
         context["dataset"] = dataset
         team = self.request.team
-        if dataset.evaluation_mode == EvaluationMode.SESSION:
-            filter_class = ExperimentSessionFilter
-        else:
-            filter_class = ChatMessageFilter
         context.update(
             get_filter_context_data(
                 team,
-                filter_class.columns(team),
-                filter_class=filter_class,
+                ExperimentSessionFilter.columns(team),
+                filter_class=ExperimentSessionFilter,
                 table_url="",
                 table_container_id="",
                 table_type=FilterSet.TableType.DATASETS,

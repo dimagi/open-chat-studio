@@ -3,10 +3,19 @@
 <section class="mb-8">
   <div class="flex items-center justify-between mb-3">
     <h2 class="pg-subtitle mb-0">{% translate "Auto-population rules" %}</h2>
-    <a class="btn btn-sm btn-primary"
-       href="{% url 'evaluations:auto_population_rule_new' request.team.slug dataset.id %}">
-      {% translate "Add rule" %}
-    </a>
+    {% if dataset.evaluation_mode == 'session' %}
+      <a class="btn btn-sm btn-primary"
+         href="{% url 'evaluations:auto_population_rule_new' request.team.slug dataset.id %}">
+        {% translate "Add rule" %}
+      </a>
+    {% endif %}
   </div>
-  {% render_table auto_population_rules_table %}
+  {% if dataset.evaluation_mode == 'session' %}
+    {% render_table auto_population_rules_table %}
+  {% else %}
+    <div class="alert alert-info">
+      <i class="fa-solid fa-circle-info"></i>
+      <span>{% translate "Auto-population rules aren't supported for message-level datasets." %}</span>
+    </div>
+  {% endif %}
 </section>

@@ -89,23 +89,6 @@ def test_ingest_rule_skips_sessions_older_than_rule_created_at():
     assert dataset.messages.count() == 0
 
 
-@pytest.mark.django_db()
-def test_ingest_rule_message_mode_appends_message_pairs():
-    team = TeamFactory.create()
-    dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset 4", evaluation_mode=EvaluationMode.MESSAGE)
-    rule = DatasetAutoPopulationRuleFactory.create(team=team, dataset=dataset)
-    session = ExperimentSessionFactory.create(experiment=rule.source_experiment, team=team)
-    session.chat.messages.create(message_type="human", content="hi")
-    session.chat.messages.create(message_type="ai", content="hello")
-
-    _ingest_rule(rule)
-
-    assert dataset.messages.count() == 1
-    msg = dataset.messages.first()
-    assert msg.input_chat_message_id is not None
-    assert msg.expected_output_chat_message_id is not None
-
-
 @pytest.mark.django_db(transaction=True)
 def test_ingest_rule_triggers_delta_runs_only_for_opted_in_configs():
     team = TeamFactory.create()

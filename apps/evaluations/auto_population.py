@@ -15,7 +15,6 @@ from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
-    EvaluationMode,
     EvaluationRunType,
 )
 from apps.evaluations.notifications import auto_population_rule_disabled_notification
@@ -59,7 +58,8 @@ def _handle_rule_failure(rule: DatasetAutoPopulationRule, exception: Exception) 
         )
 
 
-def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
+def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
+    """Find new sessions matching the rule's filter and build session-mode EvaluationMessages."""
     qs = ExperimentSession.objects.filter(
         team=rule.team,
         experiment=rule.source_experiment,
@@ -82,54 +82,12 @@ def _ingest_rule_session_mode(rule: DatasetAutoPopulationRule, created_floor) ->
     return list(created)
 
 
-def _ingest_rule_message_mode(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
-    base_qs = ExperimentSession.objects.filter(
-        team=rule.team,
-        experiment=rule.source_experiment,
-        created_at__gt=created_floor,
-    )
-    session_external_ids = list(base_qs.values_list("external_id", flat=True))
-    if not session_external_ids:
-        return []
-
-    # `EvaluationMessage.create_from_sessions` has two independent branches:
-    # `external_session_ids` (no filter) and `filtered_session_ids` + `filter_params`
-    # (with filter). Pick the right one based on whether the rule has a filter.
-    if rule.filter_query_string:
-        eval_messages = EvaluationMessage.create_from_sessions(
-            team=rule.team,
-            external_session_ids=None,
-            filtered_session_ids=session_external_ids,
-            filter_params=FilterParams(QueryDict(rule.filter_query_string)),
-            timezone=None,
-        )
-    else:
-        eval_messages = EvaluationMessage.create_from_sessions(
-            team=rule.team,
-            external_session_ids=session_external_ids,
-        )
-
-    if not eval_messages:
-        return []
-
-    existing_pairs = set(
-        rule.dataset.messages.filter(
-            input_chat_message_id__isnull=False,
-            expected_output_chat_message_id__isnull=False,
-        ).values_list("input_chat_message_id", "expected_output_chat_message_id")
-    )
-    fresh = [
-        m for m in eval_messages if (m.input_chat_message_id, m.expected_output_chat_message_id) not in existing_pairs
-    ]
-    if not fresh:
-        return []
-    created = EvaluationMessage.objects.bulk_create(fresh)
-    rule.dataset.messages.add(*created)
-    return list(created)
-
-
 def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
     """Scan the rule's source experiment for new sessions, append matches to the dataset.
+
+    Rules are only valid against session-mode datasets (enforced by
+    `DatasetAutoPopulationRule.clean()`), so the scan always builds
+    session-mode `EvaluationMessage` rows.
 
     Returns the list of newly appended EvaluationMessage rows.
     """
@@ -137,10 +95,7 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
     lookback_floor = timezone.now() - timedelta(days=settings.EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS)
     created_floor = max(rule.created_at, lookback_floor)
 
-    if dataset.evaluation_mode == EvaluationMode.SESSION:
-        appended = _ingest_rule_session_mode(rule, created_floor)
-    else:
-        appended = _ingest_rule_message_mode(rule, created_floor)
+    appended = _scan_for_new_sessions(rule, created_floor)
 
     rule.last_run_at = timezone.now()
     update_fields = ["last_run_at", "last_run_status"]
