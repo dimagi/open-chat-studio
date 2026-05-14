@@ -278,7 +278,15 @@ window.datasetModeSelector = function(options = {}) {
       }
       this.sessionIdsIsLoading = true;
 
-      return fetch(this.sessionIdsFetchUrl + window.location.search, {
+      // Merge any params baked into sessionIdsFetchUrl (e.g. dataset_id) with the
+      // current filter params from window.location.search. Naively concatenating
+      // produces a double-'?' URL when both sides have query strings.
+      const fetchUrl = new URL(this.sessionIdsFetchUrl, window.location.origin);
+      new URLSearchParams(window.location.search).forEach((value, key) => {
+        fetchUrl.searchParams.append(key, value);
+      });
+
+      return fetch(fetchUrl.toString(), {
         method: 'GET',
         credentials: 'same-origin',
         headers: {

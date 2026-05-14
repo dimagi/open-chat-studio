@@ -14,6 +14,7 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.tasks import create_dataset_from_sessions_task
 from apps.human_annotations.models import AnnotationItem, QueueStatus
+from apps.teams.utils import current_team
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -27,6 +28,17 @@ def team_with_users(db):
 @pytest.fixture()
 def user(team_with_users):
     return team_with_users.members.first()
+
+
+@pytest.fixture()
+def team_context(team_with_users):
+    """Sets the team in the contextvar so TeamBackend can resolve membership-based perms.
+
+    Required for tests that instantiate forms directly (no request) and rely on
+    user.has_perm() inside AnnotationQueue.objects.visible_to().
+    """
+    with current_team(team_with_users):
+        yield team_with_users
 
 
 @pytest.fixture()
@@ -68,7 +80,7 @@ def queue_with_session_items(team_with_users, user):
 
 
 @pytest.mark.django_db()
-def test_form_only_shows_queues_with_session_items(team_with_users, user):
+def test_form_only_shows_queues_with_session_items(team_with_users, user, team_context):
     queue_with_sessions = AnnotationQueueFactory.create(team=team_with_users, created_by=user, name="With Sessions")
     session = ExperimentSessionFactory.create(team=team_with_users)
     AnnotationItemFactory.create(queue=queue_with_sessions, team=team_with_users, session=session)
@@ -80,32 +92,45 @@ def test_form_only_shows_queues_with_session_items(team_with_users, user):
     other_session = ExperimentSessionFactory.create(team=other_team)
     AnnotationItemFactory.create(queue=other_queue, team=other_team, session=other_session)
 
-    form = ImportFromAnnotationQueueForm(team=team_with_users)
+    form = ImportFromAnnotationQueueForm(team=team_with_users, user=user)
     queue_ids = set(form.fields["queue"].queryset.values_list("id", flat=True))
     assert queue_ids == {queue_with_sessions.id}
 
 
 @pytest.mark.django_db()
-def test_form_excludes_archived_queues(team_with_users, user):
+def test_form_excludes_archived_queues(team_with_users, user, team_context):
     queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, status=QueueStatus.ARCHIVED)
     session = ExperimentSessionFactory.create(team=team_with_users)
     AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session)
 
-    form = ImportFromAnnotationQueueForm(team=team_with_users)
+    form = ImportFromAnnotationQueueForm(team=team_with_users, user=user)
     assert form.fields["queue"].queryset.count() == 0
 
 
 @pytest.mark.django_db()
-def test_form_is_valid_when_queue_selected(team_with_users, user, queue_with_session_items):
-    queue, _ = queue_with_session_items
-    form = ImportFromAnnotationQueueForm({"queue": queue.id}, team=team_with_users)
+def test_form_is_valid_when_queue_selected(team_with_users, user, queue_with_session_items, team_context):
+    queue, session = queue_with_session_items
+    form = ImportFromAnnotationQueueForm({"queue": queue.id}, team=team_with_users, user=user)
     assert form.is_valid(), form.errors
+    assert form.cleaned_data["session_external_ids"] == [str(session.external_id)]
 
 
 @pytest.mark.django_db()
-def test_form_is_invalid_when_no_queue_selected(team_with_users, user):
-    form = ImportFromAnnotationQueueForm({}, team=team_with_users)
+def test_form_is_invalid_when_no_queue_selected(team_with_users, user, team_context):
+    form = ImportFromAnnotationQueueForm({}, team=team_with_users, user=user)
     assert not form.is_valid()
+
+
+@pytest.mark.django_db()
+def test_form_uses_visible_to_when_user_passed(team_with_users, user, queue_with_session_items, team_context):
+    """Form delegates to AnnotationQueue.objects.visible_to when a user is provided.
+
+    visible_to returns all team queues for users with add_annotationqueue perm
+    (which TeamWithUsersFactory admins have), so the queue stays visible.
+    """
+    queue, _ = queue_with_session_items
+    form = ImportFromAnnotationQueueForm(team=team_with_users, user=user)
+    assert queue.id in set(form.fields["queue"].queryset.values_list("id", flat=True))
 
 
 # === View ===
@@ -367,7 +392,7 @@ def test_create_form_annotation_queue_requires_queue_with_sessions(team_with_use
 
 
 @pytest.mark.django_db()
-def test_create_form_annotation_queue_field_filters_to_team(team_with_users, user):
+def test_create_form_annotation_queue_field_filters_to_team(team_with_users, user, team_context):
     """The annotation_queue queryset is scoped to the user's team."""
     other_team = TeamWithUsersFactory.create()
     other_queue = AnnotationQueueFactory.create(team=other_team)
@@ -378,7 +403,7 @@ def test_create_form_annotation_queue_field_filters_to_team(team_with_users, use
     own_session = ExperimentSessionFactory.create(team=team_with_users)
     AnnotationItemFactory.create(queue=own_queue, team=team_with_users, session=own_session)
 
-    form = EvaluationDatasetForm(team=team_with_users)
+    form = EvaluationDatasetForm(team=team_with_users, user=user)
     queue_ids = set(form.fields["annotation_queue"].queryset.values_list("id", flat=True))
     assert queue_ids == {own_queue.id}
 

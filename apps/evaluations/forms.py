@@ -708,10 +708,15 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         required=False,
     )
 
-    def __init__(self, team, *args, **kwargs):
+    def __init__(self, team, *args, user=None, **kwargs):
         super().__init__(team, *args, **kwargs)
+        self.user = user
+        if user is not None:
+            queue_qs = AnnotationQueue.objects.visible_to(user, team)
+        else:
+            queue_qs = AnnotationQueue.objects.filter(team=team)
         self.fields["annotation_queue"].queryset = (
-            AnnotationQueue.objects.filter(team=team, items__session__isnull=False)
+            queue_qs.filter(items__session__isnull=False)
             .exclude(status=QueueStatus.ARCHIVED)
             .distinct()
             .order_by("name")
@@ -1063,11 +1068,34 @@ class ImportFromAnnotationQueueForm(forms.Form):
         help_text="Select an annotation queue. Only queues containing sessions are listed.",
     )
 
-    def __init__(self, *args, team, **kwargs):
+    def __init__(self, *args, team, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.team = team
+        self.user = user
+        if user is not None:
+            queue_qs = AnnotationQueue.objects.visible_to(user, team)
+        else:
+            queue_qs = AnnotationQueue.objects.filter(team=team)
         self.fields["queue"].queryset = (
-            AnnotationQueue.objects.filter(team=team, items__session__isnull=False)
+            queue_qs.filter(items__session__isnull=False)
             .exclude(status=QueueStatus.ARCHIVED)
             .distinct()
             .order_by("name")
         )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        queue = cleaned_data.get("queue")
+        if not queue:
+            return cleaned_data
+
+        session_external_ids = list(
+            queue.items.filter(session__isnull=False, session__team=self.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+        if not session_external_ids:
+            raise forms.ValidationError({"queue": "The selected queue does not contain any sessions."})
+
+        cleaned_data["session_external_ids"] = [str(sid) for sid in session_external_ids]
+        return cleaned_data

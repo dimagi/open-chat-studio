@@ -177,6 +177,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["team"] = self.request.team
+        kwargs["user"] = self.request.user
 
         # Pass current filter parameters to the form
         kwargs["filter_params"] = FilterParams.from_request(self.request)
@@ -269,6 +270,7 @@ def get_base_session_queryset(request):
         try:
             dataset_id_int = int(dataset_id)
         except (TypeError, ValueError):
+            logger.warning("Ignoring non-integer dataset_id %r on session selection endpoint", dataset_id)
             return query_set
         existing_session_ids = EvaluationMessage.objects.filter(
             evaluationdataset=dataset_id_int,
@@ -732,25 +734,17 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
 
     def get(self, request, team_slug: str, pk: int):
         dataset = self._get_dataset(request, pk)
-        form = ImportFromAnnotationQueueForm(team=request.team)
+        form = ImportFromAnnotationQueueForm(team=request.team, user=request.user)
         return self._render_form(request, dataset, form)
 
     def post(self, request, team_slug: str, pk: int):
         dataset = self._get_dataset(request, pk)
-        form = ImportFromAnnotationQueueForm(request.POST, team=request.team)
+        form = ImportFromAnnotationQueueForm(request.POST, team=request.team, user=request.user)
         if not form.is_valid():
             return self._render_form(request, dataset, form)
 
         queue = form.cleaned_data["queue"]
-        session_external_ids = list(
-            queue.items.filter(session__isnull=False, session__team=request.team)
-            .values_list("session__external_id", flat=True)
-            .distinct()
-        )
-
-        if not session_external_ids:
-            messages.error(request, "No sessions found in the selected queue.")
-            return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)
+        session_external_ids = form.cleaned_data["session_external_ids"]
 
         # Clear any prior error state before starting the new job.
         if dataset.is_failed or dataset.error_message:
@@ -762,7 +756,7 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
             task = create_dataset_from_sessions_task.delay(
                 dataset.id,
                 request.team.id,
-                [str(sid) for sid in session_external_ids],
+                session_external_ids,
             )
         except Exception:
             logger.exception(
