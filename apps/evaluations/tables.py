@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.models import (
     DatasetAutoPopulationRule,
     EvaluationConfig,
@@ -11,7 +12,6 @@ from apps.evaluations.models import (
     EvaluationMode,
     EvaluationRun,
     Evaluator,
-    ExperimentVersionSelection,
 )
 from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
@@ -72,9 +72,9 @@ class EvaluationConfigTable(tables.Table):
     def render_generation_chatbot(self, record):
         if not record.base_experiment:
             return "—"
-        if record.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+        if record.version_selection_type == VersionSelectionRule.LATEST_WORKING:
             return f"{record.base_experiment.name} (Latest Working)"
-        elif record.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+        elif record.version_selection_type == VersionSelectionRule.LATEST_PUBLISHED:
             return f"{record.base_experiment.name} (Latest Published)"
         elif record.experiment_version:
             version_display = (

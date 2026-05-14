@@ -911,6 +911,7 @@ OAUTH2_PROVIDER = {
         "sessions:read": "List and Read Sessions",
         "sessions:write": "Manage Sessions",
         "files:read": "Download file content",
+        "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
     },
 }

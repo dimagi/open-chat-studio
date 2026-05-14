@@ -430,8 +430,198 @@ paths:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
   /api/participants:
+    get:
+      operationId: list_participants
+      description: 'GET: list participants for the team. POST: update/create participant
+        data.'
+      summary: List Participants
+      parameters:
+      - in: query
+        name: chatbot
+        schema:
+          type: string
+          format: uuid
+        description: Filter by chatbot public id; returns participants that have data
+          for the chatbot.
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: identifier
+        schema:
+          type: string
+        description: Filter by participant identifier
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: platform
+        schema:
+          type: string
+        description: Filter by platform (e.g. api, telegram, whatsapp)
+      tags:
+      - Participants
+      security:
+      - OAuth2:
+        - participants:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedParticipantDetailList'
+              examples:
+                ListParticipants:
+                  value:
+                    next: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+                    previous: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+                    results:
+                    - id: e172ff63-2469-419f-a828-783fc9291bc7
+                      identifier: part1
+                      name: John
+                      platform: api
+                      remote_id: ''
+                      data:
+                      - chatbot: Support Bot
+                        chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
+                        data:
+                          name: John
+                          timezone: Africa/Johannesburg
+                  summary: A participant with their chatbot data
+          description: ''
     post:
       operationId: update_participant_data
+      description: 'GET: list participants for the team. POST: update/create participant
+        data.'
+      summary: Update Participant Data
+      tags:
+      - Participants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParticipantDataUpdateRequest'
+            examples:
+              CreateParticipantData:
+                value:
+                  identifier: part1
+                  platform: api
+                  data:
+                  - experiment: exp1
+                    data:
+                      name: John
+                  - experiment: exp2
+                    data:
+                      name: Doe
+                    schedules:
+                    - id: sched1
+                      name: Schedule 1
+                      date: '2022-01-01T00:00:00Z'
+                      prompt: Prompt 1
+                summary: Create participant data for multiple experiments
+              UpdateParticipantSchedules:
+                value:
+                  identifier: part1
+                  platform: api
+                  data:
+                  - experiment: exp1
+                    schedules:
+                    - id: sched1
+                      name: Schedule 1 updated
+                      date: '2022-01-01T00:00:00Z'
+                      prompt: Prompt updated
+                    - id: sched2
+                      delete: true
+                summary: Update and delete participant schedules
+        required: true
+      security:
+      - OAuth2:
+        - participants:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/participants/:
+    get:
+      operationId: list_participants_2
+      description: 'GET: list participants for the team. POST: update/create participant
+        data.'
+      summary: List Participants
+      parameters:
+      - in: query
+        name: chatbot
+        schema:
+          type: string
+          format: uuid
+        description: Filter by chatbot public id; returns participants that have data
+          for the chatbot.
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: query
+        name: identifier
+        schema:
+          type: string
+        description: Filter by participant identifier
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: platform
+        schema:
+          type: string
+        description: Filter by platform (e.g. api, telegram, whatsapp)
+      tags:
+      - Participants
+      security:
+      - OAuth2:
+        - participants:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedParticipantDetailList'
+              examples:
+                ListParticipants:
+                  value:
+                    next: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+                    previous: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+                    results:
+                    - id: e172ff63-2469-419f-a828-783fc9291bc7
+                      identifier: part1
+                      name: John
+                      platform: api
+                      remote_id: ''
+                      data:
+                      - chatbot: Support Bot
+                        chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
+                        data:
+                          name: John
+                          timezone: Africa/Johannesburg
+                  summary: A participant with their chatbot data
+          description: ''
+    post:
+      operationId: update_participant_data_2
+      description: 'GET: list participants for the team. POST: update/create participant
+        data.'
       summary: Update Participant Data
       tags:
       - Participants
@@ -1365,6 +1555,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExperimentSession'
+    PaginatedParticipantDetailList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDetail'
     Participant:
       type: object
       properties:
@@ -1374,6 +1583,20 @@ components:
         remote_id:
           type: string
           maxLength: 255
+    ParticipantDataEntry:
+      type: object
+      properties:
+        chatbot:
+          type: string
+          readOnly: true
+        chatbot_id:
+          type: string
+          format: uuid
+          readOnly: true
+        data: {}
+      required:
+      - chatbot
+      - chatbot_id
     ParticipantDataUpdateRequest:
       type: object
       properties:
@@ -1395,6 +1618,34 @@ components:
       required:
       - data
       - identifier
+    ParticipantDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        identifier:
+          type: string
+          maxLength: 320
+        name:
+          type: string
+          maxLength: 320
+        platform:
+          type: string
+          maxLength: 32
+        remote_id:
+          type: string
+          maxLength: 255
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDataEntry'
+          readOnly: true
+      required:
+      - data
+      - id
+      - platform
     ParticipantExperimentData:
       type: object
       properties:
@@ -1576,6 +1827,7 @@ components:
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions
             files:read: Download file content
+            participants:read: Read Participant Data
             participants:write: Update Participant Data
     apiKeyAuth:
       type: apiKey
@@ -1596,5 +1848,5 @@ components:
       scheme: bearer
 tags:
 - name: Chat
-  description: "\n                The Chat API is designed to be used for integrating\
-    \ chatbots into external systems.\n            "
+  description: "\n                The Chat API is designed to be used for integrating
+    chatbots into external systems.\n            "

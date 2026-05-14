@@ -11,6 +11,7 @@ from django.http import QueryDict
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import Tag
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
@@ -23,7 +24,6 @@ from apps.evaluations.models import (
     EvaluationMode,
     Evaluator,
     EvaluatorTagRule,
-    ExperimentVersionSelection,
 )
 from apps.evaluations.rule_validation import validate_condition, validate_field_in_schema
 from apps.evaluations.tasks import (
@@ -81,8 +81,8 @@ def get_experiment_version_choices(experiment_queryset):
     Returns consistent (value, label) tuples that can be used by both forms and views.
     """
     choices = [
-        (ExperimentVersionSelection.LATEST_WORKING.value, ExperimentVersionSelection.LATEST_WORKING.label),
-        (ExperimentVersionSelection.LATEST_PUBLISHED.value, ExperimentVersionSelection.LATEST_PUBLISHED.label),
+        (VersionSelectionRule.LATEST_WORKING.value, VersionSelectionRule.LATEST_WORKING.label),
+        (VersionSelectionRule.LATEST_PUBLISHED.value, VersionSelectionRule.LATEST_PUBLISHED.label),
     ]
 
     # Add specific versions if queryset provided
@@ -169,10 +169,10 @@ class EvaluationConfigForm(forms.ModelForm):
                 self.initial["experiment"] = self.instance.base_experiment
                 # Filter the experiment_version queryset to only show versions for this experiment
                 experiment_version_queryset = self._get_version_choices(self.instance.base_experiment.id)
-                if self.instance.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
-                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_WORKING.value
-                elif self.instance.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
-                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_PUBLISHED.value
+                if self.instance.version_selection_type == VersionSelectionRule.LATEST_WORKING:
+                    self.initial["experiment_version"] = VersionSelectionRule.LATEST_WORKING.value
+                elif self.instance.version_selection_type == VersionSelectionRule.LATEST_PUBLISHED:
+                    self.initial["experiment_version"] = VersionSelectionRule.LATEST_PUBLISHED.value
         elif experiment_id := self.data.get("experiment"):
             experiment_version_queryset = self._get_version_choices(experiment_id)
 
@@ -220,20 +220,20 @@ class EvaluationConfigForm(forms.ModelForm):
             return cleaned_data
 
         if experiment_version in {
-            ExperimentVersionSelection.LATEST_WORKING,
-            ExperimentVersionSelection.LATEST_PUBLISHED,
+            VersionSelectionRule.LATEST_WORKING,
+            VersionSelectionRule.LATEST_PUBLISHED,
         }:
-            if experiment_version == ExperimentVersionSelection.LATEST_WORKING:
-                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_WORKING
+            if experiment_version == VersionSelectionRule.LATEST_WORKING:
+                cleaned_data["version_selection_type"] = VersionSelectionRule.LATEST_WORKING
                 cleaned_data["experiment_version"] = None
-            elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
-                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
+            elif experiment_version == VersionSelectionRule.LATEST_PUBLISHED:
+                cleaned_data["version_selection_type"] = VersionSelectionRule.LATEST_PUBLISHED
                 cleaned_data["experiment_version"] = None
         elif not experiment:
-            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["version_selection_type"] = VersionSelectionRule.SPECIFIC
             cleaned_data["experiment_version"] = None
         else:
-            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["version_selection_type"] = VersionSelectionRule.SPECIFIC
             try:
                 if experiment.id == int(experiment_version):
                     cleaned_data["experiment_version"] = Experiment.objects.get(team=self.team, id=experiment_version)
@@ -255,8 +255,8 @@ class EvaluationConfigForm(forms.ModelForm):
         # Set base_experiment for sentinel values
         experiment = cleaned_data.get("experiment")
         if experiment and cleaned_data["version_selection_type"] in [
-            ExperimentVersionSelection.LATEST_WORKING,
-            ExperimentVersionSelection.LATEST_PUBLISHED,
+            VersionSelectionRule.LATEST_WORKING,
+            VersionSelectionRule.LATEST_PUBLISHED,
         ]:
             instance.base_experiment = experiment
         else:

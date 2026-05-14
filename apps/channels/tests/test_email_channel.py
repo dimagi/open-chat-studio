@@ -23,7 +23,8 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
-from apps.experiments.models import ExperimentSession, Participant
+from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -547,6 +548,46 @@ class TestEmailChannel:
 
 
 @pytest.mark.django_db()
+class TestEnsureSessionExistsForParticipant:
+    """Covers the bot-initiated session resolution path used by trigger_bot_message_task."""
+
+    def test_creates_session_when_none_exists(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com")
+
+        assert email_channel.experiment_session is not None
+        assert email_channel.experiment_session.participant.identifier == "user@example.com"
+        assert email_channel.experiment_session.experiment_channel == channel
+
+    def test_reuses_existing_active_session(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com")
+
+        assert email_channel.experiment_session.id == existing.id
+        assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 1
+
+    def test_new_session_ends_existing_and_creates_fresh(self, team_with_users):
+        team = team_with_users
+        channel = _make_email_channel(team)
+        existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
+        email_channel = EmailChannel(channel.experiment, channel)
+
+        email_channel.ensure_session_exists_for_participant("user@example.com", new_session=True)
+
+        existing.refresh_from_db()
+        assert existing.status == SessionStatus.PENDING_REVIEW
+        assert email_channel.experiment_session.id != existing.id
+        assert ExperimentSession.objects.filter(participant__identifier="user@example.com").count() == 2
+
+
+@pytest.mark.django_db()
 class TestHandleEmailMessageTask:
     def test_routes_and_processes_message(self, team_with_users):
         team = team_with_users
@@ -986,7 +1027,7 @@ class TestPersistInboundAttachments:
         # size check fires (magic sees b"x"*N as text/plain, causing a
         # spurious mismatch against application/pdf before the size check).
         with patch(
-            "apps.channels.channels_v2.email_channel._detect_content_type",
+            "apps.channels.channels_v2.email_channel.detect_content_type",
             return_value="application/pdf",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1025,7 +1066,7 @@ class TestPersistInboundAttachments:
         # detection-based rejection branch without relying on real libmagic
         # signatures (which can vary by version/platform).
         with patch(
-            "apps.channels.channels_v2.email_channel._detect_content_type",
+            "apps.channels.channels_v2.email_channel.detect_content_type",
             return_value="application/x-msdownload",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1130,10 +1171,10 @@ class TestEmailInboundHandlerWithAttachments:
             [oversized], to_email=channel.extra_data["email_address"], text="Please process"
         )
 
-        # Mock _detect_content_type so the oversized PDF doesn't trip the
+        # Mock detect_content_type so the oversized PDF doesn't trip the
         # mismatch check (libmagic sees a long string of "x" as text/plain).
         with (
-            patch("apps.channels.channels_v2.email_channel._detect_content_type", return_value="application/pdf"),
+            patch("apps.channels.channels_v2.email_channel.detect_content_type", return_value="application/pdf"),
             patch("apps.channels.tasks.handle_email_message.delay") as delay,
         ):
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))
@@ -1230,7 +1271,7 @@ class TestEmailAttachmentsEndToEnd:
 
         with patch.object(EmailChannel, "_get_callbacks", return_value=ChannelCallbacks()):
             email_channel = EmailChannel(
-                experiment=channel.experiment.default_version,
+                experiment=resolve_published_or_working(channel.experiment),
                 experiment_channel=channel,
                 experiment_session=session,
                 thread_context=EmailThreadContext(subject="Re: thread"),

@@ -17,6 +17,7 @@ from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import SlackChannel
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.messaging_service import SlackService
 from apps.slack.exceptions import TeamAccessException
@@ -86,7 +87,7 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
     messaging_service = SlackService(slack_team_id="_", slack_installation_id=0)
     messaging_service.client = context.client
     ocs_channel = SlackChannel(
-        experiment=experiment.default_version,
+        experiment=resolve_published_or_working(experiment),
         experiment_channel=experiment_channel,
         experiment_session=session,
         messaging_service=messaging_service,

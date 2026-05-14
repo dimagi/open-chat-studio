@@ -24,9 +24,10 @@ chat_patterns = [
 ]
 
 urlpatterns = [
-    path("participants/", views.UpdateParticipantDataOldView.as_view(), name="update-participant-data-old"),
-    # Duplicate update-participant-data without a trailing "/" for backwards compatibility
-    path("participants", views.UpdateParticipantDataView.as_view(), name="update-participant-data"),
+    # Keep participants/ lying around for backwards compatability
+    path("participants/", views.ParticipantView.as_view(), name="update-participant-data-old"),
+    # GET: list participants; POST: update participant data
+    path("participants", views.ParticipantView.as_view(), name="participant-data"),
     path(
         "openai/<uuid:experiment_id>/chat/completions",
         openai.ChatCompletionsView.as_view(),

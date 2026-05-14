@@ -104,8 +104,8 @@ def build_node_agent(
     middleware = []
     if history_middleware := node.build_history_middleware(system_message=system_message):
         middleware.append(history_middleware)
-    if size_middleware := _build_size_validation_middleware(node, system_message):
-        middleware.append(size_middleware)
+    # MessageSizeValidationMiddleware temporarily disabled — over-counts tool outputs and blocks
+    # legitimate conversations. Re-enable after switching to a tool-aware token check.
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
