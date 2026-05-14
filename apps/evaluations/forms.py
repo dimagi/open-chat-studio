@@ -555,6 +555,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
     MODE_CHOICES = [
         ("clone", "Clone from sessions"),
+        ("annotation_queue", "Import from annotation queue"),
         ("manual", "Create manually"),
         ("csv", "Upload CSV file"),
     ]
@@ -663,15 +664,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     """Form for creating evaluation datasets."""
-
-    MODE_CHOICES = [
-        ("clone", "Clone from sessions"),
-        ("annotation_queue", "Import from annotation queue"),
-        ("manual", "Create manually"),
-        ("csv", "Upload CSV file"),
-    ]
-
-    mode = forms.ChoiceField(choices=MODE_CHOICES, widget=StyledRadioSelect(), label="Dataset creation mode")
 
     annotation_queue = forms.ModelChoiceField(
         queryset=AnnotationQueue.objects.none(),
@@ -1007,6 +999,9 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
         self.fields["mode"].required = False
+        # Edit page has a dedicated entry point for annotation-queue imports, so
+        # drop it from the inline mode radio to avoid an unhandled submit path.
+        self.fields["mode"].choices = [c for c in self.fields["mode"].choices if c[0] != "annotation_queue"]
         # evaluation_mode is immutable after creation
         if "evaluation_mode" in self.fields:
             del self.fields["evaluation_mode"]
