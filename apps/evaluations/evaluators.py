@@ -41,7 +41,6 @@ class LLMResponseMixin(BaseModel):
     )
 
     def get_llm_service(self) -> LlmService:
-
         try:
             provider = LlmProvider.objects.get(id=self.llm_provider_id)
             return provider.get_llm_service()
@@ -73,6 +72,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor),
     )
+
     @field_validator("prompt")
     @classmethod
     def prompt_must_contain_variable(cls, v: str) -> str:

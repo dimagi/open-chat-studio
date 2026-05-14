@@ -6,6 +6,7 @@ from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
@@ -96,9 +97,9 @@ def trigger_bot_message_task(data):
     experiment = Experiment.objects.get(public_id=experiment_public_id)
     experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
 
-    published_experiment = experiment.default_version
+    target_experiment = resolve_published_or_working(experiment)
     ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
-    channel = ChannelClass(experiment=published_experiment, experiment_channel=experiment_channel)
+    channel = ChannelClass(experiment=target_experiment, experiment_channel=experiment_channel)
 
     with current_team(experiment.team):
         channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
@@ -109,7 +110,7 @@ def trigger_bot_message_task(data):
             session.save(update_fields=["state"])
 
         channel.experiment_session.ad_hoc_bot_message(
-            prompt_text, TraceInfo(name="api trigger"), use_experiment=published_experiment
+            prompt_text, TraceInfo(name="api trigger"), use_experiment=target_experiment
         )
 
 

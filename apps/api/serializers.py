@@ -8,7 +8,7 @@ from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.teams.models import Team
 
@@ -35,6 +35,32 @@ class ParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Participant
         fields = ["identifier", "remote_id"]
+
+
+class ParticipantDataEntrySerializer(serializers.ModelSerializer):
+    chatbot = serializers.CharField(source="experiment.name", read_only=True)
+    chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
+
+    class Meta:
+        model = ParticipantData
+        fields = ["chatbot", "chatbot_id", "data"]
+
+
+class ParticipantDetailSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    data = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Participant
+        fields = ["id", "identifier", "name", "platform", "remote_id", "data"]
+
+    @extend_schema_field(ParticipantDataEntrySerializer(many=True))
+    def get_data(self, obj):
+        # queryset is pre-annotated via the view's get_queryset / prefetch
+        qs = getattr(obj, "_prefetched_participant_data", None)
+        if qs is None:
+            qs = obj.data_set.filter(team=obj.team)
+        return ParticipantDataEntrySerializer(qs, many=True).data
 
 
 class TeamSerializer(serializers.ModelSerializer):
