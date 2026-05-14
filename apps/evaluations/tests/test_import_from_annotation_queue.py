@@ -269,6 +269,26 @@ def test_post_excludes_message_only_items(client_with_user, team_with_users, ses
     assert args[2] == [str(session.external_id)]
 
 
+@pytest.mark.django_db()
+def test_post_handles_celery_enqueue_failure(
+    client_with_user, team_with_users, session_dataset, queue_with_session_items
+):
+    """If Celery enqueue raises, the dataset is marked FAILED instead of stuck in PENDING."""
+    queue, _ = queue_with_session_items
+
+    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, session_dataset.pk])
+
+    with patch("apps.evaluations.views.dataset_views.create_dataset_from_sessions_task") as mock_task:
+        mock_task.delay.side_effect = RuntimeError("broker unavailable")
+        response = client_with_user.post(url, {"queue": queue.id})
+
+    assert response.status_code == 302
+    session_dataset.refresh_from_db()
+    assert session_dataset.status == DatasetCreationStatus.FAILED
+    assert session_dataset.error_message
+    assert session_dataset.job_id == ""
+
+
 # === Create dataset with annotation_queue mode ===
 
 

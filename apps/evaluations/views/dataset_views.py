@@ -758,11 +758,23 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
         dataset.status = DatasetCreationStatus.PENDING
         dataset.save(update_fields=["status", "error_message"])
 
-        task = create_dataset_from_sessions_task.delay(
-            dataset.id,
-            request.team.id,
-            [str(sid) for sid in session_external_ids],
-        )
+        try:
+            task = create_dataset_from_sessions_task.delay(
+                dataset.id,
+                request.team.id,
+                [str(sid) for sid in session_external_ids],
+            )
+        except Exception:
+            logger.exception(
+                "Failed to enqueue import from annotation queue",
+                extra={"dataset_id": dataset.id, "queue_id": queue.id, "team_id": request.team.id},
+            )
+            dataset.status = DatasetCreationStatus.FAILED
+            dataset.error_message = "Could not start the import job. Please try again."
+            dataset.save(update_fields=["status", "error_message"])
+            messages.error(request, "Could not start import job. Please try again.")
+            return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)
+
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
