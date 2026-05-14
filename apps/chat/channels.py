@@ -321,7 +321,10 @@ class ChannelBase(ABC):
     @staticmethod
     def get_channel_class_for_platform(platform: ChannelPlatform | str) -> type[ChannelBase]:
         if platform == "telegram":
-            channel_cls = TelegramChannel
+            # Inline import to avoid circular import: channels_v2 imports from chat.channels
+            from apps.channels.channels_v2 import telegram_channel  # noqa: PLC0415
+
+            channel_cls = telegram_channel.TelegramChannel
         elif platform == "web":
             # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.web_channel import WebChannel as NewWebChannel  # noqa: PLC0415
@@ -1065,6 +1068,7 @@ class WebChannel(ChannelBase):
         pass
 
 
+# TODO: remove after channels refactor
 class TelegramChannel(ChannelBase):
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
