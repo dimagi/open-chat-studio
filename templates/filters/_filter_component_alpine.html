@@ -170,7 +170,7 @@
       getSelectedDisplayText(filter, maxChars = 18) {
         if (this.isObjectChoiceFilter(filter)) {
           const displayValues = filter.selectedValues.map(id => {
-            const option = this.filterData.columns[filter.column].options.find(exp => exp.id === parseInt(id));
+            const option = this.filterData.columns[filter.column].options.find(exp => String(exp.id) === String(id));
             return option ? option.label : id;
           });
           const text = displayValues.join(', ');
@@ -251,7 +251,7 @@
                   const parsedValues = JSON.parse(valueParam);
                   if (this.isObjectChoiceFilter(filter)) {
                     filter.selectedValues = parsedValues.filter(id => {
-                      return this.filterData.columns[filter.column].options.findIndex(exp => exp.id === parseInt(id)) >= 0;
+                      return this.filterData.columns[filter.column].options.findIndex(exp => String(exp.id) === String(id)) >= 0;
                     });
                   } else {
                     filter.selectedValues = parsedValues;
