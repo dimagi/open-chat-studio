@@ -121,14 +121,29 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """
 
+    class MetadataKeys(StrEnum):
+        # OpenAI Assistant (internal)
+        OPENAI_RUN_ID = "openai_run_id"
+        OPENAI_FILE_IDS = "openai_file_ids"
+        OPENAI_THREAD_CHECKPOINT = "openai_thread_checkpoint"
+        # Files & attachments
+        OCS_ATTACHMENT_FILE_IDS = "ocs_attachment_file_ids"
+        CITED_FILES = "cited_files"
+        GENERATED_FILES = "generated_files"
+        # Tracing / observability
+        TRACE_INFO = "trace_info"
+        TRACE_PROVIDER = "trace_provider"  # legacy top-level; only read for migration in trace_info property
+        # History / compression
+        COMPRESSION_MARKER = "compression_marker"
+
     # Metadata keys that should be excluded from the API response
-    INTERNAL_METADATA_KEYS = {
-        # ID of the thread run
-        "openai_run_id",
-        "openai_file_ids",
-        # boolean indicating that this message has been synced to the thread
-        "openai_thread_checkpoint",
-    }
+    INTERNAL_METADATA_KEYS = frozenset(
+        {
+            MetadataKeys.OPENAI_RUN_ID,
+            MetadataKeys.OPENAI_FILE_IDS,
+            MetadataKeys.OPENAI_THREAD_CHECKPOINT,
+        }
+    )
     # override from BaseModel to allow setting created_at in evals
     created_at = models.DateTimeField(default=timezone.now)
 
@@ -162,18 +177,18 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             created_at=message.created_at,
             message_type=ChatMessageType.SYSTEM,
             content=message.summary,
-            metadata={"compression_marker": PipelineChatHistoryModes.SUMMARIZE},
+            metadata={cls.MetadataKeys.COMPRESSION_MARKER: PipelineChatHistoryModes.SUMMARIZE},
         )
 
     @property
     def trace_info(self) -> list[dict]:
-        trace_info = self.metadata.get("trace_info")
+        trace_info = self.metadata.get(self.MetadataKeys.TRACE_INFO)
         if not trace_info:
             return []
 
         if isinstance(trace_info, dict):
             # migrate legacy format
-            trace_info["trace_provider"] = self.metadata.get("trace_provider")
+            trace_info["trace_provider"] = self.metadata.get(self.MetadataKeys.TRACE_PROVIDER)
             return [trace_info]
         return trace_info
 
@@ -204,11 +219,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             PipelineChatHistoryModes,
         )
 
-        return self.metadata.get("compression_marker") == PipelineChatHistoryModes.SUMMARIZE
+        return self.metadata.get(self.MetadataKeys.COMPRESSION_MARKER) == PipelineChatHistoryModes.SUMMARIZE
 
     @property
     def compression_marker(self):
-        return self.metadata.get("compression_marker")
+        return self.metadata.get(self.MetadataKeys.COMPRESSION_MARKER)
 
     @property
     def created_at_datetime(self):
@@ -265,10 +280,15 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         external_ids = []
         ids = []
 
-        metadata_key = ["openai_file_ids", "ocs_attachment_file_ids", "cited_files", "generated_files"]
-        for source in metadata_key:
+        metadata_keys = [
+            self.MetadataKeys.OPENAI_FILE_IDS,
+            self.MetadataKeys.OCS_ATTACHMENT_FILE_IDS,
+            self.MetadataKeys.CITED_FILES,
+            self.MetadataKeys.GENERATED_FILES,
+        ]
+        for source in metadata_keys:
             # openai_file_ids is a list of external ids
-            id_list = external_ids if source == "openai_file_ids" else ids
+            id_list = external_ids if source == self.MetadataKeys.OPENAI_FILE_IDS else ids
             if file_ids := self.metadata.get(source, []):
                 id_list.extend(file_ids)
 
@@ -279,7 +299,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     def add_attachment_id(self, file_id: int):
         """Add a file ID to the message's attachment list."""
-        ids = self.metadata.setdefault("ocs_attachment_file_ids", [])
+        ids = self.metadata.setdefault(self.MetadataKeys.OCS_ATTACHMENT_FILE_IDS, [])
         if file_id not in ids:
             ids.append(file_id)
             self.save(update_fields=["metadata"])

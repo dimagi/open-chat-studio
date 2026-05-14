@@ -765,17 +765,18 @@ class ChannelBase(ABC):
         return self._create_chat_message(message_text)
 
     def _create_chat_message(self, message_text):
-        metadata = {"ocs_attachment_file_ids": []}
+        attachments_key = ChatMessage.MetadataKeys.OCS_ATTACHMENT_FILE_IDS
+        metadata = {attachments_key: []}
         is_voice = self.message.content_type == MESSAGE_TYPES.VOICE
         if is_voice and self.message.cached_media_data:
             file = self._create_voice_note_attachment(
                 self.message.cached_media_data.data, self.message.cached_media_data.content_type
             )
-            metadata["ocs_attachment_file_ids"].append(file.id)
+            metadata[attachments_key].append(file.id)
 
         attachments = self.message.attachments
         if attachments:
-            metadata["ocs_attachment_file_ids"].extend([attachment.file_id for attachment in attachments])
+            metadata[attachments_key].extend([attachment.file_id for attachment in attachments])
         human_message = self._add_message_to_history(message_text, ChatMessageType.HUMAN, metadata=metadata)
         if is_voice:
             human_message.create_and_add_tag("voice", self.experiment.team, TagCategories.MEDIA_TYPE)

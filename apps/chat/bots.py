@@ -130,7 +130,7 @@ class PipelineBot:
         attachments = attachments or []
         state["input_message_metadata"] = {}
         if attachments:
-            state["input_message_metadata"]["ocs_attachment_file_ids"] = [
+            state["input_message_metadata"][ChatMessage.MetadataKeys.OCS_ATTACHMENT_FILE_IDS] = [
                 attachment.file_id for attachment in attachments
             ]
             state["attachments"] = [attachment.model_dump() for attachment in attachments]

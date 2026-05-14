@@ -117,7 +117,7 @@ class ORMRepository:
         if history_type == "global":
             message = ChatMessage.objects.get(id=checkpoint_message_id)
             if compression_marker == COMPRESSION_MARKER:
-                message.metadata.update({"compression_marker": history_mode})
+                message.metadata.update({ChatMessage.MetadataKeys.COMPRESSION_MARKER: history_mode})
                 message.save(update_fields=["metadata"])
             else:
                 message.summary = compression_marker

@@ -348,7 +348,8 @@ class ChatMessageCreationStage(ProcessingStage):
         return ctx.user_query is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        metadata = {"ocs_attachment_file_ids": []}
+        attachments_key = ChatMessage.MetadataKeys.OCS_ATTACHMENT_FILE_IDS
+        metadata = {attachments_key: []}
         is_voice = ctx.message.content_type == MESSAGE_TYPES.VOICE
 
         # Save voice note as attachment
@@ -362,11 +363,11 @@ class ChatMessageCreationStage(ProcessingStage):
                 content_type=ctx.message.cached_media_data.content_type,
             )
             ctx.experiment_session.chat.attach_files("voice_message", [file])
-            metadata["ocs_attachment_file_ids"].append(file.id)
+            metadata[attachments_key].append(file.id)
 
         # Record attachment IDs
         if ctx.message.attachments:
-            metadata["ocs_attachment_file_ids"].extend([att.file_id for att in ctx.message.attachments])
+            metadata[attachments_key].extend([att.file_id for att in ctx.message.attachments])
 
         # Add trace metadata
         if ctx.trace_service:
