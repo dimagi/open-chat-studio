@@ -6,15 +6,19 @@ from typing import TYPE_CHECKING
 
 import httpx
 from telebot import TeleBot
+from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.channels_v2.stages.terminal import DeliveryErrorHandler, MessageDeliveryFailure
 from apps.channels.datamodels import TelegramMessage
 from apps.chat.channels import MESSAGE_TYPES
+from apps.experiments.models import ParticipantData
 from apps.service_providers.file_limits import can_send_on_telegram
 
 if TYPE_CHECKING:
@@ -130,3 +134,26 @@ class TelegramChannel(ChannelBase):
 
     def _can_send_file(self, file: File) -> bool:
         return can_send_on_telegram(file.content_type or "", file.content_size or 0).supported
+
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        return [handle_telegram_block]
+
+
+def handle_telegram_block(ctx: MessageProcessingContext, exc: Exception) -> bool:
+    """Revoke participant consent when Telegram reports the bot was blocked.
+
+    Returns True if the exception was a recognized "bot blocked" 403; False otherwise.
+    """
+    if not isinstance(exc, MessageDeliveryFailure) or not isinstance(exc.original_exc, ApiTelegramException):
+        return False
+    api_exc = exc.original_exc
+    if api_exc.error_code != 403 or "bot was blocked by the user" not in api_exc.description:
+        return False
+    try:
+        participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
+            participant__identifier=ctx.participant_identifier,
+        )
+        participant_data.update_consent(False)
+    except ParticipantData.DoesNotExist:
+        ctx.processing_errors.append("Participant data not found during consent revocation")
+    return True

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
 from django.utils import timezone
-from telebot.apihelper import ApiTelegramException
 
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
@@ -12,7 +12,6 @@ from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.channels_v2.stages.core import RESET_COMMAND
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ParticipantData
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
@@ -21,6 +20,13 @@ from apps.ocs_notifications.notifications import (
 
 if TYPE_CHECKING:
     from apps.service_providers.speech_service import SynthesizedAudio
+
+DeliveryErrorHandler = Callable[[MessageProcessingContext, Exception], bool]
+"""Channel-specific delivery error handler.
+
+Returns True if the handler claimed the exception (chain stops); False to let
+the next handler — or the generic notification fallback — run.
+"""
 
 logger = logging.getLogger("ocs.channels")
 
@@ -152,9 +158,14 @@ class ResponseSendingStage(ProcessingStage):
 class SendingErrorHandlerStage(ProcessingStage):
     """TERMINAL STAGE: Handles notifications and side effects from send failures.
 
-    Processes ctx.sending_exceptions
-
+    Processes ctx.sending_exceptions. Channels can plug in platform-specific
+    behavior by passing a chain of ``DeliveryErrorHandler`` callables; each
+    handler returns True to claim the exception. Unclaimed exceptions fall
+    through to generic notification handling.
     """
+
+    def __init__(self, error_handlers: Sequence[DeliveryErrorHandler] = ()) -> None:
+        self._error_handlers: tuple[DeliveryErrorHandler, ...] = tuple(error_handlers)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return bool(ctx.sending_exceptions)
@@ -165,15 +176,11 @@ class SendingErrorHandlerStage(ProcessingStage):
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
         """Handle a single sending exception."""
-        # Inspect the original exception inside delivery failure wrappers so
-        # platform-specific handling (e.g. Telegram 403 -> consent revocation)
-        # still fires for exceptions raised by ChannelSender implementations.
-        if isinstance(exc, MessageDeliveryFailure):
-            if isinstance(exc.original_exc, ApiTelegramException) and self._handle_telegram_block(
-                ctx, exc.original_exc
-            ):
+        for handler in self._error_handlers:
+            if handler(ctx, exc):
                 return
 
+        if isinstance(exc, MessageDeliveryFailure):
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
                 ctx.experiment,
@@ -194,22 +201,6 @@ class SendingErrorHandlerStage(ProcessingStage):
             return
 
         raise exc  # Unknown exception -- propagate to fail the task
-
-    def _handle_telegram_block(self, ctx: MessageProcessingContext, exc: ApiTelegramException) -> bool:
-        """Revoke participant consent when Telegram reports the bot was blocked.
-
-        Returns True if the exception was a recognized "bot blocked" 403; False otherwise.
-        """
-        if exc.error_code != 403 or "bot was blocked by the user" not in exc.description:
-            return False
-        try:
-            participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
-                participant__identifier=ctx.participant_identifier,
-            )
-            participant_data.update_consent(False)
-        except ParticipantData.DoesNotExist:
-            ctx.processing_errors.append("Participant data not found during consent revocation")
-        return True
 
 
 # ---------------------------------------------------------------------------

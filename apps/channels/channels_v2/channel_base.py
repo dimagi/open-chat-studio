@@ -20,6 +20,7 @@ from apps.channels.channels_v2.stages.core import (
 )
 from apps.channels.channels_v2.stages.terminal import (
     ActivityTrackingStage,
+    DeliveryErrorHandler,
     PersistenceStage,
     ResponseSendingStage,
     SendingErrorHandlerStage,
@@ -129,11 +130,19 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
+
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        """Return channel-specific handlers that get first crack at send failures.
+
+        Each handler returns True to claim the exception (chain stops); otherwise
+        the next handler runs, falling through to generic notification behavior.
+        """
+        return []
 
     def _create_trace_service(self):
         return TracingService.create_for_experiment(self.experiment)
@@ -257,7 +266,7 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 # No ActivityTrackingStage -- caller manages session activity
             ],

@@ -58,6 +58,8 @@ repos:
     hooks:
       # Run the type checker.
       - id: ty-check
+        # docs/plans/ contains design sketches, not runtime code.
+        exclude: ^docs/plans/
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:

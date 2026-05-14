@@ -153,7 +153,7 @@ class MessageProcessingContext:
 > - **Callbacks/sender/capabilities on context**: Stages are zero-arg constructors. They access channel-specific dependencies via `ctx.callbacks`, `ctx.sender`, and `ctx.capabilities`. This simplifies pipeline construction and makes stages fully reusable.
 > - **No `stage_timings`**: Observability is handled by trace spans in `ProcessingStage.__call__`, not manual timing.
 > - **Error handling per-stage**: Each stage handles its own errors internally. `processing_errors` is an observability list, not a pipeline-level error control mechanism.
-> - **`sending_exceptions`**: A `list[Exception]` (unified for text, voice, and file failures). `ResponseSendingStage` appends `MessageDeliveryFailure` or `FileDeliveryFailure` for each failure (and sends download link fallback inline for files). `SendingErrorHandlerStage` iterates the list, sends notifications, and re-raises unknown exceptions.
+> - **`sending_exceptions`**: A `list[Exception]` (unified for text, voice, and file failures). `ResponseSendingStage` appends `MessageDeliveryFailure` or `FileDeliveryFailure` for each failure (and sends download link fallback inline for files). `SendingErrorHandlerStage` iterates the list, runs a chain of channel-specific `DeliveryErrorHandler` callables first (so platform-specific side effects like Telegram's "bot blocked" consent revocation can claim the exception), then falls through to generic notification handling and re-raises unknown exceptions.
 
 **Design Choice: Immutable vs Mutable**
 
@@ -703,6 +703,14 @@ class ResponseSendingStage(ProcessingStage):
 #### Stage 11: SendingErrorHandlerStage (Terminal)
 
 ```py
+DeliveryErrorHandler = Callable[[MessageProcessingContext, Exception], bool]
+"""Channel-specific delivery error handler.
+
+Returns True if the handler claimed the exception (chain stops); False to
+let the next handler — or the generic notification fallback — run.
+"""
+
+
 class SendingErrorHandlerStage(ProcessingStage):
     """Handles notifications and side effects from send failures.
 
@@ -710,11 +718,17 @@ class SendingErrorHandlerStage(ProcessingStage):
     Processes ctx.sending_exceptions (a list of MessageDeliveryFailure
     and FileDeliveryFailure instances set by ResponseSendingStage).
 
+    Channels plug in platform-specific behavior by passing a chain of
+    DeliveryErrorHandler callables. Each handler returns True to claim
+    the exception; unclaimed exceptions fall through to generic handling:
+
     - MessageDeliveryFailure: sends a failure notification
-    - FileDeliveryFailure: sends a failure notification
-    - ApiTelegramException 403 (bot blocked): revokes participant consent
+    - FileDeliveryFailure: sends a file-specific failure notification
     - Unknown exceptions: re-raised so the task fails
     """
+
+    def __init__(self, error_handlers: Sequence[DeliveryErrorHandler] = ()) -> None:
+        self._error_handlers: tuple[DeliveryErrorHandler, ...] = tuple(error_handlers)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return bool(ctx.sending_exceptions)
@@ -725,44 +739,91 @@ class SendingErrorHandlerStage(ProcessingStage):
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
         """Handle a single sending exception."""
-        from telebot.apihelper import ApiTelegramException
+        for handler in self._error_handlers:
+            if handler(ctx, exc):
+                return
 
         if isinstance(exc, MessageDeliveryFailure):
             message_delivery_failure_notification(
-                exc.experiment,
-                session=exc.session,
-                platform_title=exc.platform_title,
+                ctx.experiment,
+                session=ctx.experiment_session,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
                 context=exc.context,
             )
             return
 
         if isinstance(exc, FileDeliveryFailure):
             file_delivery_failure_notification(
-                exc.experiment,
-                platform_title=exc.platform_title,
+                ctx.experiment,
+                platform_title=ctx.experiment_channel.platform_enum.title(),
                 content_type=exc.file.content_type,
-                session=exc.session,
+                session=ctx.experiment_session,
             )
-            return
-
-        if isinstance(exc, ApiTelegramException):
-            if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
-                try:
-                    participant_data = ParticipantData.objects.get(
-                        participant__identifier=ctx.participant_identifier,
-                        experiment=ctx.experiment,
-                    )
-                    participant_data.update_consent(False)
-                except ParticipantData.DoesNotExist:
-                    ctx.processing_errors.append(
-                        "Participant data not found during consent revocation"
-                    )
             return
 
         raise exc  # Unknown exception — propagate to fail the task
 ```
 
-> **Review decision**: Dedicated terminal stage for notifications and platform-specific send error side effects. `MessageDeliveryFailure` and `FileDeliveryFailure` (set by `ResponseSendingStage`) are handled here rather than inline, keeping `ResponseSendingStage` focused solely on sending. Unknown exceptions re-raise to fail the task.
+The Telegram "bot blocked → revoke consent" rule lives next to `TelegramChannel`, not in the
+generic stage. It's a plain function plugged in via the channel's handler chain:
+
+```py
+# apps/channels/channels_v2/telegram_channel.py
+
+def handle_telegram_block(ctx: MessageProcessingContext, exc: Exception) -> bool:
+    """Revoke participant consent when Telegram reports the bot was blocked.
+
+    Returns True if the exception was a recognized "bot blocked" 403; False otherwise.
+    """
+    if not isinstance(exc, MessageDeliveryFailure) or not isinstance(exc.original_exc, ApiTelegramException):
+        return False
+    api_exc = exc.original_exc
+    if api_exc.error_code != 403 or "bot was blocked by the user" not in api_exc.description:
+        return False
+    try:
+        participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
+            participant__identifier=ctx.participant_identifier,
+        )
+        participant_data.update_consent(False)
+    except ParticipantData.DoesNotExist:
+        ctx.processing_errors.append("Participant data not found during consent revocation")
+    return True
+
+
+class TelegramChannel(ChannelBase):
+    # ... callbacks/sender/capabilities
+
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        return [handle_telegram_block]
+```
+
+`ChannelBase` exposes the hook (defaulting to `[]`) and wires it into both
+`_build_pipeline` call sites (main pipeline + the ad-hoc `send_message_to_user` mini
+pipeline) so every channel can opt in without touching the generic stage:
+
+```py
+class ChannelBase(ABC):
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        """Return channel-specific handlers that get first crack at send failures.
+
+        Each handler returns True to claim the exception (chain stops); otherwise
+        the next handler runs, falling through to generic notification behavior.
+        """
+        return []
+
+    def _build_pipeline(self) -> MessageProcessingPipeline:
+        return MessageProcessingPipeline(
+            core_stages=[...],
+            terminal_stages=[
+                ResponseSendingStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
+                PersistenceStage(),
+                ActivityTrackingStage(),
+            ],
+        )
+```
+
+> **Review decision**: Dedicated terminal stage for notifications and platform-specific send error side effects. `MessageDeliveryFailure` and `FileDeliveryFailure` (set by `ResponseSendingStage`) are handled here rather than inline, keeping `ResponseSendingStage` focused solely on sending. Platform vocabulary (e.g. `ApiTelegramException`) stays at the platform boundary — the generic stage never imports it. Unknown exceptions re-raise to fail the task.
 
 #### Stage 12: PersistenceStage (Terminal)
 
@@ -1067,7 +1128,7 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],
@@ -1194,7 +1255,7 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
             ],
         )
@@ -1242,9 +1303,14 @@ class TelegramChannel(ChannelBase):
             supported_message_types=[MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE],
             can_send_file=lambda f: True,  # Telegram supports all file types
         )
+
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        # The 403 "bot blocked" → revoke consent rule lives next to the
+        # channel, not in the generic SendingErrorHandlerStage.
+        return [handle_telegram_block]
 ```
 
-**Much simpler\!** Channel-specific behavior is isolated to callbacks, sender, and capabilities — not spread throughout the base class. Stages are zero-arg, so `_build_pipeline()` rarely needs overriding.
+**Much simpler\!** Channel-specific behavior is isolated to callbacks, sender, capabilities, and delivery-error handlers — not spread throughout the base class. Stages are zero-arg (with the exception of `SendingErrorHandlerStage`, which takes the channel-supplied handler chain), so `_build_pipeline()` rarely needs overriding.
 
 ### 8\. Channel-Specific Pipeline Overrides
 
@@ -1414,7 +1480,7 @@ class CommCareConnectChannel(ChannelBase):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],
@@ -1928,7 +1994,7 @@ def test_full_pipeline_happy_path(mock_bot):
         ],
         terminal_stages=[
             ResponseSendingStage(),
-            SendingErrorHandlerStage(),
+            SendingErrorHandlerStage(),  # error_handlers=() in this test — no channel-specific behavior
             PersistenceStage(),
             ActivityTrackingStage(),
         ],
@@ -1984,7 +2050,8 @@ Each stage should have tests for these edge cases (where applicable):
 - **BotInteractionStage**: Successful response, bot error, response with files, response without files
 - **ResponseFormattingStage**: Text response, voice response, citations, no citations, unsupported files, voice synthesis failure (fallback to text)
 - **ResponseSendingStage**: Early exit response sent, normal text send, voice send, file send success, file send failure (appends `FileDeliveryFailure` to `ctx.sending_exceptions`), text/voice failure appends `MessageDeliveryFailure` and skips file sends, no response at all (no-op)
-- **SendingErrorHandlerStage**: `MessageDeliveryFailure` → notification (no re-raise), `FileDeliveryFailure` → notification + download link fallback, `ApiTelegramException` 403 → consent revoked, `ApiTelegramException` 403 + `ParticipantData.DoesNotExist` → error in processing_errors, unknown exception → re-raised, empty `sending_exceptions` → skips
+- **SendingErrorHandlerStage**: handler chain claims exception (skips default), handler chain falls through to default (notification), `MessageDeliveryFailure` → notification (no re-raise), `FileDeliveryFailure` → notification + download link fallback, unknown exception → re-raised, empty `sending_exceptions` → skips
+- **`handle_telegram_block`** (channel-specific handler, colocated with `TelegramChannel`): non-`MessageDeliveryFailure` → False (chain continues), non-Telegram inner exception → False, non-403 Telegram error → False, 403 "bot blocked" → consent revoked + True, 403 with `ParticipantData.DoesNotExist` → error in processing_errors + True
 - **PersistenceStage**: Early exit with session (persists), early exit without session (no-op), no early exit (skips), persists even when sending_exceptions is non-empty, voice response (tags + saves attachment), voice response without bot_response (no-op)
 - **ActivityTrackingStage**: Session update, versioned experiment tracking
 - **Pipeline catch-all**: Unexpected exception generates error message, `ChatException` gets specific prompt, `EventBot` failure falls back to `DEFAULT_ERROR_RESPONSE_TEXT`, terminal stages run, original exception re-raised
@@ -2492,8 +2559,10 @@ class ResponseSendingStage(ProcessingStage):
     # ... (see section 4 for full implementation)
 
 class SendingErrorHandlerStage(ProcessingStage):
-    """TERMINAL STAGE: Handles platform-specific send error side effects.
-    E.g., Telegram 403 "bot blocked" → revoke participant consent.
+    """TERMINAL STAGE: Generic send-failure handling. Accepts a chain of
+    channel-supplied DeliveryErrorHandler callables for platform-specific
+    side effects (e.g. TelegramChannel injects a handler that revokes
+    consent on 403 "bot blocked").
     """
     # ... (see section 4 for full implementation)
 
@@ -2599,7 +2668,7 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],
@@ -2721,7 +2790,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 16 | Code Quality | `SessionActivationStage` for non-consent path | Dedicated stage activates session when consent is disabled. Keeps `ConsentFlowStage.should_run()` side-effect-free. |
 | 17 | Architecture | Pipeline catch-all error handler | Unexpected exceptions from core stages: generate error message via `EventBot` (preserving `ChatException` distinction), fall back to `DEFAULT_ERROR_RESPONSE_TEXT`, set `ctx.early_exit_response`, run terminal stages, then **re-raise**. |
 | 18 | Architecture | Terminal stage order | `ResponseSendingStage` → `SendingErrorHandlerStage` → `PersistenceStage` → `ActivityTrackingStage`. Sending first, then error handling, then persistence, then tracking. |
-| 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles notifications and platform-specific side effects for all send failures. Iterates `ctx.sending_exceptions`. `MessageDeliveryFailure` → notification. `FileDeliveryFailure` → notification + download link fallback. `ApiTelegramException` 403 → consent revocation. Unknown exceptions re-raised. |
+| 19 | Architecture | `SendingErrorHandlerStage` (terminal) | Handles notifications and lets channels plug in platform-specific side effects via a `DeliveryErrorHandler` chain. Iterates `ctx.sending_exceptions`; for each, runs the channel's handler chain first (each handler returns True to claim the exception, False to pass), then falls through to: `MessageDeliveryFailure` → notification; `FileDeliveryFailure` → notification + download link fallback. Unknown exceptions re-raised. Telegram's 403 "bot blocked" → consent revocation lives in `handle_telegram_block` next to `TelegramChannel`, not in the generic stage. |
 | 20 | Architecture | `ResponseSendingStage` resilience | `_send_text`/`_send_voice` raise `MessageDeliveryFailure` on failure; outer try/except catches and appends to `ctx.sending_exceptions`. File failures wrap to `FileDeliveryFailure` and append independently. No inline notifications or download links — that's `SendingErrorHandlerStage`'s responsibility. |
 | 21 | Architecture | `ctx.sending_exceptions` | `list[Exception]` — unified list for text/voice (`MessageDeliveryFailure`) and file (`FileDeliveryFailure`) send failures. Set by `ResponseSendingStage`, processed by `SendingErrorHandlerStage`. |
 | 22 | Architecture | Early exit persistence regardless | `PersistenceStage` persists to chat history even if `ResponseSendingStage` failed. Chat history is an audit trail. |
@@ -2835,7 +2904,7 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 - [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `TelegramChannel` in `apps/chat/channels.py` + `apps/channels/tests/message_examples/test_telegram_channel.py`
 - [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
-**Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and `SendingErrorHandlerStage` (Telegram 403 consent revocation).
+**Why here:** First full-pipeline channel with voice, files, sender, and callbacks. Validates the complete sender/callback extraction pattern. Standalone (no messaging service dependency — uses `TeleBot` directly). Also validates `_can_send_file()` and the `DeliveryErrorHandler` chain (Telegram's 403 "bot blocked" → consent revocation, plugged in via `handle_telegram_block`).
 
 ### PR 5: WhatsappChannel — [ ] Not started
 
