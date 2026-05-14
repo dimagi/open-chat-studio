@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.urls import reverse
+from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
@@ -61,13 +62,21 @@ class EvaluationConfigTable(tables.Table):
         if not value.exists():
             return "—"
 
-        items = []
+        rows = []
         for evaluator in value.all():
             type_info = get_evaluator_type_display(evaluator.type)
-            icon_html = f'<i class="fa {type_info["icon"]}"></i> ' if type_info["icon"] else ""
-            items.append(f"<li>{icon_html}{evaluator.name} ({type_info['label']})</li>")
+            icon_class = type_info.get("icon") or ""
+            label = type_info.get("label") or ""
+            # icon_class and label come from get_evaluator_type_display (developer-controlled),
+            # safe to interpolate. evaluator.name is user-controlled — format_html escapes it.
+            rows.append((icon_class, evaluator.name, label))
 
-        return mark_safe(f'<ul class="list-disc list-inside">{"".join(items)}</ul>')
+        items = format_html_join(
+            "",
+            "<li>{}{} ({})</li>",
+            ((format_html('<i class="fa {}"></i> ', icon) if icon else "", name, label) for icon, name, label in rows),
+        )
+        return format_html('<ul class="list-disc list-inside">{}</ul>', items)
 
     def render_generation_chatbot(self, record):
         if not record.base_experiment:
@@ -321,7 +330,9 @@ class DatasetAutoPopulationRuleTable(tables.Table):
     last_error = columns.Column(verbose_name="Last error", orderable=False)
 
     def render_last_error(self, value):
-        return mark_safe(f'<span class="text-error">{value[:60]}</span>') if value else "—"
+        if not value:
+            return "—"
+        return format_html('<span class="text-error">{}</span>', value[:60])
 
     actions = actions.ActionsColumn(
         actions=[

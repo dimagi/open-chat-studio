@@ -97,16 +97,14 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
 
     appended = _scan_for_new_sessions(rule, created_floor)
 
+    # SUCCESS and NO_OP are both healthy tick outcomes — neither should let a
+    # previous failure linger and contribute to auto-disable. Reset the failure
+    # counter and clear last_error in both cases.
     rule.last_run_at = timezone.now()
-    update_fields = ["last_run_at", "last_run_status"]
-    if appended:
-        rule.last_run_status = AutoPopulationRunStatus.SUCCESS
-        rule.consecutive_failure_count = 0
-        rule.last_error = ""
-        update_fields += ["consecutive_failure_count", "last_error"]
-    else:
-        rule.last_run_status = AutoPopulationRunStatus.NO_OP
-    rule.save(update_fields=update_fields)
+    rule.last_run_status = AutoPopulationRunStatus.SUCCESS if appended else AutoPopulationRunStatus.NO_OP
+    rule.consecutive_failure_count = 0
+    rule.last_error = ""
+    rule.save(update_fields=["last_run_at", "last_run_status", "consecutive_failure_count", "last_error"])
 
     if appended:
         transaction.on_commit(lambda: _trigger_delta_runs_for_dataset(dataset, appended))
