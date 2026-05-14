@@ -145,5 +145,6 @@ def send_message_to_participant_task(data):
             chat=channel.experiment_session.chat,
             message_type=ChatMessageType.AI,
             content=message_text,
+            metadata={"direct_to_user": True},
         )
         channel.send_message_to_user(message_text)
