@@ -4,7 +4,6 @@ import json
 from io import StringIO
 
 from django import forms
-from django.core.exceptions import NON_FIELD_ERRORS
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
@@ -1027,11 +1026,6 @@ class DatasetAutoPopulationRuleForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
         self.dataset = dataset
-        # Pre-set these on the instance so Django's `_post_clean` calls
-        # `instance.full_clean()` with team/dataset already populated, allowing
-        # `DatasetAutoPopulationRule.clean()` (which validates them) to run.
-        self.instance.team = team
-        self.instance.dataset = dataset
         self.fields["source_experiment"].queryset = (
             Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
         )
@@ -1054,20 +1048,10 @@ class DatasetAutoPopulationRuleForm(forms.ModelForm):
             raise forms.ValidationError("Source chatbot must belong to your team.")
         return experiment
 
-    def _post_clean(self):
-        # Run model-level validation (including `DatasetAutoPopulationRule.clean()`),
-        # but gracefully redirect errors keyed to fields not on the form (e.g.
-        # `dataset`, `team`, which are programmatic) into non-field errors so
-        # `add_error` doesn't blow up.
-        opts = self._meta
-        exclude = self._get_validation_exclusions()
-        try:
-            self.instance = construct_instance(self, self.instance, opts.fields, opts.exclude)
-        except DjangoValidationError as e:
-            self._update_errors(e)
-        try:
-            self.instance.full_clean(exclude=exclude, validate_unique=False)
-        except DjangoValidationError as e:
-            for field, error_list in e.error_dict.items():
-                target = field if field == NON_FIELD_ERRORS or field in self.fields else None
-                self.add_error(target, error_list)
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.team = self.team
+        instance.dataset = self.dataset
+        if commit:
+            instance.save()
+        return instance
