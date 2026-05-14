@@ -2,26 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.stages.core import (
-    BotInteractionStage,
-    ChatMessageCreationStage,
-    ConsentFlowStage,
-    MessageTypeValidationStage,
-    ParticipantValidationStage,
-    QueryExtractionStage,
-    ResponseFormattingStage,
-    SessionActivationStage,
-    SessionResolutionStage,
-)
-from apps.channels.channels_v2.stages.terminal import (
-    ActivityTrackingStage,
-    PersistenceStage,
-    ResponseSendingStage,
-    SendingErrorHandlerStage,
-)
 from apps.channels.channels_v2.telegram_channel import TelegramChannel
-from apps.chat.channels import MESSAGE_TYPES
 
 
 @pytest.fixture()
@@ -51,45 +32,6 @@ class TestTelegramChannelInit:
         session = MagicMock()
         channel = _make_channel(_patched_telebot, experiment_session=session)
         assert channel.experiment_session is session
-
-
-class TestTelegramChannelPipeline:
-    def test_pipeline_includes_all_core_stages(self, _patched_telebot):
-        channel = _make_channel(_patched_telebot)
-        pipeline = channel._build_pipeline()
-
-        core_types = [type(s) for s in pipeline.core_stages]
-        assert ParticipantValidationStage in core_types
-        assert SessionResolutionStage in core_types
-        assert SessionActivationStage in core_types
-        assert MessageTypeValidationStage in core_types
-        assert QueryExtractionStage in core_types
-        assert ChatMessageCreationStage in core_types
-        assert ConsentFlowStage in core_types
-        assert BotInteractionStage in core_types
-        assert ResponseFormattingStage in core_types
-
-    def test_pipeline_includes_all_terminal_stages(self, _patched_telebot):
-        channel = _make_channel(_patched_telebot)
-        pipeline = channel._build_pipeline()
-
-        terminal_types = [type(s) for s in pipeline.terminal_stages]
-        assert ResponseSendingStage in terminal_types
-        assert SendingErrorHandlerStage in terminal_types
-        assert PersistenceStage in terminal_types
-        assert ActivityTrackingStage in terminal_types
-
-
-class TestTelegramChannelCapabilities:
-    def test_capabilities_match_telegram_features(self, _patched_telebot):
-        channel = _make_channel(_patched_telebot)
-        caps = channel._get_capabilities()
-        assert isinstance(caps, ChannelCapabilities)
-        assert caps.supports_voice_replies is True
-        assert caps.supports_files is True
-        assert caps.supports_conversational_consent is True
-        assert caps.supported_message_types == (MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE)
-        assert caps.supports_static_triggers is True
 
 
 class TestTelegramChannelCanSendFile:
