@@ -14,6 +14,7 @@ from pytz.exceptions import UnknownTimeZoneError
 from apps.channels.models import ChannelPlatform
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
 from apps.experiments.models import Experiment, ExperimentSession
@@ -573,7 +574,7 @@ class ScheduledMessage(BaseTeamModel):
         - If no experiment was specified to generate the response, use the default experiment version
         - If an experiment was specified, use that experiment
         """
-        default_router_experiment = self.experiment.default_version
+        default_router_experiment = resolve_published_or_working(self.experiment)
         experiment_id = self.params.get("experiment_id")
         if experiment_id and int(experiment_id) != self.experiment.id:
             return Experiment.objects.get(id=experiment_id)

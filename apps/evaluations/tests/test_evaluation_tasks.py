@@ -7,12 +7,12 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
     EvaluationResult,
     EvaluationRunType,
-    ExperimentVersionSelection,
 )
 from apps.evaluations.tasks import (
     EVAL_SESSIONS_TTL_DAYS,
@@ -122,7 +122,7 @@ def test_evaluate_single_message_with_bot_generation(
 
     run, evaluator = evaluation_run
     config = run.config
-    config.version_selection_type = ExperimentVersionSelection.SPECIFIC
+    config.version_selection_type = VersionSelectionRule.SPECIFIC
     config.experiment_version = experiment
     config.save()
 

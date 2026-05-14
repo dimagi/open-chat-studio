@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.rule_validation import (
     ConditionType,
     validate_condition,
@@ -49,14 +50,6 @@ class DatasetCreationStatus(models.TextChoices):
     PROCESSING = "processing", "Processing"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
-
-
-class ExperimentVersionSelection(models.TextChoices):
-    """Choices for experiment version selection including sentinel values"""
-
-    SPECIFIC = "specific", "Specific Version"
-    LATEST_WORKING = "latest_working", "Latest Working Version"
-    LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
 class EvaluationMode(models.TextChoices):
@@ -291,8 +284,8 @@ class EvaluationConfig(BaseTeamModel):
     # Store sentinel value if using latest working/published
     version_selection_type = models.CharField(
         max_length=50,
-        choices=ExperimentVersionSelection.choices,
-        default=ExperimentVersionSelection.SPECIFIC,
+        choices=VersionSelectionRule.choices,
+        default=VersionSelectionRule.SPECIFIC,
         help_text=("Type of version selection: specific, latest_working, or latest_published"),
     )
 
@@ -300,18 +293,20 @@ class EvaluationConfig(BaseTeamModel):
         return f"EvaluationConfig ({self.name})"
 
     def get_generation_experiment_version(self):
-        """Resolve the actual experiment version based on selection type"""
-        if self.version_selection_type == ExperimentVersionSelection.SPECIFIC:
+        """Resolve the actual experiment version based on selection type.
+
+        SPECIFIC short-circuits to the stored FK (no family-and-number round-trip).
+        Other rules delegate to the resolver. Returns None when the config is
+        incompletely configured; the resolver raises on programmer errors.
+        """
+        if self.version_selection_type == VersionSelectionRule.SPECIFIC:
             return self.experiment_version
-
-        if not self.base_experiment:
+        if self.base_experiment_id is None:
             return None
-
-        if self.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
-            return self.base_experiment.get_working_version()
-        elif self.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
-            return self.base_experiment.default_version
-        return None
+        return resolve_chatbot_version(
+            self.base_experiment,
+            self.version_selection_type,
+        )
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
