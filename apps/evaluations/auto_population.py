@@ -127,6 +127,7 @@ def auto_populate_eval_datasets():
         .values_list("id", flat=True)
     )
     for rule_id in rule_ids:
+        failure_exception = None
         try:
             with transaction.atomic():
                 rule = (
@@ -136,10 +137,21 @@ def auto_populate_eval_datasets():
                 )
                 if rule is None:
                     continue  # locked by another worker, or disabled mid-tick
-                try:
-                    _ingest_rule(rule)
-                except Exception as e:  # noqa: BLE001 - per-rule isolation is the point
-                    logger.exception("Auto-population rule %s failed: %s", rule.id, e)
-                    _handle_rule_failure(rule, e)
+                _ingest_rule(rule)
+        except Exception as e:  # noqa: BLE001 - per-rule isolation is the point
+            logger.exception("Auto-population rule %s failed: %s", rule_id, e)
+            failure_exception = e
+
+        if failure_exception is None:
+            continue
+
+        # Record the failure in a fresh transaction — the original `transaction.atomic()`
+        # block may have been aborted by a database error, so `_handle_rule_failure`'s
+        # `rule.save()` must run outside of it. Re-fetch the rule since the locked
+        # instance is unusable after rollback.
+        try:
+            rule = DatasetAutoPopulationRule.objects.filter(id=rule_id).first()
+            if rule is not None:
+                _handle_rule_failure(rule, failure_exception)
         except Exception:  # noqa: BLE001 - last-resort guard
-            logger.exception("Unexpected outer error processing auto-population rule %s", rule_id)
+            logger.exception("Failed to record failure state for auto-population rule %s", rule_id)

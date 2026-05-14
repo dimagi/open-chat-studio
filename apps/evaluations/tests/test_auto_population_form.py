@@ -7,7 +7,7 @@ from apps.utils.factories.experiment import ExperimentFactory
 
 @pytest.mark.django_db()
 def test_form_rejects_cross_team_source_experiment():
-    dataset = EvaluationDatasetFactory.create()
+    dataset = EvaluationDatasetFactory.create(evaluation_mode="session")
     foreign_experiment = ExperimentFactory.create()  # different team
 
     form = DatasetAutoPopulationRuleForm(
@@ -25,7 +25,7 @@ def test_form_rejects_cross_team_source_experiment():
 
 @pytest.mark.django_db()
 def test_form_rejects_invalid_filter_query():
-    dataset = EvaluationDatasetFactory.create()
+    dataset = EvaluationDatasetFactory.create(evaluation_mode="session")
     experiment = ExperimentFactory.create(team=dataset.team)
 
     form = DatasetAutoPopulationRuleForm(
@@ -44,7 +44,7 @@ def test_form_rejects_invalid_filter_query():
 
 @pytest.mark.django_db()
 def test_form_accepts_valid_input():
-    dataset = EvaluationDatasetFactory.create()
+    dataset = EvaluationDatasetFactory.create(evaluation_mode="session")
     experiment = ExperimentFactory.create(team=dataset.team)
 
     form = DatasetAutoPopulationRuleForm(

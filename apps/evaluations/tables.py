@@ -112,9 +112,12 @@ class EvaluationRunTable(tables.Table):
     )
 
     type = TemplateColumn(
+        # Use `.all|length` (not `.count`) so the prefetch cache wired up by
+        # EvaluationRunTableView.get_queryset is used; `.count` would issue a
+        # fresh query per row (N+1).
         template_code=(
             "{% if record.type == 'delta' %}"
-            "<span class='badge badge-info'>delta · {{ record.scoped_messages.count }}</span>"
+            "<span class='badge badge-info'>delta · {{ record.scoped_messages.all|length }}</span>"
             "{% elif record.type == 'preview' %}"
             "<span class='badge'>preview</span>"
             "{% else %}"

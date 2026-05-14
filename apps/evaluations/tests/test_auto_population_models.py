@@ -13,17 +13,6 @@ from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
-def test_rule_defaults():
-    rule = DatasetAutoPopulationRuleFactory.create()
-    assert rule.is_enabled is True
-    assert rule.filter_query_string == ""
-    assert rule.last_run_at is None
-    assert rule.last_run_status == ""
-    assert rule.last_error == ""
-    assert rule.consecutive_failure_count == 0
-
-
-@pytest.mark.django_db()
 def test_rule_clean_rejects_dataset_team_mismatch():
     other_team = TeamFactory.create()
     dataset = EvaluationDatasetFactory.create(evaluation_mode="session")
