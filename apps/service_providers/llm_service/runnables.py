@@ -27,7 +27,7 @@ from apps.assistants.sync import (
     get_and_store_openai_file,
 )
 from apps.chat.agent.openapi_tool import ToolArtifact
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import Experiment
 from apps.files.models import File
 from apps.service_providers.llm_service.adapters import AssistantAdapter
@@ -115,7 +115,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
             ai_message, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
             ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
-            ai_message_metadata[ChatMessage.MetadataKeys.OPENAI_RUN_ID] = run_id
+            ai_message_metadata[ChatMessageMetadataKeys.OPENAI_RUN_ID] = run_id
 
             if not current_thread_id:
                 self.adapter.update_thread_id(thread_id)

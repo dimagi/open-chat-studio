@@ -1,4 +1,4 @@
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.pipelines.nodes.base import Intents
 
 
@@ -8,7 +8,7 @@ class ToolCallbacks:
         self.intents = []
 
     def attach_file(self, file_id: int):
-        key = ChatMessage.MetadataKeys.OCS_ATTACHMENT_FILE_IDS
+        key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
         if key not in self.output_message_metadata:
             self.output_message_metadata[key] = []
         self.output_message_metadata[key].append(file_id)

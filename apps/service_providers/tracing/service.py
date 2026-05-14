@@ -12,7 +12,7 @@ from uuid import UUID
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessageMetadataKeys
 
 from .base import TraceContext, Tracer
 from .callback import wrap_callback
@@ -244,7 +244,7 @@ class TracingService:
                 logger.exception("Error getting trace info")
                 continue
 
-        return {ChatMessage.MetadataKeys.TRACE_INFO: trace_info} if trace_info else {}
+        return {ChatMessageMetadataKeys.TRACE_INFO: trace_info} if trace_info else {}
 
     @property
     def _active_tracers(self) -> list[Tracer]:

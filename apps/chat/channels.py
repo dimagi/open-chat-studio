@@ -34,7 +34,7 @@ from apps.chat.exceptions import (
     UserReportableError,
     VersionedExperimentSessionsNotAllowedException,
 )
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -765,7 +765,7 @@ class ChannelBase(ABC):
         return self._create_chat_message(message_text)
 
     def _create_chat_message(self, message_text):
-        attachments_key = ChatMessage.MetadataKeys.OCS_ATTACHMENT_FILE_IDS
+        attachments_key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
         metadata = {attachments_key: []}
         is_voice = self.message.content_type == MESSAGE_TYPES.VOICE
         if is_voice and self.message.cached_media_data:

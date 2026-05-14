@@ -13,7 +13,7 @@ from apps.chat.bots import EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
@@ -348,7 +348,7 @@ class ChatMessageCreationStage(ProcessingStage):
         return ctx.user_query is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        attachments_key = ChatMessage.MetadataKeys.OCS_ATTACHMENT_FILE_IDS
+        attachments_key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
         metadata = {attachments_key: []}
         is_voice = ctx.message.content_type == MESSAGE_TYPES.VOICE
 

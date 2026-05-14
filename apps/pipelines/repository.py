@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from apps.chat.conversation import COMPRESSION_MARKER
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
@@ -117,7 +117,7 @@ class ORMRepository:
         if history_type == "global":
             message = ChatMessage.objects.get(id=checkpoint_message_id)
             if compression_marker == COMPRESSION_MARKER:
-                message.metadata.update({ChatMessage.MetadataKeys.COMPRESSION_MARKER: history_mode})
+                message.metadata.update({ChatMessageMetadataKeys.COMPRESSION_MARKER: history_mode})
                 message.save(update_fields=["metadata"])
             else:
                 message.summary = compression_marker
