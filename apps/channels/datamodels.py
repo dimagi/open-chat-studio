@@ -212,22 +212,27 @@ class TurnWhatsappMessage(BaseMessage):
         wa_id = message.get("from")
         if wa_id:
             return wa_id
+        if not contacts:
+            raise ValueError("Cannot resolve participant_id: message has no 'from' field and contacts is empty")
         return contacts[0]["wa_id"]
 
     @classmethod
     def parse_all(cls, message_data: dict) -> list["TurnWhatsappMessage"]:
-        """Parse every message in a webhook payload.
+        """Parse every message in a WhatsApp webhook payload.
 
-        Meta/Turn.io webhooks can deliver more than one message per payload,
-        so callers must iterate over the returned list to avoid silently
-        dropping messages.
+        Turn.io and Meta Cloud API webhooks can deliver more than one message
+        per payload, so callers must iterate over the returned list to avoid
+        silently dropping messages.
         """
         contacts = message_data.get("contacts", [])
         return [cls._parse_single(message, contacts) for message in message_data.get("messages", [])]
 
     @classmethod
     def parse(cls, message_data: dict) -> "TurnWhatsappMessage":
-        return cls.parse_all(message_data)[0]
+        messages = cls.parse_all(message_data)
+        if not messages:
+            raise ValueError("No messages found in webhook payload")
+        return messages[0]
 
 
 class MetaCloudAPIMessage(TurnWhatsappMessage):
