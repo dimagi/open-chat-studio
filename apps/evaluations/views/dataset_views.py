@@ -117,7 +117,10 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
         return kwargs
 
     def _get_filter_context_data(self):
-        table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+        table_url = (
+            reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+            + f"?dataset_id={self.object.pk}"
+        )
         return get_filter_context_data(
             self.request.team,
             ExperimentSessionFilter.columns(self.request.team),
@@ -258,7 +261,22 @@ def get_base_session_queryset(request):
     filter_params = FilterParams.from_request(request)
     query_set = ExperimentSession.objects.filter(team=request.team)
     session_filter = ExperimentSessionFilter()
-    return session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
+    # Filter out sessions already in the dataset being edited.
+    dataset_id = request.GET.get("dataset_id")
+    if dataset_id:
+        try:
+            dataset_id_int = int(dataset_id)
+        except (TypeError, ValueError):
+            return query_set
+        existing_session_ids = EvaluationMessage.objects.filter(
+            evaluationdataset=dataset_id_int,
+            evaluationdataset__team=request.team,
+            session__isnull=False,
+        ).values_list("session_id", flat=True)
+        query_set = query_set.exclude(id__in=existing_session_ids)
+    return query_set
 
 
 @login_and_team_required

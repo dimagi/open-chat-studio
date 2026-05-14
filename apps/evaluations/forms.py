@@ -664,6 +664,23 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     """Form for creating evaluation datasets."""
 
+    MODE_CHOICES = [
+        ("clone", "Clone from sessions"),
+        ("annotation_queue", "Import from annotation queue"),
+        ("manual", "Create manually"),
+        ("csv", "Upload CSV file"),
+    ]
+
+    mode = forms.ChoiceField(choices=MODE_CHOICES, widget=StyledRadioSelect(), label="Dataset creation mode")
+
+    annotation_queue = forms.ModelChoiceField(
+        queryset=AnnotationQueue.objects.none(),
+        required=False,
+        label="Annotation queue",
+        help_text="All sessions in the selected queue will be added to the dataset.",
+        widget=forms.Select(attrs={"class": "select w-full"}),
+    )
+
     messages_json = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
@@ -693,6 +710,12 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(team, *args, **kwargs)
+        self.fields["annotation_queue"].queryset = (
+            AnnotationQueue.objects.filter(team=team, items__session__isnull=False)
+            .exclude(status=QueueStatus.ARCHIVED)
+            .distinct()
+            .order_by("name")
+        )
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -706,13 +729,22 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         mode = cleaned_data.get("mode")
         evaluation_mode = cleaned_data.get("evaluation_mode")
 
-        if evaluation_mode == EvaluationMode.SESSION and mode != "clone":
-            raise forms.ValidationError({"mode": "Session-mode datasets can only be created by cloning from sessions."})
+        if evaluation_mode == EvaluationMode.SESSION and mode not in {"clone", "annotation_queue"}:
+            raise forms.ValidationError(
+                {
+                    "mode": (
+                        "Session-mode datasets can only be created by cloning from sessions or importing from a queue."
+                    )
+                }
+            )
 
         if mode == "clone":
             session_ids, filtered_session_ids = self._clean_clone()
             cleaned_data["session_ids"] = session_ids
             cleaned_data["filtered_session_ids"] = filtered_session_ids
+        elif mode == "annotation_queue":
+            cleaned_data["session_ids"] = self._clean_annotation_queue()
+            cleaned_data["filtered_session_ids"] = set()
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -721,6 +753,21 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             cleaned_data["column_mapping"] = column_mapping
             cleaned_data["history_column"] = history_column
         return cleaned_data
+
+    def _clean_annotation_queue(self):
+        """Validates the selected queue and returns the set of session external IDs to import."""
+        queue = self.cleaned_data.get("annotation_queue")
+        if not queue:
+            raise forms.ValidationError({"annotation_queue": "Please select an annotation queue."})
+
+        session_external_ids = set(
+            queue.items.filter(session__isnull=False, session__team=self.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+        if not session_external_ids:
+            raise forms.ValidationError({"annotation_queue": "The selected queue does not contain any sessions."})
+        return {str(sid) for sid in session_external_ids}
 
     def _clean_manual(self):
         messages_json = self.data.get("messages_json", "")
@@ -888,7 +935,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             dataset.save(update_fields=["status"])
             return dataset
 
-        if mode == "clone":
+        if mode in {"clone", "annotation_queue"}:
             if dataset.evaluation_mode == EvaluationMode.SESSION:
                 self._save_sessions_clone(dataset)
             else:

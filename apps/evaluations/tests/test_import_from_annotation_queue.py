@@ -5,7 +5,7 @@ from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.chat.models import ChatMessageType
-from apps.evaluations.forms import ImportFromAnnotationQueueForm
+from apps.evaluations.forms import EvaluationDatasetForm, ImportFromAnnotationQueueForm
 from apps.evaluations.models import (
     DatasetCreationStatus,
     EvaluationDataset,
@@ -267,3 +267,154 @@ def test_post_excludes_message_only_items(client_with_user, team_with_users, ses
 
     args = mock_task.delay.call_args.args
     assert args[2] == [str(session.external_id)]
+
+
+# === Create dataset with annotation_queue mode ===
+
+
+@pytest.mark.django_db()
+def test_create_form_annotation_queue_mode_session_dataset(team_with_users, queue_with_session_items):
+    """A session-mode dataset can be created by importing from an annotation queue."""
+    queue, session = queue_with_session_items
+
+    form = EvaluationDatasetForm(
+        team=team_with_users,
+        data={
+            "name": "Queue Session Dataset",
+            "evaluation_mode": "session",
+            "mode": "annotation_queue",
+            "annotation_queue": queue.id,
+        },
+    )
+    assert form.is_valid(), form.errors
+    form.instance.team = team_with_users
+
+    with (
+        patch.object(form, "_save_sessions_clone") as mock_session_clone,
+        patch.object(form, "_save_session_messages_clone") as mock_msg_clone,
+    ):
+        form.save()
+
+    mock_session_clone.assert_called_once()
+    mock_msg_clone.assert_not_called()
+    assert form.cleaned_data["session_ids"] == {str(session.external_id)}
+
+
+@pytest.mark.django_db()
+def test_create_form_annotation_queue_mode_message_dataset(team_with_users, queue_with_session_items):
+    """A message-mode dataset can also be created by importing sessions from an annotation queue."""
+    queue, session = queue_with_session_items
+
+    form = EvaluationDatasetForm(
+        team=team_with_users,
+        data={
+            "name": "Queue Message Dataset",
+            "evaluation_mode": "message",
+            "mode": "annotation_queue",
+            "annotation_queue": queue.id,
+        },
+    )
+    assert form.is_valid(), form.errors
+    form.instance.team = team_with_users
+
+    with (
+        patch.object(form, "_save_sessions_clone") as mock_session_clone,
+        patch.object(form, "_save_session_messages_clone") as mock_msg_clone,
+    ):
+        form.save()
+
+    mock_msg_clone.assert_called_once()
+    mock_session_clone.assert_not_called()
+    assert form.cleaned_data["session_ids"] == {str(session.external_id)}
+
+
+@pytest.mark.django_db()
+def test_create_form_annotation_queue_requires_queue_with_sessions(team_with_users, user):
+    """An empty queue (no session items) is not selectable in the queryset."""
+    empty_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+
+    form = EvaluationDatasetForm(
+        team=team_with_users,
+        data={
+            "name": "Bad Queue Dataset",
+            "evaluation_mode": "session",
+            "mode": "annotation_queue",
+            "annotation_queue": empty_queue.id,
+        },
+    )
+    assert not form.is_valid()
+    assert "annotation_queue" in form.errors
+
+
+@pytest.mark.django_db()
+def test_create_form_annotation_queue_field_filters_to_team(team_with_users, user):
+    """The annotation_queue queryset is scoped to the user's team."""
+    other_team = TeamWithUsersFactory.create()
+    other_queue = AnnotationQueueFactory.create(team=other_team)
+    other_session = ExperimentSessionFactory.create(team=other_team)
+    AnnotationItemFactory.create(queue=other_queue, team=other_team, session=other_session)
+
+    own_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
+    own_session = ExperimentSessionFactory.create(team=team_with_users)
+    AnnotationItemFactory.create(queue=own_queue, team=team_with_users, session=own_session)
+
+    form = EvaluationDatasetForm(team=team_with_users)
+    queue_ids = set(form.fields["annotation_queue"].queryset.values_list("id", flat=True))
+    assert queue_ids == {own_queue.id}
+
+
+# === Session selection table excludes sessions already in dataset ===
+
+
+@pytest.mark.django_db()
+def test_session_selection_list_excludes_sessions_already_in_dataset(
+    client_with_user, team_with_users, session_dataset
+):
+    """When editing a dataset, sessions already linked to it are excluded from the selection table."""
+    in_dataset = ExperimentSessionFactory.create(team=team_with_users)
+    not_in_dataset = ExperimentSessionFactory.create(team=team_with_users)
+
+    msg = EvaluationMessage.objects.create(
+        input={}, output={}, history=[], session=in_dataset, metadata={"session_id": str(in_dataset.external_id)}
+    )
+    session_dataset.messages.add(msg)
+
+    url = reverse("evaluations:dataset_sessions_selection_json", args=[team_with_users.slug])
+    response = client_with_user.get(url, {"dataset_id": session_dataset.pk})
+
+    assert response.status_code == 200
+    session_ids = response.json()
+    assert str(not_in_dataset.external_id) in session_ids
+    assert str(in_dataset.external_id) not in session_ids
+
+
+@pytest.mark.django_db()
+def test_session_selection_list_without_dataset_id_returns_all(client_with_user, team_with_users, session_dataset):
+    """Without a dataset_id parameter, all team sessions are returned (create flow)."""
+    in_dataset = ExperimentSessionFactory.create(team=team_with_users)
+    other = ExperimentSessionFactory.create(team=team_with_users)
+
+    msg = EvaluationMessage.objects.create(
+        input={}, output={}, history=[], session=in_dataset, metadata={"session_id": str(in_dataset.external_id)}
+    )
+    session_dataset.messages.add(msg)
+
+    url = reverse("evaluations:dataset_sessions_selection_json", args=[team_with_users.slug])
+    response = client_with_user.get(url)
+
+    assert response.status_code == 200
+    session_ids = response.json()
+    assert str(in_dataset.external_id) in session_ids
+    assert str(other.external_id) in session_ids
+
+
+@pytest.mark.django_db()
+def test_session_selection_list_ignores_invalid_dataset_id(client_with_user, team_with_users):
+    """A non-integer dataset_id param should not raise; just return the unfiltered list."""
+    session = ExperimentSessionFactory.create(team=team_with_users)
+
+    url = reverse("evaluations:dataset_sessions_selection_json", args=[team_with_users.slug])
+    response = client_with_user.get(url, {"dataset_id": "not-an-int"})
+
+    assert response.status_code == 200
+    assert str(session.external_id) in response.json()
