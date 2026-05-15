@@ -1,0 +1,55 @@
+{% extends "generic/object_form.html" %}
+{% load form_tags i18n %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:dataset_home' request.team.slug %}">{% translate "Datasets" %}</a></li>
+      <li><a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.id %}">{{ dataset.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ page_title }}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block form %}
+  {{ form.non_field_errors }}
+  {% render_form_fields form "source_experiment" "is_enabled" %}
+
+  <div class="fieldset w-full">
+    <label class="label font-bold">{% translate "Filter" %}</label>
+    <p class="text-sm text-gray-500 mb-2">
+      {% translate "Optional. Limit which sessions get auto-populated. Leave blank to ingest every session from the source chatbot." %}
+    </p>
+
+    {# Pre-load existing rule's filter into URL so the widget reads it on init. #}
+    <script>
+      (function(){
+        const existing = "{{ object.filter_query_string|default_if_none:''|escapejs }}";
+        if (existing && !window.location.search.includes('filter_')) {
+          history.replaceState({}, '', window.location.pathname + '?' + existing + window.location.hash);
+        }
+      })();
+    </script>
+
+    {% include "filters/inline_filter_editor.html" %}
+
+    {# Hidden input that receives the URL filter params on submit. #}
+    {{ form.filter_query_string }}
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const form = document.querySelector('form');
+      if (!form) return;
+      form.addEventListener('submit', function () {
+        const params = new URLSearchParams(window.location.search);
+        const filterParams = new URLSearchParams();
+        for (const [k, v] of params) {
+          if (k.startsWith('filter_')) filterParams.append(k, v);
+        }
+        const hidden = document.getElementById('{{ form.filter_query_string.id_for_label }}');
+        if (hidden) hidden.value = filterParams.toString();
+      });
+    });
+  </script>
+{% endblock form %}

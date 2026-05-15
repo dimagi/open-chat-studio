@@ -155,7 +155,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         queryset = EvaluationRun.objects.filter(
             config=config,
             status=EvaluationRunStatus.COMPLETED,
-            type=EvaluationRunType.FULL,
+            type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
         )
 
         if date_range != "all":
@@ -186,9 +186,14 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return EvaluationRun.objects.filter(
-            config_id=self.kwargs["evaluation_pk"], type=EvaluationRunType.FULL
-        ).order_by("-created_at")
+        return (
+            EvaluationRun.objects.filter(
+                config_id=self.kwargs["evaluation_pk"],
+                type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+            )
+            .prefetch_related("scoped_messages")
+            .order_by("-created_at")
+        )
 
 
 class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

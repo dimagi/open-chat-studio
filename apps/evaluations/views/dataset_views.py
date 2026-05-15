@@ -30,6 +30,7 @@ from apps.evaluations.models import (
     EvaluationMessageContent,
 )
 from apps.evaluations.tables import (
+    DatasetAutoPopulationRuleTable,
     DatasetMessagesTable,
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
@@ -122,6 +123,10 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
         context["celery_job_id"] = self.object.job_id
+        context["auto_population_rules_table"] = DatasetAutoPopulationRuleTable(
+            self.object.auto_population_rules.select_related("source_experiment"),
+            request=self.request,
+        )
         return context
 
     def form_valid(self, form):

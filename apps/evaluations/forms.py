@@ -7,6 +7,7 @@ from django import forms
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
+from django.http import QueryDict
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import Tag
@@ -14,6 +15,7 @@ from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
+    DatasetAutoPopulationRule,
     DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
@@ -32,6 +34,7 @@ from apps.evaluations.tasks import (
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
@@ -130,6 +133,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "experiment_version",
             "run_generation",
             "base_experiment",
+            "auto_run_on_append",
         ]
         widgets = {
             "evaluators": EvaluatorCheckboxWidget(),
@@ -596,8 +600,12 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         filtered_session_ids_str = self.data.get("filtered_session_ids", "")
         filtered_session_ids = {sid for sid in filtered_session_ids_str.split(",") if sid}
 
+        # Session-mode datasets are allowed to start empty (they may be auto-populated
+        # later). Message-mode datasets still need at least one session to clone from.
         if not session_ids and not filtered_session_ids:
-            raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+            if self.cleaned_data.get("evaluation_mode") != EvaluationMode.SESSION:
+                raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+            return session_ids, filtered_session_ids
 
         intersection = session_ids & filtered_session_ids
         if intersection:
@@ -1004,3 +1012,46 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                     self._save_session_messages_clone(dataset)
 
         return dataset
+
+
+class DatasetAutoPopulationRuleForm(forms.ModelForm):
+    class Meta:
+        model = DatasetAutoPopulationRule
+        fields = ["source_experiment", "filter_query_string", "is_enabled"]
+        widgets = {
+            "filter_query_string": forms.HiddenInput(),
+        }
+
+    def __init__(self, *args, team, dataset, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.dataset = dataset
+        self.fields["source_experiment"].queryset = (
+            Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
+        )
+
+    def clean_filter_query_string(self):
+        raw = self.cleaned_data.get("filter_query_string", "")
+        if not raw:
+            return raw
+        try:
+            params = FilterParams(QueryDict(raw))
+        except Exception as e:  # noqa: BLE001 - surface as a form error
+            raise forms.ValidationError(f"Invalid filter query: {e}") from e
+        if not params.filters:
+            raise forms.ValidationError("Filter query is malformed: no complete column/operator/value triples found.")
+        return raw
+
+    def clean_source_experiment(self):
+        experiment = self.cleaned_data.get("source_experiment")
+        if experiment and experiment.team_id != self.team.id:
+            raise forms.ValidationError("Source chatbot must belong to your team.")
+        return experiment
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.team = self.team
+        instance.dataset = self.dataset
+        if commit:
+            instance.save()
+        return instance
