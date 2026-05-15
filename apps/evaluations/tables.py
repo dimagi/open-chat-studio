@@ -1,16 +1,18 @@
 from django.conf import settings
 from django.urls import reverse
+from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.models import (
+    DatasetAutoPopulationRule,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMode,
     EvaluationRun,
     Evaluator,
-    ExperimentVersionSelection,
 )
 from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
@@ -60,20 +62,28 @@ class EvaluationConfigTable(tables.Table):
         if not value.exists():
             return "—"
 
-        items = []
+        rows = []
         for evaluator in value.all():
             type_info = get_evaluator_type_display(evaluator.type)
-            icon_html = f'<i class="fa {type_info["icon"]}"></i> ' if type_info["icon"] else ""
-            items.append(f"<li>{icon_html}{evaluator.name} ({type_info['label']})</li>")
+            icon_class = type_info.get("icon") or ""
+            label = type_info.get("label") or ""
+            # icon_class and label come from get_evaluator_type_display (developer-controlled),
+            # safe to interpolate. evaluator.name is user-controlled — format_html escapes it.
+            rows.append((icon_class, evaluator.name, label))
 
-        return mark_safe(f'<ul class="list-disc list-inside">{"".join(items)}</ul>')
+        items = format_html_join(
+            "",
+            "<li>{}{} ({})</li>",
+            ((format_html('<i class="fa {}"></i> ', icon) if icon else "", name, label) for icon, name, label in rows),
+        )
+        return format_html('<ul class="list-disc list-inside">{}</ul>', items)
 
     def render_generation_chatbot(self, record):
         if not record.base_experiment:
             return "—"
-        if record.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
+        if record.version_selection_type == VersionSelectionRule.LATEST_WORKING:
             return f"{record.base_experiment.name} (Latest Working)"
-        elif record.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
+        elif record.version_selection_type == VersionSelectionRule.LATEST_PUBLISHED:
             return f"{record.base_experiment.name} (Latest Published)"
         elif record.experiment_version:
             version_display = (
@@ -110,6 +120,23 @@ class EvaluationRunTable(tables.Table):
         template_name="evaluations/evaluation_run_status_column.html", verbose_name="Status", orderable=False
     )
 
+    type = TemplateColumn(
+        # Use `.all|length` (not `.count`) so the prefetch cache wired up by
+        # EvaluationRunTableView.get_queryset is used; `.count` would issue a
+        # fresh query per row (N+1).
+        template_code=(
+            "{% if record.type == 'delta' %}"
+            "<span class='badge badge-info'>delta · {{ record.scoped_messages.all|length }}</span>"
+            "{% elif record.type == 'preview' %}"
+            "<span class='badge'>preview</span>"
+            "{% else %}"
+            "<span class='badge badge-ghost'>full</span>"
+            "{% endif %}"
+        ),
+        verbose_name="Type",
+        orderable=False,
+    )
+
     results = columns.Column(accessor="results__count", verbose_name="Result count", orderable=False)
 
     actions = actions.ActionsColumn(
@@ -128,7 +155,7 @@ class EvaluationRunTable(tables.Table):
 
     class Meta:
         model = EvaluationRun
-        fields = ("created_at", "status", "finished_at", "results", "actions")
+        fields = ("created_at", "type", "status", "finished_at", "results", "actions")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No runs found."
@@ -289,6 +316,54 @@ class EvaluationSessionsSelectionTable(tables.Table):
         attrs = {"class": "table w-full"}
         orderable = False
         empty_text = "No sessions available for selection."
+
+
+class DatasetAutoPopulationRuleTable(tables.Table):
+    source_experiment = columns.Column(verbose_name="Source chatbot", orderable=False)
+    is_enabled = columns.BooleanColumn(verbose_name="Enabled", orderable=False, yesno="Yes,No")
+    last_run_at = columns.DateTimeColumn(verbose_name="Last run", orderable=False)
+    last_run_status = columns.Column(
+        accessor="get_last_run_status_display",
+        verbose_name="Status",
+        orderable=False,
+    )
+    last_error = columns.Column(verbose_name="Last error", orderable=False)
+
+    def render_last_error(self, value):
+        if not value:
+            return "—"
+        return format_html('<span class="text-error">{}</span>', value[:60])
+
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(
+                url_name="evaluations:auto_population_rule_edit",
+                url_factory=lambda url_name, request, record, _: reverse(
+                    url_name, args=[request.team.slug, record.dataset_id, record.id]
+                ),
+            ),
+            actions.AjaxAction(
+                "evaluations:auto_population_rule_toggle",
+                title="Toggle enabled",
+                icon_class="fa-solid fa-pause",
+                hx_method="post",
+            ),
+            actions.AjaxAction(
+                "evaluations:auto_population_rule_delete",
+                title="Delete",
+                icon_class="fa-solid fa-trash",
+                hx_method="delete",
+                confirm_message="Delete this rule?",
+            ),
+        ]
+    )
+
+    class Meta:
+        model = DatasetAutoPopulationRule
+        fields = ("source_experiment", "is_enabled", "last_run_at", "last_run_status", "last_error", "actions")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No auto-population rules configured."
 
 
 def _row_class_factory(table, record):

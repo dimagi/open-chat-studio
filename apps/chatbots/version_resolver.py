@@ -1,0 +1,96 @@
+"""Resolve a Chatbot Version from a family + a Version Selection Rule.
+
+See `CONTEXT.md` for the domain vocabulary. The rule values mirror the strings
+that already live in `evaluations_evaluationconfig.version_selection_type`, so
+this enum can be moved without a data migration.
+
+`VersionSelectionRule` replaced `apps.evaluations.models.ExperimentVersionSelection`
+(same string values, no DB migration). All imports now resolve here.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from django.db import models
+
+if TYPE_CHECKING:
+    from apps.experiments.models import Experiment
+
+
+class VersionSelectionRule(models.TextChoices):
+    """How a caller asks for a Chatbot Version given a family head."""
+
+    SPECIFIC = "specific", "Specific Version"
+    LATEST_WORKING = "latest_working", "Latest Working Version"
+    LATEST_PUBLISHED = "latest_published", "Latest Published Version"
+
+
+class VersionNotFound(ValueError):
+    """SPECIFIC was requested but no version with that version_number exists in the family."""
+
+
+class NoPublishedVersion(ValueError):
+    """LATEST_PUBLISHED was requested but the family has no Published Version."""
+
+
+def resolve_chatbot_version(
+    family: Experiment,
+    rule: VersionSelectionRule | str,
+    version_number: int | None = None,
+) -> Experiment:
+    """Return the Chatbot Version specified by `rule` within `family`.
+
+    `family` must be the family-head Experiment (i.e. `working_version_id IS NULL`).
+    For SPECIFIC, `version_number` is the small int stored on `Experiment.version_number`
+    (not a primary key). Raises `VersionNotFound` or `NoPublishedVersion` on failure
+    modes — never returns None.
+    """
+    rule = VersionSelectionRule(rule)
+
+    if not family.is_working_version:
+        raise ValueError(
+            f"resolve_chatbot_version() requires a family-head Experiment, "
+            f"got snapshot {family!r} (working_version_id={family.working_version_id})"
+        )
+
+    if rule == VersionSelectionRule.LATEST_WORKING:
+        return family.get_working_version()
+    if rule == VersionSelectionRule.LATEST_PUBLISHED:
+        return _resolve_latest_published(family)
+    if rule == VersionSelectionRule.SPECIFIC:
+        return _resolve_specific(family, version_number)
+
+    raise ValueError(f"Unknown rule: {rule}")  # defensive; enum values exhausted above
+
+
+def _resolve_latest_published(family: Experiment) -> Experiment:
+    published = family.versions.filter(is_default_version=True).first()
+    if published is None:
+        raise NoPublishedVersion(f"Chatbot family {family.id} has no Published Version")
+    return published
+
+
+def _resolve_specific(family: Experiment, version_number: int | None) -> Experiment:
+    if version_number is None:
+        raise VersionNotFound("SPECIFIC rule requires a version_number")
+    if family.version_number == version_number:
+        return family
+    try:
+        return family.versions.get(version_number=version_number)
+    except family.versions.model.DoesNotExist:
+        raise VersionNotFound(f"Family {family.id} has no version with version_number={version_number}") from None
+
+
+def resolve_published_or_working(family: Experiment) -> Experiment:
+    """Resolve to the Published Version, falling back to the Working Version if absent.
+
+    Mirrors the legacy `Experiment.default_version` semantics for inbound entry points
+    (channel webhooks, public API) that must keep working for unpublished Chatbots.
+    Strict callers should use `resolve_chatbot_version` directly with LATEST_PUBLISHED
+    and handle `NoPublishedVersion` themselves.
+    """
+    try:
+        return resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
+    except NoPublishedVersion:
+        return resolve_chatbot_version(family, VersionSelectionRule.LATEST_WORKING)

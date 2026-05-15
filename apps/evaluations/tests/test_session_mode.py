@@ -10,7 +10,7 @@ from apps.evaluations.tasks import create_dataset_from_sessions_task
 from apps.evaluations.utils import make_session_evaluation_messages
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 from apps.utils.factories.traces import TraceFactory
 
 
@@ -284,16 +284,19 @@ class TestSessionModeDuplicateDetection:
 @pytest.mark.django_db()
 class TestDatasetFormEvaluationMode:
     def test_create_form_includes_evaluation_mode_field(self):
-        team = TeamFactory.create()
-        form = EvaluationDatasetForm(team=team)
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        form = EvaluationDatasetForm(team=team, user=user)
         assert "evaluation_mode" in form.fields
 
     def test_create_form_session_mode_only_allows_clone(self):
         """When mode is session, only clone is valid."""
-        team = TeamFactory.create()
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
 
         form = EvaluationDatasetForm(
             team=team,
+            user=user,
             data={
                 "name": "Test Session Dataset",
                 "evaluation_mode": "session",
@@ -340,6 +343,43 @@ class TestDatasetFormEvaluationMode:
 
         mock_session_clone.assert_called_once()
         mock_clone.assert_not_called()
+
+    def test_create_form_session_mode_allows_zero_sessions(self):
+        """Session-mode datasets may be created empty (e.g. to be auto-populated later)."""
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+
+        form = EvaluationDatasetForm(
+            team=team,
+            user=user,
+            data={
+                "name": "Empty Session Dataset",
+                "evaluation_mode": "session",
+                "mode": "clone",
+                "session_ids": "",
+                "filtered_session_ids": "",
+            },
+        )
+        assert form.is_valid(), form.errors
+
+    def test_create_form_message_mode_still_requires_sessions(self):
+        """Message-mode datasets in clone mode still require at least one session."""
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+
+        form = EvaluationDatasetForm(
+            team=team,
+            user=user,
+            data={
+                "name": "Empty Message Dataset",
+                "evaluation_mode": "message",
+                "mode": "clone",
+                "session_ids": "",
+                "filtered_session_ids": "",
+            },
+        )
+        assert not form.is_valid()
+        assert any("at least one session" in str(e).lower() for e in form.errors.get("__all__", []))
 
     def test_edit_form_message_mode_uses_message_clone_task(self):
         """Editing a message-mode dataset calls _save_session_messages_clone, not _save_sessions_clone."""

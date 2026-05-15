@@ -91,7 +91,7 @@ class WebChannel(ChannelBase):
         )
 
     @classmethod
-    def start_new_session(
+    def start_new_session(  # ty: ignore[invalid-method-override]
         cls,
         working_experiment: Experiment,
         participant_identifier: str,

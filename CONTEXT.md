@@ -25,10 +25,14 @@ _Avoid_: Default Version (the underlying field is `is_default_version`, but new 
 The DAG of nodes that defines a Chatbot's runtime behaviour, edited in a visual flow editor. Every Chatbot has one Pipeline.
 
 **Pipeline Version**:
-An immutable snapshot of a Pipeline. Each Chatbot Version owns exactly one Pipeline Version (snapshot-paired, 1:1).
+An immutable snapshot of a Pipeline. Each Chatbot Version owns exactly one Pipeline Version (snapshot-paired, 1:1). A Pipeline Version is **not** independently published — there is no Published Pipeline Version concept. Whichever Pipeline Version is paired with the Published Chatbot Version is the one external Channels execute.
 
 **Pipeline Node**:
 A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Assistant, Router, Custom Action, …) that determines its behaviour, plus a `params` JSON blob configured via the visual editor. Nodes are independently versioned alongside their Pipeline.
+
+**Version Selection Rule**:
+The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do I want?". Three values: **Specific** (pinned by `version_number` within the family), **Latest Working**, **Latest Published**. Used by Evaluation Configs, channel entry-point tasks, the API entry point, and the web widget. Resolved at the moment of use against the family head.
+_Avoid_: "version selection type" (the legacy field name on `EvaluationConfig`).
 
 ### Runtime
 
@@ -100,7 +104,7 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - A **Chatbot** has many **Chatbot Versions** (one per snapshot).
 - Each **Chatbot** has exactly one **Working Version** and at most one **Published Version**.
 - The **Working Version** can also be the **Published Version** before any snapshots have been promoted.
-- A **Pipeline** has many **Pipeline Versions**. Working/Published Version semantics apply identically.
+- A **Pipeline** has many **Pipeline Versions**. Working Version semantics apply identically; **Published Version does not** — Published-ness lives on the Chatbot Version, and the paired Pipeline Version inherits it.
 - A **Chatbot Version** owns exactly one **Pipeline Version** (1:1, snapshot-paired): publishing a new Chatbot Version creates a new Pipeline Version alongside it.
 - A **Session** is bound to one **Chatbot Version**, one **Participant**, and (optionally) one **Channel**.
 - A **Channel** stores an FK to a Chatbot's family head; at message-receipt time it routes to that Chatbot's **Published Version**, and the resulting Session is bound to that version. The web widget and API can override with an explicit version number, which is how teams "chat with the Working Version" for testing.

@@ -20,6 +20,9 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.aggregation import compute_aggregates_for_run
+from apps.evaluations.auto_population import (
+    auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
+)
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
@@ -237,11 +240,13 @@ def run_evaluation_task(evaluation_run_id):
         with current_team(evaluation_run.team):
             config = evaluation_run.config
             evaluators = list(cast(Iterable[Evaluator], config.evaluators.all()))
-            message_queryset = config.dataset.messages.all()
+
             if evaluation_run.type == EvaluationRunType.PREVIEW:
-                messages = list(message_queryset[:PREVIEW_SAMPLE_SIZE])
+                messages = list(config.dataset.messages.all()[:PREVIEW_SAMPLE_SIZE])
+            elif evaluation_run.type == EvaluationRunType.DELTA:
+                messages = list(evaluation_run.scoped_messages.all())
             else:
-                messages = list(message_queryset)
+                messages = list(config.dataset.messages.all())
 
             if len(evaluators) == 0 or len(messages) == 0:
                 evaluation_run.job_id = ""

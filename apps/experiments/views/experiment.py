@@ -48,6 +48,7 @@ from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.datamodels import Attachment, AttachmentType
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
 )
@@ -269,7 +270,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
         # old links dont have uuids
         raise Http404() from None
 
-    experiment_version = experiment.default_version
+    experiment_version = resolve_published_or_working(experiment)
     if not experiment_version.is_public:
         raise Http404
 
@@ -352,7 +353,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         # old links dont have uuids
         raise Http404() from None
 
-    experiment_version = experiment.default_version
+    experiment_version = resolve_published_or_working(experiment)
     if not experiment_version.is_public:
         raise Http404
 
@@ -465,8 +466,8 @@ def _record_consent_and_redirect(
 
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    default_version = request.experiment.default_version
-    consent = default_version.consent_form
+    published_version = resolve_published_or_working(request.experiment)
+    consent = published_version.consent_form
 
     initial = {
         "participant_id": request.experiment_session.participant.id,
@@ -488,15 +489,15 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
 
     consent_notice = consent.get_rendered_content()
     version_specific_vars = {
-        "experiment_name": default_version.name,
-        "experiment_description": default_version.description,
+        "experiment_name": published_version.name,
+        "experiment_description": published_version.description,
     }
     return TemplateResponse(
         request,
         "experiments/start_experiment_session.html",
         {
             "active_tab": "experiments",
-            "experiment": default_version,
+            "experiment": published_version,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
             **version_specific_vars,
@@ -521,12 +522,12 @@ def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, ses
     else:
         form = SurveyCompletedForm()
 
-    default_version = request.experiment.default_version
+    published_version = resolve_published_or_working(request.experiment)
     experiment_session = request.experiment_session
     version_specific_vars = {
-        "experiment_name": default_version.name,
-        "experiment_description": default_version.description,
-        "pre_survey_link": experiment_session.get_pre_survey_link(default_version),
+        "experiment_name": published_version.name,
+        "experiment_description": published_version.description,
+        "pre_survey_link": experiment_session.get_pre_survey_link(published_version),
     }
     return TemplateResponse(
         request,
@@ -782,7 +783,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
     form = None
     survey_link = None
     survey_text = None
-    experiment_version = request.experiment.default_version
+    experiment_version = resolve_published_or_working(request.experiment)
     if request.method == "POST":
         # no validation needed
         request.experiment_session.status = SessionStatus.COMPLETE

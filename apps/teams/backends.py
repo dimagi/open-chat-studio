@@ -100,6 +100,7 @@ CONTENT_TYPES = {
         "evaluationrunaggregate",
         "appliedtag",
         "evaluatortagrule",
+        "datasetautopopulationrule",
     ],
     "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
     "trace": ["trace"],
