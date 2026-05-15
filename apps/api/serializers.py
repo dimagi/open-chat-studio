@@ -300,7 +300,7 @@ class TriggerBotMessageRequest(serializers.Serializer):
         default=dict,
     )
 
-    def validate(self, data):
+    def validate(self, data):  # ty: ignore[invalid-method-override]
         has_prompt = bool(data.get("prompt_text"))
         has_message = bool(data.get("message_text"))
         if has_prompt and has_message:

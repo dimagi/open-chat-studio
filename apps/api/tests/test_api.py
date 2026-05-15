@@ -555,7 +555,7 @@ def _setup_participant_data(
     )
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=True)
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @patch("apps.chat.channels.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
@@ -636,7 +636,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method):
     assert last_message.content == "Time to take a break an juice some fruit"
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=True)
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
@@ -718,7 +718,7 @@ def test_generate_bot_message_auto_creates_participant(ConnectClient, experiment
         assert not ExperimentSession.objects.filter(participant=participant, experiment=experiment).exists()
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=True)
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_generate_bot_message_for_email_channel(experiment):
     """Regression: trigger_bot_message_task must work for the v2 EmailChannel.
@@ -767,7 +767,7 @@ def test_generate_bot_message_for_email_channel(experiment):
 # ── trigger_bot direct-message (message_text) tests ──────────────────────────
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=True)
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
@@ -817,7 +817,7 @@ def test_trigger_bot_direct_message(ConnectClientChat, ConnectClientView, experi
     assert saved_msg.content == message
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=True)
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_trigger_bot_direct_message_for_email_channel(experiment):
     """
