@@ -109,7 +109,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.send_text(text, recipient)
         except Exception as e:
-            logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
                 context="text message",
@@ -119,7 +118,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.send_voice(audio, recipient)
         except Exception as e:
-            logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
                 context="voice message",
@@ -129,7 +127,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.flush()
         except Exception as e:
-            logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
                 context="flush",
@@ -139,7 +136,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.send_file(file, recipient, ctx.experiment_session.id)
         except Exception as e:
-            logger.exception(e)
             ctx.sending_exceptions.append(
                 FileDeliveryFailure(
                     e,
