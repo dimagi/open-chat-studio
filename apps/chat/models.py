@@ -131,20 +131,17 @@ class ChatMessageMetadataKeys(StrEnum):
     # History / compression
     COMPRESSION_MARKER = "compression_marker"
 
+    @classmethod
+    def internal_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
+        """Metadata keys that should be excluded from the API response."""
+        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT})
+
 
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """
 
-    # Metadata keys that should be excluded from the API response
-    INTERNAL_METADATA_KEYS = frozenset(
-        {
-            ChatMessageMetadataKeys.OPENAI_RUN_ID,
-            ChatMessageMetadataKeys.OPENAI_FILE_IDS,
-            ChatMessageMetadataKeys.OPENAI_THREAD_CHECKPOINT,
-        }
-    )
     # override from BaseModel to allow setting created_at in evals
     created_at = models.DateTimeField(default=timezone.now)
 
