@@ -261,6 +261,40 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
         )
 
 
+def collapse_consecutive_text_messages(messages: list[TurnWhatsappMessage]) -> list[TurnWhatsappMessage]:
+    """Merge consecutive text messages from the same participant into a single message.
+
+    WhatsApp webhooks frequently batch multiple messages from one sender (the user
+    types several lines in quick succession before the webhook fires). Each message
+    in the batch is a separate conversational fragment; replying to each one
+    independently produces redundant bot turns. Concatenating them with ``"\\n\\n"``
+    treats the burst as a single user turn — the same convention used by the
+    CommCare Connect handler.
+
+    Non-text messages (audio, images, etc.) are preserved as-is and break the run,
+    so a text → audio → text sequence yields three separate messages. The merged
+    text message inherits the *last* fragment's metadata (e.g. ``whatsapp_message_id``)
+    so downstream features like the typing indicator point at the most recent message.
+    """
+    collapsed: list[TurnWhatsappMessage] = []
+    for msg in messages:
+        previous = collapsed[-1] if collapsed else None
+        is_mergeable_text = (
+            msg.content_type == MESSAGE_TYPES.TEXT
+            and previous is not None
+            and previous.content_type == MESSAGE_TYPES.TEXT
+            and previous.participant_id == msg.participant_id
+        )
+        if is_mergeable_text:
+            merged_text = (
+                f"{previous.message_text}\n\n{msg.message_text}" if previous.message_text else msg.message_text
+            )
+            collapsed[-1] = msg.model_copy(update={"message_text": merged_text})
+        else:
+            collapsed.append(msg)
+    return collapsed
+
+
 class FacebookMessage(BaseMessage):
     """
     A wrapper class for user messages coming from Facebook

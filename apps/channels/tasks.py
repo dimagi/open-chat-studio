@@ -16,6 +16,7 @@ from apps.channels.datamodels import (
     TelegramMessage,
     TurnWhatsappMessage,
     TwilioMessage,
+    collapse_consecutive_text_messages,
 )
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
@@ -120,7 +121,7 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
-    messages = TurnWhatsappMessage.parse_all(message_data)
+    messages = collapse_consecutive_text_messages(TurnWhatsappMessage.parse_all(message_data))
     if not messages:
         return
     experiment_channel = get_experiment_channel(
@@ -202,7 +203,7 @@ def get_experiment_channel_base_query(platform, **query_kwargs):
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: dict):
-    messages = MetaCloudAPIMessage.parse_all(message_data)
+    messages = collapse_consecutive_text_messages(MetaCloudAPIMessage.parse_all(message_data))
     if not messages:
         return
     experiment_channel = (

@@ -5,7 +5,12 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import (
+    MetaCloudAPIMessage,
+    TurnWhatsappMessage,
+    TwilioMessage,
+    collapse_consecutive_text_messages,
+)
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
@@ -208,15 +213,43 @@ class TestTurnio:
         assert [m.message_text for m in messages] == ["Hi there!", "Are you ready?"]
         assert all(m.participant_id == "27456897512" for m in messages)
 
+    def test_collapse_preserves_non_text_messages_between_text_runs(self):
+        # text → text → audio → text from the same participant: the leading text run
+        # gets merged, the audio stays separate, and the trailing text is on its own.
+        messages = [
+            TurnWhatsappMessage(participant_id="p1", message_text="Hi", content_type="text"),
+            TurnWhatsappMessage(participant_id="p1", message_text="there", content_type="text"),
+            TurnWhatsappMessage(participant_id="p1", message_text="", content_type="audio", media_id="audio-1"),
+            TurnWhatsappMessage(participant_id="p1", message_text="back", content_type="text"),
+        ]
+        collapsed = collapse_consecutive_text_messages(messages)
+        assert [(m.message_text, m.content_type, m.media_id) for m in collapsed] == [
+            ("Hi\n\nthere", MESSAGE_TYPES.TEXT, None),
+            ("", MESSAGE_TYPES.VOICE, "audio-1"),
+            ("back", MESSAGE_TYPES.TEXT, None),
+        ]
+
+    def test_collapse_does_not_merge_across_participants(self):
+        messages = [
+            TurnWhatsappMessage(participant_id="p1", message_text="A", content_type="text"),
+            TurnWhatsappMessage(participant_id="p2", message_text="B", content_type="text"),
+            TurnWhatsappMessage(participant_id="p1", message_text="C", content_type="text"),
+        ]
+        collapsed = collapse_consecutive_text_messages(messages)
+        assert [(m.participant_id, m.message_text) for m in collapsed] == [
+            ("p1", "A"),
+            ("p2", "B"),
+            ("p1", "C"),
+        ]
+
     @pytest.mark.django_db()
     @patch("apps.chat.channels.ChannelBase.new_user_message")
-    def test_all_messages_in_batch_are_processed(self, new_user_message_mock, turnio_whatsapp_channel):
-        """A Turn.io webhook delivering multiple messages must hand each to the channel."""
+    def test_consecutive_text_messages_are_concatenated(self, new_user_message_mock, turnio_whatsapp_channel):
+        """A Turn.io webhook with multiple text messages from one sender should be merged into one turn."""
         incoming_message = turnio_messages.multi_message()
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        assert new_user_message_mock.call_count == 2
-        processed_texts = [call.args[0].message_text for call in new_user_message_mock.call_args_list]
-        assert processed_texts == ["Hi there!", "Are you ready?"]
+        assert new_user_message_mock.call_count == 1
+        assert new_user_message_mock.call_args.args[0].message_text == "Hi there!\n\nAre you ready?"
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
@@ -365,21 +398,19 @@ class TestMetaCloudApi:
 
     @pytest.mark.django_db()
     @patch("apps.chat.channels.ChannelBase.new_user_message")
-    def test_all_messages_in_batch_are_processed(self, new_user_message_mock, meta_cloud_api_whatsapp_channel):
-        """A Meta Cloud API webhook delivering multiple messages must hand each to the channel."""
+    def test_consecutive_text_messages_are_concatenated(self, new_user_message_mock, meta_cloud_api_whatsapp_channel):
+        """A Meta Cloud API webhook with multiple text messages from one sender should be merged into one turn.
+
+        The merged message keeps the most recent whatsapp_message_id so features
+        like the typing indicator point at the latest message.
+        """
         incoming_message = meta_cloud_api_messages.multi_message_value()
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.team.slug,
             message_data=incoming_message,
         )
-        assert new_user_message_mock.call_count == 3
-        processed = [
-            (call.args[0].message_text, call.args[0].whatsapp_message_id)
-            for call in new_user_message_mock.call_args_list
-        ]
-        assert processed == [
-            ("Hello", "wamid.first"),
-            ("How are you?", "wamid.second"),
-            ("Still there?", "wamid.third"),
-        ]
+        assert new_user_message_mock.call_count == 1
+        merged = new_user_message_mock.call_args.args[0]
+        assert merged.message_text == "Hello\n\nHow are you?\n\nStill there?"
+        assert merged.whatsapp_message_id == "wamid.third"
