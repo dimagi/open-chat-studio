@@ -225,7 +225,11 @@ class TurnWhatsappMessage(BaseMessage):
         silently dropping messages.
         """
         contacts = message_data.get("contacts", [])
-        return [cls._parse_single(message, contacts) for message in message_data.get("messages", [])]
+        raw_messages = message_data.get("messages", [])
+        if not raw_messages:
+            logger.warning("WhatsApp webhook payload contained no messages")
+            return []
+        return [cls._parse_single(message, contacts) for message in raw_messages]
 
     @classmethod
     def parse(cls, message_data: dict) -> "TurnWhatsappMessage":
