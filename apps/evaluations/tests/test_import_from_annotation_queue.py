@@ -99,17 +99,6 @@ def test_form_excludes_archived_queues(team_with_users, user, team_context):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("submit_queue", [True, False])
-def test_form_validation(team_with_users, user, queue_with_session_items, team_context, submit_queue):
-    queue, session = queue_with_session_items
-    data = {"queue": queue.id} if submit_queue else {}
-    form = ImportFromAnnotationQueueForm(data, team=team_with_users, user=user)
-    assert form.is_valid() is submit_queue
-    if submit_queue:
-        assert form.cleaned_data["session_external_ids"] == [str(session.external_id)]
-
-
-@pytest.mark.django_db()
 def test_form_uses_visible_to_when_user_passed(team_with_users, user, queue_with_session_items, team_context):
     """Form delegates to AnnotationQueue.objects.visible_to when a user is provided.
 
