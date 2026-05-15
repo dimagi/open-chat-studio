@@ -294,8 +294,55 @@ jobs:
             9. Apply the `claude` and `auto-models` labels to the PR if they exist.
             10. If after dedup there is nothing to add, comment-only outcome: do NOT
                 open an empty PR — instead print a short summary to stdout and exit.
+            11. ALWAYS write a decision report to `./decision_report.md` before
+                exiting, regardless of outcome (PR opened, nothing to add, or
+                partial). Use this exact structure:
+
+                ```markdown
+                # Auto Update Models — Decision Report
+
+                **Run date (UTC):** <YYYY-MM-DD HH:MM>
+                **Candidates considered:** <count>
+                **Outcome:** <PR opened | Nothing to add | Error>
+                **PR:** <PR URL if opened, else "n/a">
+
+                ## Per-model decisions
+
+                ### `<model-id>` (org: `<org>`)
+                - **Verdict:** Added | Skipped | Needs follow-up
+                - **Mapped providers:** <e.g. openai, azure>  (if added)
+                - **Reason:** <one-sentence rationale — why added/skipped, or
+                  what info was missing>
+                - **Source:** <llm-stats.com URL from payload>
+
+                <repeat for every candidate in matched_models.json>
+
+                ## Notes
+                <any other context worth surfacing — sources consulted, edge
+                cases, decisions deferred to follow-up, etc.>
+                ```
+
+                Every candidate from `matched_models.json` MUST appear in the
+                "Per-model decisions" section with an explicit verdict and
+                reason — including skips and dedup matches. This file is the
+                audit trail for the run.
 
             Branch: ${{ steps.branch.outputs.branch_name }} (already created and
             checked out).
           claude_args: |
             --allowedTools "Bash(uv run:*),Bash(uv sync:*),Bash(python manage.py:*),Bash(npm run lint:*),Bash(ls:*),Bash(cat:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Write,Edit,Glob,Grep,WebFetch"
+
+      - name: Append decision report to step summary
+        if: always()
+        run: |
+          if [ -f decision_report.md ]; then
+            cat decision_report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "# Auto Update Models — Decision Report"
+              echo ""
+              echo "**No decision report was produced.** Claude Code exited without"
+              echo "writing \`decision_report.md\`. Check the Claude step logs above"
+              echo "for what happened."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
