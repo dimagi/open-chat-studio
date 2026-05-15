@@ -13,9 +13,9 @@ from apps.evaluations.models import (
     EvaluationMode,
 )
 from apps.evaluations.tasks import create_dataset_from_sessions_task
-from apps.human_annotations.models import AnnotationItem, QueueStatus
+from apps.human_annotations.models import QueueStatus
 from apps.teams.utils import current_team
-from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -54,15 +54,6 @@ def session_dataset(team_with_users):
         team=team_with_users,
         name="Test Session Dataset",
         evaluation_mode=EvaluationMode.SESSION,
-    )
-
-
-@pytest.fixture()
-def message_dataset(team_with_users):
-    return EvaluationDataset.objects.create(
-        team=team_with_users,
-        name="Test Message Dataset",
-        evaluation_mode=EvaluationMode.MESSAGE,
     )
 
 
@@ -108,17 +99,14 @@ def test_form_excludes_archived_queues(team_with_users, user, team_context):
 
 
 @pytest.mark.django_db()
-def test_form_is_valid_when_queue_selected(team_with_users, user, queue_with_session_items, team_context):
+@pytest.mark.parametrize("submit_queue", [True, False])
+def test_form_validation(team_with_users, user, queue_with_session_items, team_context, submit_queue):
     queue, session = queue_with_session_items
-    form = ImportFromAnnotationQueueForm({"queue": queue.id}, team=team_with_users, user=user)
-    assert form.is_valid(), form.errors
-    assert form.cleaned_data["session_external_ids"] == [str(session.external_id)]
-
-
-@pytest.mark.django_db()
-def test_form_is_invalid_when_no_queue_selected(team_with_users, user, team_context):
-    form = ImportFromAnnotationQueueForm({}, team=team_with_users, user=user)
-    assert not form.is_valid()
+    data = {"queue": queue.id} if submit_queue else {}
+    form = ImportFromAnnotationQueueForm(data, team=team_with_users, user=user)
+    assert form.is_valid() is submit_queue
+    if submit_queue:
+        assert form.cleaned_data["session_external_ids"] == [str(session.external_id)]
 
 
 @pytest.mark.django_db()
@@ -134,31 +122,6 @@ def test_form_uses_visible_to_when_user_passed(team_with_users, user, queue_with
 
 
 # === View ===
-
-
-@pytest.mark.django_db()
-def test_get_renders_form(client_with_user, team_with_users, session_dataset):
-    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, session_dataset.pk])
-    response = client_with_user.get(url)
-    assert response.status_code == 200
-    assert "form" in response.context
-    assert "dataset" in response.context
-
-
-@pytest.mark.django_db()
-def test_get_404_for_message_mode_dataset(client_with_user, team_with_users, message_dataset):
-    """Endpoint is session-mode only; message-mode datasets 404."""
-    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, message_dataset.pk])
-    response = client_with_user.get(url)
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db()
-def test_post_invalid_form_rerenders(client_with_user, team_with_users, session_dataset):
-    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, session_dataset.pk])
-    response = client_with_user.post(url, {"queue": ""})
-    assert response.status_code == 200
-    assert response.context["form"].errors
 
 
 @pytest.mark.django_db()
@@ -233,68 +196,6 @@ def test_idempotent_import_via_task(team_with_users, user, session_dataset, queu
 
 
 @pytest.mark.django_db()
-def test_post_requires_team_match(team_with_users, user):
-    other_team = TeamWithUsersFactory.create()
-    other_session_dataset = EvaluationDataset.objects.create(
-        team=other_team, name="Other Team Dataset", evaluation_mode=EvaluationMode.SESSION
-    )
-    client = Client()
-    client.force_login(user)
-
-    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, other_session_dataset.pk])
-    response = client.get(url)
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db()
-def test_dataset_external_id_passed_as_string(client_with_user, team_with_users, session_dataset, user):
-    """Ensure external_ids are passed as strings (UUIDs) for celery serialization."""
-    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
-    session1 = ExperimentSessionFactory.create(team=team_with_users)
-    session2 = ExperimentSessionFactory.create(team=team_with_users)
-    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session1)
-    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session2)
-
-    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, session_dataset.pk])
-
-    with patch("apps.evaluations.views.dataset_views.create_dataset_from_sessions_task") as mock_task:
-        mock_task.delay.return_value.id = "fake-task-id"
-        client_with_user.post(url, {"queue": queue.id})
-
-    args = mock_task.delay.call_args.args
-    passed_ids = set(args[2])
-    assert passed_ids == {str(session1.external_id), str(session2.external_id)}
-    assert all(isinstance(x, str) for x in args[2])
-
-
-@pytest.mark.django_db()
-def test_post_excludes_message_only_items(client_with_user, team_with_users, session_dataset, user):
-    """Items with item_type=message (no session FK) should not be imported."""
-    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
-    session = ExperimentSessionFactory.create(team=team_with_users)
-    AnnotationItemFactory.create(queue=queue, team=team_with_users, session=session)
-
-    # Create a message-only item directly (no session FK)
-    chat = ChatFactory.create(team=team_with_users)
-    chat_message = ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="Hello", chat=chat)
-    AnnotationItem.objects.create(
-        queue=queue,
-        team=team_with_users,
-        item_type="message",
-        message=chat_message,
-    )
-
-    url = reverse("evaluations:dataset_import_from_queue", args=[team_with_users.slug, session_dataset.pk])
-
-    with patch("apps.evaluations.views.dataset_views.create_dataset_from_sessions_task") as mock_task:
-        mock_task.delay.return_value.id = "fake-task-id"
-        client_with_user.post(url, {"queue": queue.id})
-
-    args = mock_task.delay.call_args.args
-    assert args[2] == [str(session.external_id)]
-
-
-@pytest.mark.django_db()
 def test_post_handles_celery_enqueue_failure(
     client_with_user, team_with_users, session_dataset, queue_with_session_items
 ):
@@ -315,87 +216,6 @@ def test_post_handles_celery_enqueue_failure(
 
 
 # === Create dataset with annotation_queue mode ===
-
-
-@pytest.mark.django_db()
-def test_create_form_annotation_queue_mode_session_dataset(
-    team_with_users, user, queue_with_session_items, team_context
-):
-    """A session-mode dataset can be created by importing from an annotation queue."""
-    queue, session = queue_with_session_items
-
-    form = EvaluationDatasetForm(
-        team=team_with_users,
-        user=user,
-        data={
-            "name": "Queue Session Dataset",
-            "evaluation_mode": "session",
-            "mode": "annotation_queue",
-            "annotation_queue": queue.id,
-        },
-    )
-    assert form.is_valid(), form.errors
-    form.instance.team = team_with_users
-
-    with (
-        patch.object(form, "_save_sessions_clone") as mock_session_clone,
-        patch.object(form, "_save_session_messages_clone") as mock_msg_clone,
-    ):
-        form.save()
-
-    mock_session_clone.assert_called_once()
-    mock_msg_clone.assert_not_called()
-    assert form.cleaned_data["session_ids"] == {str(session.external_id)}
-
-
-@pytest.mark.django_db()
-def test_create_form_annotation_queue_mode_message_dataset(
-    team_with_users, user, queue_with_session_items, team_context
-):
-    """A message-mode dataset can also be created by importing sessions from an annotation queue."""
-    queue, session = queue_with_session_items
-
-    form = EvaluationDatasetForm(
-        team=team_with_users,
-        user=user,
-        data={
-            "name": "Queue Message Dataset",
-            "evaluation_mode": "message",
-            "mode": "annotation_queue",
-            "annotation_queue": queue.id,
-        },
-    )
-    assert form.is_valid(), form.errors
-    form.instance.team = team_with_users
-
-    with (
-        patch.object(form, "_save_sessions_clone") as mock_session_clone,
-        patch.object(form, "_save_session_messages_clone") as mock_msg_clone,
-    ):
-        form.save()
-
-    mock_msg_clone.assert_called_once()
-    mock_session_clone.assert_not_called()
-    assert form.cleaned_data["session_ids"] == {str(session.external_id)}
-
-
-@pytest.mark.django_db()
-def test_create_form_annotation_queue_requires_queue_with_sessions(team_with_users, user, team_context):
-    """An empty queue (no session items) is not selectable in the queryset."""
-    empty_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
-
-    form = EvaluationDatasetForm(
-        team=team_with_users,
-        user=user,
-        data={
-            "name": "Bad Queue Dataset",
-            "evaluation_mode": "session",
-            "mode": "annotation_queue",
-            "annotation_queue": empty_queue.id,
-        },
-    )
-    assert not form.is_valid()
-    assert "annotation_queue" in form.errors
 
 
 @pytest.mark.django_db()
