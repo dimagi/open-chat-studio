@@ -318,12 +318,15 @@ def test_post_handles_celery_enqueue_failure(
 
 
 @pytest.mark.django_db()
-def test_create_form_annotation_queue_mode_session_dataset(team_with_users, queue_with_session_items):
+def test_create_form_annotation_queue_mode_session_dataset(
+    team_with_users, user, queue_with_session_items, team_context
+):
     """A session-mode dataset can be created by importing from an annotation queue."""
     queue, session = queue_with_session_items
 
     form = EvaluationDatasetForm(
         team=team_with_users,
+        user=user,
         data={
             "name": "Queue Session Dataset",
             "evaluation_mode": "session",
@@ -346,12 +349,15 @@ def test_create_form_annotation_queue_mode_session_dataset(team_with_users, queu
 
 
 @pytest.mark.django_db()
-def test_create_form_annotation_queue_mode_message_dataset(team_with_users, queue_with_session_items):
+def test_create_form_annotation_queue_mode_message_dataset(
+    team_with_users, user, queue_with_session_items, team_context
+):
     """A message-mode dataset can also be created by importing sessions from an annotation queue."""
     queue, session = queue_with_session_items
 
     form = EvaluationDatasetForm(
         team=team_with_users,
+        user=user,
         data={
             "name": "Queue Message Dataset",
             "evaluation_mode": "message",
@@ -374,12 +380,13 @@ def test_create_form_annotation_queue_mode_message_dataset(team_with_users, queu
 
 
 @pytest.mark.django_db()
-def test_create_form_annotation_queue_requires_queue_with_sessions(team_with_users, user):
+def test_create_form_annotation_queue_requires_queue_with_sessions(team_with_users, user, team_context):
     """An empty queue (no session items) is not selectable in the queryset."""
     empty_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user)
 
     form = EvaluationDatasetForm(
         team=team_with_users,
+        user=user,
         data={
             "name": "Bad Queue Dataset",
             "evaluation_mode": "session",

@@ -700,15 +700,12 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         required=False,
     )
 
-    def __init__(self, team, *args, user=None, **kwargs):
+    def __init__(self, team, *args, user, **kwargs):
         super().__init__(team, *args, **kwargs)
         self.user = user
-        if user is not None:
-            queue_qs = AnnotationQueue.objects.visible_to(user, team)
-        else:
-            queue_qs = AnnotationQueue.objects.filter(team=team)
         self.fields["annotation_queue"].queryset = (
-            queue_qs.filter(items__session__isnull=False)
+            AnnotationQueue.objects.visible_to(user, team)
+            .filter(items__session__isnull=False)
             .exclude(status=QueueStatus.ARCHIVED)
             .distinct()
             .order_by("name")
