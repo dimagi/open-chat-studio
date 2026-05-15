@@ -54,6 +54,9 @@
         </div>
       </div>
     {% endif %}
+
+    {% include "evaluations/components/auto_population_rules_panel.html" with dataset=object %}
+
     <h2 class="pg-subtitle">{% if object.evaluation_mode == 'session' %}{% translate "Sessions" %}{% else %}{% translate "Messages" %}{% endif %}</h2>
     <div id="dataset-messages-table"
          hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}{% querystring %}"

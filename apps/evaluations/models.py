@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.rule_validation import (
     ConditionType,
     validate_condition,
@@ -42,6 +43,7 @@ class EvaluationRunStatus(models.TextChoices):
 class EvaluationRunType(models.TextChoices):
     FULL = "full", "Full"
     PREVIEW = "preview", "Preview"
+    DELTA = "delta", "Delta"
 
 
 class DatasetCreationStatus(models.TextChoices):
@@ -49,14 +51,6 @@ class DatasetCreationStatus(models.TextChoices):
     PROCESSING = "processing", "Processing"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
-
-
-class ExperimentVersionSelection(models.TextChoices):
-    """Choices for experiment version selection including sentinel values"""
-
-    SPECIFIC = "specific", "Specific Version"
-    LATEST_WORKING = "latest_working", "Latest Working Version"
-    LATEST_PUBLISHED = "latest_published", "Latest Published Version"
 
 
 class EvaluationMode(models.TextChoices):
@@ -268,6 +262,64 @@ class EvaluationDataset(BaseTeamModel):
         unique_together = ("name", "team")
 
 
+class AutoPopulationRunStatus(models.TextChoices):
+    SUCCESS = "success", "Success"
+    ERROR = "error", "Error"
+    NO_OP = "no_op", "No-op"
+
+
+class DatasetAutoPopulationRule(BaseTeamModel):
+    """A continuous-ingestion rule that pulls new sessions from a source experiment
+    into an evaluation dataset on each polling tick."""
+
+    AUTO_DISABLE_FAILURE_THRESHOLD = 3
+
+    dataset = models.ForeignKey(
+        EvaluationDataset,
+        on_delete=models.CASCADE,
+        related_name="auto_population_rules",
+    )
+    source_experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        related_name="auto_population_rules",
+        help_text="Sessions from this chatbot are considered for auto-population.",
+    )
+    filter_query_string = models.TextField(
+        blank=True,
+        help_text=(
+            "Filter criteria as a query string; empty means 'all sessions from this bot'. "
+            "Format matches FilterParams used elsewhere."
+        ),
+    )
+    is_enabled = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_run_status = models.CharField(max_length=10, choices=AutoPopulationRunStatus.choices, blank=True)
+    last_error = models.TextField(blank=True)
+    consecutive_failure_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        indexes = [models.Index(fields=["is_enabled", "last_run_at"])]
+
+    def __str__(self) -> str:
+        return f"AutoPopRule({self.source_experiment_id} -> dataset {self.dataset_id})"
+
+    def clean(self):
+        super().clean()
+        if self.team_id and self.dataset_id and self.dataset.team_id != self.team_id:
+            raise ValidationError({"dataset": "Dataset must belong to the same team as the rule."})
+        if self.dataset_id and self.dataset.evaluation_mode != EvaluationMode.SESSION:
+            raise ValidationError({"dataset": "Auto-population rules are only supported for session-level datasets."})
+        if self.team_id and self.source_experiment_id and self.source_experiment.team_id != self.team_id:
+            raise ValidationError({"source_experiment": "Source chatbot must belong to the same team as the rule."})
+
+    def get_absolute_url(self):
+        return reverse(
+            "evaluations:auto_population_rule_edit",
+            args=[get_slug_for_team(self.team_id), self.dataset_id, self.id],
+        )
+
+
 class EvaluationConfig(BaseTeamModel):
     name = models.CharField(max_length=255)
     evaluators = models.ManyToManyField(Evaluator)
@@ -291,33 +343,50 @@ class EvaluationConfig(BaseTeamModel):
     # Store sentinel value if using latest working/published
     version_selection_type = models.CharField(
         max_length=50,
-        choices=ExperimentVersionSelection.choices,
-        default=ExperimentVersionSelection.SPECIFIC,
+        choices=VersionSelectionRule.choices,
+        default=VersionSelectionRule.SPECIFIC,
         help_text=("Type of version selection: specific, latest_working, or latest_published"),
+    )
+    auto_run_on_append = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, every time the dataset receives newly auto-populated rows "
+            "this evaluation runs automatically over only those rows. May incur LLM cost."
+        ),
     )
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
 
     def get_generation_experiment_version(self):
-        """Resolve the actual experiment version based on selection type"""
-        if self.version_selection_type == ExperimentVersionSelection.SPECIFIC:
+        """Resolve the actual experiment version based on selection type.
+
+        SPECIFIC short-circuits to the stored FK (no family-and-number round-trip).
+        Other rules delegate to the resolver. Returns None when the config is
+        incompletely configured; the resolver raises on programmer errors.
+        """
+        if self.version_selection_type == VersionSelectionRule.SPECIFIC:
             return self.experiment_version
-
-        if not self.base_experiment:
+        if self.base_experiment_id is None:
             return None
-
-        if self.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
-            return self.base_experiment.get_working_version()
-        elif self.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
-            return self.base_experiment.default_version
-        return None
+        return resolve_chatbot_version(
+            self.base_experiment,
+            self.version_selection_type,
+        )
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
 
-    def run(self, run_type=EvaluationRunType.FULL) -> EvaluationRun:
-        """Runs the evaluation asynchronously using Celery"""
+    def run(
+        self,
+        run_type: EvaluationRunType = EvaluationRunType.FULL,
+        scoped_messages: list[EvaluationMessage] | None = None,
+    ) -> EvaluationRun:
+        """Runs the evaluation asynchronously using Celery.
+
+        When `scoped_messages` is provided, the run only evaluates those
+        messages instead of the dataset's full membership.
+        """
         generation_experiment = self.get_generation_experiment_version()
         run = EvaluationRun.objects.create(
             team=self.team,
@@ -326,6 +395,8 @@ class EvaluationConfig(BaseTeamModel):
             status=EvaluationRunStatus.PENDING,
             type=run_type,
         )
+        if scoped_messages is not None:
+            run.scoped_messages.add(*scoped_messages)
 
         from apps.evaluations.tasks import (  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
             run_evaluation_task,
@@ -359,6 +430,12 @@ class EvaluationRun(BaseTeamModel):
     )
     job_id = models.CharField(max_length=255, blank=True)
     error_message = models.TextField(blank=True)
+    scoped_messages = models.ManyToManyField(
+        EvaluationMessage,
+        blank=True,
+        related_name="scoping_runs",
+        help_text="Subset of dataset messages this run evaluated. Empty for FULL/PREVIEW.",
+    )
 
     def __str__(self):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
@@ -375,12 +452,16 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     def get_table_data(self, include_ids: bool = False):
-        results = (
+        results_qs = (
             self.results.select_related("message__session__experiment", "evaluator", "session")
             .prefetch_related("applied_tags__tag")
             .order_by("created_at")
-            .all()
         )
+        if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
+            scoped_ids = self.scoped_messages.values_list("id", flat=True)
+            results_qs = results_qs.filter(message_id__in=scoped_ids)
+
+        results = results_qs.all()
         table_by_message = defaultdict(dict)
         tags_by_message = defaultdict(set)
         for result in results:

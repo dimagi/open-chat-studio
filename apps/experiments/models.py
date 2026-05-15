@@ -37,6 +37,7 @@ from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -116,20 +117,6 @@ class PromptObjectManager(AuditingManager):
 
 
 class ExperimentObjectManager(VersionsObjectManagerMixin, AuditingManager):
-    def get_default_or_working(self, family_member: Experiment):
-        """
-        Returns the default version of the family of experiments relating to `family_member` or if there is no default,
-        the working experiment.
-        """
-        if family_member.is_default_version:
-            return family_member
-
-        working_version_id = family_member.working_version_id or family_member.id
-        experiment = self.filter(
-            working_version_id=working_version_id, is_default_version=True, team_id=family_member.team_id
-        ).first()
-        return experiment if experiment else family_member
-
     def get_version_names(self, team, working_version=None) -> list[str]:
         qs = self.get_queryset().filter(team=team)
         if working_version:
@@ -708,7 +695,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         working_version = self.get_working_version()
         if version == self.DEFAULT_VERSION_NUMBER:
-            return working_version.default_version
+            return resolve_published_or_working(working_version)
         elif working_version.version_number == version:
             return working_version
         return working_version.versions.get(version_number=version)
@@ -726,11 +713,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def trends_cache_key(self) -> str:
         return self.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.id)
-
-    @cached_property
-    def default_version(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
-        return Experiment.objects.get_default_or_working(self)
 
     def as_chip(self) -> Chip:
         label = self.name
@@ -1665,12 +1647,12 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
-        return self.experiment.default_version
+        """The Chatbot Version this session executes against — Published if one exists, Working otherwise."""
+        return resolve_published_or_working(self.experiment)
 
     @cached_property
     def working_experiment(self) -> Experiment:
-        """Returns the default experiment, or if there is none, the working experiment"""
+        """The Working Version (family head) of this session's Chatbot."""
         return self.experiment.get_working_version()
 
     def get_experiment_version_number(self) -> int:
