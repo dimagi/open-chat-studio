@@ -10,6 +10,9 @@
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
+      <p class="text-xs text-base-content/60 mb-2">
+        {% blocktranslate %}Model release info is sourced from <a class="link" href="https://llm-stats.com" target="_blank" rel="noopener">llm-stats.com</a>.{% endblocktranslate %}
+      </p>
       {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type for_type=subtype %}
     </div>
 
