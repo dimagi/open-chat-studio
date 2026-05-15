@@ -607,6 +607,102 @@ def test_flag_item_htmx(client, team_with_users, queue):
     assert item.status == AnnotationItemStatus.FLAGGED
 
 
+# ===== Edit annotation =====
+
+
+@pytest.mark.django_db()
+def test_edit_annotation_get_renders_prefilled_form(client, team_with_users, queue, user):
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    annotation = Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 3, "notes": "Initial"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse(
+        "human_annotations:edit_annotation",
+        args=[team_with_users.slug, queue.pk, item.pk, annotation.pk],
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.context["is_edit"] is True
+    assert response.context["form"].initial == {"quality_score": 3, "notes": "Initial"}
+
+
+@pytest.mark.django_db()
+def test_edit_annotation_updates_data_and_recomputes_aggregates(client, team_with_users, queue, user):
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    annotation = Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 3, "notes": "Initial"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    # Creation triggered aggregate compute with quality_score=3
+    queue.refresh_from_db()
+    assert queue.aggregate.aggregates["quality_score"]["mean"] == 3
+
+    url = reverse(
+        "human_annotations:edit_annotation",
+        args=[team_with_users.slug, queue.pk, item.pk, annotation.pk],
+    )
+    response = client.post(url, {"quality_score": 5, "notes": "Updated"})
+    assert response.status_code == 302
+
+    annotation.refresh_from_db()
+    assert annotation.data == {"quality_score": 5, "notes": "Updated"}
+
+    queue.refresh_from_db()
+    assert queue.aggregate.aggregates["quality_score"]["mean"] == 5
+
+
+@pytest.mark.django_db()
+def test_edit_annotation_forbidden_for_other_user(client, team_with_users, queue):
+    other_user = team_with_users.members.exclude(id=team_with_users.members.first().id).first()
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    annotation = Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=other_user,
+        data={"quality_score": 2, "notes": "Theirs"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse(
+        "human_annotations:edit_annotation",
+        args=[team_with_users.slug, queue.pk, item.pk, annotation.pk],
+    )
+    response = client.post(url, {"quality_score": 5, "notes": "Hijacked"})
+    assert response.status_code == 403
+
+    annotation.refresh_from_db()
+    assert annotation.data == {"quality_score": 2, "notes": "Theirs"}
+
+
+@pytest.mark.django_db()
+def test_edit_annotation_works_after_item_completed(client, team_with_users, queue, user):
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    annotation = Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 3, "notes": "First"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.COMPLETED  # queue.num_reviews_required == 1
+
+    url = reverse(
+        "human_annotations:edit_annotation",
+        args=[team_with_users.slug, queue.pk, item.pk, annotation.pk],
+    )
+    response = client.post(url, {"quality_score": 4, "notes": "Updated"})
+    assert response.status_code == 302
+    annotation.refresh_from_db()
+    assert annotation.data == {"quality_score": 4, "notes": "Updated"}
+
+
 # ===== Export =====
 
 

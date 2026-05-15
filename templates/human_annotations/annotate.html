@@ -77,9 +77,9 @@
       {% if can_annotate %}
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
-            <h3 class="card-title text-sm">Annotation</h3>
+            <h3 class="card-title text-sm">{% if is_edit %}Edit Annotation{% else %}Annotation{% endif %}</h3>
           <form method="post"
-                action="{% url 'human_annotations:submit_annotation' request.team.slug queue.pk item.pk %}">
+                action="{% if is_edit %}{% url 'human_annotations:edit_annotation' request.team.slug queue.pk item.pk annotation.pk %}{% else %}{% url 'human_annotations:submit_annotation' request.team.slug queue.pk item.pk %}{% endif %}">
             {% csrf_token %}
             {% for field in form %}
               <div class="form-control mb-3 flex flex-col">
@@ -96,12 +96,18 @@
               </div>
             {% endfor %}
             <div class="flex gap-2 mt-4">
-              <button type="submit" class="btn btn-primary btn-sm">Submit</button>
-              <a href="{% url 'human_annotations:annotate_queue' request.team.slug queue.pk %}?skip={{ item.pk }}"
-                 class="btn btn-ghost btn-sm">Skip</a>
-              <button type="button"
-                      class="btn btn-warning btn-sm btn-outline"
-                      onclick="document.getElementById('flag-dialog').showModal()">Flag</button>
+              {% if is_edit %}
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                <a href="{% url 'human_annotations:annotate_item' request.team.slug queue.pk item.pk %}"
+                   class="btn btn-ghost btn-sm">Cancel</a>
+              {% else %}
+                <button type="submit" class="btn btn-primary btn-sm">Submit</button>
+                <a href="{% url 'human_annotations:annotate_queue' request.team.slug queue.pk %}?skip={{ item.pk }}"
+                   class="btn btn-ghost btn-sm">Skip</a>
+                <button type="button"
+                        class="btn btn-warning btn-sm btn-outline"
+                        onclick="document.getElementById('flag-dialog').showModal()">Flag</button>
+              {% endif %}
             </div>
           </form>
 
@@ -137,7 +143,16 @@
                 <div class="border rounded-lg p-3">
                   <div class="flex justify-between items-center mb-2">
                     <span class="font-medium text-sm">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>
-                    <span class="text-xs text-gray-500">{{ ann.created_at|date:"DATETIME_FORMAT" }}</span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-gray-500">{{ ann.created_at|date:"DATETIME_FORMAT" }}</span>
+                      {% if ann.can_edit %}
+                        <a href="{% url 'human_annotations:edit_annotation' request.team.slug queue.pk item.pk ann.id %}"
+                           class="btn btn-xs btn-ghost"
+                           title="Edit annotation">
+                          <i class="fa-solid fa-pencil"></i> Edit
+                        </a>
+                      {% endif %}
+                    </div>
                   </div>
                   <div class="flex flex-col gap-1">
                     {% for field_name, field_value in ann.fields %}
