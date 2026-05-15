@@ -136,6 +136,11 @@ class ChatMessageMetadataKeys(StrEnum):
         """Metadata keys that should be excluded from the API response."""
         return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT})
 
+    @classmethod
+    def attachment_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
+        """Metadata keys that hold file IDs referencing attachments on a message."""
+        return frozenset({cls.OPENAI_FILE_IDS, cls.OCS_ATTACHMENT_FILE_IDS, cls.CITED_FILES, cls.GENERATED_FILES})
+
 
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
@@ -278,13 +283,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         external_ids = []
         ids = []
 
-        metadata_keys = [
-            ChatMessageMetadataKeys.OPENAI_FILE_IDS,
-            ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS,
-            ChatMessageMetadataKeys.CITED_FILES,
-            ChatMessageMetadataKeys.GENERATED_FILES,
-        ]
-        for source in metadata_keys:
+        for source in ChatMessageMetadataKeys.attachment_keys():
             # openai_file_ids is a list of external ids
             id_list = external_ids if source == ChatMessageMetadataKeys.OPENAI_FILE_IDS else ids
             if file_ids := self.metadata.get(source, []):
