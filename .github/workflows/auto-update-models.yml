@@ -354,4 +354,4 @@ jobs:
           name: decision-report
           path: decision_report.md
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 5
