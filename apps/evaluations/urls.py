@@ -118,6 +118,11 @@ urlpatterns = [
         name="dataset_upload",
     ),
     path(
+        "dataset/<int:pk>/import-from-queue/",
+        dataset_views.ImportFromAnnotationQueue.as_view(),
+        name="dataset_import_from_queue",
+    ),
+    path(
         "dataset/<int:dataset_id>/auto_population/new/",
         auto_population_views.CreateAutoPopulationRule.as_view(),
         name="auto_population_rule_new",

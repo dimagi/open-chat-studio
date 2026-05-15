@@ -10,7 +10,7 @@ from apps.evaluations.tasks import create_dataset_from_sessions_task
 from apps.evaluations.utils import make_session_evaluation_messages
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 from apps.utils.factories.traces import TraceFactory
 
 
@@ -284,16 +284,19 @@ class TestSessionModeDuplicateDetection:
 @pytest.mark.django_db()
 class TestDatasetFormEvaluationMode:
     def test_create_form_includes_evaluation_mode_field(self):
-        team = TeamFactory.create()
-        form = EvaluationDatasetForm(team=team)
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        form = EvaluationDatasetForm(team=team, user=user)
         assert "evaluation_mode" in form.fields
 
     def test_create_form_session_mode_only_allows_clone(self):
         """When mode is session, only clone is valid."""
-        team = TeamFactory.create()
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
 
         form = EvaluationDatasetForm(
             team=team,
+            user=user,
             data={
                 "name": "Test Session Dataset",
                 "evaluation_mode": "session",

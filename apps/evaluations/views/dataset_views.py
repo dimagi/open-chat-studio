@@ -12,22 +12,28 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Count
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
+from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
-from apps.evaluations.forms import EvaluationDatasetEditForm, EvaluationDatasetForm
+from apps.evaluations.forms import (
+    EvaluationDatasetEditForm,
+    EvaluationDatasetForm,
+    ImportFromAnnotationQueueForm,
+)
 from apps.evaluations.models import (
     DatasetCreationStatus,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
+    EvaluationMode,
 )
 from apps.evaluations.tables import (
     DatasetAutoPopulationRuleTable,
@@ -35,7 +41,10 @@ from apps.evaluations.tables import (
     EvaluationDatasetTable,
     EvaluationSessionsSelectionTable,
 )
-from apps.evaluations.tasks import update_dataset_from_csv_task
+from apps.evaluations.tasks import (
+    create_dataset_from_sessions_task,
+    update_dataset_from_csv_task,
+)
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
     make_evaluation_messages_from_sessions,
@@ -109,7 +118,10 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
         return kwargs
 
     def _get_filter_context_data(self):
-        table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+        table_url = (
+            reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
+            + f"?dataset_id={self.object.pk}"
+        )
         return get_filter_context_data(
             self.request.team,
             ExperimentSessionFilter.columns(self.request.team),
@@ -170,6 +182,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["team"] = self.request.team
+        kwargs["user"] = self.request.user
 
         # Pass current filter parameters to the form
         kwargs["filter_params"] = FilterParams.from_request(self.request)
@@ -254,7 +267,23 @@ def get_base_session_queryset(request):
     filter_params = FilterParams.from_request(request)
     query_set = ExperimentSession.objects.filter(team=request.team)
     session_filter = ExperimentSessionFilter()
-    return session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
+
+    # Filter out sessions already in the dataset being edited.
+    dataset_id = request.GET.get("dataset_id")
+    if dataset_id:
+        try:
+            dataset_id_int = int(dataset_id)
+        except (TypeError, ValueError):
+            logger.warning("Ignoring non-integer dataset_id %r on session selection endpoint", dataset_id)
+            return query_set
+        existing_session_ids = EvaluationMessage.objects.filter(
+            evaluationdataset=dataset_id_int,
+            evaluationdataset__team=request.team,
+            session__isnull=False,
+        ).values_list("session_id", flat=True)
+        query_set = query_set.exclude(id__in=existing_session_ids)
+    return query_set
 
 
 @login_and_team_required
@@ -678,3 +707,78 @@ class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
 
         messages.success(request, "Messages added to dataset successfully.")
         return HttpResponse(status=204)
+
+
+class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Import sessions from an annotation queue into an existing dataset.
+
+    Only available for session-mode datasets. The underlying task is idempotent —
+    sessions already present in the dataset are skipped.
+    """
+
+    permission_required = "evaluations.change_evaluationdataset"
+
+    def _get_dataset(self, request, pk):
+        return get_object_or_404(
+            EvaluationDataset,
+            id=pk,
+            team=request.team,
+            evaluation_mode=EvaluationMode.SESSION,
+        )
+
+    def _render_form(self, request, dataset, form):
+        return render(
+            request,
+            "evaluations/import_from_annotation_queue.html",
+            {
+                "dataset": dataset,
+                "form": form,
+                "active_tab": "evaluation_datasets",
+            },
+        )
+
+    def get(self, request, team_slug: str, pk: int):
+        dataset = self._get_dataset(request, pk)
+        form = ImportFromAnnotationQueueForm(team=request.team, user=request.user)
+        return self._render_form(request, dataset, form)
+
+    def post(self, request, team_slug: str, pk: int):
+        dataset = self._get_dataset(request, pk)
+        form = ImportFromAnnotationQueueForm(request.POST, team=request.team, user=request.user)
+        if not form.is_valid():
+            return self._render_form(request, dataset, form)
+
+        queue = form.cleaned_data["queue"]
+        session_external_ids = form.cleaned_data["session_external_ids"]
+
+        # Clear any prior error state before starting the new job.
+        if dataset.is_failed or dataset.error_message:
+            dataset.error_message = ""
+        dataset.status = DatasetCreationStatus.PENDING
+        dataset.save(update_fields=["status", "error_message"])
+
+        try:
+            task = create_dataset_from_sessions_task.delay(
+                dataset.id,
+                request.team.id,
+                session_external_ids,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to enqueue import from annotation queue",
+                extra={"dataset_id": dataset.id, "queue_id": queue.id, "team_id": request.team.id},
+            )
+            dataset.status = DatasetCreationStatus.FAILED
+            dataset.error_message = "Could not start the import job. Please try again."
+            dataset.save(update_fields=["status", "error_message"])
+            messages.error(request, "Could not start import job. Please try again.")
+            return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)
+
+        dataset.job_id = task.id
+        dataset.save(update_fields=["job_id"])
+
+        messages.success(
+            request,
+            f'Importing {len(session_external_ids)} session(s) from "{queue.name}". Duplicates will be skipped.',
+        )
+        return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)

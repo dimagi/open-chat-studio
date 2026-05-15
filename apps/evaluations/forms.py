@@ -34,6 +34,7 @@ from apps.evaluations.tasks import (
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.human_annotations.models import AnnotationQueue, QueueStatus
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
@@ -558,6 +559,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
     MODE_CHOICES = [
         ("clone", "Clone from sessions"),
+        ("annotation_queue", "Import from annotation queue"),
         ("manual", "Create manually"),
         ("csv", "Upload CSV file"),
     ]
@@ -671,6 +673,14 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     """Form for creating evaluation datasets."""
 
+    annotation_queue = forms.ModelChoiceField(
+        queryset=AnnotationQueue.objects.none(),
+        required=False,
+        label="Annotation queue",
+        help_text="All sessions in the selected queue will be added to the dataset.",
+        widget=forms.Select(attrs={"class": "select w-full"}),
+    )
+
     messages_json = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
@@ -698,8 +708,16 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         required=False,
     )
 
-    def __init__(self, team, *args, **kwargs):
+    def __init__(self, team, *args, user, **kwargs):
         super().__init__(team, *args, **kwargs)
+        self.user = user
+        self.fields["annotation_queue"].queryset = (
+            AnnotationQueue.objects.visible_to(user, team)
+            .filter(items__session__isnull=False)
+            .exclude(status=QueueStatus.ARCHIVED)
+            .distinct()
+            .order_by("name")
+        )
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -713,13 +731,22 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         mode = cleaned_data.get("mode")
         evaluation_mode = cleaned_data.get("evaluation_mode")
 
-        if evaluation_mode == EvaluationMode.SESSION and mode != "clone":
-            raise forms.ValidationError({"mode": "Session-mode datasets can only be created by cloning from sessions."})
+        if evaluation_mode == EvaluationMode.SESSION and mode not in {"clone", "annotation_queue"}:
+            raise forms.ValidationError(
+                {
+                    "mode": (
+                        "Session-mode datasets can only be created by cloning from sessions or importing from a queue."
+                    )
+                }
+            )
 
         if mode == "clone":
             session_ids, filtered_session_ids = self._clean_clone()
             cleaned_data["session_ids"] = session_ids
             cleaned_data["filtered_session_ids"] = filtered_session_ids
+        elif mode == "annotation_queue":
+            cleaned_data["session_ids"] = self._clean_annotation_queue()
+            cleaned_data["filtered_session_ids"] = set()
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -728,6 +755,21 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             cleaned_data["column_mapping"] = column_mapping
             cleaned_data["history_column"] = history_column
         return cleaned_data
+
+    def _clean_annotation_queue(self):
+        """Validates the selected queue and returns the set of session external IDs to import."""
+        queue = self.cleaned_data.get("annotation_queue")
+        if not queue:
+            raise forms.ValidationError({"annotation_queue": "Please select an annotation queue."})
+
+        session_external_ids = set(
+            queue.items.filter(session__isnull=False, session__team=self.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+        if not session_external_ids:
+            raise forms.ValidationError({"annotation_queue": "The selected queue does not contain any sessions."})
+        return {str(sid) for sid in session_external_ids}
 
     def _clean_manual(self):
         messages_json = self.data.get("messages_json", "")
@@ -895,7 +937,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             dataset.save(update_fields=["status"])
             return dataset
 
-        if mode == "clone":
+        if mode in {"clone", "annotation_queue"}:
             if dataset.evaluation_mode == EvaluationMode.SESSION:
                 self._save_sessions_clone(dataset)
             else:
@@ -962,6 +1004,9 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
         self.fields["mode"].required = False
+        # Edit page has a dedicated entry point for annotation-queue imports, so
+        # drop it from the inline mode radio to avoid an unhandled submit path.
+        self.fields["mode"].choices = [c for c in self.fields["mode"].choices if c[0] != "annotation_queue"]
         # evaluation_mode is immutable after creation
         if "evaluation_mode" in self.fields:
             del self.fields["evaluation_mode"]
@@ -1012,6 +1057,45 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                     self._save_session_messages_clone(dataset)
 
         return dataset
+
+
+class ImportFromAnnotationQueueForm(forms.Form):
+    """Form to pick an annotation queue to import sessions from into a dataset."""
+
+    queue = forms.ModelChoiceField(
+        queryset=AnnotationQueue.objects.none(),
+        label="Annotation Queue",
+        help_text="Select an annotation queue. Only queues containing sessions are listed.",
+    )
+
+    def __init__(self, *args, team, user, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.user = user
+        self.fields["queue"].queryset = (
+            AnnotationQueue.objects.visible_to(user, team)
+            .filter(items__session__isnull=False)
+            .exclude(status=QueueStatus.ARCHIVED)
+            .distinct()
+            .order_by("name")
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        queue = cleaned_data.get("queue")
+        if not queue:
+            return cleaned_data
+
+        session_external_ids = list(
+            queue.items.filter(session__isnull=False, session__team=self.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+        if not session_external_ids:
+            raise forms.ValidationError({"queue": "The selected queue does not contain any sessions."})
+
+        cleaned_data["session_external_ids"] = [str(sid) for sid in session_external_ids]
+        return cleaned_data
 
 
 class DatasetAutoPopulationRuleForm(forms.ModelForm):
