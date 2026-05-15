@@ -5,7 +5,7 @@ from django.db.models import Subquery
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
-from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
@@ -84,11 +84,16 @@ def create_connect_channel_for_participant(channel, connect_client, connect_id, 
 @shared_task(ignore_result=True)
 def trigger_bot_message_task(data):
     """
-    Trigger a bot message for a participant on a specific platform using the prompt from the given data.
+    Trigger a bot message for a participant on a specific platform.
+
+    When ``data["message_text"]`` is set, the message is delivered directly to the participant
+    without any LLM processing. When ``data["prompt_text"]`` is set, the bot generates a
+    response via the LLM and sends that.
     """
     platform = data["platform"]
     experiment_public_id = data["experiment"]
-    prompt_text = data["prompt_text"]
+    prompt_text = data.get("prompt_text")
+    message_text = data.get("message_text")
     identifier = data["identifier"]
     start_new_session = data["start_new_session"]
     session_data = data.get("session_data")
@@ -96,9 +101,9 @@ def trigger_bot_message_task(data):
     experiment = Experiment.objects.get(public_id=experiment_public_id)
     experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
 
-    target_experiment = resolve_published_or_working(experiment)
+    published_experiment = experiment.default_version
     ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
-    channel = ChannelClass(experiment=target_experiment, experiment_channel=experiment_channel)
+    channel = ChannelClass(experiment=published_experiment, experiment_channel=experiment_channel)
 
     with current_team(experiment.team):
         channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
@@ -108,6 +113,15 @@ def trigger_bot_message_task(data):
             session.state = merged_state
             session.save(update_fields=["state"])
 
-        channel.experiment_session.ad_hoc_bot_message(
-            prompt_text, TraceInfo(name="api trigger"), use_experiment=target_experiment
-        )
+        if message_text:
+            ChatMessage.objects.create(
+                chat=channel.experiment_session.chat,
+                message_type=ChatMessageType.AI,
+                content=message_text,
+                metadata={"direct_to_user": True},
+            )
+            channel.send_message_to_user(message_text)
+        else:
+            channel.experiment_session.ad_hoc_bot_message(
+                prompt_text, TraceInfo(name="api trigger"), use_experiment=published_experiment
+            )

@@ -81,12 +81,92 @@ def consent(request: Request):
     return HttpResponse()
 
 
+def _get_or_create_participant_data(request, identifier, platform, experiment, incoming_participant_data):
+    """Get or create a participant and their ParticipantData for an experiment.
+
+    If ``incoming_participant_data`` is provided it is merged into any existing data.
+    Returns the (possibly newly created) ``ParticipantData`` instance.
+    """
+    participant_data = ParticipantData.objects.filter(
+        participant__identifier=identifier,
+        participant__platform=platform,
+        experiment=experiment.id,
+    ).first()
+
+    if not participant_data:
+        participant, _ = Participant.objects.get_or_create(
+            identifier=identifier, platform=platform, team=request.team
+        )
+        participant_data, created = ParticipantData.objects.get_or_create(
+            participant=participant,
+            experiment=experiment,
+            defaults={"team": request.team, "data": incoming_participant_data or {}},
+        )
+        if not created and incoming_participant_data:
+            merged_data = {**participant_data.data, **incoming_participant_data}
+            if merged_data != participant_data.data:
+                participant_data.data = merged_data
+                participant_data.save(update_fields=["data"])
+    elif incoming_participant_data:
+        merged_data = {**participant_data.data, **incoming_participant_data}
+        if merged_data != participant_data.data:
+            participant_data.data = merged_data
+            participant_data.save(update_fields=["data"])
+
+    return participant_data
+
+
+def _ensure_commcare_connect_ready(channel, identifier, participant_data):
+    """Ensure a CommCare Connect channel exists for the participant and that they have consented.
+
+    Returns a ``JsonResponse`` error response if the channel cannot be created or consent has
+    not been given, or ``None`` if everything is in order.
+    """
+    if not participant_data.system_metadata.get("commcare_connect_channel_id"):
+        connect_client = CommCareConnectClient()
+        try:
+            create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+        except httpx.HTTPStatusError as e:
+            connect_logger.error(
+                f"Failed to create CommCare Connect channel for participant {identifier}: "
+                f"HTTP {e.response.status_code} - {e.response.text}"
+            )
+            if e.response.status_code == 404:
+                return JsonResponse(
+                    {"detail": "Failed to create channel: Participant not found in CommCare Connect"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            elif e.response.status_code >= 500:
+                return JsonResponse(
+                    {"detail": "Failed to create channel: CommCare Connect service error"},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            else:
+                return JsonResponse(
+                    {"detail": f"Failed to create channel: {e.response.text}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except httpx.HTTPError as e:
+            connect_logger.error(
+                f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}"
+            )
+            return JsonResponse(
+                {"detail": "Failed to create channel: Unable to connect to CommCare Connect service"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+    if not participant_data.has_consented():
+        return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+
+    return None
+
+
 class TriggerBotMessageView(APIView):
     required_scopes = ("chatbots:interact",)
 
     @extend_schema(
         operation_id="trigger_bot_message",
-        summary="Trigger the bot to send a message to the user",
+        summary="Trigger the bot to send a message to the user, or deliver a message directly",
         tags=["Channels"],
         request=TriggerBotMessageRequest(),
         responses={
@@ -109,10 +189,17 @@ class TriggerBotMessageView(APIView):
                 status_codes=[200],
             ),
             OpenApiExample(
-                name="ParticipantNotFound",
-                summary="Participant not found",
-                value={"detail": "Participant not found"},
-                status_codes=[404],
+                name="SendMessageDirectly",
+                summary="Send a pre-written message directly to the participant, bypassing the bot/LLM.",
+                value={
+                    "identifier": "+15556793",
+                    "experiment": "exp1",
+                    "platform": "whatsapp",
+                    "message_text": "Your appointment is confirmed for tomorrow at 10am.",
+                    "session_data": {"key": "value"},
+                    "participant_data": {"key": "value"},
+                },
+                status_codes=[200],
             ),
             OpenApiExample(
                 name="ExperimentChannelNotFound",
@@ -131,18 +218,18 @@ class TriggerBotMessageView(APIView):
     @transaction.atomic
     def post(self, request):
         """
-        Trigger the bot to send a message to the user
+        Trigger the bot to send a message to the user, or deliver a message directly.
+
+        Provide either ``prompt_text`` (routes through the LLM/bot pipeline) or ``message_text``
+        (sends the exact text to the participant without any LLM processing). Exactly one is required.
         """
         serializer = TriggerBotMessageRequest(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         data = serializer.data
         platform = data["platform"]
-        identifier = data["identifier"]
-        identifier = ChannelPlatform(platform).normalize_identifier(identifier)
-        experiment_public_id = data["experiment"]
-
-        experiment = get_object_or_404(Experiment, public_id=experiment_public_id, team=request.team)
+        identifier = ChannelPlatform(platform).normalize_identifier(data["identifier"])
+        experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
 
         channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
         if not channel:
@@ -151,70 +238,13 @@ class TriggerBotMessageView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        participant_data = ParticipantData.objects.filter(
-            participant__identifier=identifier,
-            participant__platform=platform,
-            experiment=experiment.id,
-        ).first()
-
-        if not participant_data:
-            participant, _ = Participant.objects.get_or_create(
-                identifier=identifier, platform=platform, team=request.team
-            )
-            participant_data, created = ParticipantData.objects.get_or_create(
-                participant=participant,
-                experiment=experiment,
-                defaults={"team": request.team, "data": data.get("participant_data") or {}},
-            )
-            # If participant_data already existed and participant_data is provided in request
-            if not created and data.get("participant_data"):
-                merged_data = {**participant_data.data, **data["participant_data"]}
-                if merged_data != participant_data.data:
-                    participant_data.data = merged_data
-                    participant_data.save(update_fields=["data"])
-        elif data.get("participant_data"):
-            merged_data = {**participant_data.data, **data["participant_data"]}
-            if merged_data != participant_data.data:
-                participant_data.data = merged_data
-                participant_data.save(update_fields=["data"])
+        participant_data = _get_or_create_participant_data(
+            request, identifier, platform, experiment, data.get("participant_data")
+        )
 
         if platform == ChannelPlatform.COMMCARE_CONNECT:
-            if not participant_data.system_metadata.get("commcare_connect_channel_id"):
-                # Trigger the setup task to create the channel and get consent status from CCC
-                connect_client = CommCareConnectClient()
-                try:
-                    create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
-                except httpx.HTTPStatusError as e:
-                    connect_logger.error(
-                        f"Failed to create CommCare Connect channel for participant {identifier}: "
-                        f"HTTP {e.response.status_code} - {e.response.text}"
-                    )
-                    if e.response.status_code == 404:
-                        return JsonResponse(
-                            {"detail": "Failed to create channel: Participant not found in CommCare Connect"},
-                            status=status.HTTP_404_NOT_FOUND,
-                        )
-                    elif e.response.status_code >= 500:
-                        return JsonResponse(
-                            {"detail": "Failed to create channel: CommCare Connect service error"},
-                            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        )
-                    else:
-                        return JsonResponse(
-                            {"detail": f"Failed to create channel: {e.response.text}"},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                except httpx.HTTPError as e:
-                    connect_logger.error(
-                        f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}"
-                    )
-                    return JsonResponse(
-                        {"detail": "Failed to create channel: Unable to connect to CommCare Connect service"},
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    )
-
-            if not participant_data.has_consented():
-                return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
+            if error := _ensure_commcare_connect_ready(channel, identifier, participant_data):
+                return error
 
         trigger_bot_message_task.delay(data)
 

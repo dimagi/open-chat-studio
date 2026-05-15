@@ -283,7 +283,13 @@ class TriggerBotMessageRequest(serializers.Serializer):
     identifier = serializers.CharField(label="Participant Identifier")
     platform = serializers.ChoiceField(choices=ChannelPlatform.choices, label="Participant Platform")
     experiment = serializers.UUIDField(label="Experiment ID")
-    prompt_text = serializers.CharField(label="Prompt to go to bot")
+    prompt_text = serializers.CharField(label="Prompt to go to bot", required=False, allow_null=True, default=None)
+    message_text = serializers.CharField(
+        label="Message to send directly to participant (bypasses bot/LLM)",
+        required=False,
+        allow_null=True,
+        default=None,
+    )
     start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)
     session_data = serializers.DictField(
         help_text="Update session data. This will be merged with existing session data", required=False, default=dict
@@ -293,3 +299,12 @@ class TriggerBotMessageRequest(serializers.Serializer):
         required=False,
         default=dict,
     )
+
+    def validate(self, data):
+        has_prompt = bool(data.get("prompt_text"))
+        has_message = bool(data.get("message_text"))
+        if has_prompt and has_message:
+            raise serializers.ValidationError("Provide either 'prompt_text' or 'message_text', not both.")
+        if not has_prompt and not has_message:
+            raise serializers.ValidationError("Either 'prompt_text' or 'message_text' must be provided.")
+        return data
