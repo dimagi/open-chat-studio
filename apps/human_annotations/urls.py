@@ -46,6 +46,11 @@ urlpatterns = [
         annotate_views.SubmitAnnotation.as_view(),
         name="submit_annotation",
     ),
+    path(
+        "queue/<int:pk>/item/<int:item_pk>/annotation/<int:annotation_pk>/edit/",
+        annotate_views.EditAnnotation.as_view(),
+        name="edit_annotation",
+    ),
     path("queue/<int:pk>/item/<int:item_pk>/flag/", annotate_views.FlagItem.as_view(), name="flag_item"),
     path("queue/<int:pk>/item/<int:item_pk>/unflag/", annotate_views.UnflagItem.as_view(), name="unflag_item"),
 ]
