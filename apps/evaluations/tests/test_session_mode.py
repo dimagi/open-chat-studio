@@ -346,10 +346,12 @@ class TestDatasetFormEvaluationMode:
 
     def test_create_form_session_mode_allows_zero_sessions(self):
         """Session-mode datasets may be created empty (e.g. to be auto-populated later)."""
-        team = TeamFactory.create()
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
 
         form = EvaluationDatasetForm(
             team=team,
+            user=user,
             data={
                 "name": "Empty Session Dataset",
                 "evaluation_mode": "session",
@@ -362,10 +364,12 @@ class TestDatasetFormEvaluationMode:
 
     def test_create_form_message_mode_still_requires_sessions(self):
         """Message-mode datasets in clone mode still require at least one session."""
-        team = TeamFactory.create()
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
 
         form = EvaluationDatasetForm(
             team=team,
+            user=user,
             data={
                 "name": "Empty Message Dataset",
                 "evaluation_mode": "message",
