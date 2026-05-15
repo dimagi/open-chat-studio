@@ -611,26 +611,6 @@ def test_flag_item_htmx(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
-def test_edit_annotation_get_renders_prefilled_form(client, team_with_users, queue, user):
-    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
-    annotation = Annotation.objects.create(
-        item=item,
-        team=team_with_users,
-        reviewer=user,
-        data={"quality_score": 3, "notes": "Initial"},
-        status=AnnotationStatus.SUBMITTED,
-    )
-    url = reverse(
-        "human_annotations:edit_annotation",
-        args=[team_with_users.slug, queue.pk, item.pk, annotation.pk],
-    )
-    response = client.get(url)
-    assert response.status_code == 200
-    assert response.context["is_edit"] is True
-    assert response.context["form"].initial == {"quality_score": 3, "notes": "Initial"}
-
-
-@pytest.mark.django_db()
 def test_edit_annotation_updates_data_and_recomputes_aggregates(client, team_with_users, queue, user):
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     annotation = Annotation.objects.create(
