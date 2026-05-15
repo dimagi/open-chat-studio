@@ -888,8 +888,13 @@ paths:
   /api/trigger_bot:
     post:
       operationId: trigger_bot_message
-      description: Trigger the bot to send a message to the user
-      summary: Trigger the bot to send a message to the user
+      description: |-
+        Trigger the bot to send a message to the user, or deliver a message directly.
+
+        Provide either ``prompt_text`` (routes through the LLM/bot pipeline) or ``message_text``
+        (sends the exact text to the participant without any LLM processing). Exactly one is required.
+      summary: Trigger the bot to send a message to the user, or deliver a message
+        directly
       tags:
       - Channels
       requestBody:
@@ -910,10 +915,18 @@ paths:
                     key: value
                 summary: Generates a bot message and sends it to the user (auto-creates
                   participant if needed).
-              ParticipantNotFound:
+              SendMessageDirectly:
                 value:
-                  detail: Participant not found
-                summary: Participant not found
+                  identifier: '+15556793'
+                  experiment: exp1
+                  platform: whatsapp
+                  message_text: Your appointment is confirmed for tomorrow at 10am.
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
+                summary: Send a pre-written message directly to the participant, bypassing
+                  the bot/LLM.
               ExperimentChannelNotFound:
                 value:
                   detail: Experiment cannot send messages on the connect_messaging
@@ -949,10 +962,6 @@ paths:
               schema:
                 description: Not Found
               examples:
-                ParticipantNotFound:
-                  value:
-                    detail: Participant not found
-                  summary: Participant not found
                 ExperimentChannelNotFound:
                   value:
                     detail: Experiment cannot send messages on the connect_messaging
@@ -1751,7 +1760,12 @@ components:
           title: Experiment ID
         prompt_text:
           type: string
+          nullable: true
           title: Prompt to go to bot
+        message_text:
+          type: string
+          nullable: true
+          title: Message to send directly to participant (bypasses bot/LLM)
         start_new_session:
           type: boolean
           default: false
@@ -1770,7 +1784,6 @@ components:
       - experiment
       - identifier
       - platform
-      - prompt_text
     UploadedFile:
       type: object
       properties:
