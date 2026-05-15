@@ -249,6 +249,6 @@ class TriggerBotMessageView(APIView):
             if error := _ensure_commcare_connect_ready(channel, identifier, participant_data):
                 return error
 
-        transaction.on_commit(lambda: trigger_bot_message_task.delay(data))
+        trigger_bot_message_task.delay_on_commit(data)
 
         return Response(status=status.HTTP_200_OK)
