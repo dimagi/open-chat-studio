@@ -229,6 +229,9 @@ class TriggerBotMessageView(APIView):
         data = serializer.data
         platform = data["platform"]
         identifier = ChannelPlatform(platform).normalize_identifier(data["identifier"])
+        # Propagate the normalized identifier so the async task uses a consistent value
+        data = dict(data)
+        data["identifier"] = identifier
         experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
 
         channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
