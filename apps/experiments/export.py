@@ -213,6 +213,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
     Django's StreamingHttpResponse so the response is sent to the client
     incrementally rather than buffered entirely in memory.
     """
+    yield "﻿"
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     for row in rows:
