@@ -146,7 +146,7 @@
                     <div class="flex items-center gap-2">
                       <span class="text-xs text-gray-500">{{ ann.created_at|date:"DATETIME_FORMAT" }}</span>
                       {% if ann.can_edit %}
-                        <a href="{% url 'human_annotations:edit_annotation' request.team.slug queue.pk item.pk ann.id %}"
+                        <a href="{% url 'human_annotations:edit_annotation' request.team.slug queue.pk item.pk ann.annotation_id %}"
                            class="btn btn-xs btn-ghost"
                            title="Edit annotation">
                           <i class="fa-solid fa-pencil"></i> Edit

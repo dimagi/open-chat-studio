@@ -149,7 +149,7 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             schema_fields = list(queue.schema.keys())
             annotations = [
                 {
-                    "id": ann.id,
+                    "annotation_id": ann.id,
                     "reviewer": ann.reviewer,
                     "created_at": ann.created_at,
                     "fields": [(name, ann.data.get(name, "")) for name in schema_fields],
