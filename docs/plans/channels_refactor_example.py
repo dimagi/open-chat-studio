@@ -20,7 +20,10 @@ architecture with all review decisions applied:
   - Issue 16: SessionActivationStage handles non-consent session activation (no side effects in should_run)
   - Issue 17: Pipeline catch-all error handler (EventBot + DEFAULT_ERROR_RESPONSE_TEXT + re-raise)
   - Issue 18: Terminal stage order: ResponseSending → SendingErrorHandler → EarlyExitResponse → ActivityTracking
-  - Issue 19: SendingErrorHandlerStage for platform-specific send error side effects
+  - Issue 19: SendingErrorHandlerStage runs a chain of channel-supplied DeliveryErrorHandler
+              callables, then falls through to generic notification handling. Platform-specific
+              behavior (e.g. Telegram 403 → consent revocation) lives next to the channel,
+              not in the generic stage.
   - Issue 20: ResponseSendingStage resilience (try/except, delivery failure notifications)
   - Issue 21: ctx.sending_exceptions (list[Exception] — unified list for text/voice/file failures)
   - Issue 22: PersistenceStage persists regardless of sending exceptions
@@ -54,6 +57,7 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from io import BytesIO
@@ -909,17 +913,35 @@ class ResponseSendingStage(ProcessingStage):
             ) from e
 
 
+DeliveryErrorHandler = Callable[[MessageProcessingContext, Exception], bool]
+"""Channel-specific delivery error handler.
+
+Returns True if the handler claimed the exception (chain stops); False to
+let the next handler — or the generic notification fallback — run.
+"""
+
+
 class SendingErrorHandlerStage(ProcessingStage):
     """TERMINAL STAGE: Handles notifications and side effects from send failures.
 
     Processes ctx.sending_exceptions (a list of MessageDeliveryFailure and
     FileDeliveryFailure instances set by ResponseSendingStage).
 
+    Channels plug in platform-specific behavior via the error_handlers chain.
+    Each handler returns True to claim the exception; unclaimed exceptions
+    fall through to generic handling:
+
     - MessageDeliveryFailure: sends a failure notification
-    - FileDeliveryFailure: sends a failure notification
-    - ApiTelegramException 403 (bot blocked): revokes participant consent
+    - FileDeliveryFailure: sends a file-specific failure notification
     - Unknown exceptions: re-raised so the task fails
+
+    No platform-specific knowledge lives in this stage — e.g. the Telegram
+    "bot blocked → revoke consent" rule is registered by TelegramChannel as
+    a DeliveryErrorHandler, not coded here.
     """
+
+    def __init__(self, error_handlers: Sequence[DeliveryErrorHandler] = ()) -> None:
+        self._error_handlers: tuple[DeliveryErrorHandler, ...] = tuple(error_handlers)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return bool(ctx.sending_exceptions)
@@ -930,13 +952,14 @@ class SendingErrorHandlerStage(ProcessingStage):
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
         """Handle a single sending exception."""
-        from telebot.apihelper import ApiTelegramException
-
-        from apps.experiments.models import ParticipantData
         from apps.ocs_notifications.notifications import (
             file_delivery_failure_notification,
             message_delivery_failure_notification,
         )
+
+        for handler in self._error_handlers:
+            if handler(ctx, exc):
+                return
 
         if isinstance(exc, MessageDeliveryFailure):
             message_delivery_failure_notification(
@@ -954,18 +977,6 @@ class SendingErrorHandlerStage(ProcessingStage):
                 content_type=exc.file.content_type,
                 session=exc.session,
             )
-            return
-
-        if isinstance(exc, ApiTelegramException):
-            if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
-                try:
-                    participant_data = ParticipantData.objects.get(
-                        participant__identifier=ctx.participant_identifier,
-                        experiment=ctx.experiment,
-                    )
-                    participant_data.update_consent(False)
-                except ParticipantData.DoesNotExist:
-                    ctx.processing_errors.append("Participant data not found during consent revocation")
             return
 
         raise exc  # Unknown exception — propagate to fail the task
@@ -1276,7 +1287,7 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],
@@ -1300,6 +1311,16 @@ class ChannelBase(ABC):
     def _can_send_file(self, file) -> bool:
         """Default: can't send files. Override in subclasses."""
         return False
+
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        """Return channel-specific handlers that get first crack at send failures.
+
+        Each handler returns True to claim the exception (chain stops); otherwise
+        the next handler runs, falling through to generic notification behavior.
+        Override in subclasses to register platform-specific behavior (e.g.
+        TelegramChannel registers a 403 "bot blocked" → consent revocation handler).
+        """
+        return []
 
     @abstractmethod
     def _get_callbacks(self) -> ChannelCallbacks:
@@ -1342,7 +1363,7 @@ class ChannelBase(ABC):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 # No ActivityTrackingStage — caller manages session activity
             ],
@@ -1387,9 +1408,10 @@ class TelegramSender(ChannelSender):
     """Sends messages via the Telegram Bot API.
 
     Exceptions (e.g., ApiTelegramException) are NOT caught here — they
-    propagate to ResponseSendingStage which wraps them in MessageDeliveryFailure,
-    appends to ctx.sending_exceptions, and lets SendingErrorHandlerStage handle
-    platform-specific side effects (e.g., Telegram 403 consent revocation).
+    propagate to ResponseSendingStage which wraps them in MessageDeliveryFailure
+    and appends to ctx.sending_exceptions. SendingErrorHandlerStage then walks
+    the channel's DeliveryErrorHandler chain; TelegramChannel registers
+    handle_telegram_block to translate a 403 "bot blocked" into consent revocation.
     """
 
     def __init__(self, telegram_bot):
@@ -1467,6 +1489,35 @@ class TelegramChannel(ChannelBase):
         elif mime.startswith(("video/", "audio/", "application/")):
             return size <= 50 * 1024 * 1024
         return False
+
+    def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
+        # Telegram-specific delivery error handling lives next to the
+        # channel, not in the generic SendingErrorHandlerStage.
+        return [handle_telegram_block]
+
+
+def handle_telegram_block(ctx: MessageProcessingContext, exc: Exception) -> bool:
+    """Revoke participant consent when Telegram reports the bot was blocked.
+
+    Returns True if the exception was a recognized "bot blocked" 403; False otherwise.
+    """
+    from telebot.apihelper import ApiTelegramException
+
+    from apps.experiments.models import ParticipantData
+
+    if not isinstance(exc, MessageDeliveryFailure) or not isinstance(exc.original_exc, ApiTelegramException):
+        return False
+    api_exc = exc.original_exc
+    if api_exc.error_code != 403 or "bot was blocked by the user" not in api_exc.description:
+        return False
+    try:
+        participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
+            participant__identifier=ctx.participant_identifier,
+        )
+        participant_data.update_consent(False)
+    except ParticipantData.DoesNotExist:
+        ctx.processing_errors.append("Participant data not found during consent revocation")
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -2107,7 +2158,7 @@ class CommCareConnectChannel(ChannelBase):
             ],
             terminal_stages=[
                 ResponseSendingStage(),
-                SendingErrorHandlerStage(),
+                SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],

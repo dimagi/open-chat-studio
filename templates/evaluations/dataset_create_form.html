@@ -15,9 +15,19 @@
       <template x-if="evaluationMode === 'session'">
           <div class="alert alert-info mt-2 mb-2">
               <i class="fa-solid fa-info-circle"></i>
-              <span>{% translate "Session-mode datasets can only be created by cloning from sessions." %}</span>
+              <span>{% translate "Session-mode datasets can only be created by cloning from sessions or importing from an annotation queue." %}</span>
           </div>
       </template>
+    <!-- Import from annotation queue mode -->
+      <div x-show="mode === 'annotation_queue'" class="w-full mt-4">
+        <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">
+          <h3 class="text-lg font-semibold mb-4">{% translate "Import Sessions from Annotation Queue" %}</h3>
+          <p class="text-sm text-gray-600 mb-4">
+            {% translate "All sessions in the selected annotation queue will be added to the dataset. Duplicate sessions will be automatically skipped." %}
+          </p>
+          {% render_form_fields form "annotation_queue" %}
+        </div>
+      </div>
     <!-- Clone from sessions mode -->
       <div x-show="mode === 'clone'" class="w-full mt-4">
         <div class="p-4 bg-base-100 rounded-sm shadow-sm mb-4">

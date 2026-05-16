@@ -1,20 +1,95 @@
+import uuid
+
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiExample, extend_schema
-from rest_framework.exceptions import NotFound
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from apps.api.serializers import ParticipantDataUpdateRequest
+from apps.api.pagination import CursorPagination
+from apps.api.permissions import ReadOnlyAPIKeyPermission
+from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
 from apps.api.tasks import setup_connect_channels_for_bots
 from apps.channels.models import ChannelPlatform
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
-class UpdateParticipantDataView(APIView):
-    required_scopes = ("participants:write",)
-    permission_required = "experiments.change_participantdata"
+class ParticipantView(APIView):
+    """GET: list participants for the team. POST: update/create participant data."""
+
+    pagination_class = CursorPagination
+    permission_classes = [IsAuthenticated, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
+    # base scope; TokenHasOAuthResourceScope appends :read for safe methods, :write otherwise.
+    required_scopes = ("participants",)
+
+    @extend_schema(
+        operation_id="list_participants",
+        summary="List Participants",
+        tags=["Participants"],
+        parameters=[
+            OpenApiParameter(
+                name="identifier",
+                description="Filter by participant identifier",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="platform",
+                description="Filter by platform (e.g. api, telegram, whatsapp)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="chatbot",
+                description="Filter by chatbot public id; returns participants that have data for the chatbot.",
+                required=False,
+                type=OpenApiTypes.UUID,
+            ),
+        ],
+        responses={200: ParticipantDetailSerializer(many=True)},
+        examples=[
+            OpenApiExample(
+                name="ListParticipants",
+                summary="A participant with their chatbot data",
+                response_only=True,
+                value={
+                    "id": "e172ff63-2469-419f-a828-783fc9291bc7",
+                    "identifier": "part1",
+                    "name": "John",
+                    "platform": "api",
+                    "remote_id": "",
+                    "data": [
+                        {
+                            "chatbot": "Support Bot",
+                            "chatbot_id": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
+                            "data": {"name": "John", "timezone": "Africa/Johannesburg"},
+                        },
+                    ],
+                },
+            ),
+        ],
+    )
+    def get(self, request):
+        data_qs = ParticipantData.objects.select_related("experiment").filter(team=request.team)
+        qs = Participant.objects.filter(team=request.team)
+        if identifier := request.query_params.get("identifier"):
+            qs = qs.filter(identifier=identifier)
+        if platform := request.query_params.get("platform"):
+            qs = qs.filter(platform=platform)
+        if experiment_uuid := _parse_experiment_uuid(request.query_params.get("experiment")):
+            data_qs = data_qs.filter(experiment__public_id=experiment_uuid)
+            qs = qs.filter(id__in=data_qs.values_list("participant_id", flat=True))
+        qs = qs.prefetch_related(Prefetch("data_set", queryset=data_qs, to_attr="_prefetched_participant_data"))
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = ParticipantDetailSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     @extend_schema(
         operation_id="update_participant_data",
@@ -74,14 +149,13 @@ class UpdateParticipantDataView(APIView):
         return _update_participant_data(request)
 
 
-@extend_schema(exclude=True)
-class UpdateParticipantDataOldView(APIView):
-    required_scopes = ("participants:write",)
-    permission_required = "experiments.change_participantdata"
-
-    def post(self, request):
-        # This endpoint is kept for backwards compatibility of the path with a trailing "/"
-        return _update_participant_data(request)
+def _parse_experiment_uuid(value):
+    if not value:
+        return None
+    try:
+        return uuid.UUID(value)
+    except ValueError as e:
+        raise ValidationError({"experiment": "Must be a valid UUID."}) from e
 
 
 def _update_participant_data(request):
@@ -141,12 +215,40 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
     return experiment_map
 
 
+def _schedule_external_id(data, experiment, participant):
+    return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
+
+
+def _apply_schedule_update(message, data):
+    message.next_trigger_date = data["date"]
+    message.custom_schedule_params["name"] = data["name"]
+    message.custom_schedule_params["prompt_text"] = data["prompt"]
+    return message
+
+
+def _build_new_scheduled_message(request, experiment, participant, external_id, data):
+    return ScheduledMessage(
+        team=request.team,
+        experiment=experiment,
+        participant=participant,
+        next_trigger_date=data["date"],
+        external_id=external_id,
+        custom_schedule_params={
+            "name": data["name"],
+            "prompt_text": data["prompt"],
+            "repetitions": 1,
+            # these aren't really needed since it's one-off schedule
+            "frequency": 1,
+            "time_period": TimePeriod.DAYS,
+        },
+    )
+
+
 @transaction.atomic()
 def _create_update_schedules(request, experiment, participant, schedule_data):
-    def _get_id(data):
-        return data.get("id") or ScheduledMessage.generate_external_id(data["name"], experiment.id, participant.id)
-
-    data_by_id = {_get_id(data): data for data in schedule_data if not data.get("delete")}
+    data_by_id = {
+        _schedule_external_id(data, experiment, participant): data for data in schedule_data if not data.get("delete")
+    }
     existing_by_id = {
         message.external_id: message
         for message in ScheduledMessage.objects.filter(
@@ -157,29 +259,9 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
     updated = []
     for external_id, data in data_by_id.items():
         if external_id in existing_by_id:
-            message = existing_by_id[external_id]
-            message.next_trigger_date = data["date"]
-            message.custom_schedule_params["name"] = data["name"]
-            message.custom_schedule_params["prompt_text"] = data["prompt"]
-            updated.append(message)
+            updated.append(_apply_schedule_update(existing_by_id[external_id], data))
         else:
-            new.append(
-                ScheduledMessage(
-                    team=request.team,
-                    experiment=experiment,
-                    participant=participant,
-                    next_trigger_date=data["date"],
-                    external_id=external_id,
-                    custom_schedule_params={
-                        "name": data["name"],
-                        "prompt_text": data["prompt"],
-                        "repetitions": 1,
-                        # these aren't really needed since it's one-off schedule
-                        "frequency": 1,
-                        "time_period": TimePeriod.DAYS,
-                    },
-                )
-            )
+            new.append(_build_new_scheduled_message(request, experiment, participant, external_id, data))
 
     delete_ids = {data["id"] for data in schedule_data if data.get("delete")}
     if delete_ids:

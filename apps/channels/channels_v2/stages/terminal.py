@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
 from django.utils import timezone
-from telebot.apihelper import ApiTelegramException
 
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
@@ -12,7 +12,6 @@ from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.channels_v2.stages.core import RESET_COMMAND
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ParticipantData
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
@@ -21,6 +20,13 @@ from apps.ocs_notifications.notifications import (
 
 if TYPE_CHECKING:
     from apps.service_providers.speech_service import SynthesizedAudio
+
+DeliveryErrorHandler = Callable[[MessageProcessingContext, Exception], bool]
+"""Channel-specific delivery error handler.
+
+Returns True if the handler claimed the exception (chain stops); False to let
+the next handler — or the generic notification fallback — run.
+"""
 
 logger = logging.getLogger("ocs.channels")
 
@@ -103,7 +109,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.send_text(text, recipient)
         except Exception as e:
-            logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
                 context="text message",
@@ -113,7 +118,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.send_voice(audio, recipient)
         except Exception as e:
-            logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
                 context="voice message",
@@ -123,7 +127,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.flush()
         except Exception as e:
-            logger.exception(e)
             raise MessageDeliveryFailure(
                 e,
                 context="flush",
@@ -133,7 +136,6 @@ class ResponseSendingStage(ProcessingStage):
         try:
             ctx.sender.send_file(file, recipient, ctx.experiment_session.id)
         except Exception as e:
-            logger.exception(e)
             ctx.sending_exceptions.append(
                 FileDeliveryFailure(
                     e,
@@ -152,9 +154,14 @@ class ResponseSendingStage(ProcessingStage):
 class SendingErrorHandlerStage(ProcessingStage):
     """TERMINAL STAGE: Handles notifications and side effects from send failures.
 
-    Processes ctx.sending_exceptions
-
+    Processes ctx.sending_exceptions. Channels can plug in platform-specific
+    behavior by passing a chain of ``DeliveryErrorHandler`` callables; each
+    handler returns True to claim the exception. Unclaimed exceptions fall
+    through to generic notification handling.
     """
+
+    def __init__(self, error_handlers: Sequence[DeliveryErrorHandler] = ()) -> None:
+        self._error_handlers: tuple[DeliveryErrorHandler, ...] = tuple(error_handlers)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return bool(ctx.sending_exceptions)
@@ -165,6 +172,10 @@ class SendingErrorHandlerStage(ProcessingStage):
 
     def _handle_exception(self, ctx: MessageProcessingContext, exc: Exception) -> None:
         """Handle a single sending exception."""
+        for handler in self._error_handlers:
+            if handler(ctx, exc):
+                return
+
         if isinstance(exc, MessageDeliveryFailure):
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
@@ -183,18 +194,6 @@ class SendingErrorHandlerStage(ProcessingStage):
                 content_type=exc.file.content_type,
                 session=ctx.experiment_session,
             )
-            return
-
-        if isinstance(exc, ApiTelegramException):
-            if exc.error_code == 403 and "bot was blocked by the user" in exc.description:
-                try:
-                    participant_data = ParticipantData.objects.get(
-                        participant__identifier=ctx.participant_identifier,
-                        experiment=ctx.experiment,
-                    )
-                    participant_data.update_consent(False)
-                except ParticipantData.DoesNotExist:
-                    ctx.processing_errors.append("Participant data not found during consent revocation")
             return
 
         raise exc  # Unknown exception -- propagate to fail the task

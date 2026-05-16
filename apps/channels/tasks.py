@@ -8,6 +8,7 @@ from telebot import types
 from twilio.request_validator import RequestValidator
 
 from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.channels_v2.telegram_channel import TelegramChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import (
     BaseMessage,
@@ -23,10 +24,10 @@ from apps.chat.channels import (
     EvaluationChannel,
     FacebookMessengerChannel,
     SureAdhereChannel,
-    TelegramChannel,
     WhatsappChannel,
 )
 from apps.chat.models import ChatMessage
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import set_current_team
@@ -49,7 +50,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         return
 
     message = TelegramMessage.parse(update)
-    message_handler = TelegramChannel(experiment_channel.experiment.default_version, experiment_channel)
+    message_handler = TelegramChannel(resolve_published_or_working(experiment_channel.experiment), experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 
     message_handler.new_user_message(message)
@@ -70,7 +71,9 @@ def handle_twilio_message(self, message_data: dict):
         log.info(f"No experiment channel found for {channel_id_key}: {message.to}")
         return
 
-    message_handler = ChannelClass(experiment_channel.experiment.default_version, experiment_channel=experiment_channel)
+    message_handler = ChannelClass(
+        resolve_published_or_working(experiment_channel.experiment), experiment_channel=experiment_channel
+    )
     update_taskbadger_data(self, message_handler, message)
 
     message_handler.new_user_message(message)
@@ -110,7 +113,7 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
     if not experiment_channel:
         log.info(f"No experiment channel found for SureAdhere tenant ID: {sureadhere_tenant_id}")
         return
-    channel = SureAdhereChannel(experiment_channel.experiment.default_version, experiment_channel)
+    channel = SureAdhereChannel(resolve_published_or_working(experiment_channel.experiment), experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
 
@@ -126,7 +129,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     if not experiment_channel:
         log.info(f"No experiment channel found for experiment_id: {experiment_id}")
         return
-    channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
+    channel = WhatsappChannel(resolve_published_or_working(experiment_channel.experiment), experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
 
@@ -174,7 +177,7 @@ def handle_commcare_connect_message(self, experiment_id: int, participant_data_i
 
     message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
     channel = CommCareConnectChannel(
-        experiment=experiment_channel.experiment.default_version, experiment_channel=experiment_channel
+        experiment=resolve_published_or_working(experiment_channel.experiment), experiment_channel=experiment_channel
     )
 
     update_taskbadger_data(self, channel, message)
@@ -209,7 +212,7 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
         return
 
     set_current_team(experiment_channel.team)
-    channel = WhatsappChannel(experiment_channel.experiment.default_version, experiment_channel)
+    channel = WhatsappChannel(resolve_published_or_working(experiment_channel.experiment), experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
 
@@ -269,7 +272,7 @@ def handle_email_message(self, email_data: dict, channel_id: int | None = None, 
     thread_context = EmailThreadContext.from_inbound(message)
 
     channel = EmailChannel(
-        experiment=experiment_channel.experiment.default_version,
+        experiment=resolve_published_or_working(experiment_channel.experiment),
         experiment_channel=experiment_channel,
         experiment_session=session,
         thread_context=thread_context,

@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -148,9 +149,11 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             schema_fields = list(queue.schema.keys())
             annotations = [
                 {
+                    "annotation_id": ann.id,
                     "reviewer": ann.reviewer,
                     "created_at": ann.created_at,
                     "fields": [(name, ann.data.get(name, "")) for name in schema_fields],
+                    "can_edit": ann.reviewer_id == request.user.id,
                 }
                 for ann in item.annotations.filter(status=AnnotationStatus.SUBMITTED)
                 .select_related("reviewer")
@@ -225,6 +228,77 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
             )
 
         return redirect("human_annotations:annotate_queue", team_slug=team_slug, pk=pk)
+
+
+class EditAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Allow the original reviewer to edit their submitted annotation."""
+
+    permission_required = "human_annotations.add_annotation"
+
+    def _get_annotation(self, request, pk, item_pk, annotation_pk):
+        annotation = get_object_or_404(
+            Annotation.objects.select_related("item__queue"),
+            id=annotation_pk,
+            item_id=item_pk,
+            item__queue_id=pk,
+            item__queue__team=request.team,
+        )
+        if annotation.reviewer_id != request.user.id:
+            raise PermissionDenied("You can only edit your own annotations.")
+        return annotation.item.queue, annotation.item, annotation
+
+    def get(self, request, team_slug: str, pk: int, item_pk: int, annotation_pk: int):
+        queue, item, annotation = self._get_annotation(request, pk, item_pk, annotation_pk)
+        FormClass = build_annotation_form(queue)
+        form = FormClass(initial=annotation.data)
+        item_content = _get_item_display_content(item)
+        progress = _get_progress_for_user(queue, request.user)
+        return render(
+            request,
+            "human_annotations/annotate.html",
+            {
+                "queue": queue,
+                "item": item,
+                "form": form,
+                "can_annotate": True,
+                "is_edit": True,
+                "annotation": annotation,
+                "progress": progress,
+                "item_content": item_content,
+                "active_tab": "annotation_queues",
+            },
+        )
+
+    def post(self, request, team_slug: str, pk: int, item_pk: int, annotation_pk: int):
+        queue, item, annotation = self._get_annotation(request, pk, item_pk, annotation_pk)
+        FormClass = build_annotation_form(queue)
+        form = FormClass(request.POST)
+        if form.is_valid():
+            data = {k: v for k, v in form.cleaned_data.items() if v is not None and v != ""}
+            annotation.data = data
+            annotation.save(update_fields=["data", "updated_at"])
+            annotation.recompute_queue_aggregates(queue)
+            messages.success(request, "Annotation updated.")
+            return redirect("human_annotations:annotate_item", team_slug=team_slug, pk=pk, item_pk=item_pk)
+
+        messages.error(request, "Invalid annotation data. Please check the form.")
+        item_content = _get_item_display_content(item)
+        progress = _get_progress_for_user(queue, request.user)
+        return render(
+            request,
+            "human_annotations/annotate.html",
+            {
+                "queue": queue,
+                "item": item,
+                "form": form,
+                "can_annotate": True,
+                "is_edit": True,
+                "annotation": annotation,
+                "progress": progress,
+                "item_content": item_content,
+                "active_tab": "annotation_queues",
+            },
+        )
 
 
 class FlagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):

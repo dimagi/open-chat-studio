@@ -54,6 +54,9 @@
         </div>
       </div>
     {% endif %}
+
+    {% include "evaluations/components/auto_population_rules_panel.html" with dataset=object %}
+
     <h2 class="pg-subtitle">{% if object.evaluation_mode == 'session' %}{% translate "Sessions" %}{% else %}{% translate "Messages" %}{% endif %}</h2>
     <div id="dataset-messages-table"
          hx-get="{% url 'evaluations:dataset_messages_table' request.team.slug object.id %}{% querystring %}"
@@ -65,9 +68,15 @@
       </div>
     </div>
 
-  <div x-data="datasetModeSelector({ defaultMode: 'clone', sessionIdsFetchUrl: '{% url 'evaluations:dataset_sessions_selection_json' team.slug %}', evaluationMode: '{{ object.evaluation_mode }}' })" x-init="init()" class="mt-6">
+  <div x-data="datasetModeSelector({ defaultMode: 'clone', sessionIdsFetchUrl: '{% url 'evaluations:dataset_sessions_selection_json' team.slug %}?dataset_id={{ object.id }}', evaluationMode: '{{ object.evaluation_mode }}' })" x-init="init()" class="mt-6">
     {% if object.evaluation_mode == 'session' %}
-      <h3 class="text-lg font-semibold mb-4">{% translate "Add Sessions to Dataset" %}</h3>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">{% translate "Add Sessions to Dataset" %}</h3>
+        <a href="{% url 'evaluations:dataset_import_from_queue' request.team.slug object.id %}"
+           class="btn btn-outline btn-sm">
+          <i class="fa-solid fa-file-import mr-2"></i>{% translate "Import from Annotation Queue" %}
+        </a>
+      </div>
     {% else %}
       <h3 class="text-lg font-semibold mb-4">{% translate "Add Messages to Dataset" %}</h3>
 
@@ -118,7 +127,7 @@
               </div>
             </div>
 
-            <div id="sessions-table" class="overflow-x-auto w-full{% if object.evaluation_mode == 'session' %} session-mode-active{% endif %}" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
+            <div id="sessions-table" class="overflow-x-auto w-full{% if object.evaluation_mode == 'session' %} session-mode-active{% endif %}" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}?dataset_id={{ object.id }}">
               {% include "table/table_placeholder.html" %}
             </div>
           </div>

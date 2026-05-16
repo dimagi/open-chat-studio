@@ -1,5 +1,6 @@
 import platform
 import re
+import sys
 import textwrap
 import time
 from pathlib import Path
@@ -164,6 +165,14 @@ def ngrok_url(c: Context):
     return public_url
 
 
+def _disable_stdin_forwarding(c: Context) -> None:
+    """Stop invoke from forwarding stdin to child processes. The long-running
+    dev tasks (runserver, celery worker) never read interactive input, and
+    forwarding fails with EINVAL when launched under a parent (honcho) whose
+    stdin is a foreign TTY whose process group we don't own."""
+    c.config.run.in_stream = False
+
+
 def _get_portless_name(c: Context) -> str:
     result = c.run("portless list", hide=True, warn=True)
     used_names = set(re.findall(r"http://(\w+)\.localhost", result.stdout)) if result.ok else set()
@@ -175,9 +184,10 @@ def _get_portless_name(c: Context) -> str:
     return name
 
 
-@task(aliases=["django", "dev"], help={"public": "Expose server publicly via ngrok tunnel"})
+@task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
+    _disable_stdin_forwarding(c)
     has_portless = c.run("which portless", hide=True, warn=True).ok
     if has_portless:
         portless_name = _get_portless_name(c)
@@ -197,9 +207,9 @@ def runserver(c: Context, public=False):
         else:
             env = " ".join(env_vars)
             runserver_command = f"{env} {runserver_command}"
-            pty = True
+            pty = sys.stdout.isatty()
     else:
-        pty = True
+        pty = sys.stdout.isatty()
 
     c.run(runserver_command, echo=True, pty=pty)
 
@@ -207,11 +217,12 @@ def runserver(c: Context, public=False):
 @task(
     help={
         "gevent": "Use gevent pool for async tasks (disables beat scheduler)",
-        "beat": "Include beat scheduler for periodic tasks (default: True)",
+        "beat": "Include beat scheduler for periodic tasks (default: False)",
     }
 )
-def celery(c: Context, gevent=False, beat=True):
+def celery(c: Context, gevent=False, beat=False):
     """Start Celery worker with auto-reload on code changes."""
+    _disable_stdin_forwarding(c)
     cmd = "celery -A config worker -l INFO"
     if gevent:
         cmd += " --pool gevent --concurrency 10"
@@ -222,7 +233,13 @@ def celery(c: Context, gevent=False, beat=True):
 
     if gevent:
         cprint("Starting celery worker with gevent pool. This will not run celery beat.", "yellow")
-    c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=True)
+    c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=sys.stdout.isatty())
+
+
+@task
+def dev(c: Context):
+    """Run Django, Celery, and the webpack asset watcher together via honcho."""
+    c.run("uv run honcho -f Procfile.dev start", echo=True, pty=True)
 
 
 @task(

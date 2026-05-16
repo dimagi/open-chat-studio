@@ -8,7 +8,7 @@ from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.teams.models import Team
 
@@ -35,6 +35,32 @@ class ParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Participant
         fields = ["identifier", "remote_id"]
+
+
+class ParticipantDataEntrySerializer(serializers.ModelSerializer):
+    chatbot = serializers.CharField(source="experiment.name", read_only=True)
+    chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
+
+    class Meta:
+        model = ParticipantData
+        fields = ["chatbot", "chatbot_id", "data"]
+
+
+class ParticipantDetailSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    data = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Participant
+        fields = ["id", "identifier", "name", "platform", "remote_id", "data"]
+
+    @extend_schema_field(ParticipantDataEntrySerializer(many=True))
+    def get_data(self, obj):
+        # queryset is pre-annotated via the view's get_queryset / prefetch
+        qs = getattr(obj, "_prefetched_participant_data", None)
+        if qs is None:
+            qs = obj.data_set.filter(team=obj.team)
+        return ParticipantDataEntrySerializer(qs, many=True).data
 
 
 class TeamSerializer(serializers.ModelSerializer):
@@ -257,7 +283,13 @@ class TriggerBotMessageRequest(serializers.Serializer):
     identifier = serializers.CharField(label="Participant Identifier")
     platform = serializers.ChoiceField(choices=ChannelPlatform.choices, label="Participant Platform")
     experiment = serializers.UUIDField(label="Experiment ID")
-    prompt_text = serializers.CharField(label="Prompt to go to bot")
+    prompt_text = serializers.CharField(label="Prompt to go to bot", required=False, allow_null=True, default=None)
+    message_text = serializers.CharField(
+        label="Message to send directly to participant (bypasses bot/LLM)",
+        required=False,
+        allow_null=True,
+        default=None,
+    )
     start_new_session = serializers.BooleanField(label="Starts a new session", required=False, default=False)
     session_data = serializers.DictField(
         help_text="Update session data. This will be merged with existing session data", required=False, default=dict
@@ -267,3 +299,12 @@ class TriggerBotMessageRequest(serializers.Serializer):
         required=False,
         default=dict,
     )
+
+    def validate(self, data):  # ty: ignore[invalid-method-override]
+        has_prompt = bool(data.get("prompt_text"))
+        has_message = bool(data.get("message_text"))
+        if has_prompt and has_message:
+            raise serializers.ValidationError("Provide either 'prompt_text' or 'message_text', not both.")
+        if not has_prompt and not has_message:
+            raise serializers.ValidationError("Either 'prompt_text' or 'message_text' must be provided.")
+        return data

@@ -4,6 +4,7 @@ from apps.utils.admin import ReadonlyAdminMixin
 
 from .models import (
     AppliedTag,
+    DatasetAutoPopulationRule,
     EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
@@ -82,3 +83,19 @@ class AppliedTagAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("id", "evaluation_result", "rule", "tag", "team")
     list_filter = ("team",)
     search_fields = ("rule__evaluator__name",)
+
+
+@admin.register(DatasetAutoPopulationRule)
+class DatasetAutoPopulationRuleAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "team",
+        "dataset",
+        "source_experiment",
+        "is_enabled",
+        "last_run_at",
+        "last_run_status",
+        "consecutive_failure_count",
+    )
+    list_filter = ("is_enabled", "last_run_status", "team")
+    search_fields = ("dataset__name", "source_experiment__name")

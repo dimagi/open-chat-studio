@@ -122,6 +122,17 @@
       </div>
     </div>
 
+    <div class="fieldset w-full mt-4">
+      <label class="cursor-pointer label inline-flex items-center gap-2">
+        {{ form.auto_run_on_append }}
+        <span class="label-text">{% translate "Auto-run when new rows are auto-populated" %}</span>
+      </label>
+      <p class="text-xs text-gray-500 mt-1">
+        {{ form.auto_run_on_append.help_text }}
+      </p>
+      {{ form.auto_run_on_append.errors }}
+    </div>
+
   </div>
 
 {% endblock form %}
