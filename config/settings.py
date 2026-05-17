@@ -519,6 +519,10 @@ SCHEDULED_TASKS = {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
         "schedule": timedelta(days=1),
     },
+    "evaluations.auto_population.auto_populate_eval_datasets": {
+        "task": "apps.evaluations.auto_population.auto_populate_eval_datasets",
+        "schedule": timedelta(minutes=5),
+    },
 }
 
 CACHES = {
@@ -907,6 +911,7 @@ OAUTH2_PROVIDER = {
         "sessions:read": "List and Read Sessions",
         "sessions:write": "Manage Sessions",
         "files:read": "Download file content",
+        "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
     },
 }
@@ -940,3 +945,7 @@ MB = 1_048_576  # 1 MB
 RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 5 * MB
 RESTRICTED_HTTP_MAX_REQUEST_BYTES = MB
 RESTRICTED_HTTP_MAX_FILE_UPLOAD_BYTES = 25 * MB
+
+# Evaluations settings
+# How far back the auto-populate-eval-datasets task scans for new sessions per rule.
+EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS = env.int("EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS", default=30)

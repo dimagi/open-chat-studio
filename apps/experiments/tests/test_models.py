@@ -854,22 +854,6 @@ class TestExperimentModel:
 
 @pytest.mark.django_db()
 class TestExperimentObjectManager:
-    def test_get_default_or_working(self):
-        working_exp = ExperimentFactory.create(version_number=3)
-        # With no versions, working_exp should be returned
-        assert Experiment.objects.get_default_or_working(family_member=working_exp) == working_exp
-
-        # With versions, the default version should be returned
-        team = working_exp.team
-        exp_v1 = ExperimentFactory.create(team=team, version_number=2, working_version=working_exp)
-        exp_v2 = ExperimentFactory.create(
-            team=team, version_number=3, working_version=working_exp, is_default_version=True
-        )
-
-        assert Experiment.objects.get_default_or_working(family_member=working_exp) == exp_v2
-        assert Experiment.objects.get_default_or_working(family_member=exp_v1) == exp_v2
-        assert Experiment.objects.get_default_or_working(family_member=exp_v2) == exp_v2
-
     def test_working_versions_queryset(self, team):
         experiments = ExperimentFactory.create_batch(3, team=team)
         for working_exp in experiments:

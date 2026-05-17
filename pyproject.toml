@@ -38,7 +38,7 @@ dependencies = [
     "httpx",
     "jinja2",
     "langchain>=1.1.0",
-    "langchain-core>=0.3.23",
+    "langchain-core>=1.4.0",
     "langchain-anthropic",
     "langchain-openai>=1.1.14",
     "langchain_google_genai",
@@ -69,7 +69,7 @@ dependencies = [
     "phonenumberslite",
     "emoji",
     "python-magic",
-    "urllib3>=2.3.0",
+    "urllib3>=2.7.0",
     "pycryptodome",
     "django-pydantic-field",
     "pgvector",
@@ -84,7 +84,7 @@ dependencies = [
     "django-watchfiles>=1.4.0",
     "django-silk>=5.4.3",
     "django-oauth-toolkit>=3.2.0,<4.0.0",
-    "langchain-classic>=1.0.0",
+    "langchain-classic>=1.0.7",
     "langchain-google-vertexai",
     "python-json-logger>=3.2.1",
     "chardet",
@@ -173,6 +173,7 @@ dev = [
     "prek>=0.3.2",
     "django-types",
     "ty==0.0.33",
+    "honcho>=2.0.0",
 ]
 docs = [
     "zensical>=0.0.40",
@@ -200,7 +201,7 @@ python-version = "3.13"
 python = ".venv"
 
 [tool.ty.src]
-exclude = ["migrations/", "locust/"]
+exclude = ["migrations/", "locust/", "docs/plans/"]
 
 [tool.ty.rules]
 all = "ignore"

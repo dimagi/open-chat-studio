@@ -40,6 +40,11 @@ from apps.channels.serializers import (
     CommCareConnectMessageSerializer,
 )
 from apps.channels.utils import validate_platform_availability
+from apps.chatbots.version_resolver import (
+    VersionSelectionRule,
+    resolve_chatbot_version,
+    resolve_published_or_working,
+)
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
 from apps.service_providers.models import MessagingProviderType
@@ -216,7 +221,10 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
-    experiment_version = experiment.get_version(version) if version is not None else experiment.default_version
+    if version:
+        experiment_version = resolve_chatbot_version(experiment, VersionSelectionRule.SPECIFIC, version_number=version)
+    else:
+        experiment_version = resolve_published_or_working(experiment)
     ai_response = tasks.handle_api_message(
         request.user,
         experiment_version,

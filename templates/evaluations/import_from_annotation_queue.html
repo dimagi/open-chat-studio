@@ -1,0 +1,36 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:dataset_home' request.team.slug %}">{% translate "Datasets" %}</a></li>
+      <li><a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.pk %}">{{ dataset.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Import from Annotation Queue" %}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+<div class="flex flex-col gap-4 max-w-lg">
+  <h2 class="text-xl font-bold">
+    {% blocktranslate with dataset_name=dataset.name %}Import Sessions into "{{ dataset_name }}"{% endblocktranslate %}
+  </h2>
+  <p class="text-sm text-gray-600">
+    {% translate "Sessions from the selected annotation queue will be added to this dataset. Sessions that already exist in the dataset will be skipped." %}
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="flex flex-col gap-4">
+      {% render_form_fields form %}
+
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">{% translate "Import" %}</button>
+        <a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.pk %}"
+           class="btn btn-ghost">{% translate "Cancel" %}</a>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock app %}

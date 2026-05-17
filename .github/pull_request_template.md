@@ -15,6 +15,8 @@ The primary goal of this section is to provide information to the reviewer to ma
 
 Include technical details about the change and highlight the primary code changes and any decisions or design points
 that the reviewer should be made aware of.
+
+This should NOT be a summary of the every change. Focus on decisions and outcomes.
 -->
 
 

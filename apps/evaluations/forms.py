@@ -7,12 +7,15 @@ from django import forms
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
+from django.http import QueryDict
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import Tag
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
+    DatasetAutoPopulationRule,
     DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
@@ -21,7 +24,6 @@ from apps.evaluations.models import (
     EvaluationMode,
     Evaluator,
     EvaluatorTagRule,
-    ExperimentVersionSelection,
 )
 from apps.evaluations.rule_validation import validate_condition, validate_field_in_schema
 from apps.evaluations.tasks import (
@@ -32,6 +34,8 @@ from apps.evaluations.tasks import (
 from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
+from apps.human_annotations.models import AnnotationQueue, QueueStatus
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 
 class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
@@ -78,8 +82,8 @@ def get_experiment_version_choices(experiment_queryset):
     Returns consistent (value, label) tuples that can be used by both forms and views.
     """
     choices = [
-        (ExperimentVersionSelection.LATEST_WORKING.value, ExperimentVersionSelection.LATEST_WORKING.label),
-        (ExperimentVersionSelection.LATEST_PUBLISHED.value, ExperimentVersionSelection.LATEST_PUBLISHED.label),
+        (VersionSelectionRule.LATEST_WORKING.value, VersionSelectionRule.LATEST_WORKING.label),
+        (VersionSelectionRule.LATEST_PUBLISHED.value, VersionSelectionRule.LATEST_PUBLISHED.label),
     ]
 
     # Add specific versions if queryset provided
@@ -130,6 +134,7 @@ class EvaluationConfigForm(forms.ModelForm):
             "experiment_version",
             "run_generation",
             "base_experiment",
+            "auto_run_on_append",
         ]
         widgets = {
             "evaluators": EvaluatorCheckboxWidget(),
@@ -165,10 +170,10 @@ class EvaluationConfigForm(forms.ModelForm):
                 self.initial["experiment"] = self.instance.base_experiment
                 # Filter the experiment_version queryset to only show versions for this experiment
                 experiment_version_queryset = self._get_version_choices(self.instance.base_experiment.id)
-                if self.instance.version_selection_type == ExperimentVersionSelection.LATEST_WORKING:
-                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_WORKING.value
-                elif self.instance.version_selection_type == ExperimentVersionSelection.LATEST_PUBLISHED:
-                    self.initial["experiment_version"] = ExperimentVersionSelection.LATEST_PUBLISHED.value
+                if self.instance.version_selection_type == VersionSelectionRule.LATEST_WORKING:
+                    self.initial["experiment_version"] = VersionSelectionRule.LATEST_WORKING.value
+                elif self.instance.version_selection_type == VersionSelectionRule.LATEST_PUBLISHED:
+                    self.initial["experiment_version"] = VersionSelectionRule.LATEST_PUBLISHED.value
         elif experiment_id := self.data.get("experiment"):
             experiment_version_queryset = self._get_version_choices(experiment_id)
 
@@ -216,20 +221,20 @@ class EvaluationConfigForm(forms.ModelForm):
             return cleaned_data
 
         if experiment_version in {
-            ExperimentVersionSelection.LATEST_WORKING,
-            ExperimentVersionSelection.LATEST_PUBLISHED,
+            VersionSelectionRule.LATEST_WORKING,
+            VersionSelectionRule.LATEST_PUBLISHED,
         }:
-            if experiment_version == ExperimentVersionSelection.LATEST_WORKING:
-                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_WORKING
+            if experiment_version == VersionSelectionRule.LATEST_WORKING:
+                cleaned_data["version_selection_type"] = VersionSelectionRule.LATEST_WORKING
                 cleaned_data["experiment_version"] = None
-            elif experiment_version == ExperimentVersionSelection.LATEST_PUBLISHED:
-                cleaned_data["version_selection_type"] = ExperimentVersionSelection.LATEST_PUBLISHED
+            elif experiment_version == VersionSelectionRule.LATEST_PUBLISHED:
+                cleaned_data["version_selection_type"] = VersionSelectionRule.LATEST_PUBLISHED
                 cleaned_data["experiment_version"] = None
         elif not experiment:
-            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["version_selection_type"] = VersionSelectionRule.SPECIFIC
             cleaned_data["experiment_version"] = None
         else:
-            cleaned_data["version_selection_type"] = ExperimentVersionSelection.SPECIFIC
+            cleaned_data["version_selection_type"] = VersionSelectionRule.SPECIFIC
             try:
                 if experiment.id == int(experiment_version):
                     cleaned_data["experiment_version"] = Experiment.objects.get(team=self.team, id=experiment_version)
@@ -251,8 +256,8 @@ class EvaluationConfigForm(forms.ModelForm):
         # Set base_experiment for sentinel values
         experiment = cleaned_data.get("experiment")
         if experiment and cleaned_data["version_selection_type"] in [
-            ExperimentVersionSelection.LATEST_WORKING,
-            ExperimentVersionSelection.LATEST_PUBLISHED,
+            VersionSelectionRule.LATEST_WORKING,
+            VersionSelectionRule.LATEST_PUBLISHED,
         ]:
             instance.base_experiment = experiment
         else:
@@ -554,6 +559,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 
     MODE_CHOICES = [
         ("clone", "Clone from sessions"),
+        ("annotation_queue", "Import from annotation queue"),
         ("manual", "Create manually"),
         ("csv", "Upload CSV file"),
     ]
@@ -596,8 +602,12 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         filtered_session_ids_str = self.data.get("filtered_session_ids", "")
         filtered_session_ids = {sid for sid in filtered_session_ids_str.split(",") if sid}
 
+        # Session-mode datasets are allowed to start empty (they may be auto-populated
+        # later). Message-mode datasets still need at least one session to clone from.
         if not session_ids and not filtered_session_ids:
-            raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+            if self.cleaned_data.get("evaluation_mode") != EvaluationMode.SESSION:
+                raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
+            return session_ids, filtered_session_ids
 
         intersection = session_ids & filtered_session_ids
         if intersection:
@@ -663,6 +673,14 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
 class EvaluationDatasetForm(EvaluationDatasetBaseForm):
     """Form for creating evaluation datasets."""
 
+    annotation_queue = forms.ModelChoiceField(
+        queryset=AnnotationQueue.objects.none(),
+        required=False,
+        label="Annotation queue",
+        help_text="All sessions in the selected queue will be added to the dataset.",
+        widget=forms.Select(attrs={"class": "select w-full"}),
+    )
+
     messages_json = forms.CharField(
         widget=forms.HiddenInput(),
         required=False,
@@ -690,8 +708,16 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         required=False,
     )
 
-    def __init__(self, team, *args, **kwargs):
+    def __init__(self, team, *args, user, **kwargs):
         super().__init__(team, *args, **kwargs)
+        self.user = user
+        self.fields["annotation_queue"].queryset = (
+            AnnotationQueue.objects.visible_to(user, team)
+            .filter(items__session__isnull=False)
+            .exclude(status=QueueStatus.ARCHIVED)
+            .distinct()
+            .order_by("name")
+        )
 
     def clean_name(self):
         name = self.cleaned_data.get("name")
@@ -705,13 +731,22 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
         mode = cleaned_data.get("mode")
         evaluation_mode = cleaned_data.get("evaluation_mode")
 
-        if evaluation_mode == EvaluationMode.SESSION and mode != "clone":
-            raise forms.ValidationError({"mode": "Session-mode datasets can only be created by cloning from sessions."})
+        if evaluation_mode == EvaluationMode.SESSION and mode not in {"clone", "annotation_queue"}:
+            raise forms.ValidationError(
+                {
+                    "mode": (
+                        "Session-mode datasets can only be created by cloning from sessions or importing from a queue."
+                    )
+                }
+            )
 
         if mode == "clone":
             session_ids, filtered_session_ids = self._clean_clone()
             cleaned_data["session_ids"] = session_ids
             cleaned_data["filtered_session_ids"] = filtered_session_ids
+        elif mode == "annotation_queue":
+            cleaned_data["session_ids"] = self._clean_annotation_queue()
+            cleaned_data["filtered_session_ids"] = set()
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -720,6 +755,21 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             cleaned_data["column_mapping"] = column_mapping
             cleaned_data["history_column"] = history_column
         return cleaned_data
+
+    def _clean_annotation_queue(self):
+        """Validates the selected queue and returns the set of session external IDs to import."""
+        queue = self.cleaned_data.get("annotation_queue")
+        if not queue:
+            raise forms.ValidationError({"annotation_queue": "Please select an annotation queue."})
+
+        session_external_ids = set(
+            queue.items.filter(session__isnull=False, session__team=self.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+        if not session_external_ids:
+            raise forms.ValidationError({"annotation_queue": "The selected queue does not contain any sessions."})
+        return {str(sid) for sid in session_external_ids}
 
     def _clean_manual(self):
         messages_json = self.data.get("messages_json", "")
@@ -887,7 +937,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             dataset.save(update_fields=["status"])
             return dataset
 
-        if mode == "clone":
+        if mode in {"clone", "annotation_queue"}:
             if dataset.evaluation_mode == EvaluationMode.SESSION:
                 self._save_sessions_clone(dataset)
             else:
@@ -954,6 +1004,9 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
         super().__init__(team, *args, **kwargs)
         self.fields["mode"].label = "Add messages mode"
         self.fields["mode"].required = False
+        # Edit page has a dedicated entry point for annotation-queue imports, so
+        # drop it from the inline mode radio to avoid an unhandled submit path.
+        self.fields["mode"].choices = [c for c in self.fields["mode"].choices if c[0] != "annotation_queue"]
         # evaluation_mode is immutable after creation
         if "evaluation_mode" in self.fields:
             del self.fields["evaluation_mode"]
@@ -1004,3 +1057,85 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
                     self._save_session_messages_clone(dataset)
 
         return dataset
+
+
+class ImportFromAnnotationQueueForm(forms.Form):
+    """Form to pick an annotation queue to import sessions from into a dataset."""
+
+    queue = forms.ModelChoiceField(
+        queryset=AnnotationQueue.objects.none(),
+        label="Annotation Queue",
+        help_text="Select an annotation queue. Only queues containing sessions are listed.",
+    )
+
+    def __init__(self, *args, team, user, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.user = user
+        self.fields["queue"].queryset = (
+            AnnotationQueue.objects.visible_to(user, team)
+            .filter(items__session__isnull=False)
+            .exclude(status=QueueStatus.ARCHIVED)
+            .distinct()
+            .order_by("name")
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        queue = cleaned_data.get("queue")
+        if not queue:
+            return cleaned_data
+
+        session_external_ids = list(
+            queue.items.filter(session__isnull=False, session__team=self.team)
+            .values_list("session__external_id", flat=True)
+            .distinct()
+        )
+        if not session_external_ids:
+            raise forms.ValidationError({"queue": "The selected queue does not contain any sessions."})
+
+        cleaned_data["session_external_ids"] = [str(sid) for sid in session_external_ids]
+        return cleaned_data
+
+
+class DatasetAutoPopulationRuleForm(forms.ModelForm):
+    class Meta:
+        model = DatasetAutoPopulationRule
+        fields = ["source_experiment", "filter_query_string", "is_enabled"]
+        widgets = {
+            "filter_query_string": forms.HiddenInput(),
+        }
+
+    def __init__(self, *args, team, dataset, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        self.dataset = dataset
+        self.fields["source_experiment"].queryset = (
+            Experiment.objects.working_versions_queryset().filter(team=team).order_by("name")
+        )
+
+    def clean_filter_query_string(self):
+        raw = self.cleaned_data.get("filter_query_string", "")
+        if not raw:
+            return raw
+        try:
+            params = FilterParams(QueryDict(raw))
+        except Exception as e:  # noqa: BLE001 - surface as a form error
+            raise forms.ValidationError(f"Invalid filter query: {e}") from e
+        if not params.filters:
+            raise forms.ValidationError("Filter query is malformed: no complete column/operator/value triples found.")
+        return raw
+
+    def clean_source_experiment(self):
+        experiment = self.cleaned_data.get("source_experiment")
+        if experiment and experiment.team_id != self.team.id:
+            raise forms.ValidationError("Source chatbot must belong to your team.")
+        return experiment
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.team = self.team
+        instance.dataset = self.dataset
+        if commit:
+            instance.save()
+        return instance

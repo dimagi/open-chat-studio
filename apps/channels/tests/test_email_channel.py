@@ -23,6 +23,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -1026,7 +1027,7 @@ class TestPersistInboundAttachments:
         # size check fires (magic sees b"x"*N as text/plain, causing a
         # spurious mismatch against application/pdf before the size check).
         with patch(
-            "apps.channels.channels_v2.email_channel._detect_content_type",
+            "apps.channels.channels_v2.email_channel.detect_content_type",
             return_value="application/pdf",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1065,7 +1066,7 @@ class TestPersistInboundAttachments:
         # detection-based rejection branch without relying on real libmagic
         # signatures (which can vary by version/platform).
         with patch(
-            "apps.channels.channels_v2.email_channel._detect_content_type",
+            "apps.channels.channels_v2.email_channel.detect_content_type",
             return_value="application/x-msdownload",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1170,10 +1171,10 @@ class TestEmailInboundHandlerWithAttachments:
             [oversized], to_email=channel.extra_data["email_address"], text="Please process"
         )
 
-        # Mock _detect_content_type so the oversized PDF doesn't trip the
+        # Mock detect_content_type so the oversized PDF doesn't trip the
         # mismatch check (libmagic sees a long string of "x" as text/plain).
         with (
-            patch("apps.channels.channels_v2.email_channel._detect_content_type", return_value="application/pdf"),
+            patch("apps.channels.channels_v2.email_channel.detect_content_type", return_value="application/pdf"),
             patch("apps.channels.tasks.handle_email_message.delay") as delay,
         ):
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))
@@ -1270,7 +1271,7 @@ class TestEmailAttachmentsEndToEnd:
 
         with patch.object(EmailChannel, "_get_callbacks", return_value=ChannelCallbacks()):
             email_channel = EmailChannel(
-                experiment=channel.experiment.default_version,
+                experiment=resolve_published_or_working(channel.experiment),
                 experiment_channel=channel,
                 experiment_session=session,
                 thread_context=EmailThreadContext(subject="Re: thread"),

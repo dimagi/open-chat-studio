@@ -237,14 +237,20 @@ class Annotation(BaseTeamModel):
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
 
+        self.recompute_queue_aggregates(item.queue)
+
+    def recompute_queue_aggregates(self, queue=None):
+        """Recompute aggregates for the queue this annotation belongs to."""
+        if queue is None:
+            queue = self.item.queue
         from apps.human_annotations.aggregation import (  # noqa: PLC0415 - circular: aggregation imports human_annotations.models
             compute_aggregates_for_queue,
         )
 
         try:
-            compute_aggregates_for_queue(item.queue)
+            compute_aggregates_for_queue(queue)
         except Exception:
-            logger.exception("Failed to recompute aggregates for queue %s", item.queue_id)
+            logger.exception("Failed to recompute aggregates for queue %s", queue.id)
 
 
 class AnnotationQueueAggregate(BaseTeamModel):
