@@ -241,7 +241,9 @@ class HistoryMixin(LLMResponseMixin):
         )
 
         # Reserve space for the system message so trigger/keep thresholds reflect usable context
-        system_message_tokens = model.get_num_tokens_from_messages([system_message]) if model is not None else 0
+        from apps.pipelines.nodes.history_middleware import _count_tokens  # noqa: PLC0415
+
+        system_message_tokens = _count_tokens(model, [system_message]) if model is not None else 0
         token_limit = max(specified_token_limit - system_message_tokens, 100)
 
         if history_mode == PipelineChatHistoryModes.SUMMARIZE:

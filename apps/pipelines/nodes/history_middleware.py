@@ -6,12 +6,27 @@ from typing import TYPE_CHECKING, cast
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
 
 from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.exceptions import MessageTooLargeError
+
+
+def _count_tokens(model, messages: list) -> int:
+    """Count tokens using the model's tokenizer, falling back to an approximation.
+
+    Some models (e.g. AzureChatOpenAI with only a deployment_name) do not expose
+    a model name that tiktoken can resolve. In those cases we fall back to
+    langchain's built-in approximate counter so that token budgets remain useful.
+    """
+    try:
+        return model.get_num_tokens_from_messages(messages)
+    except Exception:
+        return count_tokens_approximately(messages)
+
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import PipelineNode
@@ -150,10 +165,7 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
         human_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
         if not human_messages:
             return None
-        try:
-            token_count = self._model.get_num_tokens_from_messages([human_messages[-1]])
-        except Exception:
-            return None
+        token_count = _count_tokens(self._model, [human_messages[-1]])
         if token_count > self._token_limit:
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "

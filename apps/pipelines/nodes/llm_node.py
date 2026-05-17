@@ -13,7 +13,7 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
-from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
+from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware, _count_tokens
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -123,10 +123,7 @@ def _build_size_validation_middleware(
     max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
     if not max_token_limit:
         return None
-    try:
-        system_tokens = model.get_num_tokens_from_messages([system_message])
-    except Exception:
-        system_tokens = 0
+    system_tokens = _count_tokens(model, [system_message])
     effective_limit = max(max_token_limit - system_tokens, 0)
     return MessageSizeValidationMiddleware(token_limit=effective_limit, model=model)
 
