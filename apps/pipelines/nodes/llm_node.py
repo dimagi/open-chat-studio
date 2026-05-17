@@ -123,7 +123,10 @@ def _build_size_validation_middleware(
     max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
     if not max_token_limit:
         return None
-    system_tokens = model.get_num_tokens_from_messages([system_message])
+    try:
+        system_tokens = model.get_num_tokens_from_messages([system_message])
+    except Exception:
+        system_tokens = 0
     effective_limit = max(max_token_limit - system_tokens, 0)
     return MessageSizeValidationMiddleware(token_limit=effective_limit, model=model)
 

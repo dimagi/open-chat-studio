@@ -150,7 +150,10 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
         human_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
         if not human_messages:
             return None
-        token_count = self._model.get_num_tokens_from_messages([human_messages[-1]])
+        try:
+            token_count = self._model.get_num_tokens_from_messages([human_messages[-1]])
+        except Exception:
+            return None
         if token_count > self._token_limit:
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "
