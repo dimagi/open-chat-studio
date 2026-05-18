@@ -183,16 +183,23 @@ class AnnotationItem(BaseTeamModel):
         return f"Item {self.id}"
 
     def update_status(self, save=True):
-        """Update item status based on review count vs queue requirement.
+        """Update item status based on review count, authoritative flag, and queue requirement.
         Preserves FLAGGED status — only explicit unflagging clears it."""
         if self.status == AnnotationItemStatus.FLAGGED:
             return
-        if self.review_count >= self.queue.num_reviews_required:
-            self.status = AnnotationItemStatus.COMPLETED
-        elif self.review_count > 0:
-            self.status = AnnotationItemStatus.IN_PROGRESS
-        else:
+
+        required = self.queue.num_reviews_required
+        has_authoritative = self.annotations.filter(status=AnnotationStatus.SUBMITTED, is_authoritative=True).exists()
+
+        if self.review_count == 0:
             self.status = AnnotationItemStatus.PENDING
+        elif self.review_count < required:
+            self.status = AnnotationItemStatus.IN_PROGRESS
+        elif required == 1 or has_authoritative:
+            self.status = AnnotationItemStatus.COMPLETED
+        else:
+            self.status = AnnotationItemStatus.AWAITING_RESOLUTION
+
         if save:
             self.save(update_fields=["status"])
 

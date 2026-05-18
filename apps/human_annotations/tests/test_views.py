@@ -824,7 +824,8 @@ def test_multi_review_second_user_can_annotate(team_with_users):
 
 @pytest.mark.django_db()
 def test_multi_review_item_completed_after_enough_reviews(team_with_users):
-    """Item should only be COMPLETED after reaching num_reviews_required."""
+    """Multi-reviewer items move to AWAITING_RESOLUTION once enough reviews are in;
+    COMPLETED requires an authoritative annotation to be picked."""
     user1 = team_with_users.members.first()
     user2 = team_with_users.members.last()
 
@@ -842,7 +843,7 @@ def test_multi_review_item_completed_after_enough_reviews(team_with_users):
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.IN_PROGRESS
 
-    # Second review - should complete
+    # Second review - reaches required count without authoritative pick
     Annotation.objects.create(
         item=item,
         team=team_with_users,
@@ -852,7 +853,7 @@ def test_multi_review_item_completed_after_enough_reviews(team_with_users):
     )
     item.refresh_from_db()
     assert item.review_count == 2
-    assert item.status == AnnotationItemStatus.COMPLETED
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
 
 
 @pytest.mark.django_db()
