@@ -1,3 +1,10 @@
+<div id="annotate-summary">
+  {% if item.status == "awaiting_resolution" %}
+    <div role="alert" class="alert alert-warning alert-soft mb-3">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <span><strong>Awaiting resolution.</strong> All required reviews submitted. An admin must mark one annotation as authoritative to resolve.</span>
+    </div>
+  {% endif %}
 <div id="annotation-list" class="card bg-base-100 shadow-sm">
   <div class="card-body">
     <h3 class="card-title text-sm">Annotations ({{ annotations|length }})</h3>
@@ -29,7 +36,7 @@
                           class="btn btn-xs btn-ghost"
                           hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
                           hx-vals='{"value":"false"}'
-                          hx-target="#annotation-list"
+                          hx-target="#annotate-summary"
                           hx-swap="outerHTML"
                           hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
                     <i class="fa-solid fa-star-half-stroke"></i> Clear authoritative
@@ -39,7 +46,7 @@
                           class="btn btn-xs btn-outline btn-primary"
                           hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
                           hx-vals='{"value":"true"}'
-                          hx-target="#annotation-list"
+                          hx-target="#annotate-summary"
                           hx-swap="outerHTML"
                           hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
                     <i class="fa-regular fa-star"></i> Mark authoritative
@@ -60,4 +67,5 @@
       {% endfor %}
     </div>
   </div>
+</div>
 </div>

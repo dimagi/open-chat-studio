@@ -395,3 +395,53 @@ def test_backfill_function_marks_single_reviewer_and_downgrades_completed(team, 
     assert single_ann.is_authoritative is True
     assert single_ann.authoritative_set_at is not None
     assert multi_item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+
+@pytest.mark.django_db()
+def test_htmx_swap_clears_awaiting_banner_when_authoritative_set(admin_client, team, second_user):
+    """After marking authoritative via HTMX, the swapped partial should no longer
+    contain the awaiting-resolution banner because the item is now COMPLETED."""
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    admin = team.members.first()
+    user1 = team.members.exclude(pk__in=[admin.pk, second_user.pk]).first()
+    queue.assignees.set([user1, second_user])
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    response = admin_client.post(
+        _set_authoritative_url(team, queue, item, ann1),
+        {"value": "true"},
+        HTTP_HX_REQUEST="true",
+    )
+
+    assert response.status_code == 200
+    # The swapped partial should NOT contain the banner — item is now COMPLETED.
+    assert b"Awaiting resolution." not in response.content
+    # And the swap target should be present.
+    assert b'id="annotate-summary"' in response.content
+
+
+@pytest.mark.django_db()
+def test_htmx_swap_shows_awaiting_banner_when_authoritative_cleared(admin_client, team, second_user):
+    """After clearing authoritative via HTMX, the swapped partial should contain
+    the awaiting-resolution banner because the item is back to AWAITING_RESOLUTION."""
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    admin = team.members.first()
+    user1 = team.members.exclude(pk__in=[admin.pk, second_user.pk]).first()
+    queue.assignees.set([user1, second_user])
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED)
+    admin_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
+
+    response = admin_client.post(
+        _set_authoritative_url(team, queue, item, ann1),
+        {"value": "false"},
+        HTTP_HX_REQUEST="true",
+    )
+
+    assert response.status_code == 200
+    assert b"Awaiting resolution." in response.content

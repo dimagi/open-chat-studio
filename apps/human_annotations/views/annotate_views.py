@@ -399,6 +399,7 @@ class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
         annotation.recompute_queue_aggregates(queue)
 
         if request.headers.get("HX-Request"):
+            item.refresh_from_db()
             annotations = _build_annotations_context(item, request.user, queue)
             return render(
                 request,

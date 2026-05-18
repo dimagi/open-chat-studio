@@ -135,12 +135,6 @@
         </div>
         </div>
       {% elif annotations %}
-        {% if item.status == "awaiting_resolution" %}
-          <div role="alert" class="alert alert-warning alert-soft">
-            <i class="fa-solid fa-circle-exclamation"></i>
-            <span><strong>Awaiting resolution.</strong> All required reviews submitted. An admin must mark one annotation as authoritative to resolve.</span>
-          </div>
-        {% endif %}
         {% include "human_annotations/partials/annotation_list.html" %}
       {% endif %}
 
