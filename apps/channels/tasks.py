@@ -8,6 +8,7 @@ from telebot import types
 from twilio.request_validator import RequestValidator
 
 from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.channels_v2.telegram_channel import TelegramChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import (
     BaseMessage,
@@ -23,7 +24,6 @@ from apps.chat.channels import (
     EvaluationChannel,
     FacebookMessengerChannel,
     SureAdhereChannel,
-    TelegramChannel,
     WhatsappChannel,
 )
 from apps.chat.models import ChatMessage

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from telebot.apihelper import ApiTelegramException
 
 from apps.channels.channels_v2.stages.terminal import (
     FileDeliveryFailure,
@@ -9,7 +8,6 @@ from apps.channels.channels_v2.stages.terminal import (
     SendingErrorHandlerStage,
 )
 from apps.channels.tests.channels.conftest import make_context
-from apps.experiments.models import ParticipantData
 
 
 class TestSendingErrorHandlerStage:
@@ -17,50 +15,55 @@ class TestSendingErrorHandlerStage:
         self.stage = SendingErrorHandlerStage()
 
     def test_should_not_run_without_exceptions(self):
+        """The stage is a no-op when no sending exceptions accumulated upstream."""
         ctx = make_context()
         assert self.stage.should_run(ctx) is False
 
     def test_should_run_with_sending_exceptions(self):
+        """The stage activates as soon as any sending exception is recorded."""
         ctx = make_context(sending_exceptions=[MagicMock()])
         assert self.stage.should_run(ctx) is True
 
-    @patch("apps.experiments.models.ParticipantData.objects")
-    def test_telegram_403_revokes_consent(self, mock_pd_objects):
-        participant_data = MagicMock()
-        mock_pd_objects.get.return_value = participant_data
-        exc = ApiTelegramException(
-            "sendMessage",
-            MagicMock(status_code=403),
-            {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
-        )
-        ctx = make_context(
-            sending_exceptions=[exc],
-            participant_identifier="blocked_user",
-        )
+    def test_handler_chain_claims_exception_and_skips_default(self):
+        """A handler returning True stops the chain and suppresses the generic notification.
 
-        self.stage(ctx)
+        Also asserts the chain keeps walking past handlers that return False, so the
+        first non-claiming handler does not short-circuit subsequent ones.
+        """
+        claiming_handler = MagicMock(return_value=True)
+        passing_handler = MagicMock(return_value=False)
+        stage = SendingErrorHandlerStage(error_handlers=[passing_handler, claiming_handler])
 
-        participant_data.update_consent.assert_called_once_with(False)
+        exc = MessageDeliveryFailure(RuntimeError("boom"), context="text message")
+        ctx = make_context(sending_exceptions=[exc])
 
-    @patch("apps.experiments.models.ParticipantData.objects")
-    def test_telegram_403_participant_not_found(self, mock_pd_objects):
-        mock_pd_objects.get.side_effect = ParticipantData.DoesNotExist
-        exc = ApiTelegramException(
-            "sendMessage",
-            MagicMock(status_code=403),
-            {"error_code": 403, "description": "Forbidden: bot was blocked by the user"},
-        )
-        ctx = make_context(
-            sending_exceptions=[exc],
-            participant_identifier="unknown_user",
-        )
+        with patch("apps.channels.channels_v2.stages.terminal.message_delivery_failure_notification") as mock_notify:
+            stage(ctx)
 
-        self.stage(ctx)
+        passing_handler.assert_called_once_with(ctx, exc)
+        claiming_handler.assert_called_once_with(ctx, exc)
+        mock_notify.assert_not_called()
 
-        assert any("Participant data not found" in e for e in ctx.processing_errors)
+    def test_handler_chain_falls_through_when_no_handler_claims(self):
+        """If every handler returns False, the stage falls back to its built-in notification path."""
+        passing_handler = MagicMock(return_value=False)
+        stage = SendingErrorHandlerStage(error_handlers=[passing_handler])
+
+        exc = MessageDeliveryFailure(RuntimeError("boom"), context="text message")
+        experiment_channel = MagicMock()
+        experiment_channel.platform_enum.title.return_value = "Telegram"
+        ctx = make_context(sending_exceptions=[exc], experiment_channel=experiment_channel)
+
+        with patch("apps.channels.channels_v2.stages.terminal.message_delivery_failure_notification") as mock_notify:
+            stage(ctx)
+
+        passing_handler.assert_called_once_with(ctx, exc)
+        mock_notify.assert_called_once()
 
     @patch("apps.channels.channels_v2.stages.terminal.message_delivery_failure_notification")
     def test_message_delivery_failure_sends_notification_and_does_not_reraise(self, mock_notify):
+        """A wrapped ``MessageDeliveryFailure`` triggers a team notification and is swallowed,
+        so a single send failure does not poison the rest of the pipeline."""
         exc = MessageDeliveryFailure(
             RuntimeError("network error"),
             context="text message",
@@ -95,6 +98,7 @@ class TestSendingErrorHandlerStage:
 
     @patch("apps.channels.channels_v2.stages.terminal.file_delivery_failure_notification")
     def test_file_exception_sends_notification(self, mock_notify):
+        """A ``FileDeliveryFailure`` triggers a file-specific notification and is also swallowed."""
         file_obj = MagicMock()
         file_obj.content_type = "image/png"
         experiment = MagicMock()

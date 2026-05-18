@@ -376,7 +376,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
-@patch("apps.chat.channels.ChannelBase.start_new_session")
+@patch("apps.channels.channels_v2.channel_base.ChannelBase.start_new_session")
 @patch("apps.chatbots.views.send_bot_message.delay")
 def test_new_chatbot_session_view(
     task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users

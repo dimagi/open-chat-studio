@@ -2,6 +2,14 @@
 {% load form_tags i18n %}
 {% block pre_form %}
   <div class="my-4 flex flex-col gap-4" x-data="{ type: '{{ subtype }}' }">
+    <div role="alert" class="alert alert-info alert-soft text-sm py-2">
+      <i class="fa-solid fa-circle-info"></i>
+      <span>
+        We use
+        <a href="https://llm-stats.com" target="_blank" rel="noopener noreferrer" class="link link-hover font-semibold">llm-stats.com</a>
+        to source new model releases as they become available.
+      </span>
+    </div>
     <div>
       <h2 class="font-bold text-lg">Default LLM Models
         {% blocktranslate asvar help_text %}
