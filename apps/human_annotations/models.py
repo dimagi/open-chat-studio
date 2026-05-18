@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Sum
 from django.urls import reverse
+from django.utils import timezone
 from pydantic import TypeAdapter
 
 from apps.evaluations.field_definitions import FieldDefinition
@@ -242,9 +243,24 @@ class Annotation(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
+        if is_new and self.status == AnnotationStatus.SUBMITTED:
+            self._maybe_auto_mark_authoritative()
         super().save(*args, **kwargs)
         if is_new and self.status == AnnotationStatus.SUBMITTED:
             self._update_item_review_count()
+
+    def _maybe_auto_mark_authoritative(self):
+        """For single-reviewer queues, auto-mark the first submission as authoritative.
+        Skips when another authoritative annotation already exists on the item (handles
+        over-budget submissions and avoids violating the partial unique constraint)."""
+        queue = self.item.queue
+        if queue.num_reviews_required != 1:
+            return
+        if Annotation.objects.filter(item=self.item, is_authoritative=True).exists():
+            return
+        self.is_authoritative = True
+        self.authoritative_set_by = None
+        self.authoritative_set_at = timezone.now()
 
     def _update_item_review_count(self):
         """Increment item review count, update status, and recompute queue aggregates."""
