@@ -10,6 +10,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import Participant
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -355,8 +356,6 @@ class TestMetaCloudApi:
     ):
         """When wa_id is missing (username-adopter, not in contact book), the BSUID becomes the
         participant identifier and a new Participant is created."""
-        from apps.experiments.models import Participant  # noqa: PLC0415
-
         chat = Chat.objects.create(team=meta_cloud_api_whatsapp_channel.experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
 

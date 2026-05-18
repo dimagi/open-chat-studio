@@ -1,3 +1,9 @@
+# Note: the webhook-envelope wrapper is intentionally duplicated across the full-payload
+# builders below rather than extracted to a helper. The explicit shape makes it easy to
+# see what an inbound Meta payload actually looks like when reading the fixtures alongside
+# the tests.
+
+
 def legacy_text_message_value(phone_number_id="12345"):
     """Pre-BSUID webhook value: only wa_id / from are present, no user_id fields."""
     return {
