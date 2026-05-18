@@ -1,4 +1,7 @@
+import importlib
+
 import pytest
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import Client
@@ -351,3 +354,44 @@ def test_annotate_item_page_shows_awaiting_banner(admin_client, team, second_use
     assert b"awaiting resolution" in response.content.lower()
     # Admin should see at least one Mark authoritative button.
     assert b"Mark authoritative" in response.content
+
+
+@pytest.mark.django_db()
+def test_backfill_function_marks_single_reviewer_and_downgrades_completed(team, second_user):
+    """Direct test of the backfill helper. Since Django migrations have already
+    run in the test DB, we exercise the helper function in isolation by setting
+    up state that mimics pre-migration data and calling the forwards function."""
+    migration_module = importlib.import_module("apps.human_annotations.migrations.0004_backfill_authoritative")
+    forwards = migration_module.forwards
+
+    # Setup: single-reviewer queue with one submitted annotation that is NOT yet authoritative.
+    single_q = _make_queue(team, num_reviews_required=1)
+    single_item = _make_item(single_q)
+    user = team.members.first()
+    single_ann = Annotation.objects.create(
+        item=single_item, team=team, reviewer=user, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    # Strip the auto-mark to simulate pre-migration data.
+    Annotation.objects.filter(pk=single_ann.pk).update(
+        is_authoritative=False, authoritative_set_by=None, authoritative_set_at=None
+    )
+
+    # Setup: multi-reviewer queue with item already at COMPLETED but no authoritative annotation.
+    multi_q = _make_queue(team, num_reviews_required=2)
+    multi_item = _make_item(multi_q)
+    Annotation.objects.create(item=multi_item, team=team, reviewer=user, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(
+        item=multi_item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED
+    )
+    # Force pre-migration state.
+    AnnotationItem.objects.filter(pk=multi_item.pk).update(status=AnnotationItemStatus.COMPLETED)
+
+    # Run the backfill in isolation.
+    forwards(django_apps, None)
+
+    single_ann.refresh_from_db()
+    multi_item.refresh_from_db()
+
+    assert single_ann.is_authoritative is True
+    assert single_ann.authoritative_set_at is not None
+    assert multi_item.status == AnnotationItemStatus.AWAITING_RESOLUTION
