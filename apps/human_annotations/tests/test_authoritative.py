@@ -142,7 +142,6 @@ def test_multi_reviewer_completed_when_authoritative_set(team, second_user):
     item.refresh_from_db()
     item.update_status()
 
-    item.refresh_from_db()
     assert item.status == AnnotationItemStatus.COMPLETED
 
 

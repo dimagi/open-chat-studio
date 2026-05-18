@@ -823,7 +823,7 @@ def test_multi_review_second_user_can_annotate(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_multi_review_item_completed_after_enough_reviews(team_with_users):
+def test_multi_review_item_awaits_resolution_after_enough_reviews(team_with_users):
     """Multi-reviewer items move to AWAITING_RESOLUTION once enough reviews are in;
     COMPLETED requires an authoritative annotation to be picked."""
     user1 = team_with_users.members.first()

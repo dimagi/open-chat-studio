@@ -182,6 +182,9 @@ class AnnotationItem(BaseTeamModel):
             return f"Message {self.message_id}"
         return f"Item {self.id}"
 
+    def _has_authoritative_annotation(self) -> bool:
+        return self.annotations.filter(status=AnnotationStatus.SUBMITTED, is_authoritative=True).exists()
+
     def update_status(self, save=True):
         """Update item status based on review count, authoritative flag, and queue requirement.
         Preserves FLAGGED status — only explicit unflagging clears it."""
@@ -189,13 +192,12 @@ class AnnotationItem(BaseTeamModel):
             return
 
         required = self.queue.num_reviews_required
-        has_authoritative = self.annotations.filter(status=AnnotationStatus.SUBMITTED, is_authoritative=True).exists()
 
         if self.review_count == 0:
             self.status = AnnotationItemStatus.PENDING
         elif self.review_count < required:
             self.status = AnnotationItemStatus.IN_PROGRESS
-        elif required == 1 or has_authoritative:
+        elif required == 1 or self._has_authoritative_annotation():
             self.status = AnnotationItemStatus.COMPLETED
         else:
             self.status = AnnotationItemStatus.AWAITING_RESOLUTION
