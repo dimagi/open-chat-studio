@@ -1557,3 +1557,21 @@ def test_queue_detail_shows_awaiting_resolution_callout(client, team_with_users,
     assert b"1 awaiting resolution" in response.content
     # And confirm the renamed label is present too.
     assert b"items resolved" in response.content
+
+
+@pytest.mark.django_db()
+def test_items_table_marks_authoritative_with_star(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    ann = Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    ann.refresh_from_db()
+    assert ann.is_authoritative is True
+
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    # The star glyph (fa-star) should appear in the rendered annotations summary.
+    assert b"fa-star" in response.content
