@@ -210,24 +210,7 @@ class TestNewMetaCloudApiMessage:
         )
 
         # Build a payload with two entries for two different phone numbers
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "BIZ_ID",
-                    "changes": [
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("12345"),
-                            "field": "messages",
-                        },
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("99999"),
-                            "field": "messages",
-                        },
-                    ],
-                }
-            ],
-        }
+        payload = meta_cloud_api_messages.multi_text_message(["12345", "99999"])
         response = self._post(payload)
         assert response.status_code == 200
         assert mock_delay.call_count == 2
@@ -237,24 +220,7 @@ class TestNewMetaCloudApiMessage:
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_unknown_phone_number_in_multi_payload_skipped(self, mock_delay, meta_cloud_api_channel):
         """A value with an unknown phone_number_id is skipped; other values are still dispatched."""
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "BIZ_ID",
-                    "changes": [
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("12345"),
-                            "field": "messages",
-                        },
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("unknown_id"),
-                            "field": "messages",
-                        },
-                    ],
-                }
-            ],
-        }
+        payload = meta_cloud_api_messages.multi_text_message(["12345", "unknown_id"])
         response = self._post(payload)
         assert response.status_code == 200
         assert mock_delay.call_count == 1
@@ -287,24 +253,7 @@ class TestNewMetaCloudApiMessage:
 
         # Payload targeting BOTH attacker's phone_number_id and victim's phone_number_id,
         # signed with the attacker's app_secret.
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "BIZ_ID",
-                    "changes": [
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("attacker_phone_id"),
-                            "field": "messages",
-                        },
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("12345"),
-                            "field": "messages",
-                        },
-                    ],
-                }
-            ],
-        }
+        payload = meta_cloud_api_messages.multi_text_message(["attacker_phone_id", "12345"])
         response = self._post(payload, app_secret=attacker_secret)
         assert response.status_code == 200
         mock_delay.assert_not_called()
