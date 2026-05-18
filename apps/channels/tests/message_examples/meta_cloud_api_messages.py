@@ -1,4 +1,5 @@
 def legacy_text_message_value(phone_number_id="12345"):
+    """Pre-BSUID webhook value: only wa_id / from are present, no user_id fields."""
     return {
         "messaging_product": "whatsapp",
         "metadata": {
@@ -19,6 +20,7 @@ def legacy_text_message_value(phone_number_id="12345"):
 
 
 def legacy_text_message(phone_number_id="12345"):
+    """Pre-BSUID full webhook payload: only wa_id / from are present, no user_id fields."""
     return {
         "object": "whatsapp_business_account",
         "entry": [
