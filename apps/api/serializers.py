@@ -7,7 +7,7 @@ from rest_framework.exceptions import NotFound
 from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.teams.models import Team
@@ -107,7 +107,7 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
             instance.tags = []
         data = super().to_representation(instance)
         data["role"] = ChatMessageType(data["role"]).role
-        for key in ChatMessage.INTERNAL_METADATA_KEYS:
+        for key in ChatMessageMetadataKeys.internal_keys():
             data["metadata"].pop(key, None)
         return data
 

@@ -16,7 +16,7 @@ from langchain_core.prompts import PromptTemplate, get_template_variables
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.chat.agent.tools import get_assistant_tools
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessageMetadataKeys
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.repository import ORMRepository
@@ -180,12 +180,15 @@ class AssistantAdapter(BaseAdapter):
         return self._get_openai_metadata(annotation_file_ids)
 
     def _get_openai_metadata(self, annotation_file_ids: list):
-        return {"openai_thread_checkpoint": True, "openai_file_ids": annotation_file_ids}
+        return {
+            ChatMessageMetadataKeys.OPENAI_THREAD_CHECKPOINT: True,
+            ChatMessageMetadataKeys.OPENAI_FILE_IDS: annotation_file_ids,
+        }
 
     def get_messages_to_sync_to_thread(self):
         to_sync = []
         for message in self.session.chat.message_iterator(with_summaries=False):
-            if message.get_metadata("openai_thread_checkpoint"):
+            if message.get_metadata(ChatMessageMetadataKeys.OPENAI_THREAD_CHECKPOINT):
                 break
             to_sync.append(message)
         return [
