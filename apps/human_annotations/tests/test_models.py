@@ -5,8 +5,10 @@ from django.contrib.auth import get_user_model
 from apps.human_annotations.models import (
     Annotation,
     AnnotationItem,
+    AnnotationItemStatus,
     AnnotationItemType,
     AnnotationQueue,
+    AnnotationStatus,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
@@ -123,3 +125,23 @@ def test_authoritative_constraint_allows_one_per_item_across_different_items(tea
     # Both items can have an authoritative annotation simultaneously.
     Annotation.objects.create(item=item1, team=team, reviewer=user, data={}, is_authoritative=True)
     Annotation.objects.create(item=item2, team=team, reviewer=user, data={}, is_authoritative=True)
+
+
+@pytest.mark.django_db()
+def test_get_progress_includes_awaiting_resolution(team):
+    User = get_user_model()
+    user1 = team.members.first()
+    user2 = User.objects.create(username="r2", email="r2@e.com")
+    MembershipFactory.create(team=team, user=user2)
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user1, num_reviews_required=2)
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
+    item = AnnotationItem.objects.create(queue=queue, team=team, item_type=AnnotationItemType.SESSION, session=session)
+    Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=item, team=team, reviewer=user2, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    progress = queue.get_progress()
+
+    assert progress["awaiting_resolution_items"] == 1
+    assert progress["completed_items"] == 0

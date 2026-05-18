@@ -100,6 +100,7 @@ class AnnotationQueue(BaseTeamModel):
         """Return progress stats including review-level progress for multi-review queues."""
         total_items = self.items.count()
         completed_items = self.items.filter(status=AnnotationItemStatus.COMPLETED).count()
+        awaiting_resolution_items = self.items.filter(status=AnnotationItemStatus.AWAITING_RESOLUTION).count()
         flagged_items = self.items.filter(status=AnnotationItemStatus.FLAGGED).count()
 
         total_reviews_needed = total_items * self.num_reviews_required
@@ -109,6 +110,7 @@ class AnnotationQueue(BaseTeamModel):
         return {
             "total_items": total_items,
             "completed_items": completed_items,
+            "awaiting_resolution_items": awaiting_resolution_items,
             "flagged_items": flagged_items,
             "total_reviews_needed": total_reviews_needed,
             "reviews_done": reviews_done,
