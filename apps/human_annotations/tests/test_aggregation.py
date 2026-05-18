@@ -6,6 +6,7 @@ from apps.human_annotations.models import (
     AnnotationItem,
     AnnotationItemType,
     AnnotationQueue,
+    AnnotationStatus,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -150,3 +151,54 @@ def test_aggregates_auto_recompute_on_annotation_save(team, queue_with_int_schem
     agg.refresh_from_db()
     assert agg.aggregates["score"]["count"] == 2
     assert agg.aggregates["score"]["mean"] == 4.0
+
+
+@pytest.mark.django_db()
+def test_aggregation_uses_only_authoritative_when_set(team, queue_with_int_schema):
+    user1 = team.members.first()
+    user2 = team.members.last()
+    queue = queue_with_int_schema
+    queue.num_reviews_required = 2
+    queue.save(update_fields=["num_reviews_required"])
+
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
+    item = AnnotationItem.objects.create(queue=queue, team=team, item_type=AnnotationItemType.SESSION, session=session)
+    # Two divergent annotations; admin picks the second as authoritative.
+    Annotation.objects.create(
+        item=item, team=team, reviewer=user1, data={"score": 1}, status=AnnotationStatus.SUBMITTED
+    )
+    auth = Annotation.objects.create(
+        item=item, team=team, reviewer=user2, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    auth.is_authoritative = True
+    auth.save(update_fields=["is_authoritative"])
+
+    agg = compute_aggregates_for_queue(queue)
+
+    # Only the authoritative value (5) should contribute.
+    assert agg.aggregates["score"]["count"] == 1
+    assert agg.aggregates["score"]["mean"] == 5.0
+
+
+@pytest.mark.django_db()
+def test_aggregation_falls_back_to_all_when_no_authoritative(team, queue_with_int_schema):
+    user1 = team.members.first()
+    user2 = team.members.last()
+    queue = queue_with_int_schema
+    queue.num_reviews_required = 2
+    queue.save(update_fields=["num_reviews_required"])
+
+    session = ExperimentSessionFactory.create(team=team, chat__team=team)
+    item = AnnotationItem.objects.create(queue=queue, team=team, item_type=AnnotationItemType.SESSION, session=session)
+    Annotation.objects.create(
+        item=item, team=team, reviewer=user1, data={"score": 1}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=team, reviewer=user2, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    agg = compute_aggregates_for_queue(queue)
+
+    # Both values should contribute when no authoritative pick.
+    assert agg.aggregates["score"]["count"] == 2
+    assert agg.aggregates["score"]["mean"] == 3.0
