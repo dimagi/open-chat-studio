@@ -17,7 +17,6 @@ from langchain_core.runnables import (
     RunnableSerializable,
     ensure_config,
 )
-from langchain_core.runnables.config import merge_configs
 from pydantic import ConfigDict
 
 from apps.assistants.sync import (
@@ -84,9 +83,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
     def invoke(  # ty: ignore[invalid-method-override]
         self, input: str, config: RunnableConfig | None = None, attachments: list[Attachment] | None = None
     ) -> ChainOutput:
-        callback = self.adapter.callback_handler
         config = ensure_config(config)
-        merged_config = merge_configs(config, {"callbacks": [callback]})
         save_input_to_history = config.get("configurable", {}).get("save_input_to_history", True)
         experiment_tag = config.get("configurable", {}).get("experiment_tag")
         human_message_resource_file_ids = self._upload_tool_resource_files(attachments)
@@ -111,7 +108,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
             if current_thread_id:
                 input_dict["thread_id"] = current_thread_id
             input_dict["instructions"] = self.adapter.get_assistant_instructions()
-            thread_id, run_id = self._get_response_with_retries(merged_config, input_dict, current_thread_id)
+            thread_id, run_id = self._get_response_with_retries(config, input_dict, current_thread_id)
             ai_message, annotation_file_ids = self._get_output_with_annotations(thread_id, run_id)
             ai_message_metadata = self.adapter.get_output_message_metadata(annotation_file_ids)
             ai_message_metadata["openai_run_id"] = run_id
@@ -509,7 +506,6 @@ class AgentAssistantChat(AssistantChat):
         )
 
     def _get_allowed_tools(self, disabled_tools: set[str]):
-
         allowed_tools = [{"type": tool} for tool in self.adapter.assistant_builtin_tools if tool not in disabled_tools]
         if unused_tools := [tool for tool in self.adapter.get_allowed_tools() if tool.name not in disabled_tools]:
             allowed_tools.extend([convert_to_openai_tool(tool) for tool in unused_tools])
