@@ -326,3 +326,28 @@ def test_set_authoritative_htmx_returns_partial(admin_client, team, second_user)
 
     assert response.status_code == 200
     assert b"Authoritative" in response.content
+
+
+@pytest.mark.django_db()
+def test_annotate_item_page_shows_awaiting_banner(admin_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    admin = team.members.first()
+    user1 = team.members.exclude(pk__in=[admin.pk, second_user.pk]).first()  # the non-admin team member
+    # Restrict assignees to reviewers so the admin sees the annotations-list view, not the form.
+    queue.assignees.set([user1, second_user])
+    Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    url = reverse(
+        "human_annotations:annotate_item",
+        args=[team.slug, queue.pk, item.pk],
+    )
+    response = admin_client.get(url)
+
+    assert response.status_code == 200
+    assert b"awaiting resolution" in response.content.lower()
+    # Admin should see at least one Mark authoritative button.
+    assert b"Mark authoritative" in response.content
