@@ -223,8 +223,12 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
         if message_type == "text":
             body = message["text"]["body"]
 
+        # We need to handle multiple contacts
+        contact = message_data["contacts"][0]
+        wa_id = contact.get("wa_id")
+        user_id = contact.get("user_id")
         return MetaCloudAPIMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
+            participant_id=wa_id or user_id,
             message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),

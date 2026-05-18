@@ -65,7 +65,16 @@ class TestTwilio:
             assert whatsapp_message.media_url is None
         else:
             assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
-            assert whatsapp_message.media_url == "http://example.com/media"
+
+    def test_parse_message_with_external_user_id_keeps_phone_as_participant_id(self):
+        message = twilio_messages.Whatsapp.text_message_with_external_user_id()
+        parsed = TwilioMessage.parse(message)
+        assert parsed.participant_id == "+27456897512"
+
+    def test_parse_message_external_user_id_only_uses_bsuid_as_participant_id(self):
+        message = twilio_messages.Whatsapp.text_message_external_user_id_only()
+        parsed = TwilioMessage.parse(message)
+        assert parsed.participant_id == "US.13491208655302741918"
 
     @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
@@ -241,7 +250,7 @@ class TestMetaCloudApi:
     @pytest.mark.parametrize(
         ("message", "message_type"),
         [
-            (meta_cloud_api_messages.text_message_value(), "text"),
+            (meta_cloud_api_messages.legacy_text_message_value(), "text"),
             (meta_cloud_api_messages.audio_message_value(), "audio"),
         ],
     )
@@ -261,7 +270,7 @@ class TestMetaCloudApi:
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
         [
-            (meta_cloud_api_messages.text_message_value(), "text"),
+            (meta_cloud_api_messages.legacy_text_message_value(), "text"),
             (meta_cloud_api_messages.audio_message_value(), "audio"),
         ],
     )
@@ -290,7 +299,7 @@ class TestMetaCloudApi:
         get_voice_transcript_mock.return_value = "Hi"
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
-            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
             message_data=incoming_message,
         )
         if message_type == "text":
@@ -303,16 +312,62 @@ class TestMetaCloudApi:
     def test_unsupported_message_type_does_nothing(
         self, _handle_unsupported_message, _handle_supported_message, db, meta_cloud_api_whatsapp_channel
     ):
-        incoming_message = meta_cloud_api_messages.text_message_value()
+        incoming_message = meta_cloud_api_messages.legacy_text_message_value()
         incoming_message["messages"][0]["type"] = "video"
         incoming_message["messages"][0]["video"] = {}
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
-            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
             message_data=incoming_message,
         )
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("message", "message_type"),
+        [
+            (meta_cloud_api_messages.text_message_with_user_id_and_wa_id_value(), "text"),
+            (meta_cloud_api_messages.text_message_with_username_and_wa_id_value(), "text"),
+            (meta_cloud_api_messages.text_message_user_id_only_value(), "text"),
+        ],
+    )
+    def test_parse_bsuid_payload_shapes(self, message, message_type):
+        parsed = MetaCloudAPIMessage.parse(message)
+        if "wa_id" in message["contacts"][0]:
+            assert parsed.participant_id == "27456897512"
+        else:
+            assert parsed.participant_id == "US.13491208655302741918"
+
+    @pytest.mark.django_db()
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_bsuid_only_payload_creates_participant_keyed_by_bsuid(
+        self,
+        bot_process_input,
+        send_text_message,
+        send_typing_indicator,
+        meta_cloud_api_whatsapp_channel,
+    ):
+        """When wa_id is missing (username-adopter, not in contact book), the BSUID becomes the
+        participant identifier and a new Participant is created."""
+        from apps.experiments.models import Participant  # noqa: PLC0415
+
+        chat = Chat.objects.create(team=meta_cloud_api_whatsapp_channel.experiment.team)
+        bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
+
+        handle_meta_cloud_api_message(
+            channel_id=meta_cloud_api_whatsapp_channel.id,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
+            message_data=meta_cloud_api_messages.text_message_user_id_only_value(),
+        )
+
+        participant = Participant.objects.get(
+            team=meta_cloud_api_whatsapp_channel.experiment.team, platform=ChannelPlatform.WHATSAPP
+        )
+        assert participant.identifier == "US.13491208655302741918"
 
     @pytest.mark.django_db()
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")
@@ -330,10 +385,10 @@ class TestMetaCloudApi:
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
 
-        incoming_message = meta_cloud_api_messages.text_message_value()
+        incoming_message = meta_cloud_api_messages.legacy_text_message_value()
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
-            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
             message_data=incoming_message,
         )
 

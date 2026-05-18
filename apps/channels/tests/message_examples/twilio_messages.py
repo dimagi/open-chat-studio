@@ -32,6 +32,7 @@ def _audio_message(message: dict):
 class Whatsapp:
     to = "whatsapp:+14155238886"
     from_ = "whatsapp:+27456897512"
+    bsuid = "US.13491208655302741918"
 
     @staticmethod
     def text_message():
@@ -44,6 +45,24 @@ class Whatsapp:
     @staticmethod
     def audio_message():
         return _audio_message(Whatsapp.text_message())
+
+    @staticmethod
+    def text_message_with_external_user_id():
+        """Dual-field Twilio payload: From has the phone, ExternalUserId has the BSUID.
+
+        See https://www.twilio.com/en-us/changelog/whatsapp-usernames--new-business-scoped-user-id--bsuid--field-re
+        """
+        msg = _text_message(to=Whatsapp.to, from_=Whatsapp.from_)
+        msg["ExternalUserId"] = Whatsapp.bsuid
+        return msg
+
+    @staticmethod
+    def text_message_external_user_id_only():
+        """BSUID-only Twilio payload: From contains the BSUID and ExternalUserId is the same BSUID."""
+        msg = _text_message(to=Whatsapp.to, from_=f"whatsapp:{Whatsapp.bsuid}")
+        msg["ExternalUserId"] = Whatsapp.bsuid
+        msg.pop("WaId", None)
+        return msg
 
 
 class Messenger:

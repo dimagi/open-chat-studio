@@ -1,4 +1,5 @@
-from apps.channels.datamodels import BaseMessage
+from apps.channels.datamodels import BaseMessage, MetaCloudAPIMessage
+from apps.channels.tests.message_examples import meta_cloud_api_messages
 
 
 class TestBaseMessage:
@@ -15,3 +16,21 @@ class TestBaseMessage:
         msg = BaseMessage(participant_id="u1", message_text="hi", attachment_file_ids=[42])
         rebuilt = BaseMessage(**msg.model_dump())
         assert rebuilt.attachment_file_ids == [42]
+
+
+class TestMetaCloudAPIMessageParse:
+    def test_legacy_payload_uses_wa_id_as_participant_id(self):
+        msg = MetaCloudAPIMessage.parse(meta_cloud_api_messages.legacy_text_message_value())
+        assert msg.participant_id == "27456897512"
+
+    def test_dual_field_payload_prefers_wa_id(self):
+        msg = MetaCloudAPIMessage.parse(meta_cloud_api_messages.text_message_with_user_id_and_wa_id_value())
+        assert msg.participant_id == "27456897512"
+
+    def test_username_adopter_with_wa_id_prefers_wa_id(self):
+        msg = MetaCloudAPIMessage.parse(meta_cloud_api_messages.text_message_with_username_and_wa_id_value())
+        assert msg.participant_id == "27456897512"
+
+    def test_user_id_only_payload_falls_back_to_user_id(self):
+        msg = MetaCloudAPIMessage.parse(meta_cloud_api_messages.text_message_user_id_only_value())
+        assert msg.participant_id == "US.13491208655302741918"

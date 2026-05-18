@@ -72,7 +72,7 @@ class TestMetaCloudAPIWebhookVerifySignature:
 
 class TestMetaCloudAPIWebhookExtractMessageValues:
     def test_extracts_message_values(self):
-        data = meta_cloud_api_messages.text_message()
+        data = meta_cloud_api_messages.legacy_text_message()
         values = meta_webhook.extract_message_values(data)
         assert len(values) == 1
         assert values[0]["metadata"]["phone_number_id"] == "12345"
@@ -158,23 +158,23 @@ class TestNewMetaCloudApiMessage:
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_valid_message_returns_200(self, mock_delay, meta_cloud_api_channel):
-        response = self._post(meta_cloud_api_messages.text_message())
+        response = self._post(meta_cloud_api_messages.legacy_text_message())
         assert response.status_code == 200
         mock_delay.assert_called_once()
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_task_dispatched_with_correct_args(self, mock_delay, meta_cloud_api_channel):
-        self._post(meta_cloud_api_messages.text_message())
+        self._post(meta_cloud_api_messages.legacy_text_message())
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.text_message_value(),
+            message_data=meta_cloud_api_messages.legacy_text_message_value(),
         )
 
     def test_invalid_signature_returns_200(self, meta_cloud_api_channel):
         """Invalid signature returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
-        body = json.dumps(meta_cloud_api_messages.text_message()).encode()
+        body = json.dumps(meta_cloud_api_messages.legacy_text_message()).encode()
         request = factory.post(
             "/",
             data=body,
@@ -187,7 +187,7 @@ class TestNewMetaCloudApiMessage:
     def test_missing_signature_header_returns_200(self, meta_cloud_api_channel):
         """Missing signature header returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
-        body = json.dumps(meta_cloud_api_messages.text_message()).encode()
+        body = json.dumps(meta_cloud_api_messages.legacy_text_message()).encode()
         request = factory.post(
             "/",
             data=body,
@@ -227,7 +227,7 @@ class TestNewMetaCloudApiMessage:
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.text_message_value("12345"),
+            message_data=meta_cloud_api_messages.legacy_text_message_value("12345"),
         )
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")

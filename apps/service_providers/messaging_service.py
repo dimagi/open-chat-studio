@@ -33,6 +33,28 @@ from apps.service_providers.speech_service import SynthesizedAudio
 logger = logging.getLogger("ocs.messaging")
 
 
+def _is_bsuid_recipient(recipient: str) -> bool:
+    """Return True if `recipient` looks like a Meta business-scoped user ID.
+
+    BSUIDs use the format `<ISO country code>.<digits>` (e.g. US.13491208655302741918) and
+    parent BSUIDs use `<country>.ENT.<digits>`. Phone numbers (E.164 or wa_id digit string)
+    never contain a period.
+
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+    """
+    return "." in recipient
+
+
+def _recipient_kwarg(recipient: str) -> dict:
+    """Build the recipient half of a Meta Cloud API send payload.
+
+    Routes BSUIDs to the new `recipient` field and phone numbers to the existing `to` field.
+    """
+    if _is_bsuid_recipient(recipient):
+        return {"recipient": recipient}
+    return {"to": recipient}
+
+
 class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
     _supported_platforms: ClassVar[list]
@@ -458,7 +480,7 @@ class MetaCloudAPIService(MessagingService):
             data = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
-                "to": to,
+                **_recipient_kwarg(to),
                 "type": "template",
                 "template": {
                     "name": self.TEMPLATE_NAME,
@@ -502,7 +524,7 @@ class MetaCloudAPIService(MessagingService):
         for chunk in chunks:
             data = {
                 "messaging_product": "whatsapp",
-                "to": to,
+                **_recipient_kwarg(to),
                 "type": "text",
                 "text": {"body": chunk},
             }
@@ -528,7 +550,7 @@ class MetaCloudAPIService(MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "to": to,
+            **_recipient_kwarg(to),
             "type": "audio",
             "audio": {"id": media_id},
         }
@@ -597,7 +619,7 @@ class MetaCloudAPIService(MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "to": to,
+            **_recipient_kwarg(to),
             "type": media_type,
             media_type: {"id": media_id},
         }
