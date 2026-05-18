@@ -7,6 +7,7 @@ GitHub Actions workflows for automated issue implementation, incremental task pr
 - Implement an issue end-to-end when labeled or mentioned
 - Work through multi-task issues incrementally (one task per run)
 - Automatically fix CI failures and address review comments on Claude PRs
+- Automatically review Dependabot dependency update PRs
 
 ## How to Use
 
@@ -25,7 +26,7 @@ GitHub Actions workflows for automated issue implementation, incremental task pr
 
 ### Interactive: @claude in comments
 
-Mention `@claude` in any issue or PR comment to get a response or request changes.
+Mention `@claude` in any issue comment, PR comment, or PR review body to get a response or request changes.
 
 ## Issue Format (for incremental tasks)
 
@@ -78,7 +79,19 @@ After Claude creates a PR, the **Claude Followup** workflow automatically runs o
 
 Run on a specific issue via Actions > Claude Code > Run workflow, then enter the issue number.
 
+## Dependabot PR Review
+
+The **Claude Dependabot PR Review** workflow runs automatically on every Dependabot PR. It:
+
+1. Identifies all changed dependencies and their version ranges
+2. Fetches changelogs and release notes for each package
+3. Assesses breaking changes and security impact against the OCS codebase
+4. Posts a review comment with a risk level (LOW/MEDIUM/HIGH) and a merge recommendation (APPROVE / REVIEW_NEEDED / HOLD)
+
+Can also be triggered manually via Actions > Claude Dependabot PR Review > Run workflow, providing a PR number.
+
 ## Files
 
-- `.github/workflows/claude.yml` — Main workflow (event-driven + scheduled)
+- `.github/workflows/claude.yml` — Main workflow, named "Claude Code" in the Actions UI (event-driven + scheduled)
 - `.github/workflows/claude-followup.yml` — Automatic CI followup
+- `.github/workflows/claude-dependabot.yml` — Automatic Dependabot PR review
