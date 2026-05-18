@@ -60,7 +60,10 @@
       <progress class="progress progress-primary w-full" value="{{ progress.percent }}" max="100"></progress>
       <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
         <span>{{ progress.reviews_done }}/{{ progress.total_reviews_needed }} reviews ({{ progress.percent }}%)</span>
-        <span>{{ progress.completed_items }}/{{ progress.total_items }} items completed</span>
+        <span>{{ progress.completed_items }}/{{ progress.total_items }} items resolved</span>
+        {% if progress.awaiting_resolution_items %}
+          <span class="text-warning">{{ progress.awaiting_resolution_items }} awaiting resolution</span>
+        {% endif %}
         {% if progress.flagged_items %}
           <span class="text-warning">{{ progress.flagged_items }} flagged</span>
         {% endif %}

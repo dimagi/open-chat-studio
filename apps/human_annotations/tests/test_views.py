@@ -1533,3 +1533,26 @@ def test_import_from_dataset_post_all_duplicates_creates_no_new_items(client, te
 
     assert response.status_code == 302
     assert AnnotationItem.objects.filter(queue=queue).count() == 2
+
+
+@pytest.mark.django_db()
+def test_queue_detail_shows_awaiting_resolution_callout(client, team_with_users, user):
+    user2 = User.objects.create(username="r2-detail", email="r2-detail@e.com")
+    MembershipFactory.create(team=team_with_users, user=user2)
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=2)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user2, data={}, status=AnnotationStatus.SUBMITTED
+    )
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert b"awaiting resolution" in response.content.lower()
+    assert b"1" in response.content  # the count
