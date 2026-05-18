@@ -1554,5 +1554,6 @@ def test_queue_detail_shows_awaiting_resolution_callout(client, team_with_users,
     response = client.get(url)
 
     assert response.status_code == 200
-    assert b"awaiting resolution" in response.content.lower()
-    assert b"1" in response.content  # the count
+    assert b"1 awaiting resolution" in response.content
+    # And confirm the renamed label is present too.
+    assert b"items resolved" in response.content
