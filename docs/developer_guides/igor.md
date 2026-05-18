@@ -35,7 +35,7 @@ Review and merge the PR as normal. [Automatic follow-up](#automatic-follow-up) w
 
 Use this when you have a larger project — a multi-step refactor, a new feature with several components, or a batch of related tasks — where you want to review each piece before the next one begins.
 
-1. Create a GitHub issue using the [issue format](#issue-format-for-incremental-tasks) below and apply the `claude` label
+1. Create a GitHub issue using the [issue format](#issue-format-for-multi-task-projects) below and apply the `claude` label
 2. Claude picks up the oldest eligible issue once a day at 2am UTC and implements one unchecked task
 3. Claude opens a PR for that task — review and merge before the next task runs
 4. The cycle repeats until all tasks are checked off
@@ -52,7 +52,7 @@ Use this to ask Claude a question in context, request a specific change to an ex
 
 Claude will push changes to the branch or reply in a new comment.
 
-## Issue Format (for multi-task project)
+## Issue Format for multi-task projects
 
 ```markdown
 ## Goal
@@ -113,4 +113,4 @@ This workflow can also be triggered manually via **Actions > Claude Dependabot P
 
 ## Maintaining These Workflows
 
-For engineers responsible for extending, debugging, or operating the Claude workflows, see [README-claude-workflows.md](../../.github/workflows/README-claude-workflows.md) in `.github/workflows`.
+For engineers responsible for extending, debugging, or operating the Claude workflows, see  see `README-claude-workflows.md` in the repository's `.github/workflows` directory.
