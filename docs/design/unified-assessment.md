@@ -26,7 +26,9 @@ Both are in alpha/beta. They share more than they diverge:
 - They produce structurally identical results: `{field_name: value}` dicts.
 - They both attach to `ExperimentSession` (via `Chat` for tags; via `AnnotationItem` for queues).
 
-What's *missing* is the connective tissue. The #1 backlog item — concordance analysis — currently requires exporting from both systems, matching by session ID externally, and analysing in a separate tool. Four of nine 2026 backlog items are explicitly cross-system. The user-experience consequence is that workflows like "online evals with human review follow-up" require configuring five or six places that don't know about each other.
+What's *missing* is the connective tissue. The #1 backlog item — concordance analysis — currently requires exporting from both systems, matching by session ID externally, and analysing in a separate tool. The user-experience consequence is that workflows like "online evals with human review follow-up" require configuring five or six places that don't know about each other.
+
+**Current state of the backlog (May 2026).** Six of the nine 2026 backlog items have been delivered as point solutions in the existing evals + annotations subsystems: auto-population (#2), session-mode datasets (#3), evaluator tag rules (#4), session ID in exports (#7), and bidirectional dataset ↔ queue imports (#8, #9). See the [Backlog item mapping](#backlog-item-mapping) table for code references. What remains structural is the *connective tissue*: shared schema, a single value layer, in-system concordance, and a routing-rule surface that subsumes today's `EvaluatorTagRule` and the one-shot import buttons. The unified design re-pitches those point solutions as parallel paths that should be consolidated, not features that don't exist.
 
 ## User stories
 
@@ -114,6 +116,8 @@ Sessions are the primary unit being assessed. The system needs flexible ways to 
 - CSV import with column mapping: [`apps/evaluations/tasks.py:create_dataset_from_csv_task`](../../apps/evaluations/tasks.py)
 - Session clone logic: [`apps/evaluations/utils.py:make_evaluation_messages_from_sessions`](../../apps/evaluations/utils.py)
 - `ExperimentSession` model: [`apps/experiments/models.py:1412`](../../apps/experiments/models.py)
+- **Auto-population of datasets** (FR-2.3, backlog #2): [`apps/evaluations/models.py:DatasetAutoPopulationRule`](../../apps/evaluations/models.py) + periodic task [`apps/evaluations/auto_population.py:auto_populate_eval_datasets`](../../apps/evaluations/auto_population.py). Per-dataset rule with `source_experiment` + `filter_query_string`; auto-disables after 3 consecutive failures; can trigger delta runs via `auto_run_on_append`.
+- **Session-mode datasets** (FR-2.4, backlog #3): [`apps/evaluations/models.py:EvaluationMessage.create_from_sessions`](../../apps/evaluations/models.py) — one `EvaluationMessage` per session, full conversation in `history`. Selection UI: [`apps/evaluations/views/dataset_views.py`](../../apps/evaluations/views/dataset_views.py).
 
 ### FR-3: Automated scoring
 
@@ -137,6 +141,7 @@ Automated scorers run code or LLMs against session data to produce structured re
 - Celery chord orchestration: [`apps/evaluations/tasks.py:run_evaluation_task`](../../apps/evaluations/tasks.py)
 - Bot generation: [`apps/evaluations/tasks.py:run_bot_generation`](../../apps/evaluations/tasks.py)
 - Version resolution: [`apps/evaluations/models.py:EvaluationConfig.get_generation_experiment_version`](../../apps/evaluations/models.py)
+- **Tag emission from eval results** (FR-3.8, backlog #4): [`apps/evaluations/models.py:EvaluatorTagRule`](../../apps/evaluations/models.py) (rule shape) + [`apps/evaluations/tagging.py`](../../apps/evaluations/tagging.py) (matcher) + [`apps/evaluations/models.py:AppliedTag`](../../apps/evaluations/models.py) (audit row). Session-mode rules tag `session.chat`; message-mode rules tag `ChatMessage`. Generalised by `RoutingRule` / `AppliedRoutingRule` in the unified design — see D-14.
 
 ### FR-4: Human scoring
 
@@ -181,6 +186,7 @@ Results are the core shared artifact. Both automated and human scoring produce r
 - `Annotation`: [`apps/human_annotations/models.py`](../../apps/human_annotations/models.py)
 - CSV export (evals): [`apps/evaluations/views/evaluation_config_views.py:download_evaluation_run_csv`](../../apps/evaluations/views/evaluation_config_views.py)
 - CSV export (annotations): [`apps/human_annotations/views/queue_views.py:ExportAnnotations`](../../apps/human_annotations/views/queue_views.py)
+- **Global session ID in eval exports** (FR-5.5, backlog #7): `session` and `source_session` columns (= `ExperimentSession.external_id`) in [`apps/evaluations/const.py:EVALUATION_RUN_FIXED_HEADERS`](../../apps/evaluations/const.py), populated in `EvaluationRun.get_table_data`.
 
 ### FR-6: Aggregation & trends
 
@@ -229,6 +235,11 @@ Originally framed as "data flowing bidirectionally between automated and human a
 | FR-8.2 | **Add an `AutomatedScorer` to a human-only Assessment** to use submitted reviews as ground-truth comparison. Replaces the "import annotated sessions into an eval dataset" workflow (backlog #9). | Must |
 | FR-8.3 | Preserve provenance: every `RoutingRule` firing recorded in `AppliedRoutingRule` (see D-14) — `triggered_by` points at the originating result, `outcome` points at the produced artifact. | Should |
 | FR-8.4 | Support filtering by `Score` field values when populating queues — handled by `Source.filter_query_string` reading against `Score` rows. | Should |
+
+**Existing code (one-shot imports today; the unified design subsumes both into in-Assessment scorer composition):**
+- **Dataset → annotation queue** (backlog #8): [`apps/human_annotations/views/queue_views.py:ImportFromDataset`](../../apps/human_annotations/views/queue_views.py) + [`apps/human_annotations/forms.py:ImportFromDatasetForm`](../../apps/human_annotations/forms.py). Pulls distinct sessions from a completed eval dataset, creates `AnnotationItem`s (`item_type=SESSION`), dedupes against existing queue.
+- **Annotation queue → eval dataset** (backlog #9): [`apps/evaluations/forms.py:ImportFromAnnotationQueueForm`](../../apps/evaluations/forms.py) + dataset-view handler in [`apps/evaluations/views/dataset_views.py`](../../apps/evaluations/views/dataset_views.py); extraction via `create_dataset_from_sessions_task`. Only accepts queues whose items are `AnnotationItemType.SESSION`; produces a session-mode dataset.
+- **Limitation today:** both flows are one-shot copies, not live composition. There is no schema sharing — the eval's `Evaluator.params["output_schema"]` and the queue's `AnnotationQueue.schema` remain independent JSON blobs that happen to use the same field names. Concordance still requires an external join.
 
 ### FR-11: External escalation (cross-Assessment routing, backlog #5)
 
@@ -285,19 +296,21 @@ A separate concern from FR-8: routing items into a *different* Assessment's `Hum
 
 ## Backlog item mapping
 
-Where each 2026 backlog item lands:
+Where each 2026 backlog item lands, and what state it's in today. "Done" items work in the current evals + annotations subsystems as point solutions; the unified design subsumes them into shared shapes (single schema, single value layer, single rule surface) — see the noted limitation per row for what the unified design adds beyond the existing implementation.
 
-| # | Backlog item | Requirement(s) | Design expression |
-|---|-------------|----------------|-------------------|
-| 1 | LLM eval vs human annotation concordance | FR-7 (all) | Built-in tab on any Assessment with ≥2 scorer types; query over `Score` rows |
-| 2 | Auto-add new sessions to eval | FR-2.3 | `Source.filter_query_string` set → continuous Assessment |
-| 3 | Import entire sessions into evals | FR-2.4 | `Source.granularity = session` |
-| 4 | Evals tag sessions for filtering | FR-9 (all) | `RoutingRule(action=EMIT_TAG)`; uses existing Tag infrastructure |
-| 5 | Auto-add sessions to annotation queue from eval tags | FR-4.10, FR-9.6 (within-Assessment); FR-11 (cross-Assessment) | `RoutingRule(trigger=SCORE_VALUE, action=ESCALATE_TO_HUMAN_SCORER)` within one Assessment is the common case; cross-Assessment `ADD_TO_QUEUE` (FR-11) is the fire-and-forget escalation case |
-| 6 | Assign specific sessions to specific reviewers | FR-4.4 | Property of `HumanScorer` |
-| 7 | Export CSV with global session_id | FR-5.5 | Trivial in unified export path; targets carry session reference |
-| 8 | Import evals dataset into annotation queue | FR-8.1 | Add a `HumanScorer` to an automated-only Assessment |
-| 9 | Import annotation items into evals dataset | FR-8.2 | Add an `AutomatedScorer` to a human-only Assessment |
+| # | Backlog item | Requirement(s) | Design expression | Current state |
+|---|-------------|----------------|-------------------|---------------|
+| 1 | LLM eval vs human annotation concordance | FR-7 (all) | Built-in tab on any Assessment with ≥2 scorer types; query over `Score` rows | **Not done.** Highest priority. Requires the unified `Score` layer + shared schema to avoid external join-by-string-match. |
+| 2 | Auto-add new sessions to eval | FR-2.3 | `Source.filter_query_string` set → continuous Assessment | **Done as point solution** via [`DatasetAutoPopulationRule`](../../apps/evaluations/models.py) + periodic task. Limitation: per-dataset rule, not generalised to human queues; produces dataset items rather than continuously streaming Scores. Carries forward as the prototype for `Source.filter_query_string`. |
+| 3 | Import entire sessions into evals | FR-2.4 | `Source.granularity = session` | **Done as point solution** via session-mode `EvaluationDataset`s. Carries forward unchanged — `Source.granularity = session` is just renaming the existing mode. |
+| 4 | Evals tag sessions for filtering | FR-9 (all) | `RoutingRule(action=EMIT_TAG)`; uses existing Tag infrastructure | **Done as point solution** via [`EvaluatorTagRule`](../../apps/evaluations/models.py) + [`tagging.py`](../../apps/evaluations/tagging.py) + [`AppliedTag`](../../apps/evaluations/models.py). Limitation: rule shape is eval-result-only (no lifecycle/flag/tag triggers; no escalate/notify/add-to-queue actions). Generalised to `RoutingRule` / `AppliedRoutingRule` (D-14). |
+| 5 | Auto-add sessions to annotation queue from eval tags | FR-4.10, FR-9.6 (within-Assessment); FR-11 (cross-Assessment) | `RoutingRule(trigger=SCORE_VALUE, action=ESCALATE_TO_HUMAN_SCORER)` within one Assessment is the common case; cross-Assessment `ADD_TO_QUEUE` (FR-11) is the fire-and-forget escalation case | **Not done.** Requires the `RoutingRule` action surface (`EvaluatorTagRule` today emits tags only, doesn't add items to queues). |
+| 6 | Assign specific sessions to specific reviewers | FR-4.4 | Property of `HumanScorer` | **Not done.** Today's `AnnotationQueue.assignees` is queue-wide; per-item assignment is new. |
+| 7 | Export CSV with global session_id | FR-5.5 | Trivial in unified export path; targets carry session reference | **Done in evals**: `session` and `source_session` columns ([`EVALUATION_RUN_FIXED_HEADERS`](../../apps/evaluations/const.py)). Annotation queue exports should be audited for the same — track as a small carry-forward. |
+| 8 | Import evals dataset into annotation queue | FR-8.1 | Add a `HumanScorer` to an automated-only Assessment | **Done as point solution** via [`ImportFromDataset`](../../apps/human_annotations/views/queue_views.py). Limitation: one-shot copy, no shared schema, no live composition. Unified design replaces the import button with "add a `HumanScorer` to the Assessment." |
+| 9 | Import annotation items into evals dataset | FR-8.2 | Add an `AutomatedScorer` to a human-only Assessment | **Done as point solution** via [`ImportFromAnnotationQueueForm`](../../apps/evaluations/forms.py). Same limitation as #8 (one-shot, no shared schema). Unified design replaces with "add an `AutomatedScorer` to the Assessment." |
+
+**Net remaining backlog work (informs sequencing — out of scope for this doc):** items 1, 5, 6 are net-new and depend on unified infrastructure (Score layer, RoutingRule, per-item assignment). Items 2, 3, 4, 7, 8, 9 are carry-forward: their behaviour is preserved by the unified design but their data shapes get unified (schema, value layer, rule surface, audit row).
 
 ## Design principles
 
@@ -739,6 +752,8 @@ Story 10's "second-pass reviewer sees the flagging reviewer's score" is **hardco
 | [`Annotation`](../../apps/human_annotations/models.py) | `Review` (workflow shell) + N `Score` rows |
 | [`EvaluatorTagRule`](../../apps/evaluations/models.py) | `RoutingRule` (broader trigger surface) |
 | [`AppliedTag`](../../apps/evaluations/models.py) | Generalised into `AppliedRoutingRule`: one audit table for all `RoutingRule` firings, regardless of action type. See D-14. |
+| [`DatasetAutoPopulationRule`](../../apps/evaluations/models.py) | Subsumed into `Source.filter_query_string` semantics (continuous mode). The auto-population rule's `source_experiment` + `filter_query_string` + `is_enabled` become properties of the Assessment's Source; the periodic Celery scan becomes the lifecycle-hook dispatch (D-15). Auto-disable-after-N-failures behaviour carries forward as an operational concern on `AppliedSourceFilter` failure counts. |
+| [`ImportFromDataset`](../../apps/human_annotations/views/queue_views.py) / [`ImportFromAnnotationQueueForm`](../../apps/evaluations/forms.py) | Retired as user-facing one-shot imports. Equivalent behaviour expressed as "add another scorer to the same Assessment" (FR-8). |
 | [`EvaluationRunAggregate`](../../apps/evaluations/models.py) | unchanged — still the eager batch-aggregate cache |
 | [`AnnotationQueueAggregate`](../../apps/human_annotations/models.py) | retired; aggregates queried from `Score` |
 | [`Tag`](../../apps/annotations/models.py), [`CustomTaggedItem`](../../apps/annotations/models.py), [`UserComment`](../../apps/annotations/models.py) | Unchanged for ad-hoc human tags and system condition tags. See D-9 for the two tag uses that migrate out. |
