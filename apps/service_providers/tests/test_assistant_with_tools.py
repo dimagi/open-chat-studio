@@ -26,7 +26,7 @@ def _make_tool_for_testing(output: Any, **kwargs) -> BaseTool:
 
 @pytest.fixture()
 def fake_llm_service():
-    return build_fake_llm_service(responses=["this is a test message"], token_counts=[30, 20, 10])
+    return build_fake_llm_service(responses=["this is a test message"])
 
 
 @pytest.fixture()
