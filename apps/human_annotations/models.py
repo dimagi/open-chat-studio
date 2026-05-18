@@ -24,6 +24,7 @@ class QueueStatus(models.TextChoices):
 class AnnotationItemStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     IN_PROGRESS = "in_progress", "In Progress"
+    AWAITING_RESOLUTION = "awaiting_resolution", "Awaiting resolution"
     COMPLETED = "completed", "Completed"
     FLAGGED = "flagged", "Flagged"
 
@@ -215,10 +216,26 @@ class Annotation(BaseTeamModel):
         choices=AnnotationStatus.choices,
         default=AnnotationStatus.SUBMITTED,
     )
+    is_authoritative = models.BooleanField(default=False)
+    authoritative_set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authoritative_annotations_set",
+    )
+    authoritative_set_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ("item", "reviewer")
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item"],
+                condition=models.Q(is_authoritative=True),
+                name="one_authoritative_annotation_per_item",
+            ),
+        ]
 
     def __str__(self):
         return f"Annotation by {self.reviewer} on item {self.item_id}"
