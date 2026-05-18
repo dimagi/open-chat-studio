@@ -1575,3 +1575,42 @@ def test_items_table_marks_authoritative_with_star(client, team_with_users, user
     assert response.status_code == 200
     # The star glyph (fa-star) should appear in the rendered annotations summary.
     assert b"fa-star" in response.content
+
+
+@pytest.mark.django_db()
+def test_export_csv_includes_is_authoritative(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url + "?format=csv")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    reader = csv.DictReader(io.StringIO(content))
+    fieldnames = reader.fieldnames
+    assert fieldnames is not None
+    assert "is_authoritative" in fieldnames
+    rows = list(reader)
+    assert rows[0]["is_authoritative"] == "True"
+
+
+@pytest.mark.django_db()
+def test_export_jsonl_includes_is_authoritative(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url + "?format=jsonl")
+
+    assert response.status_code == 200
+    lines = response.content.decode().strip().splitlines()
+    record = json.loads(lines[0])
+    assert "is_authoritative" in record
+    assert record["is_authoritative"] is True
