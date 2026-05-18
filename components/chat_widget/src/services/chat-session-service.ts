@@ -125,7 +125,17 @@ export class ChatSessionService {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to poll task: ${response.statusText}`);
+      let errorMessage = `Failed to poll task: ${response.statusText}`;
+      try {
+        const data = (await response.json()) as { error?: string };
+        if (data?.error) {
+          errorMessage = data.error;
+        }
+      } catch {
+        // non-JSON body; keep statusText fallback
+      }
+
+      throw new Error(errorMessage);
     }
 
     return response.json() as Promise<ChatTaskPollResponse>;
