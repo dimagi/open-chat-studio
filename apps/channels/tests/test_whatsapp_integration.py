@@ -248,14 +248,14 @@ class TestTurnio:
 
 class TestMetaCloudApi:
     @pytest.mark.parametrize(
-        ("message", "message_type"),
+        ("value", "message_type"),
         [
             (meta_cloud_api_messages.legacy_text_message_value(), "text"),
             (meta_cloud_api_messages.audio_message_value(), "audio"),
         ],
     )
-    def test_parse_messages(self, message, message_type):
-        parsed = MetaCloudAPIMessage.parse(message)
+    def test_parse_messages(self, value, message_type):
+        parsed = MetaCloudAPIMessage.parse(value["messages"][0])
         assert parsed.participant_id == "27456897512"
         if message_type == "text":
             assert parsed.message_text == "Hello"
@@ -268,7 +268,7 @@ class TestMetaCloudApi:
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize(
-        ("incoming_message", "message_type"),
+        ("incoming_value", "message_type"),
         [
             (meta_cloud_api_messages.legacy_text_message_value(), "text"),
             (meta_cloud_api_messages.audio_message_value(), "audio"),
@@ -287,7 +287,7 @@ class TestMetaCloudApi:
         send_voice_message,
         get_voice_transcript_mock,
         synthesize_voice_mock,
-        incoming_message,
+        incoming_value,
         message_type,
         meta_cloud_api_whatsapp_channel,
     ):
@@ -300,7 +300,7 @@ class TestMetaCloudApi:
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
-            message_data=incoming_message,
+            message_data=incoming_value["messages"][0],
         )
         if message_type == "text":
             send_text_message.assert_called()
@@ -312,29 +312,31 @@ class TestMetaCloudApi:
     def test_unsupported_message_type_does_nothing(
         self, _handle_unsupported_message, _handle_supported_message, db, meta_cloud_api_whatsapp_channel
     ):
-        incoming_message = meta_cloud_api_messages.legacy_text_message_value()
-        incoming_message["messages"][0]["type"] = "video"
-        incoming_message["messages"][0]["video"] = {}
+        incoming_value = meta_cloud_api_messages.legacy_text_message_value()
+        message = incoming_value["messages"][0]
+        message["type"] = "video"
+        message["video"] = {}
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
-            message_data=incoming_message,
+            message_data=message,
         )
         _handle_unsupported_message.assert_called()
         _handle_supported_message.assert_not_called()
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize(
-        ("message", "message_type"),
+        ("value", "message_type"),
         [
             (meta_cloud_api_messages.text_message_with_user_id_and_wa_id_value(), "text"),
             (meta_cloud_api_messages.text_message_with_username_and_wa_id_value(), "text"),
             (meta_cloud_api_messages.text_message_user_id_only_value(), "text"),
         ],
     )
-    def test_parse_bsuid_payload_shapes(self, message, message_type):
+    def test_parse_bsuid_payload_shapes(self, value, message_type):
+        message = value["messages"][0]
         parsed = MetaCloudAPIMessage.parse(message)
-        if "wa_id" in message["contacts"][0]:
+        if "from" in message:
             assert parsed.participant_id == "27456897512"
         else:
             assert parsed.participant_id == "US.13491208655302741918"
@@ -361,7 +363,7 @@ class TestMetaCloudApi:
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
-            message_data=meta_cloud_api_messages.text_message_user_id_only_value(),
+            message_data=meta_cloud_api_messages.text_message_user_id_only_value()["messages"][0],
         )
 
         participant = Participant.objects.get(
@@ -385,7 +387,7 @@ class TestMetaCloudApi:
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
 
-        incoming_message = meta_cloud_api_messages.legacy_text_message_value()
+        incoming_message = meta_cloud_api_messages.legacy_text_message_value()["messages"][0]
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,

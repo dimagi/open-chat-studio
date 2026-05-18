@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import phonenumbers
 from mailparser_reply import EmailReplyParser
@@ -13,6 +13,9 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.documents.readers import Document
 from apps.files.models import File
+
+if TYPE_CHECKING:
+    from apps.channels.meta_webhook import MetaCloudAPIWebhookMessage
 
 logger = logging.getLogger("ocs.channels")
 
@@ -216,24 +219,22 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
     whatsapp_message_id: str | None = Field(default=None)
 
     @staticmethod
-    def parse(message_data: dict) -> "MetaCloudAPIMessage":
-        message = message_data["messages"][0]
-        message_type = message["type"]
+    def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage":
+        message_type = message_data["type"]
         body = ""
         if message_type == "text":
-            body = message["text"]["body"]
+            body = message_data["text"]["body"]
 
-        # We need to handle multiple contacts
-        contact = message_data["contacts"][0]
-        wa_id = contact.get("wa_id")
-        user_id = contact.get("user_id")
+        # Prefer the phone number (`from`) when available; fall back to the BSUID (`from_user_id`)
+        # for username-adopters whose phone is not exposed by Meta.
+        participant_id = message_data.get("from") or message_data.get("from_user_id")
         return MetaCloudAPIMessage(
-            participant_id=wa_id or user_id,
+            participant_id=participant_id,
             message_text=body,
             content_type=message_type,
-            media_id=message.get(message_type, {}).get("id", None),
+            media_id=message_data.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
-            whatsapp_message_id=message.get("id"),
+            whatsapp_message_id=message_data.get("id"),
         )
 
 

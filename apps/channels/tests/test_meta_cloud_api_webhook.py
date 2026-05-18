@@ -70,13 +70,79 @@ class TestMetaCloudAPIWebhookVerifySignature:
         assert meta_webhook.verify_signature(payload, signature, "") is False
 
 
-class TestMetaCloudAPIWebhookExtractMessageValues:
-    def test_extracts_message_values(self):
+class TestMetaCloudAPIWebhookExtractMessages:
+    def test_extracts_messages(self):
         data = meta_cloud_api_messages.legacy_text_message()
-        values = meta_webhook.extract_message_values(data)
-        assert len(values) == 1
-        assert values[0]["metadata"]["phone_number_id"] == "12345"
-        assert values[0]["messages"][0]["text"]["body"] == "Hello"
+        messages = meta_webhook.extract_messages(data)
+        assert len(messages) == 1
+        phone_id, message = messages[0]
+        assert phone_id == "12345"
+        assert message["text"]["body"] == "Hello"
+        assert message["from"] == "27456897512"
+
+    def test_collapses_multiple_text_messages_from_same_user(self):
+        value = meta_cloud_api_messages.legacy_text_message_value()
+        first = value["messages"][0]
+        value["messages"] = [
+            {**first, "id": "wamid.1", "timestamp": "100", "text": {"body": "first"}},
+            {**first, "id": "wamid.2", "timestamp": "200", "text": {"body": "second"}},
+            {**first, "id": "wamid.3", "timestamp": "300", "text": {"body": "third"}},
+        ]
+        data = {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": value}]}]}
+
+        messages = meta_webhook.extract_messages(data)
+        assert len(messages) == 1
+        _, merged = messages[0]
+        assert merged["id"] == "wamid.3"  # Last entry's details kept.
+        assert merged["timestamp"] == "300"
+        assert merged["text"]["body"] == "first\nsecond\nthird"
+
+    def test_groups_separately_for_different_users(self):
+        value = meta_cloud_api_messages.legacy_text_message_value()
+        first = value["messages"][0]
+        value["messages"] = [
+            {**first, "id": "wamid.a", "from": "111", "from_user_id": "US.A", "text": {"body": "from A"}},
+            {**first, "id": "wamid.b", "from": "222", "from_user_id": "US.B", "text": {"body": "from B"}},
+        ]
+        data = {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": value}]}]}
+
+        messages = meta_webhook.extract_messages(data)
+        assert len(messages) == 2
+        bodies = {m["text"]["body"] for _, m in messages}
+        assert bodies == {"from A", "from B"}
+
+    def test_does_not_merge_text_with_non_text_from_same_user(self):
+        value = meta_cloud_api_messages.legacy_text_message_value()
+        text_msg = value["messages"][0]
+        audio_msg = {
+            "id": "wamid.audio",
+            "timestamp": "200",
+            "from": text_msg["from"],
+            "type": "audio",
+            "audio": {"id": "media_abc"},
+        }
+        value["messages"] = [text_msg, audio_msg]
+        data = {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": value}]}]}
+
+        messages = meta_webhook.extract_messages(data)
+        assert len(messages) == 2
+        types = [m["type"] for _, m in messages]
+        assert sorted(types) == ["audio", "text"]
+
+    def test_groups_by_from_user_id_when_present(self):
+        """Username-adopter sends two text messages: same from_user_id, same from (phone)."""
+        value = meta_cloud_api_messages.text_message_with_username_and_wa_id_value()
+        first = value["messages"][0]
+        value["messages"] = [
+            {**first, "id": "wamid.1", "timestamp": "100", "text": {"body": "hi"}},
+            {**first, "id": "wamid.2", "timestamp": "200", "text": {"body": "there"}},
+        ]
+        data = {"object": "whatsapp_business_account", "entry": [{"changes": [{"value": value}]}]}
+
+        messages = meta_webhook.extract_messages(data)
+        assert len(messages) == 1
+        _, merged = messages[0]
+        assert merged["text"]["body"] == "hi\nthere"
 
 
 @pytest.mark.django_db()
@@ -168,7 +234,7 @@ class TestNewMetaCloudApiMessage:
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.legacy_text_message_value(),
+            message_data=meta_cloud_api_messages.legacy_text_message_value()["messages"][0],
         )
 
     def test_invalid_signature_returns_200(self, meta_cloud_api_channel):
@@ -227,7 +293,7 @@ class TestNewMetaCloudApiMessage:
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.legacy_text_message_value("12345"),
+            message_data=meta_cloud_api_messages.legacy_text_message_value("12345")["messages"][0],
         )
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
