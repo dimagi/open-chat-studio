@@ -1,5 +1,8 @@
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.test import Client
+from django.urls import reverse
 
 from apps.human_annotations.models import (
     Annotation,
@@ -9,6 +12,7 @@ from apps.human_annotations.models import (
     AnnotationQueue,
     AnnotationStatus,
 )
+from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 
@@ -25,6 +29,38 @@ def second_user(team):
     user = User.objects.create(username="reviewer2", email="r2@example.com")
     MembershipFactory.create(team=team, user=user)
     return user
+
+
+@pytest.fixture()
+def admin_client(team):
+    """Team owner - has change_annotationqueue."""
+    user = team.members.first()
+    c = Client()
+    c.force_login(user)
+    return c
+
+
+@pytest.fixture()
+def reviewer_user(team):
+    """A user with only the ANNOTATION_REVIEWER_GROUP (no change_annotationqueue)."""
+    user = User.objects.create(username="reviewer-only", email="ro@example.com")
+    membership = MembershipFactory.create(team=team, user=user)
+    membership.groups.set([Group.objects.get(name=ANNOTATION_REVIEWER_GROUP)])
+    return user
+
+
+@pytest.fixture()
+def reviewer_client(reviewer_user):
+    c = Client()
+    c.force_login(reviewer_user)
+    return c
+
+
+def _set_authoritative_url(team, queue, item, annotation):
+    return reverse(
+        "human_annotations:set_authoritative",
+        args=[team.slug, queue.pk, item.pk, annotation.pk],
+    )
 
 
 def _make_queue(team, num_reviews_required=1):
@@ -156,3 +192,137 @@ def test_flagged_status_preserved(team):
 
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.FLAGGED
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_as_admin(admin_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    ann1 = Annotation.objects.create(
+        item=item, team=team, reviewer=user1, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=team, reviewer=second_user, data={"score": 3}, status=AnnotationStatus.SUBMITTED
+    )
+
+    response = admin_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
+
+    assert response.status_code in (200, 302)
+    ann1.refresh_from_db()
+    item.refresh_from_db()
+    assert ann1.is_authoritative is True
+    assert ann1.authoritative_set_by_id == user1.id
+    assert ann1.authoritative_set_at is not None
+    assert item.status == AnnotationItemStatus.COMPLETED
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_clears_other_annotations(admin_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    ann2 = Annotation.objects.create(
+        item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED
+    )
+
+    admin_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
+    admin_client.post(_set_authoritative_url(team, queue, item, ann2), {"value": "true"})
+
+    ann1.refresh_from_db()
+    ann2.refresh_from_db()
+    assert ann1.is_authoritative is False
+    assert ann1.authoritative_set_by_id is None
+    assert ann1.authoritative_set_at is None
+    assert ann2.is_authoritative is True
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_value_false_clears(admin_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED)
+    admin_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
+
+    admin_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "false"})
+
+    ann1.refresh_from_db()
+    item.refresh_from_db()
+    assert ann1.is_authoritative is False
+    assert ann1.authoritative_set_at is None
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_forbidden_for_reviewer(reviewer_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+
+    response = reviewer_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
+
+    assert response.status_code == 403
+    ann1.refresh_from_db()
+    assert ann1.is_authoritative is False
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_cross_team_404(admin_client, team):
+    other_team = TeamWithUsersFactory.create()
+    queue = _make_queue(other_team, num_reviews_required=2)
+    item = _make_item(queue)
+    user = other_team.members.first()
+    ann = Annotation.objects.create(
+        item=item, team=other_team, reviewer=user, data={}, status=AnnotationStatus.SUBMITTED
+    )
+
+    # Posting via the admin team's slug for a different team's queue should 404.
+    url = reverse(
+        "human_annotations:set_authoritative",
+        args=[team.slug, queue.pk, item.pk, ann.pk],
+    )
+    response = admin_client.post(url, {"value": "true"})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_pre_mark_before_all_reviews(admin_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+
+    admin_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
+
+    ann1.refresh_from_db()
+    item.refresh_from_db()
+    assert ann1.is_authoritative is True
+    # Only one of two reviews submitted, so status should remain IN_PROGRESS.
+    assert item.status == AnnotationItemStatus.IN_PROGRESS
+
+    # When the second review arrives, item should now be COMPLETED (authoritative already set).
+    Annotation.objects.create(item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.COMPLETED
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_htmx_returns_partial(admin_client, team, second_user):
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+
+    response = admin_client.post(
+        _set_authoritative_url(team, queue, item, ann1),
+        {"value": "true"},
+        HTTP_HX_REQUEST="true",
+    )
+
+    assert response.status_code == 200
+    assert b"Authoritative" in response.content
