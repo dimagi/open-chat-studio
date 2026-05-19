@@ -103,6 +103,7 @@ def get_session_json(session, expected_messages=None, expected_tags=None):
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
         "status": session.status,
+        "platform": session.platform,
         "tags": expected_tags if expected_tags is not None else [],
     }
     if expected_messages is not None:

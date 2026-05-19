@@ -130,7 +130,19 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "status", "messages", "tags"]
+        fields = [
+            "url",
+            "id",
+            "team",
+            "experiment",
+            "participant",
+            "created_at",
+            "updated_at",
+            "status",
+            "platform",
+            "messages",
+            "tags",
+        ]
 
     def __init__(self, *args, **kwargs):
         self._include_messages = kwargs.pop("include_messages", False)
