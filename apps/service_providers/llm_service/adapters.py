@@ -34,10 +34,6 @@ if TYPE_CHECKING:
 class BaseAdapter:
     ai_message = None
 
-    @property
-    def callback_handler(self):
-        return self.get_llm_service().get_callback_handler(self.provider_model_name)
-
     def get_llm_service(self):
         return self.llm_service
 
