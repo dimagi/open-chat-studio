@@ -606,12 +606,18 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
     first_message = session.chat.messages.first()
     assert first_message.message_type == "ai"
     assert first_message.content == "Time to take a break and brew some coffee"
+    response_data = response.json()
+    assert response_data["session_id"] == str(session.external_id)
+    assert response_data["channel"] == ChannelPlatform.COMMCARE_CONNECT
+    assert response_data["team"] == {"name": experiment.team.name, "slug": experiment.team.slug}
+    assert f"/api/sessions/{session.external_id}/" in response_data["url"]
 
     # Call it a second time to make sure the session is reused
     with mock_llm(["Time to take a break and brew some tea"]):
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
+    assert response.json()["session_id"] == str(session.external_id)  # same session reused
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
     assert session.chat.messages.count() == 2
     last_message = session.chat.messages.last()
@@ -632,6 +638,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
         .order_by("-created_at")
         .first()
     )
+    assert response.json()["session_id"] == str(new_session.external_id)  # new session ID returned
     assert new_session.chat.messages.count() == 1
     last_message = new_session.chat.messages.last()
     assert last_message.message_type == "ai"
@@ -761,6 +768,9 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
     bot_message = session.chat.messages.first()
     assert bot_message.message_type == "ai"
     assert bot_message.content == "Hello from the bot"
+    response_data = response.json()
+    assert response_data["session_id"] == str(session.external_id)
+    assert response_data["channel"] == ChannelPlatform.EMAIL
 
     # Email actually delivered through the EmailSender
     assert len(mail.outbox) == 1
@@ -824,6 +834,9 @@ def test_trigger_bot_direct_message(
     saved_msg = session.chat.messages.first()
     assert saved_msg.message_type == "ai"
     assert saved_msg.content == message
+    response_data = response.json()
+    assert response_data["session_id"] == str(session.external_id)
+    assert response_data["channel"] == ChannelPlatform.COMMCARE_CONNECT
 
 
 @pytest.mark.django_db()

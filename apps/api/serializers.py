@@ -130,7 +130,18 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ExperimentSession
-        fields = ["url", "id", "team", "experiment", "participant", "created_at", "updated_at", "status", "messages", "tags"]
+        fields = [
+            "url",
+            "id",
+            "team",
+            "experiment",
+            "participant",
+            "created_at",
+            "updated_at",
+            "status",
+            "messages",
+            "tags",
+        ]
 
     def __init__(self, *args, **kwargs):
         self._include_messages = kwargs.pop("include_messages", False)
@@ -308,3 +319,16 @@ class TriggerBotMessageRequest(serializers.Serializer):
         if not has_prompt and not has_message:
             raise serializers.ValidationError("Either 'prompt_text' or 'message_text' must be provided.")
         return data
+
+
+class TriggerBotMessageResponse(serializers.ModelSerializer):
+    session_id = serializers.ReadOnlyField(source="external_id")
+    url = serializers.HyperlinkedIdentityField(
+        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    )
+    team = TeamSerializer(read_only=True)
+    channel = serializers.CharField(source="experiment_channel.platform", read_only=True)
+
+    class Meta:
+        model = ExperimentSession
+        fields = ["session_id", "url", "team", "channel"]

@@ -7,7 +7,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.experiments.models import Experiment, ParticipantData
+from apps.experiments.models import ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
 
@@ -83,37 +83,33 @@ def create_connect_channel_for_participant(channel, connect_client, connect_id, 
 
 
 @shared_task(ignore_result=True)
-def trigger_bot_message_task(data):
+def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, message_text: str | None):
     """
     Trigger a bot message for a participant on a specific platform.
 
-    When ``data["message_text"]`` is set, the message is delivered directly to the participant
-    without any LLM processing. When ``data["prompt_text"]`` is set, the bot generates a
+    The session must already exist (created synchronously by the view so that its ID can be
+    returned to the caller before the task runs).
+
+    When ``message_text`` is set, the message is delivered directly to the participant
+    without any LLM processing. When ``prompt_text`` is set, the bot generates a
     response via the LLM and sends that.
     """
-    platform = data["platform"]
-    experiment_public_id = data["experiment"]
-    prompt_text = data.get("prompt_text")
-    message_text = data.get("message_text")
-    identifier = data["identifier"]
-    start_new_session = data["start_new_session"]
-    session_data = data.get("session_data")
+    from apps.experiments.models import ExperimentSession  # noqa: PLC0415
 
-    experiment = Experiment.objects.get(public_id=experiment_public_id)
-    experiment_channel = ExperimentChannel.objects.get(platform=platform, experiment=experiment)
+    session = ExperimentSession.objects.select_related("experiment", "experiment_channel", "participant").get(
+        external_id=session_external_id
+    )
 
+    experiment = session.experiment
     target_experiment = resolve_published_or_working(experiment)
-    ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
-    channel = ChannelClass(experiment=target_experiment, experiment_channel=experiment_channel)
+    ChannelClass = ChannelBase.get_channel_class_for_platform(session.experiment_channel.platform)
+    channel = ChannelClass(
+        experiment=target_experiment,
+        experiment_channel=session.experiment_channel,
+        experiment_session=session,
+    )
 
     with current_team(experiment.team):
-        channel.ensure_session_exists_for_participant(identifier, new_session=start_new_session)
-        if session_data:
-            session = channel.experiment_session
-            merged_state = {**session.state, **session_data}
-            session.state = merged_state
-            session.save(update_fields=["state"])
-
         if message_text:
             ChatMessage.objects.create(
                 chat=channel.experiment_session.chat,
