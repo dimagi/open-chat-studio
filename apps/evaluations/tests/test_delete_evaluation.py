@@ -51,6 +51,7 @@ def test_delete_evaluation_redirect_param_zero_does_not_redirect(client, team_wi
 
     assert response.status_code == 200
     assert "HX-Redirect" not in response.headers
+    assert not EvaluationConfig.objects.filter(id=evaluation.id).exists()
 
 
 @pytest.mark.django_db()
@@ -90,3 +91,7 @@ def test_detail_page_hides_delete_for_user_without_delete_perm(client, team_with
     assert response.status_code == 200
     delete_url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
     assert delete_url not in response.content.decode()
+
+    delete_response = client.delete(delete_url)
+    assert delete_response.status_code == 403
+    assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
