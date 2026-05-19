@@ -19,6 +19,7 @@ from apps.api.tasks import create_connect_channel_for_participant, trigger_bot_m
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.teams.utils import current_team
 
@@ -246,8 +247,6 @@ class TriggerBotMessageView(APIView):
         if platform == ChannelPlatform.COMMCARE_CONNECT:
             if error := _ensure_commcare_connect_ready(channel, identifier, participant_data):
                 return error
-
-        from apps.chatbots.version_resolver import resolve_published_or_working  # noqa: PLC0415
 
         target_experiment = resolve_published_or_working(experiment)
         ChannelClass = ChannelBase.get_channel_class_for_platform(platform)

@@ -7,7 +7,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
 
@@ -94,8 +94,6 @@ def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, 
     without any LLM processing. When ``prompt_text`` is set, the bot generates a
     response via the LLM and sends that.
     """
-    from apps.experiments.models import ExperimentSession  # noqa: PLC0415
-
     session = ExperimentSession.objects.select_related("experiment", "experiment_channel", "participant").get(
         external_id=session_external_id
     )
