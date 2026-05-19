@@ -7,7 +7,6 @@ from io import StringIO
 from typing import Any
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -126,7 +125,6 @@ class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Delet
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
         self.object.delete()
-        messages.success(request, "Evaluation deleted")
         response = HttpResponse(status=200)
         if request.GET.get("redirect") == "1":
             response["HX-Redirect"] = reverse("evaluations:home", args=[self.request.team.slug])
