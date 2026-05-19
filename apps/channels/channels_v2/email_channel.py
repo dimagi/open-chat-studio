@@ -322,10 +322,22 @@ class EmailChannel(ChannelBase):
     def _get_sender(self) -> EmailSender:
         extra = self.experiment_channel.extra_data
         email_address = extra.get("email_address", "")
+
+        thread_context = self.thread_context
+        if not thread_context.subject and self.experiment_session:
+            state = self.experiment_session.state or {}
+            custom_subject = state.get("email_subject")
+            if isinstance(custom_subject, str) and custom_subject.strip():
+                thread_context = EmailThreadContext(
+                    subject=custom_subject.strip(),
+                    in_reply_to=thread_context.in_reply_to,
+                    references=thread_context.references,
+                )
+
         self._sender_instance = EmailSender(
             from_address=extra.get("from_address") or email_address,
             domain=_domain_from_address(email_address),
-            thread_context=self.thread_context,
+            thread_context=thread_context,
         )
         return self._sender_instance
 

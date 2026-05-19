@@ -259,7 +259,7 @@ class TestPipeline:
         provider = LlmProviderFactory.create()
         provider_model = LlmProviderModelFactory.create()
         llm = FakeLlmEcho()
-        service = build_fake_llm_service(None, [0], llm)
+        service = build_fake_llm_service(None, llm)
         get_llm_service.return_value = service
 
         llm_node = llm_response_with_prompt_node(

@@ -10,6 +10,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
@@ -135,8 +136,8 @@ def _process_files(node: PipelineNode, cited_files: set[File], generated_files: 
     if generated_files:
         node.repo.attach_files_to_chat(attachment_type="code_interpreter", files=generated_files)
     return {
-        "cited_files": [file.id for file in cited_files],
-        "generated_files": [file.id for file in generated_files],
+        ChatMessageMetadataKeys.CITED_FILES: [file.id for file in cited_files],
+        ChatMessageMetadataKeys.GENERATED_FILES: [file.id for file in generated_files],
     }
 
 

@@ -77,7 +77,7 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
             }
         ],
     )
-    service = build_fake_llm_service(responses=[response], token_counts=[30])
+    service = build_fake_llm_service(responses=[response])
     get_llm_service.return_value = service
 
     prompt = "evaluate the sentiment of the following conversation"
@@ -153,7 +153,7 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
             }
         ],
     )
-    service = build_fake_llm_service(responses=[response], token_counts=[30])
+    service = build_fake_llm_service(responses=[response])
     get_llm_service.return_value = service
 
     prompt = (
@@ -232,7 +232,7 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
             }
         ],
     )
-    service = build_fake_llm_service(responses=[response], token_counts=[30])
+    service = build_fake_llm_service(responses=[response])
     get_llm_service.return_value = service
 
     prompt = "Evaluate the AI response to: {input.content}. Response: {output.content}"
@@ -311,7 +311,7 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
             }
         ],
     )
-    service = build_fake_llm_service(responses=[response], token_counts=[30])
+    service = build_fake_llm_service(responses=[response])
     get_llm_service.return_value = service
 
     llm = service.get_chat_model("gpt-4o")
@@ -343,7 +343,7 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
             }
         ],
     )
-    invalid_service = build_fake_llm_service(responses=[invalid_response], token_counts=[30])
+    invalid_service = build_fake_llm_service(responses=[invalid_response])
     invalid_llm = invalid_service.get_chat_model("gpt-4o")
     invalid_structured_llm = invalid_llm.with_structured_output(output_model)
 
