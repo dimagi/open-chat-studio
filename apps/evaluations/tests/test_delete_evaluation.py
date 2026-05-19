@@ -68,7 +68,7 @@ def test_detail_page_shows_edit_and_delete_for_admin(client, team_with_users):
     content = response.content.decode()
     edit_url = reverse("evaluations:edit", args=[team_with_users.slug, evaluation.id])
     delete_url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
-    assert edit_url in content
+    assert f'href="{edit_url}"' in content
     assert f"{delete_url}?redirect=1" in content
 
 
@@ -95,3 +95,24 @@ def test_detail_page_hides_delete_for_user_without_delete_perm(client, team_with
     delete_response = client.delete(delete_url)
     assert delete_response.status_code == 403
     assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+def test_detail_page_hides_edit_for_user_without_change_perm(client, team_with_users):
+    """A team member with view-only perms must not see the Edit control."""
+    view_perm = Permission.objects.get(
+        content_type=ContentType.objects.get_for_model(EvaluationRun),
+        codename="view_evaluationrun",
+    )
+    limited_group = GroupFactory.create(name="evaluations-view-only")
+    limited_group.permissions.add(view_perm)
+    membership = MembershipFactory.create(team=team_with_users, groups=[limited_group])
+    evaluation = EvaluationConfigFactory.create(team=team_with_users)
+
+    client.force_login(membership.user)
+    url = reverse("evaluations:evaluation_runs_home", args=[team_with_users.slug, evaluation.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    edit_url = reverse("evaluations:edit", args=[team_with_users.slug, evaluation.id])
+    assert f'href="{edit_url}"' not in response.content.decode()
