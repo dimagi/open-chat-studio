@@ -15,6 +15,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand
 
 from apps.annotations.models import Tag
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.documents.models import Collection
 from apps.evaluations.models import (
@@ -280,6 +281,10 @@ class Command(BaseCommand):
     def _seed_participants_and_sessions(self, user, team, experiments, tags) -> list[ExperimentSession]:
         self.stdout.write("")
         self.stdout.write("--- Creating Participants with Sessions ---")
+        channels_by_platform = {
+            ChannelPlatform.WEB: ExperimentChannel.objects.get_team_web_channel(team),
+            ChannelPlatform.API: ExperimentChannel.objects.get_team_api_channel(team),
+        }
         seeded_sessions = []
         for idx, data in enumerate(_PARTICIPANT_DATA):
             participant, created = Participant.objects.get_or_create(
@@ -295,13 +300,22 @@ class Command(BaseCommand):
             self._log_created("participant", f"{data['name']} ({data['identifier']})", created)
             target_experiment = experiments[idx % len(experiments)]
             tag = tags[idx % len(tags)]
-            session = self._create_session_with_messages(user, team, target_experiment, participant, data, tag)
+            channel = channels_by_platform[data["platform"]]
+            session = self._create_session_with_messages(user, team, target_experiment, participant, channel, data, tag)
             seeded_sessions.append(session)
             self.stdout.write(f"    Session for {data['name']} → {target_experiment.name} (tag: {tag.name})")
         return seeded_sessions
 
-    def _create_session_with_messages(self, user, team, experiment, participant, data, tag) -> ExperimentSession:
-        session = ExperimentSession.objects.create(team=team, experiment=experiment, participant=participant)
+    def _create_session_with_messages(
+        self, user, team, experiment, participant, channel, data, tag
+    ) -> ExperimentSession:
+        session = ExperimentSession.objects.create(
+            team=team,
+            experiment=experiment,
+            participant=participant,
+            experiment_channel=channel,
+            platform=channel.platform,
+        )
         ChatMessage.objects.create(
             chat=session.chat,
             message_type=ChatMessageType.HUMAN,
