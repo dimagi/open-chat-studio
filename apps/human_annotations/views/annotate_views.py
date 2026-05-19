@@ -373,6 +373,7 @@ class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
             id=annotation_pk,
             item_id=item_pk,
             item__queue=queue,
+            status=AnnotationStatus.SUBMITTED,
         )
         value = request.POST.get("value", "false").lower() == "true"
 

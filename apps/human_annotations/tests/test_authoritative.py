@@ -445,3 +445,18 @@ def test_htmx_swap_shows_awaiting_banner_when_authoritative_cleared(admin_client
 
     assert response.status_code == 200
     assert b"Awaiting resolution." in response.content
+
+
+@pytest.mark.django_db()
+def test_set_authoritative_rejects_draft_annotation(admin_client, team):
+    """Direct POSTs cannot mark a DRAFT annotation as authoritative; only SUBMITTED counts."""
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    user = team.members.first()
+    draft = Annotation.objects.create(item=item, team=team, reviewer=user, data={}, status=AnnotationStatus.DRAFT)
+
+    response = admin_client.post(_set_authoritative_url(team, queue, item, draft), {"value": "true"})
+
+    assert response.status_code == 404
+    draft.refresh_from_db()
+    assert draft.is_authoritative is False

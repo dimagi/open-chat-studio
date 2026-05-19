@@ -222,12 +222,6 @@ class Annotation(BaseTeamModel):
         on_delete=models.CASCADE,
         related_name="annotations",
     )
-    data = SanitizedJSONField(default=dict, help_text="Annotation data matching the queue's schema")
-    status = models.CharField(
-        max_length=20,
-        choices=AnnotationStatus.choices,
-        default=AnnotationStatus.SUBMITTED,
-    )
     is_authoritative = models.BooleanField(default=False)
     authoritative_set_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -237,6 +231,12 @@ class Annotation(BaseTeamModel):
         related_name="authoritative_annotations_set",
     )
     authoritative_set_at = models.DateTimeField(null=True, blank=True)
+    data = SanitizedJSONField(default=dict, help_text="Annotation data matching the queue's schema")
+    status = models.CharField(
+        max_length=20,
+        choices=AnnotationStatus.choices,
+        default=AnnotationStatus.SUBMITTED,
+    )
 
     class Meta:
         unique_together = ("item", "reviewer")
