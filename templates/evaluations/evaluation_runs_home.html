@@ -36,9 +36,17 @@
           Run Evaluation
         </a>
         {% if perms.evaluations.delete_evaluationconfig %}
-          <button class="btn btn-outline btn-error"
+          <button id="delete-evaluation-button"
+                  class="btn btn-outline btn-error"
+                  type="button"
                   hx-delete="{% url 'evaluations:delete' request.team.slug config.id %}?redirect=1"
-                  hx-confirm="Delete this evaluation? This will also delete all run history and results. This cannot be undone.">
+                  hx-trigger="confirmed"
+                  onclick="alertify.confirm().setting({
+                    title: 'Confirm',
+                    message: 'Delete this evaluation? This will also delete all run history and results. This cannot be undone.',
+                    transition: 'fade',
+                    onok: function() { htmx.trigger('#delete-evaluation-button', 'confirmed'); },
+                  }).show();">
             <i class="fa-solid fa-trash"></i>
             Delete
           </button>
