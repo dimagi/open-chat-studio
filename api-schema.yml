@@ -944,7 +944,36 @@ paths:
       - tokenAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerBotMessageResponse'
+              examples:
+                GenerateBotMessageAndSend:
+                  value:
+                    identifier: '+15556793'
+                    experiment: exp1
+                    platform: whatsapp
+                    prompt_text: Tell the user to do something
+                    session_data:
+                      key: value
+                    participant_data:
+                      key: value
+                  summary: Generates a bot message and sends it to the user (auto-creates
+                    participant if needed).
+                SendMessageDirectly:
+                  value:
+                    identifier: '+15556793'
+                    experiment: exp1
+                    platform: whatsapp
+                    message_text: Your appointment is confirmed for tomorrow at 10am.
+                    session_data:
+                      key: value
+                    participant_data:
+                      key: value
+                  summary: Send a pre-written message directly to the participant,
+                    bypassing the bot/LLM.
+          description: ''
         '400':
           content:
             application/json:
@@ -1814,6 +1843,28 @@ components:
       - experiment
       - identifier
       - platform
+    TriggerBotMessageResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        channel:
+          type: string
+          readOnly: true
+      required:
+      - channel
+      - session_id
+      - team
+      - url
     UploadedFile:
       type: object
       properties:
