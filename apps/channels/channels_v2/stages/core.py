@@ -9,7 +9,7 @@ from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.datamodels import Attachment
-from apps.chat.bots import EventBot, get_bot
+from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
@@ -419,6 +419,36 @@ class BotInteractionStage(ProcessingStage):
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
 
+        ctx.bot_response = ctx.bot.process_input(
+            ctx.user_query,
+            attachments=ctx.message.attachments,
+            human_message=ctx.human_message,
+        )
+        ctx.files_to_send = ctx.bot_response.get_attached_files() or []
+
+
+# ---------------------------------------------------------------------------
+# EvalsBotInteractionStage
+# ---------------------------------------------------------------------------
+
+
+class EvalsBotInteractionStage(ProcessingStage):
+    """Bot interaction for evaluations -- uses EvalsBot with in-memory participant_data.
+
+    Reads participant_data from ctx.channel_context (set by EvaluationChannel),
+    bypassing the DB-backed ParticipantData model.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.user_query is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        ctx.bot = EvalsBot(
+            ctx.experiment_session,
+            ctx.experiment,
+            ctx.trace_service,
+            participant_data=ctx.channel_context["participant_data"],
+        )
         ctx.bot_response = ctx.bot.process_input(
             ctx.user_query,
             attachments=ctx.message.attachments,
