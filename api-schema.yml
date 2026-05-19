@@ -1358,6 +1358,8 @@ components:
           type: string
           format: date-time
           readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusCb5Enum'
         tags:
           type: array
           items:
@@ -1424,6 +1426,8 @@ components:
           type: string
           format: date-time
           readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusCb5Enum'
         messages:
           type: array
           items:
@@ -1731,6 +1735,24 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
+    StatusCb5Enum:
+      enum:
+      - setup
+      - pending
+      - pending-pre-survey
+      - active
+      - pending-review
+      - complete
+      - unknown
+      type: string
+      description: |-
+        * `setup` - Setting Up
+        * `pending` - Awaiting participant
+        * `pending-pre-survey` - Awaiting pre-survey
+        * `active` - Active
+        * `pending-review` - Awaiting final review.
+        * `complete` - Complete
+        * `unknown` - Unknown
     Team:
       type: object
       properties:
