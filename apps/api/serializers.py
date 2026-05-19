@@ -328,7 +328,7 @@ class TriggerBotMessageResponse(serializers.ModelSerializer):
         view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
     )
     team = TeamSerializer(read_only=True)
-    channel = serializers.CharField(source="platform", read_only=True)
+    channel = serializers.CharField(source="platform", read_only=True, allow_null=True)
 
     class Meta:
         model = ExperimentSession

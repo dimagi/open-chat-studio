@@ -100,7 +100,7 @@ def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, 
 
     experiment = session.experiment
     target_experiment = resolve_published_or_working(experiment)
-    ChannelClass = ChannelBase.get_channel_class_for_platform(session.experiment_channel.platform)
+    ChannelClass = ChannelBase.get_channel_class_for_platform(session.platform)
     channel = ChannelClass(
         experiment=target_experiment,
         experiment_channel=session.experiment_channel,
