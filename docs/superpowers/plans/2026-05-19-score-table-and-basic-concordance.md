@@ -1,0 +1,2044 @@
+# Score table and basic concordance — implementation plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship the unified-assessment design's `Score` value layer (lean shape), dual-write hooks from existing `EvaluationResult` and `Annotation` records, a one-shot backfill for historical data, and a minimal concordance view that compares one shared categorical field between an `EvaluationConfig` and an `AnnotationQueue`.
+
+**Architecture:** New `apps/assessments/` app with one `Score` model. Both subsystems retain their existing storage and additionally write `Score` rows via small writer helpers. The concordance view is a single Django view + template that queries `Score`, pre-aggregates per `(target, source)` in Python (latest-per-side for v1), joins on `ExperimentSession`, and renders side-by-side values plus a simple agreement count. Discoverable via a sidebar sub-item under Evaluations, gated by a new team-managed waffle flag `flag_assessments_concordance`.
+
+**Tech Stack:** Django 5.x, Python 3.13, `django.contrib.contenttypes` GenericForeignKey, `django-waffle`, FactoryBoy for fixtures, pytest. Backfill follows OCS's `IdempotentCommand` + `RunDataMigration` pattern documented in `docs/developer_guides/custom_migrations.md`.
+
+**Source-of-truth spec:** `docs/superpowers/specs/2026-05-19-score-table-and-basic-concordance-design.md`.
+
+---
+
+## File layout (created/modified)
+
+**Created:**
+
+- `apps/assessments/__init__.py`
+- `apps/assessments/apps.py`
+- `apps/assessments/models.py` — `Score` model
+- `apps/assessments/score_writers.py` — `write_scores_from_evaluation_result`, `write_scores_from_annotation`, `_score_from_field`, `_source_for_evaluator`
+- `apps/assessments/views.py` — concordance view
+- `apps/assessments/urls.py` — single URL
+- `apps/assessments/admin.py` — minimal `Score` admin (read-only)
+- `apps/assessments/migrations/__init__.py`
+- `apps/assessments/migrations/0001_initial.py` — generated
+- `apps/assessments/management/__init__.py`
+- `apps/assessments/management/commands/__init__.py`
+- `apps/assessments/management/commands/backfill_initial_scores.py`
+- `apps/assessments/tests/__init__.py`
+- `apps/assessments/tests/conftest.py`
+- `apps/assessments/tests/test_score_writers.py`
+- `apps/assessments/tests/test_backfill_command.py`
+- `apps/assessments/tests/test_concordance_view.py`
+- `apps/utils/factories/assessments.py` — `ScoreFactory`
+- `templates/assessments/concordance.html`
+- `docs/superpowers/plans/2026-05-19-score-table-and-basic-concordance.md` (this file — already created)
+
+**Modified:**
+
+- `config/settings.py` — add `"apps.assessments"` to `PROJECT_APPS`
+- `config/urls.py` — wire `apps.assessments.urls`
+- `apps/teams/flags.py` — add `ASSESSMENTS_CONCORDANCE` flag
+- `apps/evaluations/tasks.py` — call `write_scores_from_evaluation_result` after `EvaluationResult.objects.create(...)` in `evaluate_single_message_task` (success path only)
+- `apps/human_annotations/models.py` — call `write_scores_from_annotation` from `Annotation.save` on first SUBMITTED save
+- `templates/web/components/team_nav.html` — sub-item under Evaluations
+
+---
+
+## Task 1: Scaffold the `apps/assessments/` app
+
+**Files:**
+- Create: `apps/assessments/__init__.py`, `apps/assessments/apps.py`, `apps/assessments/models.py` (empty), `apps/assessments/admin.py` (empty), `apps/assessments/migrations/__init__.py`, `apps/assessments/tests/__init__.py`
+- Modify: `config/settings.py:118` (add `"apps.assessments"` after `"apps.human_annotations"`)
+
+- [ ] **Step 1: Create the app package files**
+
+```python
+# apps/assessments/__init__.py
+```
+(empty file)
+
+```python
+# apps/assessments/apps.py
+from django.apps import AppConfig
+
+
+class AssessmentsConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.assessments"
+    label = "assessments"
+```
+
+```python
+# apps/assessments/models.py
+```
+(empty — model added in Task 2)
+
+```python
+# apps/assessments/admin.py
+```
+(empty — admin added in Task 3)
+
+```python
+# apps/assessments/migrations/__init__.py
+```
+(empty)
+
+```python
+# apps/assessments/tests/__init__.py
+```
+(empty)
+
+- [ ] **Step 2: Register the app in settings**
+
+Modify `config/settings.py`. After the `"apps.human_annotations",` line (around line 119), add:
+
+```python
+    "apps.assessments",
+```
+
+- [ ] **Step 3: Verify the app loads**
+
+Run: `uv run python manage.py check`
+Expected: `System check identified no issues (0 silenced).`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/assessments/ config/settings.py
+git commit -m "feat(assessments): scaffold assessments app"
+```
+
+---
+
+## Task 2: Create the `Score` model and initial migration
+
+**Files:**
+- Modify: `apps/assessments/models.py`
+- Create: `apps/assessments/migrations/0001_initial.py` (generated by Django)
+- Test: `apps/assessments/tests/test_score_model.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# apps/assessments/tests/test_score_model.py
+from decimal import Decimal
+
+import pytest
+from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError
+
+from apps.assessments.models import Score
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
+
+
+@pytest.mark.django_db()
+def test_score_can_be_created_with_numeric_value():
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    score = Score.objects.create(
+        team=team,
+        target_content_type=ContentType.objects.get_for_model(session),
+        target_object_id=session.id,
+        name="quality",
+        data_type=Score.DataType.NUMERIC,
+        value_numeric=Decimal("0.75"),
+        source=Score.Source.LLM_JUDGE,
+    )
+    assert score.target == session
+    assert score.value_numeric == Decimal("0.75")
+    assert score.value_string is None
+
+
+@pytest.mark.django_db()
+def test_score_can_be_created_with_string_value():
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    score = Score.objects.create(
+        team=team,
+        target_content_type=ContentType.objects.get_for_model(session),
+        target_object_id=session.id,
+        name="sentiment",
+        data_type=Score.DataType.CATEGORICAL,
+        value_string="positive",
+        source=Score.Source.HUMAN_REVIEW,
+    )
+    assert score.value_string == "positive"
+    assert score.value_numeric is None
+
+
+@pytest.mark.django_db()
+def test_score_requires_a_value_present():
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    with pytest.raises(IntegrityError):
+        Score.objects.create(
+            team=team,
+            target_content_type=ContentType.objects.get_for_model(session),
+            target_object_id=session.id,
+            name="empty",
+            data_type=Score.DataType.NUMERIC,
+            source=Score.Source.SYSTEM,
+        )
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run pytest apps/assessments/tests/test_score_model.py -v`
+Expected: FAIL with `ImportError` or `AttributeError` on `Score`.
+
+- [ ] **Step 3: Implement the model**
+
+```python
+# apps/assessments/models.py
+from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+from django.db.models import Q
+
+from apps.teams.models import BaseTeamModel
+
+
+class Score(BaseTeamModel):
+    """A single typed score attached to a measurement-unit target.
+
+    Written by both automated evaluators (via `automated_result` FK) and human
+    reviewers (via `review` FK). See docs/design/unified-assessment.md for the
+    long-term design; this is the lean v1 shape for basic concordance.
+    """
+
+    class Source(models.TextChoices):
+        LLM_JUDGE = "llm_judge", "LLM judge"
+        PROGRAMMATIC = "programmatic", "Programmatic"
+        HUMAN_REVIEW = "human_review", "Human review"
+        USER_FEEDBACK = "user_feedback", "User feedback"
+        SYSTEM = "system", "System"
+
+    class DataType(models.TextChoices):
+        NUMERIC = "numeric", "Numeric"
+        CATEGORICAL = "categorical", "Categorical"
+        BOOLEAN = "boolean", "Boolean"
+
+    target_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    target_object_id = models.PositiveIntegerField()
+    target = GenericForeignKey("target_content_type", "target_object_id")
+
+    name = models.CharField(max_length=255)
+    data_type = models.CharField(max_length=20, choices=DataType.choices)
+    value_numeric = models.DecimalField(max_digits=20, decimal_places=6, null=True, blank=True)
+    value_string = models.TextField(null=True, blank=True)
+
+    source = models.CharField(max_length=20, choices=Source.choices)
+
+    automated_result = models.ForeignKey(
+        "evaluations.EvaluationResult",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="scores",
+    )
+    review = models.ForeignKey(
+        "human_annotations.Annotation",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="scores",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scores",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["automated_result", "name"],
+                condition=Q(automated_result__isnull=False),
+                name="score_unique_per_automated_result_field",
+            ),
+            models.UniqueConstraint(
+                fields=["review", "name"],
+                condition=Q(review__isnull=False),
+                name="score_unique_per_review_field",
+            ),
+            models.CheckConstraint(
+                check=Q(value_numeric__isnull=False) | Q(value_string__isnull=False),
+                name="score_value_present",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["target_content_type", "target_object_id", "name", "source"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        value = self.value_numeric if self.value_numeric is not None else self.value_string
+        return f"Score({self.name}={value}, source={self.source})"
+```
+
+- [ ] **Step 4: Generate the migration**
+
+Run: `uv run python manage.py makemigrations assessments`
+Expected: `Migrations for 'assessments': apps/assessments/migrations/0001_initial.py - Create model Score`
+
+- [ ] **Step 5: Apply and run the tests**
+
+Run: `uv run python manage.py migrate assessments`
+Then: `uv run pytest apps/assessments/tests/test_score_model.py -v`
+Expected: 3 tests pass.
+
+- [ ] **Step 6: Lint and format**
+
+Run: `uv run ruff check apps/assessments/ --fix && uv run ruff format apps/assessments/`
+Expected: no errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/assessments/models.py apps/assessments/migrations/ apps/assessments/tests/test_score_model.py
+git commit -m "feat(assessments): add lean Score model"
+```
+
+---
+
+## Task 3: `Score` admin and a `ScoreFactory`
+
+**Files:**
+- Modify: `apps/assessments/admin.py`
+- Create: `apps/utils/factories/assessments.py`
+
+- [ ] **Step 1: Implement the admin**
+
+```python
+# apps/assessments/admin.py
+from django.contrib import admin
+
+from apps.assessments.models import Score
+
+
+@admin.register(Score)
+class ScoreAdmin(admin.ModelAdmin):
+    list_display = ("id", "team", "source", "name", "data_type", "value_numeric", "value_string", "created_at")
+    list_filter = ("source", "data_type", "team")
+    search_fields = ("name",)
+    readonly_fields = (
+        "team",
+        "target_content_type",
+        "target_object_id",
+        "name",
+        "data_type",
+        "value_numeric",
+        "value_string",
+        "source",
+        "automated_result",
+        "review",
+        "author",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+```
+
+- [ ] **Step 2: Implement the factory**
+
+```python
+# apps/utils/factories/assessments.py
+import factory
+import factory.django
+from django.contrib.contenttypes.models import ContentType
+
+from apps.assessments.models import Score
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
+
+
+class ScoreFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Score
+
+    team = factory.SubFactory(TeamFactory)
+    name = "field"
+    data_type = Score.DataType.CATEGORICAL
+    value_string = "yes"
+    source = Score.Source.LLM_JUDGE
+
+    target_object_id = factory.SelfAttribute("_session.id")
+    target_content_type = factory.LazyAttribute(
+        lambda obj: ContentType.objects.get_for_model(obj._session)
+    )
+
+    class Params:
+        _session = factory.SubFactory(ExperimentSessionFactory, team=factory.SelfAttribute("..team"))
+```
+
+- [ ] **Step 3: Sanity-check the factory in a shell**
+
+Run:
+```bash
+uv run python manage.py shell -c "
+from apps.utils.factories.assessments import ScoreFactory
+s = ScoreFactory.build()
+print(s.name, s.source, s.value_string)
+"
+```
+Expected: prints `field llm_judge yes` (no DB write needed for `build()`).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/assessments/admin.py apps/utils/factories/assessments.py
+git commit -m "feat(assessments): Score admin and factory"
+```
+
+---
+
+## Task 4: Score writer helpers — `_score_from_field` dispatch
+
+**Files:**
+- Create: `apps/assessments/score_writers.py`
+- Create: `apps/assessments/tests/test_score_writers.py`
+
+This task only implements `_score_from_field`. The two public writers (`write_scores_from_evaluation_result`, `write_scores_from_annotation`) come in Tasks 5 and 6 respectively to keep tests small.
+
+- [ ] **Step 1: Write the failing dispatch tests**
+
+```python
+# apps/assessments/tests/test_score_writers.py
+from decimal import Decimal
+
+import pytest
+from django.contrib.contenttypes.models import ContentType
+
+from apps.assessments.models import Score
+from apps.assessments.score_writers import _score_from_field
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
+
+
+@pytest.fixture()
+def session_target(db):
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    return team, session
+
+
+def test_score_from_field_bool_routes_to_numeric_zero_one(session_target):
+    team, session = session_target
+    s_true = _score_from_field(
+        team=team, target=session, name="flag", raw_value=True,
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    s_false = _score_from_field(
+        team=team, target=session, name="flag", raw_value=False,
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    assert s_true.data_type == Score.DataType.BOOLEAN
+    assert s_true.value_numeric == Decimal("1")
+    assert s_true.value_string is None
+    assert s_false.value_numeric == Decimal("0")
+
+
+def test_score_from_field_int_and_float_route_to_numeric(session_target):
+    team, session = session_target
+    s_int = _score_from_field(
+        team=team, target=session, name="rating", raw_value=4,
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    s_float = _score_from_field(
+        team=team, target=session, name="score", raw_value=0.83,
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    assert s_int.data_type == Score.DataType.NUMERIC
+    assert s_int.value_numeric == Decimal("4")
+    assert s_float.data_type == Score.DataType.NUMERIC
+    assert s_float.value_numeric == Decimal("0.83")
+
+
+def test_score_from_field_str_routes_to_categorical(session_target):
+    team, session = session_target
+    s = _score_from_field(
+        team=team, target=session, name="label", raw_value="positive",
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    assert s.data_type == Score.DataType.CATEGORICAL
+    assert s.value_string == "positive"
+    assert s.value_numeric is None
+
+
+def test_score_from_field_choice_schema_forces_categorical_for_numeric_choices(session_target):
+    team, session = session_target
+    choice_schema = {"type": "choice", "choices": ["0", "1"], "description": "binary"}
+    s = _score_from_field(
+        team=team, target=session, name="binary", raw_value="1",
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+        schema_field=choice_schema,
+    )
+    assert s.data_type == Score.DataType.CATEGORICAL
+    assert s.value_string == "1"
+
+
+def test_score_from_field_unsupported_value_returns_none(session_target, caplog):
+    team, session = session_target
+    s_none = _score_from_field(
+        team=team, target=session, name="x", raw_value=None,
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    s_list = _score_from_field(
+        team=team, target=session, name="x", raw_value=[1, 2],
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    s_dict = _score_from_field(
+        team=team, target=session, name="x", raw_value={"a": 1},
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    assert s_none is None
+    assert s_list is None
+    assert s_dict is None
+    assert any("unsupported value type" in rec.message.lower() for rec in caplog.records)
+
+
+def test_score_from_field_sets_target_gfk_fields(session_target):
+    team, session = session_target
+    s = _score_from_field(
+        team=team, target=session, name="x", raw_value="y",
+        source=Score.Source.LLM_JUDGE, automated_result=None,
+    )
+    assert s.target_object_id == session.id
+    assert s.target_content_type == ContentType.objects.get_for_model(session)
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run pytest apps/assessments/tests/test_score_writers.py -v`
+Expected: FAIL with `ModuleNotFoundError` on `apps.assessments.score_writers`.
+
+- [ ] **Step 3: Implement `_score_from_field`**
+
+```python
+# apps/assessments/score_writers.py
+import logging
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
+from django.contrib.contenttypes.models import ContentType
+
+from apps.assessments.models import Score
+
+logger = logging.getLogger(__name__)
+
+
+def _score_from_field(
+    *,
+    team,
+    target,
+    name: str,
+    raw_value: Any,
+    source: str,
+    automated_result=None,
+    review=None,
+    author=None,
+    schema_field: dict | None = None,
+) -> Score | None:
+    """Build an unsaved Score for one schema field. Returns None for unsupported values."""
+    schema_type = (schema_field or {}).get("type")
+
+    # Force categorical when the schema declares a choice — handles numeric-looking
+    # choice values like "0" / "1" without misclassifying them as numeric.
+    if schema_type == "choice":
+        return Score(
+            team=team,
+            target_content_type=ContentType.objects.get_for_model(target),
+            target_object_id=target.pk,
+            name=name,
+            data_type=Score.DataType.CATEGORICAL,
+            value_string=str(raw_value),
+            source=source,
+            automated_result=automated_result,
+            review=review,
+            author=author,
+        )
+
+    if isinstance(raw_value, bool):
+        return Score(
+            team=team,
+            target_content_type=ContentType.objects.get_for_model(target),
+            target_object_id=target.pk,
+            name=name,
+            data_type=Score.DataType.BOOLEAN,
+            value_numeric=Decimal(1) if raw_value else Decimal(0),
+            source=source,
+            automated_result=automated_result,
+            review=review,
+            author=author,
+        )
+
+    if isinstance(raw_value, int | float | Decimal):
+        try:
+            value_numeric = Decimal(str(raw_value))
+        except InvalidOperation:
+            logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
+            return None
+        return Score(
+            team=team,
+            target_content_type=ContentType.objects.get_for_model(target),
+            target_object_id=target.pk,
+            name=name,
+            data_type=Score.DataType.NUMERIC,
+            value_numeric=value_numeric,
+            source=source,
+            automated_result=automated_result,
+            review=review,
+            author=author,
+        )
+
+    if isinstance(raw_value, str):
+        return Score(
+            team=team,
+            target_content_type=ContentType.objects.get_for_model(target),
+            target_object_id=target.pk,
+            name=name,
+            data_type=Score.DataType.CATEGORICAL,
+            value_string=raw_value,
+            source=source,
+            automated_result=automated_result,
+            review=review,
+            author=author,
+        )
+
+    logger.warning(
+        "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
+        name,
+        type(raw_value).__name__,
+    )
+    return None
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `uv run pytest apps/assessments/tests/test_score_writers.py -v`
+Expected: 6 tests pass.
+
+- [ ] **Step 5: Lint and format**
+
+Run: `uv run ruff check apps/assessments/score_writers.py --fix && uv run ruff format apps/assessments/score_writers.py`
+Expected: no errors.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/assessments/score_writers.py apps/assessments/tests/test_score_writers.py
+git commit -m "feat(assessments): _score_from_field dispatch for typed Score writing"
+```
+
+---
+
+## Task 5: `write_scores_from_evaluation_result` + Celery wiring
+
+**Files:**
+- Modify: `apps/assessments/score_writers.py`
+- Modify: `apps/evaluations/tasks.py` (around line 100, inside the `transaction.atomic()` block in `evaluate_single_message_task`)
+- Modify: `apps/assessments/tests/test_score_writers.py` (add cases)
+
+- [ ] **Step 1: Add the failing tests for `write_scores_from_evaluation_result`**
+
+Append to `apps/assessments/tests/test_score_writers.py`:
+
+```python
+from apps.assessments.score_writers import write_scores_from_evaluation_result
+from apps.utils.factories.evaluations import (
+    EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
+
+
+@pytest.fixture()
+def eval_result_on_session(db):
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    message = EvaluationMessageFactory.create(session=session)
+    evaluator = EvaluatorFactory.create(team=team)
+    run = EvaluationRunFactory.create(team=team)
+    result = EvaluationResultFactory.create(
+        team=team,
+        evaluator=evaluator,
+        message=message,
+        run=run,
+        output={
+            "result": {
+                "sentiment": "positive",
+                "score": 7,
+                "is_safe": True,
+                "weird": [1, 2, 3],
+            }
+        },
+    )
+    return team, session, result
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_decomposes_into_one_score_per_field(eval_result_on_session):
+    team, session, result = eval_result_on_session
+    write_scores_from_evaluation_result(result)
+
+    scores = {s.name: s for s in Score.objects.filter(automated_result=result)}
+    # sentiment maps to schema's choice -> CATEGORICAL
+    assert scores["sentiment"].data_type == Score.DataType.CATEGORICAL
+    assert scores["sentiment"].value_string == "positive"
+    # score is int -> NUMERIC
+    assert scores["score"].data_type == Score.DataType.NUMERIC
+    assert scores["score"].value_numeric == Decimal("7")
+    # is_safe is bool but not in schema -> BOOLEAN
+    assert scores["is_safe"].data_type == Score.DataType.BOOLEAN
+    assert scores["is_safe"].value_numeric == Decimal("1")
+    # weird is a list -> skipped
+    assert "weird" not in scores
+    # all scores targeted at the session
+    session_ct = ContentType.objects.get_for_model(session)
+    for s in scores.values():
+        assert s.target_content_type == session_ct
+        assert s.target_object_id == session.id
+        assert s.source == Score.Source.LLM_JUDGE
+        assert s.team == team
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_with_no_session_is_a_no_op(db):
+    team = TeamFactory.create()
+    message = EvaluationMessageFactory.create()
+    message.session = None
+    message.save()
+    evaluator = EvaluatorFactory.create(team=team)
+    run = EvaluationRunFactory.create(team=team)
+    result = EvaluationResultFactory.create(
+        team=team, evaluator=evaluator, message=message, run=run,
+        output={"result": {"x": "y"}},
+    )
+
+    write_scores_from_evaluation_result(result)
+
+    assert Score.objects.filter(automated_result=result).count() == 0
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_is_idempotent(eval_result_on_session):
+    _, _, result = eval_result_on_session
+    write_scores_from_evaluation_result(result)
+    first_ids = set(Score.objects.filter(automated_result=result).values_list("id", flat=True))
+
+    write_scores_from_evaluation_result(result)
+    second_ids = set(Score.objects.filter(automated_result=result).values_list("id", flat=True))
+
+    # delete-and-recreate: counts match, IDs differ
+    assert len(first_ids) == len(second_ids)
+    assert first_ids.isdisjoint(second_ids)
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_error_payload_writes_no_scores(eval_result_on_session):
+    team, session, result = eval_result_on_session
+    result.output = {"error": "boom"}
+    result.save()
+
+    write_scores_from_evaluation_result(result)
+    assert Score.objects.filter(automated_result=result).count() == 0
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run pytest apps/assessments/tests/test_score_writers.py -v -k write_scores_from_evaluation_result`
+Expected: 4 tests FAIL with `ImportError` on `write_scores_from_evaluation_result`.
+
+- [ ] **Step 3: Implement `write_scores_from_evaluation_result` and `_source_for_evaluator`**
+
+Append to `apps/assessments/score_writers.py`:
+
+```python
+def _source_for_evaluator(evaluator) -> str:
+    """Map an Evaluator.type to a Score.Source. Defaults to LLM_JUDGE."""
+    if evaluator.type == "PythonEvaluator":
+        return Score.Source.PROGRAMMATIC
+    return Score.Source.LLM_JUDGE
+
+
+def write_scores_from_evaluation_result(result) -> None:
+    """Decompose an EvaluationResult's output into Score rows.
+
+    Idempotent: deletes existing Scores for this result then bulk-creates fresh ones.
+    No-op when the result has no associated ExperimentSession or when the output
+    contains an error payload.
+    """
+    output = result.output or {}
+    if "error" in output:
+        return
+    session = result.message.session if result.message_id else None
+    if session is None:
+        return
+
+    result_payload = output.get("result", {}) or {}
+    if not isinstance(result_payload, dict):
+        return
+
+    source = _source_for_evaluator(result.evaluator)
+    schema = (result.evaluator.params or {}).get("output_schema", {}) or {}
+
+    scores = []
+    for name, raw_value in result_payload.items():
+        score = _score_from_field(
+            team=result.team,
+            target=session,
+            name=name,
+            raw_value=raw_value,
+            source=source,
+            automated_result=result,
+            schema_field=schema.get(name),
+        )
+        if score is not None:
+            scores.append(score)
+
+    Score.objects.filter(automated_result=result).delete()
+    Score.objects.bulk_create(scores)
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `uv run pytest apps/assessments/tests/test_score_writers.py -v -k write_scores_from_evaluation_result`
+Expected: 4 tests pass.
+
+- [ ] **Step 5: Wire into the Celery task**
+
+In `apps/evaluations/tasks.py`, inside `evaluate_single_message_task`, modify the success-path block at lines 92-101:
+
+```python
+                with transaction.atomic():
+                    evaluation_result = EvaluationResult.objects.create(
+                        message=message,
+                        run=evaluation_run,
+                        evaluator=evaluator,
+                        output=output,
+                        team=evaluation_run.team,
+                        session_id=session_id,
+                    )
+                    _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
+                    # local import: cross-app coupling (apps.assessments imports
+                    # evaluations.EvaluationResult via FK).
+                    from apps.assessments.score_writers import write_scores_from_evaluation_result
+                    write_scores_from_evaluation_result(evaluation_result)
+```
+
+Do **not** call the writer on the error-path `EvaluationResult.objects.create(...)` at line 104 — error payloads must not produce Scores.
+
+- [ ] **Step 6: Verify the existing eval tests still pass**
+
+Run: `uv run pytest apps/evaluations/tests -v -x`
+Expected: all green.
+
+- [ ] **Step 7: Lint and format**
+
+Run: `uv run ruff check apps/assessments/ apps/evaluations/tasks.py --fix && uv run ruff format apps/assessments/ apps/evaluations/tasks.py`
+Expected: no errors.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/assessments/score_writers.py apps/assessments/tests/test_score_writers.py apps/evaluations/tasks.py
+git commit -m "feat(assessments): dual-write Score rows from EvaluationResult"
+```
+
+---
+
+## Task 6: `write_scores_from_annotation` + `Annotation.save` wiring
+
+**Files:**
+- Modify: `apps/assessments/score_writers.py`
+- Modify: `apps/human_annotations/models.py` (Annotation.save, around line 260)
+- Modify: `apps/assessments/tests/test_score_writers.py` (add cases)
+
+- [ ] **Step 1: Add the failing tests for `write_scores_from_annotation`**
+
+Append to `apps/assessments/tests/test_score_writers.py`:
+
+```python
+from apps.assessments.score_writers import write_scores_from_annotation
+from apps.human_annotations.models import Annotation, AnnotationStatus
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
+
+
+@pytest.fixture()
+def annotation_on_session(db):
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={
+            "is_relevant": {"type": "choice", "choices": ["yes", "no"], "description": "binary"},
+            "score": {"type": "int", "description": "1-5", "ge": 1, "le": 5},
+        },
+    )
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    reviewer = team.members.first()
+    annotation = Annotation.objects.create(
+        team=team,
+        item=item,
+        reviewer=reviewer,
+        data={"is_relevant": "yes", "score": 4, "notes": "ignored"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    return team, session, annotation, reviewer
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_decomposes_data_dict(annotation_on_session):
+    team, session, annotation, reviewer = annotation_on_session
+    # Annotation.save already triggers the writer; assert what's on the table.
+    scores = {s.name: s for s in Score.objects.filter(review=annotation)}
+
+    assert scores["is_relevant"].data_type == Score.DataType.CATEGORICAL
+    assert scores["is_relevant"].value_string == "yes"
+    assert scores["is_relevant"].author_id == reviewer.id
+    assert scores["is_relevant"].source == Score.Source.HUMAN_REVIEW
+
+    assert scores["score"].data_type == Score.DataType.NUMERIC
+    assert scores["score"].value_numeric == Decimal("4")
+
+    # "notes" is not in the schema and string, so it still writes (categorical).
+    assert scores["notes"].data_type == Score.DataType.CATEGORICAL
+
+    session_ct = ContentType.objects.get_for_model(session)
+    for s in scores.values():
+        assert s.target_content_type == session_ct
+        assert s.target_object_id == session.id
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_message_only_item_is_skipped(db):
+    """Items targeting a ChatMessage only (no session) are skipped per D-13."""
+    from apps.utils.factories.experiment import ChatMessageFactory
+
+    team = TeamFactory.create()
+    chat_message = ChatMessageFactory.create()
+    queue = AnnotationQueueFactory.create(team=team, schema={"x": {"type": "string", "description": "a"}})
+    item = AnnotationItemFactory.create(queue=queue, session=None, message=chat_message, team=team, item_type="message")
+    annotation = Annotation.objects.create(
+        team=team, item=item, reviewer=team.members.first(),
+        data={"x": "y"}, status=AnnotationStatus.SUBMITTED,
+    )
+    assert Score.objects.filter(review=annotation).count() == 0
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_draft_annotation_writes_no_scores(annotation_on_session):
+    team, session, _, reviewer = annotation_on_session
+    queue = AnnotationQueueFactory.create(team=team, schema={"x": {"type": "string", "description": "a"}})
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    draft = Annotation.objects.create(
+        team=team, item=item, reviewer=reviewer,
+        data={"x": "y"}, status=AnnotationStatus.DRAFT,
+    )
+    assert Score.objects.filter(review=draft).count() == 0
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_direct_call_is_idempotent(annotation_on_session):
+    team, session, annotation, _ = annotation_on_session
+    first_ids = set(Score.objects.filter(review=annotation).values_list("id", flat=True))
+    write_scores_from_annotation(annotation)
+    second_ids = set(Score.objects.filter(review=annotation).values_list("id", flat=True))
+    assert len(first_ids) == len(second_ids)
+    assert first_ids.isdisjoint(second_ids)
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_non_authoritative_still_writes(db):
+    """Non-authoritative annotations still write Scores; concordance filters at read time."""
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={"x": {"type": "choice", "choices": ["a", "b"], "description": "binary"}},
+        num_reviews_required=2,
+    )
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    # Two reviewers — both submit; neither is auto-marked authoritative
+    # (num_reviews_required != 1 short-circuits _maybe_auto_mark_authoritative).
+    r1 = team.members.first()
+    r2 = team.members.exclude(id=r1.id).first() or r1  # fall back if only one member
+    a1 = Annotation.objects.create(team=team, item=item, reviewer=r1, data={"x": "a"}, status=AnnotationStatus.SUBMITTED)
+    if r2 != r1:
+        a2 = Annotation.objects.create(team=team, item=item, reviewer=r2, data={"x": "b"}, status=AnnotationStatus.SUBMITTED)
+        assert Score.objects.filter(review=a2).count() == 1
+        assert a2.is_authoritative is False
+    assert Score.objects.filter(review=a1).count() == 1
+    assert a1.is_authoritative is False
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `uv run pytest apps/assessments/tests/test_score_writers.py -v -k annotation`
+Expected: tests FAIL — `write_scores_from_annotation` not yet defined and `Annotation.save` doesn't call it.
+
+- [ ] **Step 3: Implement `write_scores_from_annotation`**
+
+Append to `apps/assessments/score_writers.py`:
+
+```python
+def write_scores_from_annotation(annotation) -> None:
+    """Decompose an Annotation's data dict into Score rows.
+
+    Idempotent: deletes existing Scores for this annotation then bulk-creates fresh ones.
+    Skips message-only items (D-13 in the unified design excludes ChatMessage as a
+    Score target). Writes Scores regardless of `is_authoritative` — the concordance
+    view filters to authoritative at read time so non-authoritative annotations are
+    preserved for future inter-rater-reliability work.
+    """
+    item = annotation.item
+    target = item.session  # v1 only targets ExperimentSession; ChatMessage skipped
+    if target is None:
+        return
+
+    schema = item.queue.schema or {}
+    data = annotation.data or {}
+
+    scores = []
+    for name, raw_value in data.items():
+        score = _score_from_field(
+            team=annotation.team,
+            target=target,
+            name=name,
+            raw_value=raw_value,
+            source=Score.Source.HUMAN_REVIEW,
+            review=annotation,
+            author=annotation.reviewer,
+            schema_field=schema.get(name),
+        )
+        if score is not None:
+            scores.append(score)
+
+    Score.objects.filter(review=annotation).delete()
+    Score.objects.bulk_create(scores)
+```
+
+- [ ] **Step 4: Hook into `Annotation.save`**
+
+In `apps/human_annotations/models.py`, find the existing `Annotation.save` method (around line 255):
+
+```python
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        if is_new and self.status == AnnotationStatus.SUBMITTED:
+            self._maybe_auto_mark_authoritative()
+        super().save(*args, **kwargs)
+        if is_new and self.status == AnnotationStatus.SUBMITTED:
+            self._update_item_review_count()
+```
+
+Replace the last `if is_new` block (and what follows) with:
+
+```python
+        if is_new and self.status == AnnotationStatus.SUBMITTED:
+            self._update_item_review_count()
+            # local import: cross-app cycle (apps.assessments.Score FKs to this model).
+            from apps.assessments.score_writers import write_scores_from_annotation
+            write_scores_from_annotation(self)
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `uv run pytest apps/assessments/tests/test_score_writers.py -v -k annotation`
+Expected: tests pass.
+
+- [ ] **Step 6: Run the full human_annotations test suite to ensure no regressions**
+
+Run: `uv run pytest apps/human_annotations/tests -v -x`
+Expected: all green.
+
+- [ ] **Step 7: Lint and format**
+
+Run: `uv run ruff check apps/assessments/ apps/human_annotations/models.py --fix && uv run ruff format apps/assessments/ apps/human_annotations/models.py`
+Expected: no errors.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/assessments/score_writers.py apps/assessments/tests/test_score_writers.py apps/human_annotations/models.py
+git commit -m "feat(assessments): dual-write Score rows from Annotation"
+```
+
+---
+
+## Task 7: Backfill `IdempotentCommand`
+
+**Files:**
+- Create: `apps/assessments/management/__init__.py`
+- Create: `apps/assessments/management/commands/__init__.py`
+- Create: `apps/assessments/management/commands/backfill_initial_scores.py`
+- Create: `apps/assessments/tests/test_backfill_command.py`
+
+- [ ] **Step 1: Create the package `__init__.py` files**
+
+```python
+# apps/assessments/management/__init__.py
+```
+(empty)
+
+```python
+# apps/assessments/management/commands/__init__.py
+```
+(empty)
+
+- [ ] **Step 2: Write the failing tests**
+
+```python
+# apps/assessments/tests/test_backfill_command.py
+import pytest
+from django.core.management import call_command
+
+from apps.assessments.models import Score
+from apps.human_annotations.models import Annotation, AnnotationStatus
+from apps.utils.factories.evaluations import (
+    EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
+from apps.utils.factories.team import TeamFactory
+
+
+@pytest.fixture()
+def historical_data(db):
+    """Build EvaluationResults and Annotations directly via the ORM, bypassing the
+    dual-write hooks, so we can prove the backfill produces the same rows."""
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    evaluator = EvaluatorFactory.create(team=team)
+    message = EvaluationMessageFactory.create(session=session)
+    run = EvaluationRunFactory.create(team=team)
+    result = EvaluationResultFactory.create(
+        team=team, evaluator=evaluator, message=message, run=run,
+        output={"result": {"sentiment": "positive", "score": 5}},
+    )
+    # Manually wipe the Scores that EvaluationResultFactory may have triggered
+    # (it doesn't go through the Celery task, so no scores should exist anyway).
+    Score.objects.filter(automated_result=result).delete()
+
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={"sentiment": {"type": "choice", "choices": ["positive", "negative"], "description": "x"}},
+    )
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    # Build via raw INSERT to skip Annotation.save dual-write
+    Annotation.objects.bulk_create([
+        Annotation(team=team, item=item, reviewer=team.members.first(),
+                   data={"sentiment": "positive"}, status=AnnotationStatus.SUBMITTED),
+    ])
+    return team, session, result
+
+
+@pytest.mark.django_db()
+def test_backfill_dry_run_reports_counts(historical_data, capsys):
+    call_command("backfill_initial_scores", "--dry-run")
+    captured = capsys.readouterr()
+    assert "Would write Scores" in captured.out
+    assert Score.objects.count() == 0  # dry-run wrote nothing
+
+
+@pytest.mark.django_db()
+def test_backfill_writes_scores_for_historical_data(historical_data):
+    team, session, result = historical_data
+    assert Score.objects.count() == 0
+
+    call_command("backfill_initial_scores")
+
+    auto_scores = Score.objects.filter(automated_result=result)
+    assert {s.name for s in auto_scores} == {"sentiment", "score"}
+
+    review_scores = Score.objects.filter(review__isnull=False)
+    assert review_scores.count() == 1
+    assert review_scores.first().name == "sentiment"
+
+
+@pytest.mark.django_db()
+def test_backfill_is_idempotent_on_force_rerun(historical_data):
+    call_command("backfill_initial_scores")
+    first_total = Score.objects.count()
+    call_command("backfill_initial_scores", "--force")
+    second_total = Score.objects.count()
+    assert first_total == second_total
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `uv run pytest apps/assessments/tests/test_backfill_command.py -v`
+Expected: FAIL — command not yet registered.
+
+- [ ] **Step 4: Implement the command**
+
+```python
+# apps/assessments/management/commands/backfill_initial_scores.py
+from apps.data_migrations.management.commands.base import IdempotentCommand
+
+
+class Command(IdempotentCommand):
+    help = "Backfill Score rows from existing EvaluationResults and submitted Annotations"
+    migration_name = "backfill_initial_scores_2026_05_19"
+    atomic = False  # per-row work is independent; let each commit on its own
+
+    def perform_migration(self, dry_run=False):
+        # Local imports keep import-time light; this command is rarely invoked.
+        from apps.assessments.score_writers import (
+            write_scores_from_annotation,
+            write_scores_from_evaluation_result,
+        )
+        from apps.evaluations.models import EvaluationResult
+        from apps.human_annotations.models import Annotation, AnnotationStatus
+
+        eval_qs = EvaluationResult.objects.select_related(
+            "message__session", "evaluator", "team",
+        )
+        ann_qs = Annotation.objects.filter(status=AnnotationStatus.SUBMITTED).select_related(
+            "item__queue", "item__session", "team", "reviewer",
+        )
+
+        if dry_run:
+            self.stdout.write(
+                f"Would write Scores for {eval_qs.count()} eval results, "
+                f"{ann_qs.count()} annotations"
+            )
+            return
+
+        written = 0
+        for result in eval_qs.iterator(chunk_size=500):
+            write_scores_from_evaluation_result(result)
+            written += 1
+        for annotation in ann_qs.iterator(chunk_size=500):
+            write_scores_from_annotation(annotation)
+            written += 1
+        self.stdout.write(f"Backfill processed {written} source rows")
+        return written
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `uv run pytest apps/assessments/tests/test_backfill_command.py -v`
+Expected: 3 tests pass.
+
+- [ ] **Step 6: Lint and format**
+
+Run: `uv run ruff check apps/assessments/management/ apps/assessments/tests/test_backfill_command.py --fix && uv run ruff format apps/assessments/management/ apps/assessments/tests/test_backfill_command.py`
+Expected: no errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/assessments/management/ apps/assessments/tests/test_backfill_command.py
+git commit -m "feat(assessments): backfill_initial_scores IdempotentCommand"
+```
+
+---
+
+## Task 8: `ASSESSMENTS_CONCORDANCE` waffle flag
+
+**Files:**
+- Modify: `apps/teams/flags.py`
+
+- [ ] **Step 1: Add the flag**
+
+In `apps/teams/flags.py`, add the new member to the `Flags` enum (after `JSON_COLLECTION_LOADER`):
+
+```python
+    ASSESSMENTS_CONCORDANCE = (
+        "flag_assessments_concordance",
+        "Concordance view comparing evaluations vs human annotations (alpha)",
+        "",
+        ["flag_evaluations", "flag_human_annotations"],
+        True,
+    )
+```
+
+The positional arguments map to `(slug, description, docs_slug, requires, teams_can_manage)`. Setting `requires` ensures the system knows this flag depends on the other two; setting `teams_can_manage=True` lets team admins toggle it themselves.
+
+- [ ] **Step 2: Run the existing flag tests if any**
+
+Run: `uv run pytest apps/teams/tests -v -k flag`
+Expected: green (no new behaviour to test at this layer; the flag is just metadata).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/teams/flags.py
+git commit -m "feat(assessments): add flag_assessments_concordance team-managed flag"
+```
+
+---
+
+## Task 9: Concordance view (data flow + URL)
+
+**Files:**
+- Create: `apps/assessments/views.py`
+- Create: `apps/assessments/urls.py`
+- Modify: `config/urls.py`
+- Create: `templates/assessments/concordance.html`
+- Create: `apps/assessments/tests/test_concordance_view.py`
+
+This task implements the view + URL + template. The sidebar entry comes in Task 10.
+
+- [ ] **Step 1: Wire the URL**
+
+In `config/urls.py`, find the team URL block (around line 56). Add a new include alongside the existing eval URL:
+
+```python
+    path("evaluations/concordance/", include("apps.assessments.urls")),
+```
+
+Place it *immediately* after `path("evaluations/", include("apps.evaluations.urls")),` so the URL is `/a/<team_slug>/evaluations/concordance/`.
+
+- [ ] **Step 2: Create the urls module**
+
+```python
+# apps/assessments/urls.py
+from django.urls import path
+
+from apps.assessments import views
+
+app_name = "assessments"
+
+urlpatterns = [
+    path("", views.ConcordanceView.as_view(), name="concordance"),
+]
+```
+
+- [ ] **Step 3: Write the failing view tests**
+
+```python
+# apps/assessments/tests/test_concordance_view.py
+import pytest
+from django.contrib.auth.models import Permission
+from django.urls import reverse
+from waffle.models import Flag
+
+from apps.assessments.models import Score
+from apps.human_annotations.models import Annotation, AnnotationStatus
+from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
+from apps.utils.factories.team import TeamWithUsersFactory
+
+
+@pytest.fixture()
+def concordance_flag(db):
+    """Enable the team-managed flag for all callers by default."""
+    flag, _ = Flag.objects.get_or_create(name="flag_assessments_concordance")
+    flag.everyone = True
+    flag.save()
+    flag.flush()
+    return flag
+
+
+@pytest.fixture()
+def authed_client(client, db):
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    # The view requires evaluations + human_annotations view perms — grant both.
+    perms = Permission.objects.filter(codename__in=[
+        "view_evaluationconfig", "view_annotationqueue",
+    ])
+    user.user_permissions.add(*perms)
+    client.force_login(user)
+    return client, team, user
+
+
+def _build_concordance_fixtures(team):
+    """Eval config + annotation queue sharing a binary `verdict` choice field
+    over three sessions. Wiring goes via dual-write hooks (no direct Score writes)."""
+    sessions = [ExperimentSessionFactory.create(team=team) for _ in range(3)]
+    schema = {"verdict": {"type": "choice", "choices": ["yes", "no"], "description": "binary"}}
+
+    evaluator = EvaluatorFactory.create(
+        team=team,
+        params={"llm_prompt": "x", "output_schema": schema},
+    )
+    eval_config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(team=team, config=eval_config)
+    queue = AnnotationQueueFactory.create(team=team, schema=schema)
+
+    # Three sessions with various concordance shapes:
+    # - sessions[0]: both eval and human, agree
+    # - sessions[1]: both eval and human, disagree
+    # - sessions[2]: eval only
+    judge_values = ["yes", "yes", "no"]
+    human_values = ["yes", "no", None]
+
+    for session, judge_value, human_value in zip(sessions, judge_values, human_values, strict=True):
+        message = EvaluationMessageFactory.create(session=session)
+        result = EvaluationResultFactory.create(
+            team=team, evaluator=evaluator, message=message, run=run,
+            output={"result": {"verdict": judge_value}},
+        )
+        # EvaluationResultFactory doesn't go through the Celery task, so write Scores manually
+        from apps.assessments.score_writers import write_scores_from_evaluation_result
+        write_scores_from_evaluation_result(result)
+
+        if human_value is not None:
+            item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+            Annotation.objects.create(
+                team=team, item=item, reviewer=team.members.first(),
+                data={"verdict": human_value}, status=AnnotationStatus.SUBMITTED,
+            )
+
+    # Add a fourth session that's human-only (no eval) to test the human-only bucket
+    human_only_session = ExperimentSessionFactory.create(team=team)
+    item = AnnotationItemFactory.create(queue=queue, session=human_only_session, team=team)
+    Annotation.objects.create(
+        team=team, item=item, reviewer=team.members.first(),
+        data={"verdict": "yes"}, status=AnnotationStatus.SUBMITTED,
+    )
+
+    return eval_config, queue
+
+
+@pytest.mark.django_db()
+def test_concordance_picker_form_renders_with_no_params(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b"Concordance" in response.content
+
+
+@pytest.mark.django_db()
+def test_concordance_view_renders_matched_eval_only_human_only_buckets(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id})
+    assert response.status_code == 200
+    body = response.content.decode()
+    # Matched count is 2 (sessions[0] and sessions[1]); agreement count is 1.
+    assert "Matched: 2" in body
+    assert "Agreement: 1 / 2" in body
+    assert "Eval only: 1" in body
+    assert "Human only: 1" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_filters_to_authoritative_human_score(authed_client, concordance_flag):
+    """Multi-reviewer queue: only the authoritative annotation drives the human side."""
+    client, team, _ = authed_client
+    session = ExperimentSessionFactory.create(team=team)
+    schema = {"verdict": {"type": "choice", "choices": ["yes", "no"], "description": "x"}}
+    evaluator = EvaluatorFactory.create(team=team, params={"llm_prompt": "x", "output_schema": schema})
+    eval_config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(team=team, config=eval_config)
+    message = EvaluationMessageFactory.create(session=session)
+    result = EvaluationResultFactory.create(
+        team=team, evaluator=evaluator, message=message, run=run,
+        output={"result": {"verdict": "yes"}},
+    )
+    from apps.assessments.score_writers import write_scores_from_evaluation_result
+    write_scores_from_evaluation_result(result)
+
+    queue = AnnotationQueueFactory.create(team=team, schema=schema, num_reviews_required=2)
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    members = list(team.members.all())
+    r1, r2 = members[0], (members[1] if len(members) > 1 else members[0])
+
+    # Two annotations: r1 says "no", r2 says "yes". Mark r2's as authoritative.
+    a1 = Annotation.objects.create(
+        team=team, item=item, reviewer=r1, data={"verdict": "no"}, status=AnnotationStatus.SUBMITTED,
+    )
+    if r2 != r1:
+        a2 = Annotation.objects.create(
+            team=team, item=item, reviewer=r2, data={"verdict": "yes"}, status=AnnotationStatus.SUBMITTED,
+        )
+        # Promote r2's annotation
+        a1.is_authoritative = False
+        a1.save(update_fields=["is_authoritative"])
+        a2.is_authoritative = True
+        a2.save(update_fields=["is_authoritative"])
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id})
+    assert response.status_code == 200
+    # Even though r1 disagreed, the authoritative r2 agrees with the judge.
+    body = response.content.decode()
+    if r2 != r1:
+        assert "Agreement: 1 / 1" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_404_for_cross_team_config(authed_client, concordance_flag):
+    client, _, _ = authed_client
+    other_team = TeamWithUsersFactory.create()
+    other_eval = EvaluationConfigFactory.create(team=other_team)
+    other_queue = AnnotationQueueFactory.create(team=other_team)
+
+    url = reverse("assessments:concordance", args=[other_team.slug])
+    response = client.get(url, {"eval": other_eval.id, "queue": other_queue.id})
+    # The user is not a member of other_team, so the team-required decorator blocks them.
+    assert response.status_code in (302, 403, 404)
+
+
+@pytest.mark.django_db()
+def test_concordance_view_returns_404_when_flag_off(authed_client, db):
+    client, team, _ = authed_client
+    # Explicitly disable the flag for this test.
+    flag, _ = Flag.objects.get_or_create(name="flag_assessments_concordance")
+    flag.everyone = False
+    flag.save()
+    flag.flush()
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url)
+    assert response.status_code == 404
+```
+
+- [ ] **Step 4: Run tests to verify they fail**
+
+Run: `uv run pytest apps/assessments/tests/test_concordance_view.py -v`
+Expected: FAIL — view not yet implemented (likely `ImportError` / `NoReverseMatch`).
+
+- [ ] **Step 5: Implement the view**
+
+```python
+# apps/assessments/views.py
+import logging
+from dataclasses import dataclass
+from typing import Any
+
+from django.contrib.contenttypes.models import ContentType
+from django.http import Http404, HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404, render
+from django.views.generic import TemplateView
+from waffle import flag_is_active
+
+from apps.assessments.models import Score
+from apps.evaluations.models import EvaluationConfig
+from apps.experiments.models import ExperimentSession
+from apps.human_annotations.models import AnnotationQueue
+from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _Row:
+    session_external_id: str | None
+    judge_value: Any
+    human_value: Any
+    agree: bool | None
+
+
+def _candidate_categorical_fields(eval_config: EvaluationConfig, queue: AnnotationQueue) -> list[str]:
+    """Return field names that are categorical (or boolean-like) on BOTH sides."""
+    eval_fields: dict[str, dict] = {}
+    for evaluator in eval_config.evaluators.all():
+        schema = (evaluator.params or {}).get("output_schema", {}) or {}
+        eval_fields.update(schema)
+    queue_fields = queue.schema or {}
+
+    shared = set(eval_fields) & set(queue_fields)
+    candidates = []
+    for name in sorted(shared):
+        eval_type = eval_fields[name].get("type")
+        queue_type = queue_fields[name].get("type")
+        if eval_type == "choice" and queue_type == "choice":
+            candidates.append(name)
+    return candidates
+
+
+def _latest_score_per_target(scores) -> dict[int, Score]:
+    """Pick the most-recent Score per `target_object_id`. v1 stand-in for
+    per-source consensus from the unified design."""
+    latest: dict[int, Score] = {}
+    for score in scores:
+        existing = latest.get(score.target_object_id)
+        if existing is None or score.created_at > existing.created_at:
+            latest[score.target_object_id] = score
+    return latest
+
+
+def _score_value(score: Score) -> Any:
+    """Render the comparable value out of a Score."""
+    if score.data_type == Score.DataType.CATEGORICAL:
+        return score.value_string
+    if score.data_type == Score.DataType.BOOLEAN:
+        return bool(score.value_numeric)
+    return score.value_numeric
+
+
+class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
+    template_name = "assessments/concordance.html"
+
+    def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        if not flag_is_active(request, "flag_assessments_concordance"):
+            raise Http404("Concordance is not enabled for this team.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, team_slug: str, **kwargs) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
+        team = self.request.team
+
+        eval_id = self.request.GET.get("eval")
+        queue_id = self.request.GET.get("queue")
+        field_name = self.request.GET.get("field")
+
+        context: dict[str, Any] = {
+            "active_tab": "concordance",
+            "page_title": "Concordance",
+            "eval_configs": EvaluationConfig.objects.filter(team=team).order_by("name"),
+            "queues": AnnotationQueue.objects.filter(team=team).order_by("name"),
+            "selected_eval_id": eval_id,
+            "selected_queue_id": queue_id,
+            "selected_field_name": field_name,
+        }
+
+        if not eval_id or not queue_id:
+            return context
+
+        eval_config = get_object_or_404(EvaluationConfig, id=eval_id, team=team)
+        queue = get_object_or_404(AnnotationQueue, id=queue_id, team=team)
+
+        candidates = _candidate_categorical_fields(eval_config, queue)
+        if not candidates:
+            context.update({
+                "eval_config": eval_config,
+                "queue": queue,
+                "candidate_fields": [],
+                "no_candidates": True,
+            })
+            return context
+
+        if field_name and field_name not in candidates:
+            field_name = None
+        if not field_name:
+            field_name = candidates[0] if len(candidates) == 1 else None
+
+        context.update({
+            "eval_config": eval_config,
+            "queue": queue,
+            "candidate_fields": candidates,
+            "selected_field_name": field_name,
+        })
+        if field_name is None:
+            return context
+
+        session_ct = ContentType.objects.get_for_model(ExperimentSession)
+
+        judge_scores = list(
+            Score.objects.filter(
+                team=team,
+                target_content_type=session_ct,
+                name=field_name,
+                source__in=[Score.Source.LLM_JUDGE, Score.Source.PROGRAMMATIC],
+                automated_result__evaluator__in=eval_config.evaluators.all(),
+            )
+        )
+        human_scores = list(
+            Score.objects.filter(
+                team=team,
+                target_content_type=session_ct,
+                name=field_name,
+                source=Score.Source.HUMAN_REVIEW,
+                review__item__queue=queue,
+                review__is_authoritative=True,
+            )
+        )
+
+        judge_by_target = _latest_score_per_target(judge_scores)
+        human_by_target = _latest_score_per_target(human_scores)
+
+        matched_targets = set(judge_by_target) & set(human_by_target)
+        eval_only_targets = set(judge_by_target) - matched_targets
+        human_only_targets = set(human_by_target) - matched_targets
+
+        # Resolve session external IDs in one query
+        all_target_ids = matched_targets | eval_only_targets | human_only_targets
+        sessions_by_id = {
+            s.id: s for s in ExperimentSession.objects.filter(id__in=all_target_ids)
+        }
+
+        rows: list[_Row] = []
+        for target_id in sorted(matched_targets):
+            j_val = _score_value(judge_by_target[target_id])
+            h_val = _score_value(human_by_target[target_id])
+            rows.append(_Row(
+                session_external_id=str(sessions_by_id[target_id].external_id) if target_id in sessions_by_id else None,
+                judge_value=j_val, human_value=h_val,
+                agree=(j_val == h_val),
+            ))
+
+        agree_count = sum(1 for r in rows if r.agree)
+        context.update({
+            "rows": rows,
+            "matched_count": len(rows),
+            "agree_count": agree_count,
+            "eval_only_count": len(eval_only_targets),
+            "human_only_count": len(human_only_targets),
+        })
+        return context
+```
+
+Notes on the view:
+- `LoginAndTeamRequiredMixin` handles team-membership: a non-member of the team in the URL gets redirected/404'd. The mixin is what populates `request.team`.
+- `dispatch` checks the waffle flag and raises `Http404` when off — matching the spec's "view is hidden when the flag is off."
+- `get_object_or_404` with `team=team` is the OCS pattern for cross-team safety.
+- `render(...)` is replaced by returning context — `TemplateView` does the render automatically using `template_name`.
+
+- [ ] **Step 6: Implement the template**
+
+```html
+{# templates/assessments/concordance.html #}
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+  <h1 class="text-2xl font-bold mb-4">{% translate "Concordance" %}</h1>
+
+  <form method="get" class="mb-6 flex gap-4 items-end flex-wrap">
+    <label class="form-control">
+      <span class="label-text">{% translate "Evaluation" %}</span>
+      <select name="eval" class="select select-bordered">
+        <option value="">—</option>
+        {% for ec in eval_configs %}
+          <option value="{{ ec.id }}" {% if selected_eval_id|stringformat:"s" == ec.id|stringformat:"s" %}selected{% endif %}>{{ ec.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">{% translate "Annotation queue" %}</span>
+      <select name="queue" class="select select-bordered">
+        <option value="">—</option>
+        {% for q in queues %}
+          <option value="{{ q.id }}" {% if selected_queue_id|stringformat:"s" == q.id|stringformat:"s" %}selected{% endif %}>{{ q.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    {% if candidate_fields %}
+    <label class="form-control">
+      <span class="label-text">{% translate "Field" %}</span>
+      <select name="field" class="select select-bordered">
+        {% for name in candidate_fields %}
+          <option value="{{ name }}" {% if selected_field_name == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">{% translate "Compare" %}</button>
+  </form>
+
+  {% if eval_config and queue %}
+    {% if no_candidates %}
+      <div class="alert alert-warning">
+        {% translate "No shared categorical fields between this evaluation and queue." %}
+      </div>
+    {% elif selected_field_name %}
+      <div class="mb-4">
+        <strong>{% translate "Concordance" %}:</strong>
+        {{ eval_config.name }} {% translate "vs" %} {{ queue.name }}
+        — {% translate "field" %}: <code>{{ selected_field_name }}</code>
+      </div>
+      <div class="stats shadow mb-6">
+        <div class="stat">
+          <div class="stat-title">{% translate "Matched" %}</div>
+          <div class="stat-value">{{ matched_count }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">{% translate "Agreement" %}</div>
+          <div class="stat-value">{{ agree_count }} / {{ matched_count }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">{% translate "Eval only" %}</div>
+          <div class="stat-value">{{ eval_only_count }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">{% translate "Human only" %}</div>
+          <div class="stat-value">{{ human_only_count }}</div>
+        </div>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{% translate "Session" %}</th>
+            <th>{% translate "Judge value" %}</th>
+            <th>{% translate "Human value" %}</th>
+            <th>{% translate "Agree?" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.session_external_id|default:"—" }}</td>
+              <td>{{ row.judge_value }}</td>
+              <td>{{ row.human_value }}</td>
+              <td>{% if row.agree %}✓{% else %}✗{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">{% translate "No matched sessions yet." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="alert alert-info">
+        {% translate "Multiple shared fields — pick one above to compare." %}
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: `uv run pytest apps/assessments/tests/test_concordance_view.py -v`
+Expected: 5 tests pass.
+
+- [ ] **Step 8: Lint and format**
+
+Run: `uv run ruff check apps/assessments/views.py apps/assessments/urls.py apps/assessments/tests/test_concordance_view.py --fix && uv run ruff format apps/assessments/views.py apps/assessments/urls.py apps/assessments/tests/test_concordance_view.py`
+Run: `npm run lint templates/assessments/concordance.html || true` (template linting is best-effort here).
+Expected: no errors.
+
+- [ ] **Step 9: Type-check**
+
+Run: `uv run ty check apps/assessments/`
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add apps/assessments/views.py apps/assessments/urls.py config/urls.py templates/assessments/concordance.html apps/assessments/tests/test_concordance_view.py
+git commit -m "feat(assessments): concordance view (categorical field, latest-per-side)"
+```
+
+---
+
+## Task 10: Sidebar sub-item under Evaluations
+
+**Files:**
+- Modify: `templates/web/components/team_nav.html`
+
+- [ ] **Step 1: Add the sub-item**
+
+In `templates/web/components/team_nav.html`, locate the Evaluations block (around lines 135-158). Inside the existing `<ul>` (after the Datasets `<li>` at line 156, before the closing `</ul>` at line 157), add:
+
+```html
+        {% flag "flag_assessments_concordance" %}
+          {% if perms.evaluations.view_evaluationconfig and perms.human_annotations.view_annotationqueue %}
+            <li>
+              <a href="{% url 'assessments:concordance' request.team.slug %}"
+                 {% if active_tab == 'concordance' %}class="menu-active"{% endif %}>
+                <i class="fa-solid fa-scale-balanced fa-fw"></i>
+                {% translate "Concordance" %}
+              </a>
+            </li>
+          {% endif %}
+        {% endflag %}
+```
+
+- [ ] **Step 2: Manually verify in the dev server**
+
+Run: `uv run inv runserver` (or `uv run python manage.py runserver` if portless isn't available).
+In another shell, enable the flag for your team:
+
+```bash
+uv run python manage.py shell -c "
+from waffle.models import Flag
+f, _ = Flag.objects.get_or_create(name='flag_assessments_concordance')
+f.everyone = True; f.save(); f.flush()
+"
+```
+
+Then load the team home page and confirm "Concordance" appears under Evaluations.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add templates/web/components/team_nav.html
+git commit -m "feat(assessments): sidebar sub-item under Evaluations"
+```
+
+---
+
+## Task 11: End-to-end smoke test
+
+**Files:**
+- Create: `apps/assessments/tests/test_end_to_end.py`
+
+- [ ] **Step 1: Write the smoke test**
+
+```python
+# apps/assessments/tests/test_end_to_end.py
+import pytest
+from django.contrib.contenttypes.models import ContentType
+
+from apps.assessments.models import Score
+from apps.human_annotations.models import Annotation, AnnotationStatus
+from apps.utils.factories.evaluations import (
+    EvaluationMessageFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
+from apps.utils.factories.team import TeamFactory
+
+
+@pytest.mark.django_db()
+def test_dual_write_produces_concordance_ready_scores():
+    """Smoke test: an EvaluationResult and an Annotation on the same session
+    both produce Score rows targeting the same ExperimentSession, queryable
+    via the same GFK keys."""
+    from apps.evaluations.models import EvaluationResult
+    from apps.assessments.score_writers import write_scores_from_evaluation_result
+
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team)
+    schema = {"verdict": {"type": "choice", "choices": ["yes", "no"], "description": "x"}}
+
+    # Eval side
+    evaluator = EvaluatorFactory.create(team=team, params={"llm_prompt": "x", "output_schema": schema})
+    run = EvaluationRunFactory.create(team=team)
+    message = EvaluationMessageFactory.create(session=session)
+    result = EvaluationResult.objects.create(
+        team=team, evaluator=evaluator, message=message, run=run,
+        output={"result": {"verdict": "yes"}},
+    )
+    # Direct factory call (not via Celery), so manually invoke the writer.
+    write_scores_from_evaluation_result(result)
+
+    # Human side
+    queue = AnnotationQueueFactory.create(team=team, schema=schema)
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    Annotation.objects.create(
+        team=team, item=item, reviewer=team.members.first(),
+        data={"verdict": "no"}, status=AnnotationStatus.SUBMITTED,
+    )
+
+    session_ct = ContentType.objects.get_for_model(session)
+    scores_on_session = Score.objects.filter(
+        team=team,
+        target_content_type=session_ct,
+        target_object_id=session.id,
+        name="verdict",
+    )
+    sources = {s.source for s in scores_on_session}
+    assert Score.Source.LLM_JUDGE in sources
+    assert Score.Source.HUMAN_REVIEW in sources
+```
+
+- [ ] **Step 2: Run the smoke test**
+
+Run: `uv run pytest apps/assessments/tests/test_end_to_end.py -v`
+Expected: 1 test passes.
+
+- [ ] **Step 3: Run the entire assessments suite + neighbouring suites**
+
+Run: `uv run pytest apps/assessments apps/evaluations apps/human_annotations -v -x`
+Expected: all green.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/assessments/tests/test_end_to_end.py
+git commit -m "test(assessments): end-to-end smoke that both sides land on Score"
+```
+
+---
+
+## Task 12: Wrap-up — repo-wide checks
+
+- [ ] **Step 1: Run ruff and ty over everything touched**
+
+Run:
+```bash
+uv run ruff check apps/assessments apps/evaluations/tasks.py apps/human_annotations/models.py apps/teams/flags.py config/settings.py config/urls.py
+uv run ruff format --check apps/assessments apps/evaluations/tasks.py apps/human_annotations/models.py apps/teams/flags.py config/settings.py config/urls.py
+uv run ty check apps/assessments
+```
+Expected: clean.
+
+- [ ] **Step 2: Run the full test suite once**
+
+Run: `uv run pytest apps/assessments apps/evaluations apps/human_annotations apps/teams -v -x`
+Expected: green.
+
+- [ ] **Step 3: Verify `makemigrations --dry-run` shows nothing new**
+
+Run: `uv run python manage.py makemigrations --dry-run`
+Expected: `No changes detected.`
+
+- [ ] **Step 4: Final commit (if anything fell out of lint)**
+
+```bash
+git status
+# if anything is dirty:
+git add -p
+git commit -m "chore(assessments): cleanup after lint/format"
+```
+
+- [ ] **Step 5: Manual deployment notes (recorded — not run automatically)**
+
+After deploy, run the backfill manually:
+
+```bash
+# In production shell (one team / global, both supported):
+python manage.py backfill_initial_scores --dry-run
+python manage.py backfill_initial_scores
+```
+
+The Phase-2 Django-migration top-up (`RunDataMigration("backfill_initial_scores_2026_05_19", command_options={"force": True})`) is a **follow-up PR** per the spec — not part of this plan's scope. Open a tracking issue at PR-merge time.
+
+---
+
+## Spec coverage checklist (self-review)
+
+| Spec section                                       | Plan task(s)              |
+|----------------------------------------------------|---------------------------|
+| `apps/assessments/` app scaffold                   | Task 1                    |
+| `Score` model (lean shape, GFK, constraints)       | Task 2                    |
+| `Score` admin                                      | Task 3                    |
+| `ScoreFactory`                                     | Task 3                    |
+| `_score_from_field` dispatch (bool/int/float/str)  | Task 4                    |
+| `_score_from_field` `Choice`-schema override       | Task 4                    |
+| `_score_from_field` skips list/dict/None           | Task 4                    |
+| `write_scores_from_evaluation_result`              | Task 5                    |
+| `_source_for_evaluator`                            | Task 5                    |
+| Celery wiring (success path only, atomic block)    | Task 5                    |
+| `write_scores_from_annotation`                     | Task 6                    |
+| Skip message-only annotation items (D-13)          | Task 6                    |
+| `Annotation.save` hook (local import per AGENTS.md)| Task 6                    |
+| Non-authoritative annotations still write Score    | Task 6 (test included)    |
+| Backfill `IdempotentCommand`                       | Task 7                    |
+| Backfill idempotency (delete-and-create)           | Task 7 (test included)    |
+| `ASSESSMENTS_CONCORDANCE` waffle flag              | Task 8                    |
+| Concordance view: URL + view + template            | Task 9                    |
+| Candidate-field intersection (choice-on-both)      | Task 9                    |
+| Auto-pick when one candidate                       | Task 9                    |
+| `review__is_authoritative=True` filter             | Task 9                    |
+| Latest-per-target pre-aggregation                  | Task 9                    |
+| Matched / eval-only / human-only buckets           | Task 9 (test included)    |
+| 404 when flag off                                  | Task 9 (test included)    |
+| Sidebar sub-item under Evaluations                 | Task 10                   |
+| Phase 2 (Django migration top-up)                  | Out of scope (follow-up)  |
