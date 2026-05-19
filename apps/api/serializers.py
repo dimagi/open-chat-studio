@@ -139,6 +139,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "platform",
             "messages",
             "tags",
         ]

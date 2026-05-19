@@ -1389,6 +1389,10 @@ components:
           readOnly: true
         status:
           $ref: '#/components/schemas/StatusCb5Enum'
+        platform:
+          type: string
+          nullable: true
+          maxLength: 128
         tags:
           type: array
           items:
@@ -1457,6 +1461,10 @@ components:
           readOnly: true
         status:
           $ref: '#/components/schemas/StatusCb5Enum'
+        platform:
+          type: string
+          nullable: true
+          maxLength: 128
         messages:
           type: array
           items:
