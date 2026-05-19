@@ -325,10 +325,11 @@ class EmailChannel(ChannelBase):
 
         thread_context = self.thread_context
         if not thread_context.subject and self.experiment_session:
-            custom_subject = self.experiment_session.state.get("email_subject")
-            if custom_subject:
+            state = self.experiment_session.state or {}
+            custom_subject = state.get("email_subject")
+            if isinstance(custom_subject, str) and custom_subject.strip():
                 thread_context = EmailThreadContext(
-                    subject=custom_subject,
+                    subject=custom_subject.strip(),
                     in_reply_to=thread_context.in_reply_to,
                     references=thread_context.references,
                 )

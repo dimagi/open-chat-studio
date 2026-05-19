@@ -596,6 +596,33 @@ class TestEmailChannel:
 
         assert sender.thread_context.subject == "Re: Original Subject"
 
+    @pytest.mark.parametrize("bad_value", [123, ["list"], {"dict": True}, "   ", None])
+    def test_get_sender_ignores_invalid_email_subject(self, bad_value):
+        """Non-string and whitespace-only email_subject values are ignored."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.state = {"email_subject": bad_value}
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+        sender = email_channel._get_sender()
+
+        assert sender.thread_context.subject == ""
+
+    def test_get_sender_strips_whitespace_from_email_subject(self):
+        """Leading/trailing whitespace is stripped from email_subject."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.state = {"email_subject": "  Hello World  "}
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+        sender = email_channel._get_sender()
+
+        assert sender.thread_context.subject == "Hello World"
+
 
 @pytest.mark.django_db()
 class TestEnsureSessionExistsForParticipant:
