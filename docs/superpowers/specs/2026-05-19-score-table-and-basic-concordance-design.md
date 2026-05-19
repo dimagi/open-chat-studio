@@ -104,6 +104,7 @@ class Score(BaseTeamModel):
 - **Partial unique constraints** on `(automated_result, name)` and `(review, name)` match the unified design's "artefact-level idempotency": re-running an `EvaluationResult` or resubmitting an `Annotation` deletes-and-recreates its Scores cleanly. The partial conditions are required because both FKs are nullable and we don't want them in the unique key for the other source's rows.
 - **`team` is denormalised** (via `BaseTeamModel`) — set at write time from the parent `EvaluationResult.team` / `Annotation.team`. Lets queries scope by team without a join.
 - **No `assessment` / `assessment_run` / `score_config` / `participant` / `comment`.** All deferred. Each is non-breaking to add later (nullable FK or nullable field).
+- **`is_authoritative` is not denormalised onto `Score`.** Multi-reviewer queues let humans toggle authoritativeness post-submission (see `Annotation.authoritative_set_by` / `authoritative_set_at`), and `Annotation.is_authoritative` is auto-managed for single-reviewer queues. Denormalising would require a sync hook on every authoritative-toggle. The concordance view does a query-time join through `Score.review__is_authoritative` instead; cheap enough for the dogfood pilot. Revisit if it becomes a hot path.
 - **`BOOLEAN` values land in `value_numeric` as 0/1**, not `value_string`. Lets future aggregation treat booleans as numeric without a special case. The `data_type=BOOLEAN` marker preserves the original intent so UI can render `True/False` rather than `1.0/0.0`.
 
 ## Write paths
@@ -138,6 +139,8 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
 ### Human side
 
 Hook on `Annotation.save` when `status == SUBMITTED`. `Annotation.save` already does post-save bookkeeping (`_update_item_review_count`); adding one more "decompose into Scores" call there is consistent with the existing shape.
+
+Scores are written for **every submitted annotation, regardless of `is_authoritative`**. Non-authoritative annotations are real reviewer judgments and we want to preserve them in `Score` for future inter-rater-reliability work (Story 9 in the unified design). The concordance view filters to authoritative at read time (see [Concordance view](#concordance-view)).
 
 ```python
 # inside apps/human_annotations/models.py: Annotation.save
@@ -287,12 +290,15 @@ All state lives in query params. No persisted concordance config in v1.
            name=field_name,
            source=Score.Source.HUMAN_REVIEW,
            review__item__queue=annotation_queue,
+           review__is_authoritative=True,  # ground-truth filter
        )
        .order_by("target_object_id", "-created_at")
    )
    ```
 
-5. Pre-aggregate per `(target, source)` in Python — for v1, keep the **latest** Score per side per session. This is the simple stand-in for the unified design's per-source consensus (mean / mode); fine for a single binary field where multiple judge runs typically agree and human queues are single-reviewer in the dogfood case. A code comment flags this as v1-only behaviour.
+   The `review__is_authoritative=True` filter ensures concordance compares the judge against the resolved human answer. For single-reviewer queues every submitted annotation is auto-marked authoritative (see `Annotation._maybe_auto_mark_authoritative`), so this filter is a no-op there. For multi-reviewer queues, items in `AWAITING_RESOLUTION` (no authoritative pick yet) naturally drop out of the comparison until a resolver picks one.
+
+5. Pre-aggregate per `(target, source)` in Python — for v1, keep the **latest** Score per side per session. On the judge side this is the most recent run's output; on the human side the authoritative filter usually leaves exactly one row per session, but the same "pick latest" rule applies for the rare case where an item's authoritative pick has changed and old Score rows weren't cleaned up. This is the simple stand-in for the unified design's per-source consensus (mean / mode). A code comment flags it as v1-only behaviour.
 6. Join on `target_object_id`. Three buckets: matched, eval-only, human-only.
 7. Compute `agree = judge_value == human_value` per matched row.
 
@@ -343,6 +349,7 @@ Per AGENTS.md ("when adding new features: write or update unit tests first, then
   - Re-run is a no-op against an already-backfilled DB (delete-and-create idempotency proven through total row count).
 - **Concordance view test** (`apps/assessments/tests/test_concordance_view.py`):
   - With two `Evaluator`s in one `EvaluationConfig` plus one `AnnotationQueue` sharing one categorical field over a small set of sessions, the view produces the expected matched / eval-only / human-only buckets and agreement count.
+  - Multi-reviewer queue: an item with one authoritative annotation and one non-authoritative annotation shows the **authoritative** value as the human side. Items in `AWAITING_RESOLUTION` (no authoritative pick) are excluded.
   - 404 when configs aren't in the request team.
   - Empty state (no Score rows) renders sensibly.
   - Permission test: the view is hidden when the waffle flag is off.
