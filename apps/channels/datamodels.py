@@ -22,6 +22,18 @@ logger = logging.getLogger("ocs.channels")
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
 
 
+def looks_like_bsuid(value: str) -> bool:
+    """Return True if `value` looks like a Meta business-scoped user ID.
+
+    BSUIDs use the format `<ISO country code>.<digits>` (e.g. US.13491208655302741918) and
+    parent BSUIDs use `<country>.ENT.<digits>`. Phone numbers (E.164 or wa_id digit string)
+    never contain a period.
+
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+    """
+    return "." in value
+
+
 class MediaCache(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -131,6 +143,11 @@ class TwilioMessage(BaseMessage):
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
+    phone_number: str | None = Field(default=None)
+    """The user's phone number (E.164) when included in the WhatsApp webhook (Twilio `From`
+    field). `None` for username-adopters whose phone is not exposed, and for non-WhatsApp
+    platforms (Facebook Messenger). Used alongside `participant_id` (BSUID) to match
+    legacy phone-keyed participants."""
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -151,19 +168,39 @@ class TwilioMessage(BaseMessage):
         prefix_to_remove = f"{prefix}:"
         platform = prefix_channel_map[prefix]
         to = message_data["To"].removeprefix(prefix_to_remove)
+        from_value = message_data["From"].removeprefix(prefix_to_remove)
+        phone_number = None
+
         if platform == ChannelPlatform.WHATSAPP:
             # Parse the number to E164 format, since this is the format of numbers in the DB
             # Normally they are already in this format, but this is just an extra layer of security
             number_obj = phonenumbers.parse(to)
             to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+
+            # ExternalUserId (BSUID) is the stable identifier on WhatsApp — Twilio guarantees
+            # it on every post-rollout webhook. Strip the `whatsapp:` prefix; missing field
+            # means a malformed payload, so the KeyError surfaces.
+            participant_id = message_data["ExternalUserId"].removeprefix(prefix_to_remove)
+            # `From` carries the phone only when the user has not adopted a username; otherwise
+            # it mirrors the BSUID. Normalize to E.164 for matching against legacy phone-keyed
+            # participants stored in the DB.
+            if not looks_like_bsuid(from_value):
+                phone_number = phonenumbers.format_number(
+                    phonenumbers.parse(from_value), phonenumbers.PhoneNumberFormat.E164
+                )
+        else:
+            # Facebook Messenger: no BSUID concept; use the sender id as before.
+            participant_id = from_value
+
         return TwilioMessage(
-            participant_id=message_data["From"].removeprefix(prefix_to_remove),
+            participant_id=participant_id,
             to=to,
             message_text=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
             platform=platform,
+            phone_number=phone_number,
         )
 
 
@@ -217,6 +254,10 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
     """
 
     whatsapp_message_id: str | None = Field(default=None)
+    phone_number: str | None = Field(default=None)
+    """The user's phone number when included in the webhook (Meta `from` field).
+    `None` for username-adopters whose phone is not exposed. Used alongside
+    `participant_id` (BSUID) to match legacy phone-keyed participants."""
 
     @staticmethod
     def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage":
@@ -225,9 +266,12 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
         if message_type == "text":
             body = message_data["text"]["body"]
 
-        # Prefer the phone number (`from`) when available; fall back to the BSUID (`from_user_id`)
-        # for username-adopters whose phone is not exposed by Meta.
-        participant_id = message_data.get("from") or message_data.get("from_user_id")
+        # BSUID (`from_user_id`) is the stable identifier — it's present on every post-rollout
+        # webhook regardless of whether the user adopted a username. A missing field means a
+        # malformed payload, so we let the KeyError surface.
+        participant_id = message_data["from_user_id"]
+        from_value = message_data.get("from")
+        phone_number = from_value if from_value and not looks_like_bsuid(from_value) else None
         return MetaCloudAPIMessage(
             participant_id=participant_id,
             message_text=body,
@@ -235,6 +279,7 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
             media_id=message_data.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
             whatsapp_message_id=message_data.get("id"),
+            phone_number=phone_number,
         )
 
 

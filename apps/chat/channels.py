@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import emoji
 import httpx
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -171,6 +172,7 @@ class ChannelBase(ABC):
         timezone: str | None = None,
         session_external_id: str | None = None,
         metadata: dict | None = None,
+        participant_filter: Q | None = None,
     ):
         return _start_experiment_session(
             working_experiment,
@@ -181,6 +183,7 @@ class ChannelBase(ABC):
             timezone,
             session_external_id,
             metadata,
+            participant_filter=participant_filter,
         )
 
     @property
@@ -249,6 +252,16 @@ class ChannelBase(ABC):
         if self.experiment.is_a_version:
             experiment = self.experiment.working_version
         return experiment.participantdata_set.defer("data").get(participant__identifier=self.participant_identifier)
+
+    def get_participant_identifier_filter(self) -> Q:
+        """Filter clause used to find the existing ``Participant`` for this channel's message.
+
+        Override on subclasses that match a participant by more than just their identifier
+        (e.g. ``WhatsappChannel`` matches on BSUID OR phone to keep continuity across the
+        WhatsApp usernames rollout).
+        """
+        identifier = self.experiment_channel.platform_enum.normalize_identifier(self.participant_identifier)
+        return Q(identifier=identifier)
 
     @notify_on_delivery_failure(context="voice message")
     def _send_voice_to_user_with_notification(self, synthetic_voice: SynthesizedAudio):
@@ -870,13 +883,24 @@ class ChannelBase(ABC):
             self._ensure_sessions_exists()
 
     def _load_latest_session(self):
-        """Loads the latest experiment session on the channel"""
+        """Loads the latest experiment session on the channel.
+
+        Subclasses can match a participant by something other than just the identifier
+        (``WhatsappChannel`` matches by BSUID OR phone) via the
+        ``get_participant_identifier_filter`` hook.
+        """
+        participants = Participant.objects.filter(
+            self.get_participant_identifier_filter(),
+            team=self.experiment.team,
+            platform=self.experiment_channel.platform,
+        )
         self.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=self.experiment.get_working_version(),
-                participant__identifier=str(self.participant_identifier),
+                participant__in=participants,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .select_related("participant")
             .order_by("-created_at")
             .first()
         )
@@ -897,6 +921,7 @@ class ChannelBase(ABC):
             participant_identifier=self.participant_identifier,
             participant_user=self.participant_user,
             session_status=SessionStatus.SETUP,
+            participant_filter=self.get_participant_identifier_filter(),
         )
 
     def _is_reset_conversation_request(self):
@@ -1168,6 +1193,17 @@ class TelegramChannel(ChannelBase):
 
 
 class WhatsappChannel(ChannelBase):
+    def get_participant_identifier_filter(self) -> Q:
+        """Match an existing participant on either the BSUID (``message.participant_id``) or
+        the user's phone number (``message.phone_number``). Post-rollout, new WhatsApp
+        webhooks always carry a BSUID; some also carry a phone number, allowing continuity
+        with legacy phone-keyed participants from before the rollout.
+        """
+        phone = getattr(self.message, "phone_number", None) if self.message else None
+        if phone:
+            return Q(identifier=self.participant_identifier) | Q(identifier=phone)
+        return super().get_participant_identifier_filter()
+
     @property
     def voice_replies_supported(self) -> bool:
         # TODO: Update turn-python library to support this
@@ -1315,7 +1351,7 @@ class ApiChannel(ChannelBase):
             raise ChannelException("ApiChannel requires either an existing session or a user")
 
     @classmethod
-    def start_new_session(
+    def start_new_session(  # ty: ignore[invalid-method-override]
         cls,
         working_experiment: Experiment,
         experiment_channel: ExperimentChannel,
@@ -1453,6 +1489,7 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
     metadata: dict | None = None,
+    participant_filter: Q | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1467,20 +1504,44 @@ def _start_experiment_session(
         # This should technically never happen, since we disable the input for logged in users
         raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
+    normalized_identifier = experiment_channel.platform_enum.normalize_identifier(participant_identifier)
+    if participant_filter is None:
+        participant_filter = Q(identifier=normalized_identifier)
+
     with transaction.atomic():
-        participant, created = Participant.objects.get_or_create(
-            team=team,
-            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
-            platform=experiment_channel.platform,
-            defaults={"user": participant_user},
-        )
-        if not created and participant_user and participant.user is None:
-            participant.user = participant_user
-            participant.save()
+        # When ``participant_filter`` is a simple equality (the common case), we can hand
+        # the whole lookup-or-create to ``get_or_create``. When it's a disjunction (e.g.
+        # ``WhatsappChannel`` matching BSUID OR legacy phone), we can't: ``get_or_create``
+        # requires the lookup kwargs and the create kwargs to be the same field set, but
+        # here we want to *look up* by either identifier and *create* with only the
+        # canonical (normalized) one. So in the disjunctive case we probe with
+        # ``.exists()`` first, fetching the existing participant only if one is there.
+        is_simple_filter = len(participant_filter.children) == 1
+        existing_participant = None
+        if not is_simple_filter:
+            matches = Participant.objects.filter(participant_filter, team=team, platform=experiment_channel.platform)
+            if matches.exists():
+                existing_participant = matches.order_by("created_at").first()
+
+        if existing_participant is None:
+            participant, created = Participant.objects.get_or_create(
+                team=team,
+                identifier=normalized_identifier,
+                platform=experiment_channel.platform,
+                defaults={"user": participant_user},
+            )
+            if not created and participant_user and participant.user is None:
+                participant.user = participant_user
+                participant.save()
+        else:
+            participant = existing_participant
+            if participant_user and participant.user is None:
+                participant.user = participant_user
+                participant.save()
 
         chat = Chat.objects.create(
             team=team,
-            name=f"{participant_identifier} - {experiment_channel.name}",
+            name=f"{participant.identifier} - {experiment_channel.name}",
             metadata=metadata or {},
         )
 

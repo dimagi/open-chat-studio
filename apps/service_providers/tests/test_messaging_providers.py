@@ -624,6 +624,7 @@ class TestMetaCloudAPIServiceWindow:
         )
         assert mock_post.call_args.kwargs["json"] == {
             "messaging_product": "whatsapp",
+            "recipient_type": "individual",
             "to": "+27826419977",
             "type": "text",
             "text": {"body": "Hello"},
@@ -773,6 +774,7 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
         sent = mock_post.call_args.kwargs["json"]
         assert sent == {
             "messaging_product": "whatsapp",
+            "recipient_type": "individual",
             "recipient": "US.13491208655302741918",
             "type": "text",
             "text": {"body": "Hello"},
@@ -871,12 +873,12 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
 
     def test_parent_bsuid_is_detected_as_bsuid(self):
         """Parent BSUIDs use the ENT prefix between country and identifier (e.g. US.ENT.11815799212886844830)."""
-        from apps.service_providers.messaging_service import _is_bsuid_recipient  # noqa: PLC0415
+        from apps.channels.datamodels import looks_like_bsuid  # noqa: PLC0415
 
-        assert _is_bsuid_recipient("US.ENT.11815799212886844830") is True
-        assert _is_bsuid_recipient("US.13491208655302741918") is True
-        assert _is_bsuid_recipient("+27826419977") is False
-        assert _is_bsuid_recipient("27826419977") is False
+        assert looks_like_bsuid("US.ENT.11815799212886844830") is True
+        assert looks_like_bsuid("US.13491208655302741918") is True
+        assert looks_like_bsuid("+27826419977") is False
+        assert looks_like_bsuid("27826419977") is False
 
 
 def _test_messaging_provider(team, provider_type: MessagingProviderType, data):

@@ -130,8 +130,9 @@ class TestMetaCloudAPIWebhookExtractMessages:
         assert sorted(types) == ["audio", "text"]
 
     def test_groups_by_from_user_id_when_present(self):
-        """Username-adopter sends two text messages: same from_user_id, same from (phone)."""
-        value = meta_cloud_api_messages.text_message_with_username_and_wa_id_value()
+        """Same user (matched on ``from_user_id``) sends two text messages — they should be
+        merged into a single entry."""
+        value = meta_cloud_api_messages.legacy_text_message_value()
         first = value["messages"][0]
         value["messages"] = [
             {**first, "id": "wamid.1", "timestamp": "100", "text": {"body": "hi"}},
