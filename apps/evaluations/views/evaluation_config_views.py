@@ -128,7 +128,7 @@ class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Delet
         self.object.delete()
         messages.success(request, "Evaluation deleted")
         response = HttpResponse(status=200)
-        if request.GET.get("redirect"):
+        if request.GET.get("redirect") == "1":
             response["HX-Redirect"] = reverse("evaluations:home", args=[self.request.team.slug])
         return response
 

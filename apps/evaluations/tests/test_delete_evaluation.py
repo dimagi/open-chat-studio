@@ -40,6 +40,20 @@ def test_delete_evaluation_with_redirect_param(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_delete_evaluation_redirect_param_zero_does_not_redirect(client, team_with_users):
+    """Strict contract: only ?redirect=1 sets HX-Redirect; ?redirect=0 must not."""
+    user = team_with_users.members.first()
+    evaluation = EvaluationConfigFactory.create(team=team_with_users)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(f"{url}?redirect=0")
+
+    assert response.status_code == 200
+    assert "HX-Redirect" not in response.headers
+
+
+@pytest.mark.django_db()
 def test_detail_page_shows_edit_and_delete_for_admin(client, team_with_users):
     """Detail page renders both an Edit link and a Delete button with ?redirect=1."""
     user = team_with_users.members.first()
