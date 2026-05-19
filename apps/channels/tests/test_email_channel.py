@@ -546,6 +546,56 @@ class TestEmailChannel:
         callbacks = email_channel._get_callbacks()
         assert isinstance(callbacks, ChannelCallbacks)
 
+    def test_get_sender_uses_email_subject_from_session_state(self):
+        """email_subject in session.state is used as subject when no thread context subject exists."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.state = {"email_subject": "Custom Subject"}
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+        sender = email_channel._get_sender()
+
+        assert isinstance(sender, EmailSender)
+        assert sender.thread_context.subject == "Custom Subject"
+
+    def test_get_sender_defaults_to_new_message_when_no_email_subject(self):
+        """When session.state has no email_subject, EmailSender defaults to 'New message' on flush."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.state = {}
+
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock)
+        sender = email_channel._get_sender()
+
+        assert isinstance(sender, EmailSender)
+        assert sender.thread_context.subject == ""
+        sender.send_text("Hello", "user@example.com")
+        sender.flush()
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].subject == "New message"
+
+    def test_get_sender_does_not_override_existing_thread_subject(self):
+        """Inbound reply threads (thread_context.subject already set) are unaffected by session state."""
+        channel_mock = MagicMock()
+        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
+        experiment_mock = MagicMock()
+        session_mock = MagicMock()
+        session_mock.state = {"email_subject": "Custom Subject"}
+
+        inbound_ctx = EmailThreadContext(
+            subject="Re: Original Subject",
+            in_reply_to="<orig@example.com>",
+            references=["<orig@example.com>"],
+        )
+        email_channel = EmailChannel(experiment_mock, channel_mock, session_mock, thread_context=inbound_ctx)
+        sender = email_channel._get_sender()
+
+        assert sender.thread_context.subject == "Re: Original Subject"
+
 
 @pytest.mark.django_db()
 class TestEnsureSessionExistsForParticipant:
