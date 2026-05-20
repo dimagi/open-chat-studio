@@ -5,7 +5,13 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 
 from apps.assessments.models import Score
-from apps.assessments.score_writers import _score_from_field
+from apps.assessments.score_writers import _score_from_field, write_scores_from_evaluation_result
+from apps.utils.factories.evaluations import (
+    EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -147,3 +153,98 @@ def test_score_from_field_sets_target_gfk_fields(session_target):
     assert s.target_content_type == ContentType.objects.get_for_model(session)
     assert s.team == team
     assert s.source == Score.Source.LLM_JUDGE
+
+
+@pytest.fixture()
+def eval_result_on_session(db):
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    message = EvaluationMessageFactory.create(session=session)
+    evaluator = EvaluatorFactory.create(team=team)
+    run = EvaluationRunFactory.create(team=team)
+    result = EvaluationResultFactory.create(
+        team=team,
+        evaluator=evaluator,
+        message=message,
+        run=run,
+        output={
+            "result": {
+                "sentiment": "positive",
+                "score": 7,
+                "is_safe": True,
+                "weird": [1, 2, 3],
+            }
+        },
+    )
+    return team, session, result
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_decomposes_into_one_score_per_field(eval_result_on_session):
+    team, session, result = eval_result_on_session
+    write_scores_from_evaluation_result(result)
+
+    scores = {s.name: s for s in Score.objects.filter(automated_result=result)}
+    # sentiment maps to schema's choice -> CATEGORICAL
+    assert scores["sentiment"].data_type == Score.DataType.CATEGORICAL
+    assert scores["sentiment"].value_string == "positive"
+    # score is int -> NUMERIC
+    assert scores["score"].data_type == Score.DataType.NUMERIC
+    assert scores["score"].value_numeric == Decimal("7")
+    # is_safe is bool but not in schema -> BOOLEAN
+    assert scores["is_safe"].data_type == Score.DataType.BOOLEAN
+    assert scores["is_safe"].value_numeric == Decimal("1")
+    # weird is a list -> skipped
+    assert "weird" not in scores
+    # all scores targeted at the session
+    session_ct = ContentType.objects.get_for_model(session)
+    for s in scores.values():
+        assert s.target_content_type == session_ct
+        assert s.target_object_id == session.id
+        assert s.source == Score.Source.LLM_JUDGE
+        assert s.team == team
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_with_no_session_is_a_no_op(db):
+    team = TeamFactory.create()
+    message = EvaluationMessageFactory.create()
+    message.session = None
+    message.save()
+    evaluator = EvaluatorFactory.create(team=team)
+    run = EvaluationRunFactory.create(team=team)
+    result = EvaluationResultFactory.create(
+        team=team,
+        evaluator=evaluator,
+        message=message,
+        run=run,
+        output={"result": {"x": "y"}},
+    )
+
+    write_scores_from_evaluation_result(result)
+
+    assert Score.objects.filter(automated_result=result).count() == 0
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_is_idempotent(eval_result_on_session):
+    _, _, result = eval_result_on_session
+    write_scores_from_evaluation_result(result)
+    first_ids = set(Score.objects.filter(automated_result=result).values_list("id", flat=True))
+
+    write_scores_from_evaluation_result(result)
+    second_ids = set(Score.objects.filter(automated_result=result).values_list("id", flat=True))
+
+    # delete-and-recreate: counts match, IDs differ
+    assert len(first_ids) == len(second_ids)
+    assert first_ids.isdisjoint(second_ids)
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_evaluation_result_error_payload_writes_no_scores(eval_result_on_session):
+    team, session, result = eval_result_on_session
+    result.output = {"error": "boom"}
+    result.save()
+
+    write_scores_from_evaluation_result(result)
+    assert Score.objects.filter(automated_result=result).count() == 0
