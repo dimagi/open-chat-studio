@@ -8,10 +8,12 @@ from django.views.generic import TemplateView
 from waffle import flag_is_active
 
 from apps.assessments.models import Score
-from apps.evaluations.models import EvaluationConfig
+from apps.evaluations.models import EvaluationConfig, EvaluationMode
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem, AnnotationQueue
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+
+_SESSION_MODE = EvaluationMode.SESSION
 
 _ROW_KINDS = ("matched", "eval_only", "human_only")
 _SHOW_CHOICES = (*_ROW_KINDS, "all")
@@ -110,7 +112,9 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "page_title": "Concordance",
-            "eval_configs": EvaluationConfig.objects.filter(team=team).order_by("name"),
+            "eval_configs": EvaluationConfig.objects.filter(team=team, dataset__evaluation_mode=_SESSION_MODE).order_by(
+                "name"
+            ),
             "queues": AnnotationQueue.objects.filter(team=team).order_by("name"),
             "selected_eval_id": eval_id,
             "selected_queue_id": queue_id,
