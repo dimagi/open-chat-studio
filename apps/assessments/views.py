@@ -188,8 +188,13 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
             return score.automated_result.run_id if score and score.automated_result_id else None
 
         def _eval_result_id(target_id: int) -> int | None:
+            # NOTE: the eval results page's `?result_id=` is actually an
+            # EvaluationMessage.id (its table rows are keyed by message — multiple
+            # evaluator results for the same message merge into one row). Pass the
+            # message id, not the EvaluationResult.id, so highlight + auto-paginate
+            # work.
             score = judge_by_target.get(target_id)
-            return score.automated_result_id if score else None
+            return score.automated_result.message_id if score and score.automated_result_id else None
 
         def _annotation_item_id(target_id: int) -> int | None:
             item = items_by_session.get(target_id)
