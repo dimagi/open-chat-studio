@@ -1172,6 +1172,7 @@ class TelegramChannel(ChannelBase):
         antiflood(method, chat_id, **{arg_name: file_data})
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.whatsapp_channel.WhatsappChannel
 class WhatsappChannel(ChannelBase):
     @property
     def voice_replies_supported(self) -> bool:
