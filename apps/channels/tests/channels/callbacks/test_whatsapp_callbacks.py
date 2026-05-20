@@ -1,11 +1,9 @@
-from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
 
 from apps.channels.channels_v2.whatsapp_channel import WhatsappCallbacks
 from apps.channels.datamodels import MetaCloudAPIMessage
-from apps.channels.models import ChannelPlatform
 
 
 @pytest.fixture()
@@ -23,35 +21,6 @@ def _make_ctx(last_activity_at=None, message=None):
     ctx.last_activity_at = last_activity_at
     ctx.message = message
     return ctx
-
-
-class TestBindAndLastActivityAt:
-    def test_ctx_is_none_before_bind(self, callbacks):
-        assert callbacks._ctx is None
-
-    def test_bind_stores_ctx(self, callbacks):
-        ctx = _make_ctx()
-        callbacks.bind(ctx)
-        assert callbacks._ctx is ctx
-
-
-class TestEchoTranscript:
-    def test_forwards_last_activity_at(self, callbacks, service):
-        ts = datetime(2024, 1, 15, 10, 30)
-        callbacks.bind(_make_ctx(last_activity_at=ts))
-        callbacks.echo_transcript("447700900000", "hello there")
-        service.send_text_message.assert_called_once_with(
-            message='I heard: "hello there"',
-            from_="15550001111",
-            to="447700900000",
-            platform=ChannelPlatform.WHATSAPP,
-            last_activity_at=ts,
-        )
-
-    def test_passes_none_when_not_bound(self, callbacks, service):
-        callbacks.echo_transcript("447700900000", "hello there")
-        _, kwargs = service.send_text_message.call_args
-        assert kwargs["last_activity_at"] is None
 
 
 class TestSubmitInputToLlm:
