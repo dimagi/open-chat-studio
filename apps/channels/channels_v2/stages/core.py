@@ -535,7 +535,7 @@ class ResponseFormattingStage(ProcessingStage):
         if not files:
             return text
         links = [f"{f.name}\n{f.download_link(ctx.experiment_session.id)}" for f in files]
-        return f"{text}\n\n{''.join(links)}"
+        return f"{text}\n\n{'\n\n'.join(links)}\n"
 
 
 # ---------------------------------------------------------------------------

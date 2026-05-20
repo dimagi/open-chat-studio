@@ -99,6 +99,10 @@ class MessageProcessingContext:
     # channel-specific data, revisit this design.
     channel_context: dict = field(default_factory=dict)
 
+    @property
+    def last_activity_at(self):
+        return self.experiment_session.last_activity_at if self.experiment_session else None
+
 
 # ---------------------------------------------------------------------------
 # Pipeline Orchestrator

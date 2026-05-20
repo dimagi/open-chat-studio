@@ -99,7 +99,7 @@ class ChannelBase(ABC):
                 return ChatMessage(content="", message_type=ChatMessageType.AI)
 
     def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
-        return MessageProcessingContext(
+        ctx = MessageProcessingContext(
             message=message,
             experiment=self.experiment,
             experiment_channel=self.experiment_channel,
@@ -109,6 +109,9 @@ class ChannelBase(ABC):
             capabilities=self._get_capabilities(),
             trace_service=self.trace_service,
         )
+        ctx.sender.bind(ctx)
+        ctx.callbacks.bind(ctx)
+        return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
         """Build the default processing pipeline. Subclasses can override entirely.
@@ -259,6 +262,8 @@ class ChannelBase(ABC):
             bot_response=ChatMessage(content=bot_message, message_type=ChatMessageType.AI),
             files_to_send=files,
         )
+        ctx.sender.bind(ctx)
+        ctx.callbacks.bind(ctx)
 
         mini_pipeline = MessageProcessingPipeline(
             core_stages=[

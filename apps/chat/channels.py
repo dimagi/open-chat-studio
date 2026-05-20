@@ -331,7 +331,11 @@ class ChannelBase(ABC):
 
             channel_cls = NewWebChannel
         elif platform == "whatsapp":
-            channel_cls = WhatsappChannel
+            from apps.channels.channels_v2.whatsapp_channel import (  # noqa: PLC0415
+                WhatsappChannel as NewWhatsappChannel,
+            )
+
+            channel_cls = NewWhatsappChannel
         elif platform == "facebook":
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
