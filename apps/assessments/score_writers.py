@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import logging
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
 
 from apps.assessments.models import Score
+
+if TYPE_CHECKING:
+    from apps.evaluations.models import EvaluationResult
 
 logger = logging.getLogger(__name__)
 
@@ -117,3 +122,49 @@ def _score_from_field(
         type(raw_value).__name__,
     )
     return None
+
+
+def _source_for_evaluator(evaluator) -> str:
+    """Map an Evaluator.type to a Score.Source. Defaults to LLM_JUDGE."""
+    if evaluator.type == "PythonEvaluator":
+        return Score.Source.PROGRAMMATIC
+    return Score.Source.LLM_JUDGE
+
+
+def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
+    """Decompose an EvaluationResult's output into Score rows.
+
+    Idempotent: deletes existing Scores for this result then bulk-creates fresh ones.
+    No-op when the result has no associated ExperimentSession or when the output
+    contains an error payload.
+    """
+    output = result.output or {}
+    if "error" in output:
+        return
+    session = result.message.session if result.message_id else None
+    if session is None:
+        return
+
+    result_payload = output.get("result", {}) or {}
+    if not isinstance(result_payload, dict):
+        return
+
+    source = _source_for_evaluator(result.evaluator)
+    schema = (result.evaluator.params or {}).get("output_schema", {}) or {}
+
+    scores = []
+    for name, raw_value in result_payload.items():
+        score = _score_from_field(
+            team=result.team,
+            target=session,
+            name=name,
+            raw_value=raw_value,
+            source=source,
+            automated_result=result,
+            schema_field=schema.get(name),
+        )
+        if score is not None:
+            scores.append(score)
+
+    Score.objects.filter(automated_result=result).delete()
+    Score.objects.bulk_create(scores)
