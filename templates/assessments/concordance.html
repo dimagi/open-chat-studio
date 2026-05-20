@@ -64,18 +64,56 @@
         {% translate "No shared categorical fields between this evaluation and queue." %}
       </div>
     {% elif selected_field_name %}
-      <div class="mb-4">
-        <strong>{% translate "Concordance" %}:</strong>
-        {{ eval_config.name }} {% translate "vs" %} {{ queue.name }}
-        — {% translate "field" %}: <code>{{ selected_field_name }}</code>
+      <div class="mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm pg-text-muted">
+        <span>{% translate "Comparing" %}</span>
+        <span class="font-semibold text-base-content">{{ eval_config.name }}</span>
+        <span>{% translate "to" %}</span>
+        <span class="font-semibold text-base-content">{{ queue.name }}</span>
+        <span>{% translate "on field" %}</span>
+        <code class="px-1.5 py-0.5 bg-base-200 rounded text-xs">{{ selected_field_name }}</code>
       </div>
 
-      <div class="mb-6 space-y-1">
-        <p>
-          {% translate "Matched:" %} {{ matched_count }} &nbsp;
-          {% translate "Agreement:" %} {{ agree_count }} / {{ matched_count }}{% if agree_pct is not None %} ({{ agree_pct }}%){% endif %}
-        </p>
-        <p>{% translate "Eval only:" %} {{ eval_only_count }} &nbsp; {% translate "Human only:" %} {{ human_only_count }}</p>
+      <div class="stats stats-vertical sm:stats-horizontal bg-base-200 rounded-box shadow-sm mb-6 w-full">
+        <div class="stat">
+          <div class="stat-figure {{ agreement_color_class }}">
+            <i class="fa-solid fa-handshake-simple fa-2x"></i>
+          </div>
+          <div class="stat-title">{% translate "Agreement" %}</div>
+          {% if agree_pct is not None %}
+            <div class="stat-value {{ agreement_color_class }}">{{ agree_pct }}%</div>
+            <div class="stat-desc">{{ agree_count }} / {{ matched_count }} {% translate "matched" %}</div>
+          {% else %}
+            <div class="stat-value {{ agreement_color_class }}">—</div>
+            <div class="stat-desc">{% translate "No matched sessions" %}</div>
+          {% endif %}
+        </div>
+
+        <div class="stat">
+          <div class="stat-figure pg-text-muted">
+            <i class="fa-solid fa-link fa-lg"></i>
+          </div>
+          <div class="stat-title">{% translate "Matched" %}</div>
+          <div class="stat-value text-2xl">{{ matched_count }}</div>
+          <div class="stat-desc">{% translate "sessions scored by both" %}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-figure pg-text-muted">
+            <i class="fa-solid fa-chart-simple fa-lg"></i>
+          </div>
+          <div class="stat-title">{% translate "Eval only" %}</div>
+          <div class="stat-value text-2xl">{{ eval_only_count }}</div>
+          <div class="stat-desc">{% translate "awaiting human review" %}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-figure pg-text-muted">
+            <i class="fa-solid fa-pen-to-square fa-lg"></i>
+          </div>
+          <div class="stat-title">{% translate "Human only" %}</div>
+          <div class="stat-value text-2xl">{{ human_only_count }}</div>
+          <div class="stat-desc">{% translate "awaiting eval" %}</div>
+        </div>
       </div>
 
       <table class="table">

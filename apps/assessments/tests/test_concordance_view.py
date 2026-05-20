@@ -119,10 +119,13 @@ def test_concordance_view_renders_matched_eval_only_human_only_buckets(authed_cl
     assert response.status_code == 200
     body = response.content.decode()
     # Matched count is 2 (sessions[0] and sessions[1]); agreement count is 1.
-    assert "Matched: 2" in body
-    assert "Agreement: 1 / 2" in body
-    assert "Eval only: 1" in body
-    assert "Human only: 1" in body
+    # Headline stat: 50% agreement with fraction "1 / 2 matched" in the stat-desc.
+    assert "50%" in body
+    assert "1 / 2" in body
+    # Stat-card labels are rendered as standalone elements (not "Matched: 2" plain text).
+    assert "Matched" in body
+    assert "Eval only" in body
+    assert "Human only" in body
 
 
 @pytest.mark.django_db()
@@ -169,7 +172,10 @@ def test_concordance_view_filters_to_authoritative_human_score(authed_client, co
     # Even though r1 disagreed, the authoritative r2 agrees with the judge.
     body = response.content.decode()
     if r2 != r1:
-        assert "Agreement: 1 / 1" in body
+        # 100% agreement renders as the headline stat with the success colour.
+        assert "100%" in body
+        assert "1 / 1" in body
+        assert "text-success" in body
 
 
 @pytest.mark.django_db()
@@ -217,8 +223,12 @@ def test_concordance_view_renders_agreement_percentage(authed_client, concordanc
 
     url = reverse("assessments:concordance", args=[team.slug])
     response = client.get(url, {"eval": eval_config.id, "queue": queue.id})
-    # 1 agree / 2 matched = 50%
-    assert "Agreement: 1 / 2 (50%)" in response.content.decode()
+    # 1 agree / 2 matched = 50% — rendered as a daisyUI stat-card.
+    body = response.content.decode()
+    assert "50%" in body
+    assert "1 / 2" in body
+    # 50% lives in the warning band (>=50, <80) — confirm the colour class is applied.
+    assert "text-warning" in body
 
 
 @pytest.mark.django_db()
@@ -230,7 +240,7 @@ def test_concordance_view_show_eval_only_lists_unmatched_eval_sessions(authed_cl
     response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "eval_only"})
     body = response.content.decode()
     # Eval-only count is still 1 (from the fixture); the table now shows that row.
-    assert "Eval only: 1" in body
+    assert "Eval only" in body
     # Eval-only rows have a judge value but no human value (rendered as em-dash in
     # the human-value td) and a ghost-styled badge for the agree column.
     assert "<td>—</td>" in body
@@ -245,7 +255,7 @@ def test_concordance_view_show_human_only_lists_unmatched_human_sessions(authed_
     url = reverse("assessments:concordance", args=[team.slug])
     response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "human_only"})
     body = response.content.decode()
-    assert "Human only: 1" in body
+    assert "Human only" in body
 
 
 @pytest.mark.django_db()
@@ -256,10 +266,10 @@ def test_concordance_view_show_all_renders_every_bucket(authed_client, concordan
     url = reverse("assessments:concordance", args=[team.slug])
     response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "all"})
     body = response.content.decode()
-    # Body still reports the summary counts.
-    assert "Matched: 2" in body
-    assert "Eval only: 1" in body
-    assert "Human only: 1" in body
+    # All three stat-card labels are present.
+    assert "Matched" in body
+    assert "Eval only" in body
+    assert "Human only" in body
 
 
 @pytest.mark.django_db()
@@ -302,6 +312,21 @@ def test_concordance_view_agree_column_uses_color_badges(authed_client, concorda
     assert "badge-success" in body
     assert "badge-error" in body
     assert "badge-ghost" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_renders_summary_stat_cards(authed_client, concordance_flag):
+    """Summary block uses daisyUI stat-card layout, not plain paragraphs."""
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id})
+    body = response.content.decode()
+    assert 'class="stats' in body
+    # Four stat blocks: agreement + matched + eval_only + human_only.
+    assert body.count('class="stat-title"') == 4
+    assert body.count('class="stat-value') == 4
 
 
 @pytest.mark.django_db()

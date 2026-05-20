@@ -70,6 +70,17 @@ def _score_value(score: Score) -> Any:
     return score.value_numeric
 
 
+def _agreement_color_class(agree_pct: int | None) -> str:
+    """Tailwind colour class for the headline agreement stat."""
+    if agree_pct is None:
+        return "text-base-content/40"
+    if agree_pct >= 80:
+        return "text-success"
+    if agree_pct >= 50:
+        return "text-warning"
+    return "text-error"
+
+
 def _session_fields(session: ExperimentSession | None) -> tuple[str | None, str | None]:
     """Return (external_id, experiment_public_id) for a session, or (None, None)."""
     if session is None:
@@ -256,6 +267,7 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
         matched_count = len(rows)
         agree_count = sum(1 for r in rows if r.agree)
         agree_pct = round(agree_count / matched_count * 100) if matched_count else None
+        agreement_color_class = _agreement_color_class(agree_pct)
 
         if show == "matched":
             visible_rows = rows
@@ -272,6 +284,7 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
                 "matched_count": matched_count,
                 "agree_count": agree_count,
                 "agree_pct": agree_pct,
+                "agreement_color_class": agreement_color_class,
                 "eval_only_count": len(eval_only_rows),
                 "human_only_count": len(human_only_rows),
             }
