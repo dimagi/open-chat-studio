@@ -186,6 +186,7 @@ prod = [
 
 [tool.uv]
 default-groups = ["dev", "docs"]
+required-version = ">0.11.0"
 
 [tool.djlint]
 profile="django"
