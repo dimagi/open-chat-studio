@@ -5,6 +5,8 @@ from django.contrib.auth.models import Group
 from apps.teams.backends import (
     ALL,
     CHANGE,
+    CHAT_VIEWER_GROUP,
+    CHATBOT_ADMIN_GROUP,
     CONTENT_TYPES,
     CUSTOM_PERMISSIONS,
     GROUPS,
@@ -155,8 +157,6 @@ def test_chatbot_admin_documents_permissions_regression():
     Django's auto-generated permission codenames ("view_collection", etc.), resulting in zero
     permissions being granted for documents.
     """
-    from apps.teams.backends import CHATBOT_ADMIN_GROUP  # noqa: PLC0415
-
     chatbot_admin = next(g for g in GROUPS if g.name == CHATBOT_ADMIN_GROUP)
     documents_def = next(pd for pd in chatbot_admin.permission_defs if pd.app_label == "documents")
 
@@ -189,8 +189,6 @@ def test_chatbot_admin_can_view_files_regression():
     Chatbot Admin user successfully generates the export and sees the link, but the
     actual download is denied.
     """
-    from apps.teams.backends import CHATBOT_ADMIN_GROUP  # noqa: PLC0415
-
     assert "view_file" in _group_codenames(CHATBOT_ADMIN_GROUP), (
         "Chatbot Admin must include files.view_file so users who can generate chat "
         "exports can also download the resulting File object via FileView."
@@ -203,8 +201,6 @@ def test_chat_viewer_can_view_files_regression():
     Chat Viewer users download session attachments via FileView, which requires
     `files.view_file`. Without it the download is denied.
     """
-    from apps.teams.backends import CHAT_VIEWER_GROUP  # noqa: PLC0415
-
     assert "view_file" in _group_codenames(CHAT_VIEWER_GROUP), (
         "Chat Viewer must include files.view_file so users can download session attachments via FileView."
     )
