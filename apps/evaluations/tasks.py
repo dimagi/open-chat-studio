@@ -100,7 +100,10 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                         session_id=session_id,
                     )
                     _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
+                try:
                     write_scores_from_evaluation_result(evaluation_result)
+                except Exception:
+                    logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
             except Exception as e:
                 logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
                 EvaluationResult.objects.create(
