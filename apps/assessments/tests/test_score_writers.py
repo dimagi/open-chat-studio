@@ -5,15 +5,21 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 
 from apps.assessments.models import Score
-from apps.assessments.score_writers import _score_from_field, write_scores_from_evaluation_result
+from apps.assessments.score_writers import (
+    _score_from_field,
+    write_scores_from_annotation,
+    write_scores_from_evaluation_result,
+)
+from apps.human_annotations.models import Annotation, AnnotationStatus
 from apps.utils.factories.evaluations import (
     EvaluationMessageFactory,
     EvaluationResultFactory,
     EvaluationRunFactory,
     EvaluatorFactory,
 )
-from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
+from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 
 
 @pytest.fixture()
@@ -248,3 +254,156 @@ def test_write_scores_from_evaluation_result_error_payload_writes_no_scores(eval
 
     write_scores_from_evaluation_result(result)
     assert Score.objects.filter(automated_result=result).count() == 0
+
+
+@pytest.fixture()
+def annotation_on_session(db):
+    team = TeamWithUsersFactory.create()
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={
+            "is_relevant": {"type": "choice", "choices": ["yes", "no"], "description": "binary"},
+            "score": {"type": "int", "description": "1-5", "ge": 1, "le": 5},
+        },
+    )
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    reviewer = team.members.first()
+    annotation = Annotation.objects.create(
+        team=team,
+        item=item,
+        reviewer=reviewer,
+        data={"is_relevant": "yes", "score": 4, "notes": "ignored"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    return team, session, annotation, reviewer
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_decomposes_data_dict(annotation_on_session):
+    team, session, annotation, reviewer = annotation_on_session
+    # Annotation.save already triggers the writer; assert what's on the table.
+    scores = {s.name: s for s in Score.objects.filter(review=annotation)}
+
+    assert scores["is_relevant"].data_type == Score.DataType.CATEGORICAL
+    assert scores["is_relevant"].value_string == "yes"
+    assert scores["is_relevant"].author_id == reviewer.id
+    assert scores["is_relevant"].source == Score.Source.HUMAN_REVIEW
+
+    assert scores["score"].data_type == Score.DataType.NUMERIC
+    assert scores["score"].value_numeric == Decimal("4")
+
+    # "notes" is not in the schema and is a string, so it still writes (categorical).
+    assert scores["notes"].data_type == Score.DataType.CATEGORICAL
+
+    session_ct = ContentType.objects.get_for_model(session)
+    for s in scores.values():
+        assert s.target_content_type == session_ct
+        assert s.target_object_id == session.id
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_message_only_item_is_skipped(db):
+    """Items targeting a ChatMessage only (no session) are skipped per D-13."""
+    team = TeamWithUsersFactory.create()
+    chat_message = ChatMessageFactory.create(chat=ChatFactory.create(team=team))
+    queue = AnnotationQueueFactory.create(team=team, schema={"x": {"type": "string", "description": "a"}})
+    item = AnnotationItemFactory.create(queue=queue, session=None, message=chat_message, team=team, item_type="message")
+    annotation = Annotation.objects.create(
+        team=team,
+        item=item,
+        reviewer=team.members.first(),
+        data={"x": "y"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    assert Score.objects.filter(review=annotation).count() == 0
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_draft_annotation_writes_no_scores(annotation_on_session):
+    team, session, _, reviewer = annotation_on_session
+    queue = AnnotationQueueFactory.create(team=team, schema={"x": {"type": "string", "description": "a"}})
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    draft = Annotation.objects.create(
+        team=team,
+        item=item,
+        reviewer=reviewer,
+        data={"x": "y"},
+        status=AnnotationStatus.DRAFT,
+    )
+    assert Score.objects.filter(review=draft).count() == 0
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_direct_call_is_idempotent(annotation_on_session):
+    team, session, annotation, _ = annotation_on_session
+    first_ids = set(Score.objects.filter(review=annotation).values_list("id", flat=True))
+    write_scores_from_annotation(annotation)
+    second_ids = set(Score.objects.filter(review=annotation).values_list("id", flat=True))
+    assert len(first_ids) == len(second_ids)
+    assert first_ids.isdisjoint(second_ids)
+
+
+@pytest.mark.django_db()
+def test_write_scores_from_annotation_non_authoritative_still_writes(db):
+    """Non-authoritative annotations still write Scores; concordance filters at read time."""
+    team = TeamWithUsersFactory.create()
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={"x": {"type": "choice", "choices": ["a", "b"], "description": "binary"}},
+        num_reviews_required=2,
+    )
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    # Two reviewers — both submit; neither is auto-marked authoritative
+    # (num_reviews_required != 1 short-circuits _maybe_auto_mark_authoritative).
+    r1 = team.members.first()
+    r2 = team.members.exclude(id=r1.id).first() or r1  # fall back if only one member
+    a1 = Annotation.objects.create(
+        team=team, item=item, reviewer=r1, data={"x": "a"}, status=AnnotationStatus.SUBMITTED
+    )
+    if r2 != r1:
+        a2 = Annotation.objects.create(
+            team=team, item=item, reviewer=r2, data={"x": "b"}, status=AnnotationStatus.SUBMITTED
+        )
+        assert Score.objects.filter(review=a2).count() == 1
+        assert a2.is_authoritative is False
+    assert Score.objects.filter(review=a1).count() == 1
+    assert a1.is_authoritative is False
+
+
+@pytest.mark.django_db()
+def test_annotation_save_survives_score_writer_failure(annotation_on_session, caplog, monkeypatch):
+    """If write_scores_from_annotation raises, the annotation still saves and the
+    failure is logged. Mirrors the recompute_queue_aggregates resilience pattern."""
+    caplog.set_level(logging.ERROR, logger="ocs.human_annotations")
+
+    team, session, _existing_annotation, reviewer = annotation_on_session
+    # Build a fresh item in a new queue + new session to sidestep both the
+    # unique(item, reviewer) constraint and the unique_session_per_queue constraint.
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={"is_relevant": {"type": "choice", "choices": ["yes", "no"], "description": "binary"}},
+    )
+    new_session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    new_item = AnnotationItemFactory.create(queue=queue, session=new_session, team=team)
+
+    def _boom(_annotation):
+        raise RuntimeError("simulated db failure")
+
+    # Patch the writer at the import site used by Annotation.save (which does a local import).
+    monkeypatch.setattr("apps.assessments.score_writers.write_scores_from_annotation", _boom)
+
+    # Annotation creation must succeed despite the writer raising.
+    new_annotation = Annotation.objects.create(
+        team=team,
+        item=new_item,
+        reviewer=reviewer,
+        data={"is_relevant": "no"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    assert new_annotation.pk is not None
+    # The writer raised before any Score was written.
+    assert Score.objects.filter(review=new_annotation).count() == 0
+    # The failure was logged.
+    assert any(rec.levelname == "ERROR" and "Failed to write Score rows" in rec.message for rec in caplog.records)
