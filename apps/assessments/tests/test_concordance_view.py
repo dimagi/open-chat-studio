@@ -53,7 +53,7 @@ def _build_concordance_fixtures(team):
         team=team,
         params={"llm_prompt": "x", "output_schema": schema},
     )
-    eval_config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator])
+    eval_config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator], dataset__evaluation_mode="session")
     run = EvaluationRunFactory.create(team=team, config=eval_config)
     queue = AnnotationQueueFactory.create(team=team, schema=schema)
 
@@ -135,7 +135,7 @@ def test_concordance_view_filters_to_authoritative_human_score(authed_client, co
     session = ExperimentSessionFactory.create(team=team, experiment__team=team)
     schema = {"verdict": {"type": "choice", "choices": ["yes", "no"], "description": "x"}}
     evaluator = EvaluatorFactory.create(team=team, params={"llm_prompt": "x", "output_schema": schema})
-    eval_config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator])
+    eval_config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator], dataset__evaluation_mode="session")
     run = EvaluationRunFactory.create(team=team, config=eval_config)
     message = EvaluationMessageFactory.create(session=session)
     result = EvaluationResultFactory.create(
@@ -340,3 +340,21 @@ def test_concordance_view_eval_link_carries_result_id_query_param(authed_client,
     # Each rendered eval link should append ?result_id=<id> so the linked page can
     # scroll-and-highlight the originating EvaluationResult row.
     assert "?result_id=" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_eval_dropdown_excludes_message_mode_configs(authed_client, concordance_flag):
+    """Concordance is session-scoped — message-mode evals must not appear in the picker."""
+    client, team, _ = authed_client
+    session_config = EvaluationConfigFactory.create(
+        team=team, name="session-mode-eval", dataset__evaluation_mode="session"
+    )
+    message_config = EvaluationConfigFactory.create(
+        team=team, name="message-mode-eval", dataset__evaluation_mode="message"
+    )
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url)
+    body = response.content.decode()
+    assert session_config.name in body
+    assert message_config.name not in body
