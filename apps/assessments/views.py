@@ -27,6 +27,7 @@ class _Row:
     human_value: Any
     agree: bool | None
     eval_run_id: int | None
+    eval_result_id: int | None
     annotation_item_id: int | None
 
 
@@ -186,6 +187,10 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
             score = judge_by_target.get(target_id)
             return score.automated_result.run_id if score and score.automated_result_id else None
 
+        def _eval_result_id(target_id: int) -> int | None:
+            score = judge_by_target.get(target_id)
+            return score.automated_result_id if score else None
+
         def _annotation_item_id(target_id: int) -> int | None:
             item = items_by_session.get(target_id)
             return item.id if item else None
@@ -204,6 +209,7 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
                     human_value=h_val,
                     agree=(j_val == h_val),
                     eval_run_id=_eval_run_id(target_id),
+                    eval_result_id=_eval_result_id(target_id),
                     annotation_item_id=_annotation_item_id(target_id),
                 )
             )
@@ -220,6 +226,7 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
                     human_value=None,
                     agree=None,
                     eval_run_id=_eval_run_id(target_id),
+                    eval_result_id=_eval_result_id(target_id),
                     annotation_item_id=None,
                 )
             )
@@ -236,6 +243,7 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
                     human_value=_score_value(human_by_target[target_id]),
                     agree=None,
                     eval_run_id=None,
+                    eval_result_id=None,
                     annotation_item_id=_annotation_item_id(target_id),
                 )
             )
