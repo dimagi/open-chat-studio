@@ -3,7 +3,7 @@
 <script>
   document.addEventListener('DOMContentLoaded', function(){
     document.body.addEventListener("djangoMessages", (event) => {
-      event.detail.value.messages.forEach((message) => {
+      event.detail.messages.forEach((message) => {
         alertify.notify(message.message, message.tags, 10);
       });
     })
