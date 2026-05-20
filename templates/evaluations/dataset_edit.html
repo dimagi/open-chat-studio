@@ -219,7 +219,9 @@
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
-      SiteJS.editors.initJsonEditors();
+      if (window.SiteJS && window.SiteJS.editors && window.SiteJS.editors.initJsonEditors) {
+        window.SiteJS.editors.initJsonEditors();
+      }
     });
 
     document.addEventListener('DOMContentLoaded', function() {

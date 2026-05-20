@@ -622,3 +622,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Prompt editors
   PromptEditor.initAll();
 });
+
+// Defensively expose the editors API on the global SiteJS namespace so call
+// sites in templates do not depend solely on webpack's library wrapper. This
+// guarantees window.SiteJS.editors is populated as soon as this module
+// executes, regardless of bundle output format quirks or load ordering.
+if (typeof window !== "undefined") {
+  window.SiteJS = window.SiteJS || {};
+  window.SiteJS.editors = Object.assign({}, window.SiteJS.editors, {
+    initJsonEditors,
+    createJsonEditor,
+    destroyAllEditors,
+    initPythonEditors,
+    createPythonEditor,
+    initPromptEditors,
+    createPromptEditor,
+    createDiffView,
+  });
+}
