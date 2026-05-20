@@ -201,6 +201,7 @@ GROUPS = [
             ModelPermSetDef("annotations", "usercomment", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
             AppPermSetDef("documents", ALL),
+            ModelPermSetDef("files", "file", [VIEW]),
         ],
     ),
     GroupDef(
@@ -208,6 +209,7 @@ GROUPS = [
         [
             AppPermSetDef("chat", [VIEW]),
             AppPermSetDef("annotations", [VIEW]),
+            ModelPermSetDef("files", "file", [VIEW]),
         ],
     ),
     GroupDef(

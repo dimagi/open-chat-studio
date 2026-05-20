@@ -175,6 +175,41 @@ def test_chatbot_admin_documents_permissions_regression():
     assert "delete_collection" in codenames
 
 
+def _group_codenames(group_name):
+    """All permission codenames granted to the named group across its permission_defs."""
+    group = next(g for g in GROUPS if g.name == group_name)
+    return {codename for perm_def in group.permission_defs for codename in perm_def.codenames}
+
+
+def test_chatbot_admin_can_view_files_regression():
+    """Regression test for #925: Chatbot Admin must include files.view_file.
+
+    `generate_chat_export` produces a `File` and the rendered download link points at
+    `files:base` (FileView), which requires `files.view_file`. Without this perm the
+    Chatbot Admin user successfully generates the export and sees the link, but the
+    actual download is denied.
+    """
+    from apps.teams.backends import CHATBOT_ADMIN_GROUP  # noqa: PLC0415
+
+    assert "view_file" in _group_codenames(CHATBOT_ADMIN_GROUP), (
+        "Chatbot Admin must include files.view_file so users who can generate chat "
+        "exports can also download the resulting File object via FileView."
+    )
+
+
+def test_chat_viewer_can_view_files_regression():
+    """Regression test for #925: Chat Viewer must include files.view_file.
+
+    Chat Viewer users download session attachments via FileView, which requires
+    `files.view_file`. Without it the download is denied.
+    """
+    from apps.teams.backends import CHAT_VIEWER_GROUP  # noqa: PLC0415
+
+    assert "view_file" in _group_codenames(CHAT_VIEWER_GROUP), (
+        "Chat Viewer must include files.view_file so users can download session attachments via FileView."
+    )
+
+
 def test_custom_permissions():
     mapped_permissions = [
         permission
