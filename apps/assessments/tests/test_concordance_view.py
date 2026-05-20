@@ -275,7 +275,7 @@ def test_concordance_view_renders_deep_links_per_row(authed_client, concordance_
     assert f"/evaluations/{eval_config.id}/evaluation_runs/" in body
     # Session links use the experiment public_id + session external_id; sanity-check by counting
     # session-detail link occurrences. The "all" view has 4 sessions (2 matched + 1 eval-only + 1 human-only).
-    assert body.count("/messages/") >= 4
+    assert body.count("/view/") >= 4
 
 
 @pytest.mark.django_db()

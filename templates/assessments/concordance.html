@@ -93,7 +93,7 @@
             <tr>
               <td>
                 {% if row.session_external_id and row.experiment_public_id %}
-                  {% url 'experiments:experiment_session_messages_view' request.team.slug row.experiment_public_id row.session_external_id as session_url %}
+                  {% url 'chatbots:chatbot_session_view' request.team.slug row.experiment_public_id row.session_external_id as session_url %}
                   {% include "generic/chip_button.html" with url=session_url label=row.session_external_id %}
                 {% else %}
                   {{ row.session_external_id|default:"—" }}
