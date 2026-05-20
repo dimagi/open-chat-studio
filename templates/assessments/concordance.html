@@ -93,9 +93,8 @@
             <tr>
               <td>
                 {% if row.session_external_id and row.experiment_public_id %}
-                  <a class="link link-primary" href="{% url 'experiments:experiment_session_messages_view' request.team.slug row.experiment_public_id row.session_external_id %}">
-                    {{ row.session_external_id }}
-                  </a>
+                  {% url 'experiments:experiment_session_messages_view' request.team.slug row.experiment_public_id row.session_external_id as session_url %}
+                  {% include "generic/chip_button.html" with url=session_url label=row.session_external_id %}
                 {% else %}
                   {{ row.session_external_id|default:"—" }}
                 {% endif %}
@@ -103,13 +102,20 @@
               <td>{{ row.judge_value|default:"—" }}</td>
               <td>{{ row.human_value|default:"—" }}</td>
               <td>
-                {% if row.agree is None %}—{% elif row.agree %}✓{% else %}✗{% endif %}
+                {% if row.agree is None %}
+                  <span class="badge badge-ghost">—</span>
+                {% elif row.agree %}
+                  <span class="badge badge-success">{% translate "Agree" %}</span>
+                {% else %}
+                  <span class="badge badge-error">{% translate "Disagree" %}</span>
+                {% endif %}
               </td>
               <td class="text-right">
                 <div class="join">
                   {% if row.eval_run_id %}
-                    <a class="btn btn-xs join-item" title="{% translate "Eval run" %}"
-                       href="{% url 'evaluations:evaluation_results_home' request.team.slug eval_config.id row.eval_run_id %}">
+                    {% url 'evaluations:evaluation_results_home' request.team.slug eval_config.id row.eval_run_id as eval_results_url %}
+                    <a class="btn btn-xs join-item" title="{% translate "Eval result" %}"
+                       href="{{ eval_results_url }}{% if row.eval_result_id %}?result_id={{ row.eval_result_id }}{% endif %}">
                       <i class="fa-solid fa-chart-simple fa-fw"></i> {% translate "Eval" %}
                     </a>
                   {% endif %}

@@ -231,9 +231,10 @@ def test_concordance_view_show_eval_only_lists_unmatched_eval_sessions(authed_cl
     body = response.content.decode()
     # Eval-only count is still 1 (from the fixture); the table now shows that row.
     assert "Eval only: 1" in body
-    # Eval-only rows have a judge value but no human value (rendered as em-dash).
-    # The row's "Agree?" column also renders em-dash for non-matched rows.
-    assert body.count("<td>—</td>") >= 1
+    # Eval-only rows have a judge value but no human value (rendered as em-dash in
+    # the human-value td) and a ghost-styled badge for the agree column.
+    assert "<td>—</td>" in body
+    assert "badge-ghost" in body
 
 
 @pytest.mark.django_db()
@@ -275,3 +276,42 @@ def test_concordance_view_renders_deep_links_per_row(authed_client, concordance_
     # Session links use the experiment public_id + session external_id; sanity-check by counting
     # session-detail link occurrences. The "all" view has 4 sessions (2 matched + 1 eval-only + 1 human-only).
     assert body.count("/messages/") >= 4
+
+
+@pytest.mark.django_db()
+def test_concordance_view_session_links_render_as_chips(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "all"})
+    body = response.content.decode()
+    # Chips use the project's btn-soft btn-primary styling from generic/chip_button.html.
+    assert "btn-soft btn-primary" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_agree_column_uses_color_badges(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "all"})
+    body = response.content.decode()
+    # Matched rows: 1 agree (success), 1 disagree (error). Non-matched rows: ghost.
+    assert "badge-success" in body
+    assert "badge-error" in body
+    assert "badge-ghost" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_eval_link_carries_result_id_query_param(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "all"})
+    body = response.content.decode()
+    # Each rendered eval link should append ?result_id=<id> so the linked page can
+    # scroll-and-highlight the originating EvaluationResult row.
+    assert "?result_id=" in body
