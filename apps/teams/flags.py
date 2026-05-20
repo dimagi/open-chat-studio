@@ -66,6 +66,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    ASSESSMENTS_CONCORDANCE = (
+        "flag_assessments_concordance",
+        "Concordance view comparing evaluations vs human annotations (alpha)",
+        "",
+        ["flag_evaluations", "flag_human_annotations"],
+        True,
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
