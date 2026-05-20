@@ -823,8 +823,9 @@ def test_multi_review_second_user_can_annotate(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_multi_review_item_completed_after_enough_reviews(team_with_users):
-    """Item should only be COMPLETED after reaching num_reviews_required."""
+def test_multi_review_item_awaits_resolution_after_enough_reviews(team_with_users):
+    """Multi-reviewer items move to AWAITING_RESOLUTION once enough reviews are in;
+    COMPLETED requires an authoritative annotation to be picked."""
     user1 = team_with_users.members.first()
     user2 = team_with_users.members.last()
 
@@ -842,7 +843,7 @@ def test_multi_review_item_completed_after_enough_reviews(team_with_users):
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.IN_PROGRESS
 
-    # Second review - should complete
+    # Second review - reaches required count without authoritative pick
     Annotation.objects.create(
         item=item,
         team=team_with_users,
@@ -852,7 +853,7 @@ def test_multi_review_item_completed_after_enough_reviews(team_with_users):
     )
     item.refresh_from_db()
     assert item.review_count == 2
-    assert item.status == AnnotationItemStatus.COMPLETED
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
 
 
 @pytest.mark.django_db()
@@ -1532,3 +1533,66 @@ def test_import_from_dataset_post_all_duplicates_creates_no_new_items(client, te
 
     assert response.status_code == 302
     assert AnnotationItem.objects.filter(queue=queue).count() == 2
+
+
+@pytest.mark.django_db()
+def test_queue_detail_shows_awaiting_resolution_callout(client, team_with_users, user):
+    user2 = User.objects.create(username="r2-detail", email="r2-detail@e.com")
+    MembershipFactory.create(team=team_with_users, user=user2)
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=2)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user2, data={}, status=AnnotationStatus.SUBMITTED
+    )
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert b"1 awaiting resolution" in response.content
+    # And confirm the renamed label is present too.
+    assert b"items resolved" in response.content
+
+
+@pytest.mark.django_db()
+def test_export_csv_includes_is_authoritative(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url + "?format=csv")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    reader = csv.DictReader(io.StringIO(content))
+    fieldnames = reader.fieldnames
+    assert fieldnames is not None
+    assert "is_authoritative" in fieldnames
+    rows = list(reader)
+    assert rows[0]["is_authoritative"] == "True"
+
+
+@pytest.mark.django_db()
+def test_export_jsonl_includes_is_authoritative(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item, team=team_with_users, reviewer=user, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url + "?format=jsonl")
+
+    assert response.status_code == 200
+    lines = response.content.decode().strip().splitlines()
+    record = json.loads(lines[0])
+    assert "is_authoritative" in record
+    assert record["is_authoritative"] is True

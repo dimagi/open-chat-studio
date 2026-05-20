@@ -85,6 +85,28 @@ def _check_assignee_access(queue, user):
     return queue.assignees.filter(id=user.id).exists()
 
 
+def _build_annotations_context(item, user, queue):
+    """Build the annotations list for display on the annotate page."""
+    schema_fields = list(queue.schema.keys())
+    can_set_authoritative = user.has_perm("human_annotations.change_annotationqueue")
+    return [
+        {
+            "annotation_id": ann.id,
+            "reviewer": ann.reviewer,
+            "created_at": ann.created_at,
+            "fields": [(name, ann.data.get(name, "")) for name in schema_fields],
+            "can_edit": ann.reviewer_id == user.id,
+            "is_authoritative": ann.is_authoritative,
+            "authoritative_set_by": ann.authoritative_set_by,
+            "authoritative_set_at": ann.authoritative_set_at,
+            "can_set_authoritative": can_set_authoritative,
+        }
+        for ann in item.annotations.filter(status=AnnotationStatus.SUBMITTED)
+        .select_related("reviewer", "authoritative_set_by")
+        .order_by("created_at")
+    ]
+
+
 class AnnotateQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotation"
 
@@ -146,19 +168,7 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             FormClass = build_annotation_form(queue)
             form = FormClass()
         else:
-            schema_fields = list(queue.schema.keys())
-            annotations = [
-                {
-                    "annotation_id": ann.id,
-                    "reviewer": ann.reviewer,
-                    "created_at": ann.created_at,
-                    "fields": [(name, ann.data.get(name, "")) for name in schema_fields],
-                    "can_edit": ann.reviewer_id == request.user.id,
-                }
-                for ann in item.annotations.filter(status=AnnotationStatus.SUBMITTED)
-                .select_related("reviewer")
-                .order_by("created_at")
-            ]
+            annotations = _build_annotations_context(item, request.user, queue)
 
         progress = _get_progress_for_user(queue, request.user)
         item_content = _get_item_display_content(item)
@@ -345,3 +355,55 @@ class UnflagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             response["HX-Redirect"] = redirect_url.url
             return response
         return redirect_url
+
+
+class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Queue-admin endpoint to mark/unmark an annotation as authoritative.
+
+    Enforces at-most-one-per-item at the application layer too (clears the flag
+    on any sibling annotation before setting) so we never trip the partial unique constraint.
+    """
+
+    permission_required = "human_annotations.change_annotationqueue"
+
+    def post(self, request, team_slug: str, pk: int, item_pk: int, annotation_pk: int):
+        annotation = get_object_or_404(
+            Annotation.objects.select_related("item__queue"),
+            id=annotation_pk,
+            item_id=item_pk,
+            item__queue_id=pk,
+            item__queue__team=request.team,
+            status=AnnotationStatus.SUBMITTED,
+        )
+        queue = annotation.item.queue
+        value = request.POST.get("value", "false").lower() == "true"
+
+        with transaction.atomic():
+            item = AnnotationItem.objects.select_for_update().get(pk=item_pk)
+            if value:
+                Annotation.objects.filter(item=item, is_authoritative=True).exclude(pk=annotation.pk).update(
+                    is_authoritative=False,
+                    authoritative_set_by=None,
+                    authoritative_set_at=None,
+                )
+                annotation.is_authoritative = True
+                annotation.authoritative_set_by = request.user
+                annotation.authoritative_set_at = timezone.now()
+            else:
+                annotation.is_authoritative = False
+                annotation.authoritative_set_by = None
+                annotation.authoritative_set_at = None
+            annotation.save(
+                update_fields=["is_authoritative", "authoritative_set_by", "authoritative_set_at", "updated_at"]
+            )
+            item.update_status()
+
+        annotation.recompute_queue_aggregates(queue)
+
+        item.refresh_from_db()
+        annotations = _build_annotations_context(item, request.user, queue)
+        return render(
+            request,
+            "human_annotations/partials/annotation_list.html",
+            {"queue": queue, "item": item, "annotations": annotations},
+        )
