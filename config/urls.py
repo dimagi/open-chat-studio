@@ -54,6 +54,7 @@ team_urlpatterns = [
     path("dashboard/", include("apps.dashboard.urls", namespace="dashboard")),
     path("analysis/", include("apps.analysis.urls", namespace="analysis")),
     path("evaluations/", include("apps.evaluations.urls")),
+    path("evaluations/concordance/", include("apps.assessments.urls")),
     path("traces/", include("apps.trace.urls")),
     path("filters/", include("apps.filters.urls")),
     path("notifications/", include("apps.ocs_notifications.urls")),

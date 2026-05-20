@@ -1,0 +1,87 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+  <h1 class="text-2xl font-bold mb-4">{% translate "Concordance" %}</h1>
+
+  <form method="get" class="mb-6 flex gap-4 items-end flex-wrap">
+    <label class="form-control">
+      <span class="label-text">{% translate "Evaluation" %}</span>
+      <select name="eval" class="select select-bordered">
+        <option value="">—</option>
+        {% for ec in eval_configs %}
+          <option value="{{ ec.id }}" {% if selected_eval_id|stringformat:"s" == ec.id|stringformat:"s" %}selected{% endif %}>{{ ec.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">{% translate "Annotation queue" %}</span>
+      <select name="queue" class="select select-bordered">
+        <option value="">—</option>
+        {% for q in queues %}
+          <option value="{{ q.id }}" {% if selected_queue_id|stringformat:"s" == q.id|stringformat:"s" %}selected{% endif %}>{{ q.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    {% if candidate_fields %}
+    <label class="form-control">
+      <span class="label-text">{% translate "Field" %}</span>
+      <select name="field" class="select select-bordered">
+        {% for name in candidate_fields %}
+          <option value="{{ name }}" {% if selected_field_name == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">{% translate "Compare" %}</button>
+  </form>
+
+  {% if eval_config and queue %}
+    {% if no_candidates %}
+      <div class="alert alert-warning">
+        {% translate "No shared categorical fields between this evaluation and queue." %}
+      </div>
+    {% elif selected_field_name %}
+      <div class="mb-4">
+        <strong>{% translate "Concordance" %}:</strong>
+        {{ eval_config.name }} {% translate "vs" %} {{ queue.name }}
+        — {% translate "field" %}: <code>{{ selected_field_name }}</code>
+      </div>
+
+      <div class="mb-6 space-y-1">
+        <p>{% translate "Matched:" %} {{ matched_count }} &nbsp; {% translate "Agreement:" %} {{ agree_count }} / {{ matched_count }}</p>
+        <p>{% translate "Eval only:" %} {{ eval_only_count }} &nbsp; {% translate "Human only:" %} {{ human_only_count }}</p>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{% translate "Session" %}</th>
+            <th>{% translate "Judge value" %}</th>
+            <th>{% translate "Human value" %}</th>
+            <th>{% translate "Agree?" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.session_external_id|default:"—" }}</td>
+              <td>{{ row.judge_value }}</td>
+              <td>{{ row.human_value }}</td>
+              <td>{% if row.agree %}✓{% else %}✗{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">{% translate "No matched sessions yet." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="alert alert-info">
+        {% translate "Multiple shared fields — pick one above to compare." %}
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock app %}
