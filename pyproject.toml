@@ -186,6 +186,7 @@ prod = [
 
 [tool.uv]
 default-groups = ["dev", "docs"]
+# Keep this up to date with the version in Dockerfile and Dockerfile.dev
 required-version = ">0.11.0"
 
 [tool.djlint]
