@@ -1,5 +1,6 @@
 import logging
 from decimal import Decimal
+from unittest.mock import Mock, patch
 
 import pytest
 from django.contrib.contenttypes.models import ContentType
@@ -10,8 +11,12 @@ from apps.assessments.score_writers import (
     write_scores_from_annotation,
     write_scores_from_evaluation_result,
 )
+from apps.evaluations.models import EvaluationResult
+from apps.evaluations.tasks import evaluate_single_message_task
 from apps.human_annotations.models import Annotation, AnnotationStatus
 from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationDatasetFactory,
     EvaluationMessageFactory,
     EvaluationResultFactory,
     EvaluationRunFactory,
@@ -407,3 +412,42 @@ def test_annotation_save_survives_score_writer_failure(annotation_on_session, ca
     assert Score.objects.filter(review=new_annotation).count() == 0
     # The failure was logged.
     assert any(rec.levelname == "ERROR" and "Failed to write Score rows" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluation_task_survives_score_writer_failure(evaluator_run_mock, caplog, monkeypatch):
+    """If write_scores_from_evaluation_result raises during the Celery task,
+    the EvaluationResult still persists and the error is logged. Mirrors the
+    Annotation.save resilience pattern."""
+
+    caplog.set_level(logging.ERROR, logger="ocs.evaluations")
+
+    team = TeamWithUsersFactory.create()
+    message = EvaluationMessageFactory.create()
+    dataset = EvaluationDatasetFactory.create(team=team, messages=[message])
+    evaluator = EvaluatorFactory.create(team=team)
+    config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(team=team, config=config)
+
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"score": 5}}))
+
+    def _boom(_result):
+        raise RuntimeError("simulated score writer failure")
+
+    monkeypatch.setattr("apps.evaluations.tasks.write_scores_from_evaluation_result", _boom)
+
+    evaluate_single_message_task(run.id, [evaluator.id], message.id)
+
+    # EvaluationResult was created successfully despite writer failure
+    results = list(EvaluationResult.objects.filter(run=run, evaluator=evaluator, message=message))
+    assert len(results) == 1
+    # No "error" payload — the evaluator succeeded
+    assert "error" not in results[0].output
+    # Failure was logged
+    assert any(
+        rec.levelname == "ERROR" and "Failed to write Score rows for EvaluationResult" in rec.message
+        for rec in caplog.records
+    )
+    # No Scores were written
+    assert Score.objects.filter(automated_result=results[0]).count() == 0
