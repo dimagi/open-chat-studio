@@ -172,7 +172,7 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "prek>=0.3.2",
     "django-types",
-    "ty==0.0.33",
+    "ty==0.0.38",
     "honcho>=2.0.0",
 ]
 docs = [
