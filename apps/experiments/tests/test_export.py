@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.export import filtered_export_to_csv
+from apps.experiments.export import UTF8_BOM, export_rows_to_csv_stream, filtered_export_to_csv
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -358,3 +358,14 @@ def test_session_state_export():
 
     assert json.loads(rows[1][state_index]) == {"key": "value"}
     assert json.loads(rows[2][state_index]) == {"key": "value"}
+
+
+def test_export_rows_to_csv_stream_starts_with_utf8_bom():
+    chunks = list(export_rows_to_csv_stream(iter([])))
+    assert chunks[0] == UTF8_BOM, "First chunk must be a UTF-8 BOM so Excel reads the file correctly"
+
+
+def test_export_rows_to_csv_stream_preserves_special_characters():
+    rows = [["Message"], ["I’m at the café"]]
+    output = "".join(export_rows_to_csv_stream(iter(rows)))
+    assert "I’m at the café" in output
