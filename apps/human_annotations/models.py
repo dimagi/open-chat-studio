@@ -269,6 +269,15 @@ class Annotation(BaseTeamModel):
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
         self.recompute_queue_aggregates(item.queue)
+        # Local import: a module-level import would form a real runtime cycle
+        # (human_annotations.models → assessments.score_writers → human_annotations.models
+        # via Score.review FK string resolution). Same pattern as recompute_queue_aggregates.
+        from apps.assessments.score_writers import write_scores_from_annotation  # noqa: PLC0415
+
+        try:
+            write_scores_from_annotation(self)
+        except Exception:
+            logger.exception("Failed to write Score rows for annotation %s", self.id)
 
     def _maybe_auto_mark_authoritative(self):
         """For single-reviewer queues, auto-mark the first submission as authoritative.

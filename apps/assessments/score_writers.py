@@ -10,6 +10,7 @@ from apps.assessments.models import Score
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationResult
+    from apps.human_annotations.models import Annotation
 
 logger = logging.getLogger(__name__)
 
@@ -167,4 +168,40 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
             scores.append(score)
 
     Score.objects.filter(automated_result=result).delete()
+    Score.objects.bulk_create(scores)
+
+
+def write_scores_from_annotation(annotation: Annotation) -> None:
+    """Decompose an Annotation's data dict into Score rows.
+
+    Idempotent: deletes existing Scores for this annotation then bulk-creates fresh ones.
+    Skips message-only items (D-13 in the unified design excludes ChatMessage as a
+    Score target). Writes Scores regardless of `is_authoritative` — the concordance
+    view filters to authoritative at read time so non-authoritative annotations are
+    preserved for future inter-rater-reliability work.
+    """
+    item = annotation.item
+    target = item.session  # v1 only targets ExperimentSession; ChatMessage skipped
+    if target is None:
+        return
+
+    schema = item.queue.schema or {}
+    data = annotation.data or {}
+
+    scores = []
+    for name, raw_value in data.items():
+        score = _score_from_field(
+            team=annotation.team,
+            target=target,
+            name=name,
+            raw_value=raw_value,
+            source=Score.Source.HUMAN_REVIEW,
+            review=annotation,
+            author=annotation.reviewer,
+            schema_field=schema.get(name),
+        )
+        if score is not None:
+            scores.append(score)
+
+    Score.objects.filter(review=annotation).delete()
     Score.objects.bulk_create(scores)
