@@ -1509,6 +1509,7 @@ def _start_experiment_session(
     return session
 
 
+# TODO: remove after channels refactor
 class EvaluationChannel(ChannelBase):
     """Message Handler for Evaluations"""
 
