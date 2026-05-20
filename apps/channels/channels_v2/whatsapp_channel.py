@@ -96,7 +96,7 @@ class WhatsappCallbacks(ChannelCallbacks):
     def get_message_audio(self, message: BaseMessage) -> BytesIO:
         return self._service.get_message_audio(message)
 
-    def submit_input_to_llm(self, recipient: str) -> None:
+    def on_submit_input_to_llm(self, recipient: str) -> None:
         # noqa: PLC0415 - circular: datamodels imports chat.channels
         from apps.channels.datamodels import MetaCloudAPIMessage  # noqa: PLC0415
 

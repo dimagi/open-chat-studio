@@ -27,7 +27,7 @@ class ChannelCallbacks:
     def echo_transcript(self, recipient: str, transcript: str) -> None:
         """Send the transcript back to the user."""
 
-    def submit_input_to_llm(self, recipient: str) -> None:
+    def on_submit_input_to_llm(self, recipient: str) -> None:
         """Called before LLM invocation (e.g. show 'typing' indicator)."""
 
     def get_message_audio(self, message: BaseMessage) -> BytesIO:

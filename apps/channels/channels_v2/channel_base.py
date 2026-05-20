@@ -109,8 +109,6 @@ class ChannelBase(ABC):
             capabilities=self._get_capabilities(),
             trace_service=self.trace_service,
         )
-        ctx.sender.bind(ctx)
-        ctx.callbacks.bind(ctx)
         return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
@@ -262,8 +260,6 @@ class ChannelBase(ABC):
             bot_response=ChatMessage(content=bot_message, message_type=ChatMessageType.AI),
             files_to_send=files,
         )
-        ctx.sender.bind(ctx)
-        ctx.callbacks.bind(ctx)
 
         mini_pipeline = MessageProcessingPipeline(
             core_stages=[

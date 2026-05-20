@@ -414,7 +414,7 @@ class BotInteractionStage(ProcessingStage):
         return SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
+        ctx.callbacks.on_submit_input_to_llm(ctx.participant_identifier)
 
         # Lazy bot creation -- reuse if already created (e.g. by ConsentFlowStage seed message)
         if not ctx.bot:
