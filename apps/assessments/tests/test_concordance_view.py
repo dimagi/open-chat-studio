@@ -197,3 +197,81 @@ def test_concordance_view_returns_404_when_flag_off(authed_client, db):
     url = reverse("assessments:concordance", args=[team.slug])
     response = client.get(url)
     assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_concordance_view_renders_breadcrumbs(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url)
+    body = response.content.decode()
+    # Breadcrumb structure: Evaluations link + active Concordance crumb
+    assert 'aria-label="breadcrumbs"' in body
+    assert reverse("evaluations:home", args=[team.slug]) in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_renders_agreement_percentage(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id})
+    # 1 agree / 2 matched = 50%
+    assert "Agreement: 1 / 2 (50%)" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_concordance_view_show_eval_only_lists_unmatched_eval_sessions(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "eval_only"})
+    body = response.content.decode()
+    # Eval-only count is still 1 (from the fixture); the table now shows that row.
+    assert "Eval only: 1" in body
+    # Eval-only rows have a judge value but no human value (rendered as em-dash).
+    # The row's "Agree?" column also renders em-dash for non-matched rows.
+    assert body.count("<td>—</td>") >= 1
+
+
+@pytest.mark.django_db()
+def test_concordance_view_show_human_only_lists_unmatched_human_sessions(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "human_only"})
+    body = response.content.decode()
+    assert "Human only: 1" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_show_all_renders_every_bucket(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "all"})
+    body = response.content.decode()
+    # Body still reports the summary counts.
+    assert "Matched: 2" in body
+    assert "Eval only: 1" in body
+    assert "Human only: 1" in body
+
+
+@pytest.mark.django_db()
+def test_concordance_view_renders_deep_links_per_row(authed_client, concordance_flag):
+    client, team, _ = authed_client
+    eval_config, queue = _build_concordance_fixtures(team)
+
+    url = reverse("assessments:concordance", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "show": "all"})
+    body = response.content.decode()
+    # At least one annotate_item URL for the queue + one evaluation_results URL for the eval config.
+    assert f"/queue/{queue.id}/item/" in body
+    assert f"/evaluations/{eval_config.id}/evaluation_runs/" in body
+    # Session links use the experiment public_id + session external_id; sanity-check by counting
+    # session-detail link occurrences. The "all" view has 4 sessions (2 matched + 1 eval-only + 1 human-only).
+    assert body.count("/messages/") >= 4

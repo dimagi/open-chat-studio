@@ -1,6 +1,15 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:home' request.team.slug %}">{% translate "Evaluations" %}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Concordance" %}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
 {% block app %}
   <h1 class="text-2xl font-bold mb-4">{% translate "Concordance" %}</h1>
 
@@ -34,6 +43,16 @@
         {% endfor %}
       </select>
     </label>
+
+    <label class="form-control">
+      <span class="label-text">{% translate "Show" %}</span>
+      <select name="show" class="select select-bordered">
+        <option value="matched" {% if selected_show == "matched" %}selected{% endif %}>{% translate "Matched only" %}</option>
+        <option value="eval_only" {% if selected_show == "eval_only" %}selected{% endif %}>{% translate "Eval only" %}</option>
+        <option value="human_only" {% if selected_show == "human_only" %}selected{% endif %}>{% translate "Human only" %}</option>
+        <option value="all" {% if selected_show == "all" %}selected{% endif %}>{% translate "All" %}</option>
+      </select>
+    </label>
     {% endif %}
 
     <button type="submit" class="btn btn-primary">{% translate "Compare" %}</button>
@@ -52,7 +71,10 @@
       </div>
 
       <div class="mb-6 space-y-1">
-        <p>{% translate "Matched:" %} {{ matched_count }} &nbsp; {% translate "Agreement:" %} {{ agree_count }} / {{ matched_count }}</p>
+        <p>
+          {% translate "Matched:" %} {{ matched_count }} &nbsp;
+          {% translate "Agreement:" %} {{ agree_count }} / {{ matched_count }}{% if agree_pct is not None %} ({{ agree_pct }}%){% endif %}
+        </p>
         <p>{% translate "Eval only:" %} {{ eval_only_count }} &nbsp; {% translate "Human only:" %} {{ human_only_count }}</p>
       </div>
 
@@ -63,18 +85,57 @@
             <th>{% translate "Judge value" %}</th>
             <th>{% translate "Human value" %}</th>
             <th>{% translate "Agree?" %}</th>
+            <th class="text-right">{% translate "Links" %}</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
             <tr>
-              <td>{{ row.session_external_id|default:"—" }}</td>
-              <td>{{ row.judge_value }}</td>
-              <td>{{ row.human_value }}</td>
-              <td>{% if row.agree %}✓{% else %}✗{% endif %}</td>
+              <td>
+                {% if row.session_external_id and row.experiment_public_id %}
+                  <a class="link link-primary" href="{% url 'experiments:experiment_session_messages_view' request.team.slug row.experiment_public_id row.session_external_id %}">
+                    {{ row.session_external_id }}
+                  </a>
+                {% else %}
+                  {{ row.session_external_id|default:"—" }}
+                {% endif %}
+              </td>
+              <td>{{ row.judge_value|default:"—" }}</td>
+              <td>{{ row.human_value|default:"—" }}</td>
+              <td>
+                {% if row.agree is None %}—{% elif row.agree %}✓{% else %}✗{% endif %}
+              </td>
+              <td class="text-right">
+                <div class="join">
+                  {% if row.eval_run_id %}
+                    <a class="btn btn-xs join-item" title="{% translate "Eval run" %}"
+                       href="{% url 'evaluations:evaluation_results_home' request.team.slug eval_config.id row.eval_run_id %}">
+                      <i class="fa-solid fa-chart-simple fa-fw"></i> {% translate "Eval" %}
+                    </a>
+                  {% endif %}
+                  {% if row.annotation_item_id %}
+                    <a class="btn btn-xs join-item" title="{% translate "Annotation item" %}"
+                       href="{% url 'human_annotations:annotate_item' request.team.slug queue.id row.annotation_item_id %}">
+                      <i class="fa-solid fa-pen-to-square fa-fw"></i> {% translate "Annotation" %}
+                    </a>
+                  {% endif %}
+                </div>
+              </td>
             </tr>
           {% empty %}
-            <tr><td colspan="4">{% translate "No matched sessions yet." %}</td></tr>
+            <tr>
+              <td colspan="5">
+                {% if selected_show == "matched" %}
+                  {% translate "No matched sessions yet." %}
+                {% elif selected_show == "eval_only" %}
+                  {% translate "No eval-only sessions." %}
+                {% elif selected_show == "human_only" %}
+                  {% translate "No human-only sessions." %}
+                {% else %}
+                  {% translate "No sessions to compare yet." %}
+                {% endif %}
+              </td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
