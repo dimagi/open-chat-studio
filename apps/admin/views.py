@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 from django_htmx.http import push_url
 from field_audit.models import AuditEvent
 
-from apps.admin.forms import DateRangeForm, DateRanges, FlagUpdateForm, OcsConfigurationForm
+from apps.admin.forms import DateRangeForm, DateRanges, FindProviderByKeyForm, FlagUpdateForm, OcsConfigurationForm
 from apps.admin.models import OcsConfiguration
 from apps.admin.queries import (
     get_message_stats,
@@ -35,6 +35,7 @@ from apps.admin.queries import (
 from apps.admin.serializers import StatsSerializer
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
+from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
 from apps.teams.models import Flag, Team
 
@@ -429,5 +430,40 @@ def configuration(request):
             "active_tab": "configuration",
             "form": form,
             "config_instance": config_instance,
+        },
+    )
+
+
+@is_staff
+def find_provider_by_key(request):
+    """Staff tool: paste an API key + pick a provider type to find usages.
+
+    Iterates providers of the chosen type, decrypts each one's config and
+    compares the configured secret fields against the supplied key.
+    """
+    form = FindProviderByKeyForm(request.POST or None)
+    results = None
+    if request.method == "POST" and form.is_valid():
+        service_provider = form.cleaned_provider()
+        providers = search_providers_by_api_key(
+            service_provider,
+            form.cleaned_data["key"],
+            match=form.cleaned_data["match"],
+        )
+        results = [
+            {
+                "provider": provider,
+                "service_provider": service_provider,
+                "usages": get_provider_usages(provider),
+            }
+            for provider in providers
+        ]
+    return TemplateResponse(
+        request,
+        "admin/find_provider_by_key.html",
+        context={
+            "active_tab": "admin",
+            "form": form,
+            "results": results,
         },
     )

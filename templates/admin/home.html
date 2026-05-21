@@ -11,6 +11,9 @@
         <a href="{% url 'ocs_admin:flags_home' %}" class="btn btn-primary">
           {% translate "Manage Feature Flags" %}
         </a>
+        <a href="{% url 'ocs_admin:find_provider_by_key' %}" class="btn btn-primary">
+          {% translate "Find provider by key" %}
+        </a>
       </div>
     </div>
     <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, change, submit">

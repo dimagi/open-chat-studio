@@ -1,0 +1,8 @@
+{% with obj_url=obj.get_absolute_url|default_if_none:"" %}
+  {% if obj_url %}
+    <a class="link" href="{{ obj_url }}">{{ obj.name|default:obj }}</a>
+  {% else %}
+    <span>{{ obj.name|default:obj }}</span>
+  {% endif %}
+  {% if obj.is_archived %}<span class="badge badge-warning badge-sm ml-1">archived</span>{% endif %}
+{% endwith %}
