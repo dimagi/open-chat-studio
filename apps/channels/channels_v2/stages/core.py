@@ -414,7 +414,7 @@ class BotInteractionStage(ProcessingStage):
         return SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
+        ctx.callbacks.on_submit_input_to_llm(ctx.participant_identifier)
 
         # Lazy bot creation -- reuse if already created (e.g. by ConsentFlowStage seed message)
         if not ctx.bot:
@@ -565,7 +565,7 @@ class ResponseFormattingStage(ProcessingStage):
         if not files:
             return text
         links = [f"{f.name}\n{f.download_link(ctx.experiment_session.id)}" for f in files]
-        return f"{text}\n\n{''.join(links)}"
+        return f"{text}\n\n{'\n\n'.join(links)}\n"
 
 
 # ---------------------------------------------------------------------------

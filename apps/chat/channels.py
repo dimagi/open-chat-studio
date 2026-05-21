@@ -331,7 +331,11 @@ class ChannelBase(ABC):
 
             channel_cls = NewWebChannel
         elif platform == "whatsapp":
-            channel_cls = WhatsappChannel
+            from apps.channels.channels_v2.whatsapp_channel import (  # noqa: PLC0415
+                WhatsappChannel as NewWhatsappChannel,
+            )
+
+            channel_cls = NewWhatsappChannel
         elif platform == "facebook":
             channel_cls = FacebookMessengerChannel
         elif platform == "api":
@@ -1168,6 +1172,7 @@ class TelegramChannel(ChannelBase):
         antiflood(method, chat_id, **{arg_name: file_data})
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.whatsapp_channel.WhatsappChannel
 class WhatsappChannel(ChannelBase):
     @property
     def voice_replies_supported(self) -> bool:
