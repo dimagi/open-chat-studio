@@ -6,9 +6,39 @@ from django.db.models import TextChoices
 from django.utils import timezone
 
 from apps.admin.models import ChatWidgetConfig, OcsConfiguration, SiteConfig
+from apps.service_providers.utils import ServiceProvider
 from apps.teams.models import Team
 
 User = get_user_model()
+
+
+PROVIDER_SEARCH_TYPES = (
+    ServiceProvider.llm,
+    ServiceProvider.voice,
+    ServiceProvider.messaging,
+    ServiceProvider.tracing,
+)
+
+
+class FindProviderByKeyForm(forms.Form):
+    MATCH_CHOICES = (
+        ("exact", "Exact match"),
+        ("suffix", "Suffix"),
+        ("contains", "Contains"),
+    )
+
+    provider_type = forms.ChoiceField(
+        label="Provider type",
+        choices=[(p.slug, p.label) for p in PROVIDER_SEARCH_TYPES],
+    )
+    key = forms.CharField(
+        label="API key (or part of one)",
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    match = forms.ChoiceField(label="Match", choices=MATCH_CHOICES, initial="exact")
+
+    def cleaned_provider(self) -> ServiceProvider:
+        return ServiceProvider[self.cleaned_data["provider_type"]]
 
 
 class DateRanges(TextChoices):

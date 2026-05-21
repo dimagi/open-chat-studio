@@ -1,0 +1,61 @@
+{% extends "web/app/app_base.html" %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'single_team:manage_team' request.team.slug %}">Manage Team</a></li>
+      <li><a href="{% url 'single_team:manage_team' request.team.slug %}#{{ provider_type.home_title|slugify }}">{{ provider_type.label }}</a></li>
+      <li><a href="{% url 'service_providers:edit' request.team.slug provider_type.slug provider.pk %}">{{ provider.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">Usages</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div class="app-card max-w-5xl mx-auto">
+    <h1 class="pg-title">Where is “{{ provider.name }}” used?</h1>
+    <p class="text-sm text-gray-500 mb-4">
+      {{ provider_type.label }}{% if provider.type %} — {{ provider.type_enum.label }}{% endif %}
+    </p>
+
+    {% if usages.is_empty %}
+      <div class="alert alert-info">
+        <span>This provider is not currently referenced by any objects.</span>
+      </div>
+    {% else %}
+      <p class="mb-4">This provider is referenced by {{ usages.total }} object{{ usages.total|pluralize }}:</p>
+      {% for category in usages.categories %}
+        <h2 class="font-semibold my-2">{{ category.label }} ({{ category.items|length }})</h2>
+        {% if category.label == "Pipelines" %}
+          <ul class="list-disc list-inside ml-2">
+            {% for entry in category.items %}
+              <li>
+                {% include "service_providers/components/usage_item.html" with obj=entry.pipeline %}
+                {% if entry.experiments %}
+                  <ul class="list-[circle] list-inside ml-6 mt-1">
+                    {% for experiment in entry.experiments %}
+                      <li class="text-sm">
+                        Chatbot:
+                        {% include "service_providers/components/usage_item.html" with obj=experiment %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <ul class="list-disc list-inside ml-2">
+            {% for obj in category.items %}
+              <li>{% include "service_providers/components/usage_item.html" with obj=obj %}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
+    <div class="mt-6">
+      <a href="{% url 'service_providers:edit' request.team.slug provider_type.slug provider.pk %}" class="btn btn-outline">Back to provider</a>
+    </div>
+  </div>
+{% endblock app %}
