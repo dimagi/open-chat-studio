@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import emoji
 import httpx
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -1459,6 +1460,7 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
     metadata: dict | None = None,
+    participant_id_filter: Q | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1473,16 +1475,36 @@ def _start_experiment_session(
         # This should technically never happen, since we disable the input for logged in users
         raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
+    normalized_identifier = experiment_channel.platform_enum.normalize_identifier(participant_identifier)
+    if participant_id_filter is None:
+        participant_id_filter = Q(identifier=normalized_identifier)
+
     with transaction.atomic():
-        participant, created = Participant.objects.get_or_create(
-            team=team,
-            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
-            platform=experiment_channel.platform,
-            defaults={"user": participant_user},
-        )
-        if not created and participant_user and participant.user is None:
-            participant.user = participant_user
-            participant.save()
+        # When participant_id_filter is a simple equality (the common case), delegate the
+        # whole lookup-or-create to get_or_create. When it's a disjunction (e.g. BSUID OR
+        # legacy phone), probe first so we can create with only the canonical identifier.
+        is_simple_filter = len(participant_id_filter.children) == 1
+        existing_participant = None
+        if not is_simple_filter:
+            matches = Participant.objects.filter(participant_id_filter, team=team, platform=experiment_channel.platform)
+            if matches.exists():
+                existing_participant = matches.order_by("created_at").first()
+
+        if existing_participant is None:
+            participant, created = Participant.objects.get_or_create(
+                team=team,
+                identifier=normalized_identifier,
+                platform=experiment_channel.platform,
+                defaults={"user": participant_user},
+            )
+            if not created and participant_user and participant.user is None:
+                participant.user = participant_user
+                participant.save()
+        else:
+            participant = existing_participant
+            if participant_user and participant.user is None:
+                participant.user = participant_user
+                participant.save()
 
         chat = Chat.objects.create(
             team=team,

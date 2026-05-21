@@ -11,11 +11,12 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import Participant
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -301,3 +302,160 @@ class TestMetaCloudApi:
             from_="12345",
             message_id="wamid.abc123",
         )
+
+
+BSUID = "US.13491208655302741918"
+PHONE = "27456897512"
+
+
+def _meta_message(*, bsuid: str, phone: str | None, msg_id: str = "wamid.abc", timestamp: str = "1") -> dict:
+    """Build a minimal inbound Meta Cloud API text-message payload.
+
+    ``phone=None`` means the user has adopted a username and Meta has hidden their phone
+    number — the webhook carries the BSUID only. ``phone="..."`` means the phone is still
+    visible (the user has not adopted a username, or is in the business's contact book).
+    """
+    message: dict = {
+        "from_user_id": bsuid,
+        "id": msg_id,
+        "timestamp": timestamp,
+        "text": {"body": "Hi"},
+        "type": "text",
+    }
+    if phone is not None:
+        message["from"] = phone
+    return message
+
+
+@pytest.mark.django_db()
+class TestWhatsappParticipantResolution:
+    """End-to-end participant-resolution scenarios for the WhatsApp BSUID rollout.
+
+    Five lifecycle scenarios are exercised through the Meta Cloud API webhook entry point.
+    The Twilio code path resolves through the same ``WhatsappChannel`` logic — its own
+    parser is covered by ``TestTwilioMessageParse`` in ``test_datamodels.py``.
+
+    Each scenario inlines the message it delivers; the presence or absence of ``from``
+    (the phone number) is visible at a glance via the ``phone=`` argument to
+    ``_meta_message``.
+    """
+
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def _deliver(self, bot_process_input, send_text_message, send_typing_indicator, channel, message):
+        chat = Chat.objects.create(team=channel.experiment.team)
+        bot_process_input.return_value = ChatMessage.objects.create(content="ok", chat=chat)
+        handle_meta_cloud_api_message(
+            channel_id=channel.id,
+            team_slug=channel.experiment.team.slug,
+            message_data=message,
+        )
+
+    def _whatsapp_participants(self, team):
+        return Participant.objects.filter(team=team, platform=ChannelPlatform.WHATSAPP)
+
+    def test_scenario_1_new_username_adopter_creates_bsuid_keyed_participant(self, meta_cloud_api_whatsapp_channel):
+        """A brand-new user who has already adopted a WhatsApp username sends their first
+        message. The webhook carries ONLY the BSUID — no phone number.
+
+        Expected: a new Participant is created, keyed by the BSUID.
+        """
+        message = _meta_message(bsuid=BSUID, phone=None)
+
+        self._deliver(channel=meta_cloud_api_whatsapp_channel, message=message)
+
+        participants = self._whatsapp_participants(meta_cloud_api_whatsapp_channel.experiment.team)
+        assert participants.count() == 1
+        assert participants.get().identifier == BSUID
+
+    def test_scenario_2_username_adopter_later_reveals_phone_keeps_same_participant(
+        self, meta_cloud_api_whatsapp_channel
+    ):
+        """A username-adopter sends their first message (BSUID only). Later they share their
+        phone — via the contact-info button, or because Meta's contact-book / 30-day cache
+        starts including it — and subsequent webhooks now carry both BSUID and phone.
+
+        Expected: the second webhook resolves to the SAME participant created at T1. No
+        duplicate is created.
+        """
+        team = meta_cloud_api_whatsapp_channel.experiment.team
+
+        # T1: phone hidden — webhook has BSUID only.
+        self._deliver(
+            channel=meta_cloud_api_whatsapp_channel,
+            message=_meta_message(bsuid=BSUID, phone=None, msg_id="wamid.t1"),
+        )
+
+        # T2: phone now visible — webhook has BSUID + phone.
+        self._deliver(
+            channel=meta_cloud_api_whatsapp_channel,
+            message=_meta_message(bsuid=BSUID, phone=PHONE, msg_id="wamid.t2"),
+        )
+
+        participants = self._whatsapp_participants(team)
+        assert participants.count() == 1
+        assert participants.get().identifier == BSUID
+
+    def test_scenario_3_new_user_without_username_creates_bsuid_keyed_participant(
+        self, meta_cloud_api_whatsapp_channel
+    ):
+        """A brand-new user who has NOT adopted a username sends their first message. The
+        webhook carries both BSUID and phone.
+
+        Expected: a new Participant is created, keyed by the BSUID — not the phone. From
+        this point on, the participant is BSUID-keyed regardless of phone visibility.
+        """
+        message = _meta_message(bsuid=BSUID, phone=PHONE)
+
+        self._deliver(channel=meta_cloud_api_whatsapp_channel, message=message)
+
+        participants = self._whatsapp_participants(meta_cloud_api_whatsapp_channel.experiment.team)
+        assert participants.count() == 1
+        assert participants.get().identifier == BSUID
+
+    def test_scenario_4_pre_rollout_phone_keyed_participant_is_matched_via_phone(self, meta_cloud_api_whatsapp_channel):
+        """A participant from before the BSUID rollout already exists in the DB, keyed by
+        their phone number. After rollout, Meta starts including the BSUID in webhooks.
+
+        Expected: the post-rollout webhook (BSUID + phone) resolves to the existing
+        phone-keyed participant via the phone clause. No duplicate is created. The
+        identifier on the existing participant is NOT rewritten to the BSUID.
+        """
+        team = meta_cloud_api_whatsapp_channel.experiment.team
+        legacy = ParticipantFactory.create(team=team, identifier=PHONE, platform=ChannelPlatform.WHATSAPP)
+
+        self._deliver(
+            channel=meta_cloud_api_whatsapp_channel,
+            message=_meta_message(bsuid=BSUID, phone=PHONE),
+        )
+
+        participants = self._whatsapp_participants(team)
+        assert participants.count() == 1
+        assert participants.get().pk == legacy.pk
+        legacy.refresh_from_db()
+        assert legacy.identifier == PHONE
+
+    def test_scenario_5_pre_rollout_phone_keyed_participant_adopts_username_loses_continuity(
+        self, meta_cloud_api_whatsapp_channel
+    ):
+        """A pre-rollout participant (keyed by phone) adopts a username AFTER the rollout.
+        Their webhook now carries only the BSUID — no phone — and Meta's contact book and
+        30-day cache do not contain their phone number.
+
+        Expected: we have nothing to match against; a new BSUID-keyed participant is
+        created and the legacy phone-keyed participant is untouched. This is the one
+        accepted continuity loss in the rollout design.
+        """
+        team = meta_cloud_api_whatsapp_channel.experiment.team
+        legacy = ParticipantFactory.create(team=team, identifier=PHONE, platform=ChannelPlatform.WHATSAPP)
+
+        self._deliver(
+            channel=meta_cloud_api_whatsapp_channel,
+            message=_meta_message(bsuid=BSUID, phone=None),
+        )
+
+        participants = self._whatsapp_participants(team)
+        assert set(participants.values_list("identifier", flat=True)) == {PHONE, BSUID}
+        legacy.refresh_from_db()
+        assert legacy.identifier == PHONE

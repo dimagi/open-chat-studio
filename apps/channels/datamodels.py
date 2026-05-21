@@ -143,6 +143,11 @@ class TwilioMessage(BaseMessage):
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
+    phone_number: str | None = Field(default=None)
+    """The user's phone number (E.164) when included in the WhatsApp webhook (Twilio `From`
+    field). `None` for username-adopters whose phone is not exposed, and for non-WhatsApp
+    platforms (Facebook Messenger). Used alongside `participant_id` (BSUID) to match
+    legacy phone-keyed participants."""
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -164,14 +169,27 @@ class TwilioMessage(BaseMessage):
         platform = prefix_channel_map[prefix]
         to = message_data["To"].removeprefix(prefix_to_remove)
         from_value = message_data["From"].removeprefix(prefix_to_remove)
+        phone_number = None
 
         if platform == ChannelPlatform.WHATSAPP:
             # Parse the number to E164 format, since this is the format of numbers in the DB
             # Normally they are already in this format, but this is just an extra layer of security
             number_obj = phonenumbers.parse(to)
             to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
-            participant_id = from_value
+
+            # ExternalUserId (BSUID) is the stable identifier on WhatsApp — Twilio guarantees
+            # it on every post-rollout webhook. Strip the `whatsapp:` prefix; missing field
+            # means a malformed payload, so the KeyError surfaces.
+            participant_id = message_data["ExternalUserId"].removeprefix(prefix_to_remove)
+            # `From` carries the phone only when the user has not adopted a username; otherwise
+            # it mirrors the BSUID. Normalize to E.164 for matching against legacy phone-keyed
+            # participants stored in the DB.
+            if not looks_like_bsuid(from_value):
+                phone_number = phonenumbers.format_number(
+                    phonenumbers.parse(from_value), phonenumbers.PhoneNumberFormat.E164
+                )
         else:
+            # Facebook Messenger: no BSUID concept; use the sender id as before.
             participant_id = from_value
 
         return TwilioMessage(
@@ -182,6 +200,7 @@ class TwilioMessage(BaseMessage):
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
             platform=platform,
+            phone_number=phone_number,
         )
 
 
@@ -235,6 +254,10 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
     """
 
     whatsapp_message_id: str | None = Field(default=None)
+    phone_number: str | None = Field(default=None)
+    """The user's phone number when included in the webhook (Meta `from` field).
+    `None` for username-adopters whose phone is not exposed. Used alongside
+    `participant_id` (BSUID) to match legacy phone-keyed participants."""
 
     @staticmethod
     def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage":
@@ -243,13 +266,20 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
         if message_type == "text":
             body = message_data["text"]["body"]
 
+        # BSUID (`from_user_id`) is the stable identifier — it's present on every post-rollout
+        # webhook regardless of whether the user adopted a username. A missing field means a
+        # malformed payload, so we let the KeyError surface.
+        participant_id = message_data["from_user_id"]
+        from_value = message_data.get("from")
+        phone_number = from_value if from_value and not looks_like_bsuid(from_value) else None
         return MetaCloudAPIMessage(
-            participant_id=message_data["from"],
+            participant_id=participant_id,
             message_text=body,
             content_type=message_type,
             media_id=message_data.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
             whatsapp_message_id=message_data.get("id"),
+            phone_number=phone_number,
         )
 
 

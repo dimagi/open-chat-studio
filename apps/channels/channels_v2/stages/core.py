@@ -4,6 +4,8 @@ import logging
 import re
 from io import BytesIO
 
+from django.db.models import Q, QuerySet
+
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
@@ -16,7 +18,7 @@ from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -72,11 +74,11 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Try to load an existing active session (Issue 13: select_related)
+        # Try to load an existing active session
         ctx.experiment_session = (
             ExperimentSession.objects.filter(
+                participant__in=self._participant_qs(ctx),
                 experiment=ctx.experiment.get_working_version(),
-                participant__identifier=str(ctx.participant_identifier),
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .select_related("participant", "chat", "experiment_channel")
@@ -111,8 +113,8 @@ class SessionResolutionStage(ProcessingStage):
             # channels that don't pre-set sessions, e.g. API/Telegram)
             existing = (
                 ExperimentSession.objects.filter(
+                    participant__in=self._participant_qs(ctx),
                     experiment=ctx.experiment.get_working_version(),
-                    participant__identifier=str(ctx.participant_identifier),
                 )
                 .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
                 .first()
@@ -124,6 +126,14 @@ class SessionResolutionStage(ProcessingStage):
         ctx.trace_service.set_session(ctx.experiment_session)
         raise EarlyExitResponse("Conversation reset")
 
+    def _participant_qs(self, ctx: MessageProcessingContext) -> QuerySet[Participant]:
+        """Return a Participant queryset matching the current user for use as a subquery."""
+        return Participant.objects.filter(
+            self.participant_id_filter(ctx),
+            team=ctx.experiment.team,
+            platform=ctx.experiment_channel.platform,
+        )
+
     def _create_session(self, ctx: MessageProcessingContext):
         """Delegates to the existing _start_experiment_session helper."""
         return _start_experiment_session(
@@ -132,7 +142,11 @@ class SessionResolutionStage(ProcessingStage):
             participant_identifier=ctx.participant_identifier,
             participant_user=ctx.channel_context.get("participant_user"),
             session_status=SessionStatus.SETUP,
+            participant_id_filter=self.participant_id_filter(ctx),
         )
+
+    def participant_id_filter(self, ctx: MessageProcessingContext) -> Q:
+        return ctx.callbacks.get_participant_identifier_filter(ctx.participant_identifier, ctx.message)
 
 
 # ---------------------------------------------------------------------------

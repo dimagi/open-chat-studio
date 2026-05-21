@@ -4,6 +4,8 @@ import logging
 from io import BytesIO
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
@@ -112,6 +114,15 @@ class WhatsappCallbacks(ChannelCallbacks):
             )
         except Exception:
             logger.exception("Failed to send typing indicator")
+
+    def get_participant_identifier_filter(self, participant_id: str, message) -> Q:
+        """Match on BSUID (``participant_id``) or phone number to preserve continuity
+        with legacy phone-keyed participants from before the WhatsApp username rollout.
+        """
+        phone = getattr(message, "phone_number", None) if message else None
+        if phone:
+            return Q(identifier=participant_id) | Q(identifier=phone)
+        return super().get_participant_identifier_filter(participant_id, message)
 
 
 class WhatsappChannel(ChannelBase):
