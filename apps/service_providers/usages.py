@@ -84,17 +84,22 @@ def get_provider_usages(provider) -> ProviderUsages:
 
     grouped: dict[str, list] = defaultdict(list)
     pipelines: list = []
+    channels: list = []
     for obj in related:
         model = obj.__class__
         if model.__name__ == "Pipeline":
             pipelines.append(obj)
-            continue
-        grouped[_category_label_for(model)].append(obj)
+        elif model.__name__ == "ExperimentChannel":
+            channels.append(obj)
+        else:
+            grouped[_category_label_for(model)].append(obj)
 
     categories = [UsageCategory(label=label, items=items) for label, items in sorted(grouped.items())]
 
     if pipelines:
         categories.extend(_build_pipeline_categories(pipelines))
+    if channels:
+        categories.extend(_build_channel_categories(channels))
 
     return ProviderUsages(provider=provider, categories=categories)
 
@@ -132,6 +137,41 @@ def _build_pipeline_categories(pipelines: list) -> list[UsageCategory]:
         )
     if unlinked:
         categories.append(UsageCategory(label="Unlinked Pipelines", kind="pipelines", items=unlinked))
+    return categories
+
+
+def _build_channel_categories(channels: list) -> list[UsageCategory]:
+    """Return up to two categories built from ExperimentChannel references.
+
+    Channels are owned by chatbots (``ExperimentChannel.experiment``), so we
+    roll up to chatbots — the same shape the LLM page uses for pipelines —
+    and leave any unowned channels in an "Unlinked Channels" bucket.
+    """
+    from apps.experiments.models import Experiment  # noqa: PLC0415 — app-import cycle
+
+    unique_channels = _dedupe_by_id(channels)
+    experiment_ids = {ch.experiment_id for ch in unique_channels if ch.experiment_id}
+    experiments_by_id = (
+        {exp.id: exp for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team")}
+        if experiment_ids
+        else {}
+    )
+
+    chatbots: dict[int, dict] = {}
+    unlinked: list = []
+    for channel in unique_channels:
+        exp = experiments_by_id.get(channel.experiment_id) if channel.experiment_id else None
+        if exp is None:
+            unlinked.append(channel)
+            continue
+        entry = chatbots.setdefault(exp.id, {"chatbot": exp, "channels": []})
+        entry["channels"].append(channel)
+
+    categories: list[UsageCategory] = []
+    if chatbots:
+        categories.append(UsageCategory(label="Chatbots", kind="chatbots_with_channels", items=list(chatbots.values())))
+    if unlinked:
+        categories.append(UsageCategory(label="Unlinked Channels", kind="list", items=unlinked))
     return categories
 
 

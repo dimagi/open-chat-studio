@@ -43,6 +43,32 @@ def test_get_usages_empty_when_unreferenced(anthropic_provider):
 
 
 @pytest.mark.django_db()
+def test_messaging_channels_roll_up_to_chatbots(team_with_users):
+    from apps.utils.factories.channels import ExperimentChannelFactory  # noqa: PLC0415
+
+    messaging = MessagingProviderFactory(team=team_with_users)
+    chatbot = ExperimentFactory(team=team_with_users)
+    ExperimentChannelFactory(team=team_with_users, experiment=chatbot, messaging_provider=messaging)
+    ExperimentChannelFactory(team=team_with_users, experiment=chatbot, messaging_provider=messaging)
+    # Channel with no chatbot.
+    ExperimentChannelFactory(team=team_with_users, experiment=None, messaging_provider=messaging)
+
+    usages = get_provider_usages(messaging)
+
+    labels = {c.label for c in usages.categories}
+    assert labels == {"Chatbots", "Unlinked Channels"}
+
+    chatbots_cat = next(c for c in usages.categories if c.kind == "chatbots_with_channels")
+    assert len(chatbots_cat.items) == 1
+    entry = chatbots_cat.items[0]
+    assert entry["chatbot"].id == chatbot.id
+    assert len(entry["channels"]) == 2
+
+    unlinked = next(c for c in usages.categories if c.label == "Unlinked Channels")
+    assert len(unlinked.items) == 1
+
+
+@pytest.mark.django_db()
 def test_experiment_category_displays_as_chatbots(team_with_users):
     voice = VoiceProviderFactory(team=team_with_users)
     ExperimentFactory(team=team_with_users, voice_provider=voice)
