@@ -2,9 +2,10 @@ import json
 from json import JSONDecodeError
 
 from django import template
-from django.core.serializers.json import DjangoJSONEncoder
 from django.http import QueryDict
 from django.utils.safestring import mark_safe
+
+from apps.web.json_utils import BytesAwareJSONEncoder
 from pygments import highlight as _pygments_highlight
 from pygments.formatters import HtmlFormatter  # ty: ignore[unresolved-import]
 from pygments.lexers import JsonLexer  # ty: ignore[unresolved-import]
@@ -48,7 +49,7 @@ def to_json(obj):
     if isinstance(obj, QueryDict):
         obj = dict(obj)
     try:
-        json_string = json.dumps(obj, indent=2, cls=DjangoJSONEncoder)
+        json_string = json.dumps(obj, indent=2, cls=BytesAwareJSONEncoder)
         return mark_safe(escape_script_tags(json_string))
     except JSONDecodeError:
         return mark_safe("Unable to decode JSON data")
@@ -64,7 +65,7 @@ def highlight_json(value) -> str:
     if isinstance(value, QueryDict):
         value = dict(value)
     try:
-        json_str = json.dumps(value, indent=2, cls=DjangoJSONEncoder)
+        json_str = json.dumps(value, indent=2, cls=BytesAwareJSONEncoder)
     except (TypeError, ValueError):
         return mark_safe("Unable to encode JSON data")
     formatter = HtmlFormatter(nowrap=True)

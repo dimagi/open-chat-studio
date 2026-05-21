@@ -25,6 +25,7 @@ from ..events.models import ScheduledMessage
 from ..experiments.filters import get_filter_context_data
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
+from ..web.json_utils import BytesAwareJSONEncoder
 from .filters import ParticipantFilter
 from .import_export import export_participant_data_to_response, process_participant_import
 from .tables import ParticipantTable
@@ -57,7 +58,7 @@ def single_participant_home_context(team, context: dict, participant_id: int, ex
         )
         context["selected_experiment_id"] = experiment_id
         data = participant.get_data_for_experiment(experiment_id)
-        context["participant_data"] = json.dumps(data, indent=4)
+        context["participant_data"] = json.dumps(data, indent=4, cls=BytesAwareJSONEncoder)
         context["participant_schedules"] = participant.get_schedules_for_experiment(
             experiment_id, as_dict=True, include_inactive=True
         )
