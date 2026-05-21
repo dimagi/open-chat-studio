@@ -19,6 +19,7 @@ class Score(BaseTeamModel):
         LLM_JUDGE = "llm_judge", "LLM judge"
         PROGRAMMATIC = "programmatic", "Programmatic"
         HUMAN_REVIEW = "human_review", "Human review"
+        # below here are placeholders for future use
         USER_FEEDBACK = "user_feedback", "User feedback"
         SYSTEM = "system", "System"
 
