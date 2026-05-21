@@ -1,5 +1,6 @@
 import base64
 import logging
+import re
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
@@ -22,16 +23,21 @@ logger = logging.getLogger("ocs.channels")
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
 
 
-def looks_like_bsuid(value: str) -> bool:
-    """Return True if `value` looks like a Meta business-scoped user ID.
+_BSUID_RE = re.compile(r"^[A-Z]{2}(?:\.ENT)?\.[A-Za-z0-9]{1,128}$")
 
-    BSUIDs use the format `<ISO country code>.<digits>` (e.g. US.13491208655302741918) and
-    parent BSUIDs use `<country>.ENT.<digits>`. Phone numbers (E.164 or wa_id digit string)
-    never contain a period.
+
+def looks_like_bsuid(value: str) -> bool:
+    """Return True if `value` matches the Meta business-scoped user ID format.
+
+    Per Meta's spec, a BSUID is an ISO 3166 alpha-2 country code (two uppercase letters)
+    followed by a period and up to 128 alphanumeric characters
+    (e.g. US.13491208655302741918). Parent BSUIDs (which work across business portfolios)
+    insert an ``ENT.`` between the country code and the identifier
+    (e.g. US.ENT.11815799212886844830).
 
     See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
     """
-    return "." in value
+    return bool(_BSUID_RE.match(value))
 
 
 class MediaCache(BaseModel):
