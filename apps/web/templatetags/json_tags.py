@@ -1,5 +1,5 @@
+import base64
 import json
-from json import JSONDecodeError
 
 from django import template
 from django.core.serializers.json import DjangoJSONEncoder
@@ -10,6 +10,23 @@ from pygments.formatters import HtmlFormatter  # ty: ignore[unresolved-import]
 from pygments.lexers import JsonLexer  # ty: ignore[unresolved-import]
 
 register = template.Library()
+
+
+class SafeDjangoJSONEncoder(DjangoJSONEncoder):
+    """DjangoJSONEncoder that also handles ``bytes`` values.
+
+    Bytes are decoded as UTF-8 when possible, otherwise represented as a
+    base64-encoded string so JSON serialization never raises ``TypeError``.
+    """
+
+    def default(self, o):
+        if isinstance(o, (bytes, bytearray)):
+            try:
+                return o.decode("utf-8")
+            except UnicodeDecodeError:
+                return base64.b64encode(bytes(o)).decode("ascii")
+        return super().default(o)
+
 
 # Pre-computed at import time — cheap to generate, reused on every trace page load.
 _PYGMENTS_JSON_CSS = mark_safe(
@@ -48,10 +65,10 @@ def to_json(obj):
     if isinstance(obj, QueryDict):
         obj = dict(obj)
     try:
-        json_string = json.dumps(obj, indent=2, cls=DjangoJSONEncoder)
+        json_string = json.dumps(obj, indent=2, cls=SafeDjangoJSONEncoder)
         return mark_safe(escape_script_tags(json_string))
-    except JSONDecodeError:
-        return mark_safe("Unable to decode JSON data")
+    except (TypeError, ValueError):
+        return mark_safe("Unable to encode JSON data")
 
 
 @register.filter
@@ -64,7 +81,7 @@ def highlight_json(value) -> str:
     if isinstance(value, QueryDict):
         value = dict(value)
     try:
-        json_str = json.dumps(value, indent=2, cls=DjangoJSONEncoder)
+        json_str = json.dumps(value, indent=2, cls=SafeDjangoJSONEncoder)
     except (TypeError, ValueError):
         return mark_safe("Unable to encode JSON data")
     formatter = HtmlFormatter(nowrap=True)
