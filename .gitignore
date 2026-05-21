@@ -17,6 +17,7 @@ _dist/
 .env.docker
 .env.integration
 .env.production
+.env.prod
 .DS_Store
 dump.rdb
 .direnv
