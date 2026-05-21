@@ -1436,11 +1436,16 @@ class EvaluationChannel(ChannelBase):
         return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
+        # ParticipantValidationStage omitted: the "evaluations" participant
+        # is internal — validating it against participant_allowlist is
+        # meaningless and would block private experiments. Nothing
+        # downstream in this pipeline reads ctx.participant_identifier.
+        # SessionResolutionStage omitted: session is always pre-set.
+        # SessionActivationStage omitted: the eval bot does not gate on
+        # session status, and legacy EvaluationChannel never activated
+        # the session either.
         return MessageProcessingPipeline(
             core_stages=[
-                ParticipantValidationStage(),
-                # No SessionResolutionStage — session always pre-set
-                SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
@@ -2799,7 +2804,7 @@ All decisions below were made during the plan review and are reflected throughou
 | 25 | Architecture | No web channel `_inform_user_of_error` override | Web channel no longer needs a no-op override. Error message generation is separated from sending. The generated error message flows back to the web UI via `new_user_message`'s return value. |
 | 26 | Architecture | Voice synthesis fallback in `ResponseFormattingStage` | `AudioSynthesizeException` is caught in `ResponseFormattingStage` and gracefully degraded to text formatting. Not an unrecoverable error — does not propagate to the pipeline's catch-all. Creates `audio_synthesis_failure_notification`. |
 | 27 | Architecture | `WebChannel` pipeline | Overrides `_build_pipeline` to omit `ResponseSendingStage`, `SendingErrorHandlerStage`, `SessionResolutionStage`, and `ConsentFlowStage`. Sets `supports_conversational_consent: False`. Requires pre-existing session. `start_new_session` and `check_and_process_seed_message` class methods remain on the channel class (outside the pipeline). |
-| 28 | Architecture | `EvaluationChannel` + `channel_context` | Uses `ctx.channel_context` dict to pass `participant_data` to `EvalsBotInteractionStage`. This is a **workaround** scoped to `EvaluationChannel` only — it should NOT be used as a general-purpose extension mechanism. `EvalsBotInteractionStage` replaces `BotInteractionStage` and creates `EvalsBot` instead of calling `get_bot()`. |
+| 28 | Architecture | `EvaluationChannel` + `channel_context` | Uses `ctx.channel_context` dict to pass `participant_data` to `EvalsBotInteractionStage`. This is a **workaround** scoped to `EvaluationChannel` only — it should NOT be used as a general-purpose extension mechanism. `EvalsBotInteractionStage` replaces `BotInteractionStage` and creates `EvalsBot` instead of calling `get_bot()`. The `EvaluationChannel` pipeline also omits `ParticipantValidationStage` (the internal `"evaluations"` participant fails `is_participant_allowed` on private experiments; nothing downstream reads `ctx.participant_identifier` in this pipeline) and `SessionActivationStage` (legacy never activated the session, and the bot does not gate on session status). |
 | 29 | Architecture | `NEW_HUMAN_MESSAGE` trigger in `ChatMessageCreationStage` | `enqueue_static_triggers` for `NEW_HUMAN_MESSAGE` fires in `ChatMessageCreationStage` after the DB record is created. Gated by `capabilities.supports_static_triggers` (default `True`, `EvaluationChannel` sets `False`). Session creation triggers (`PARTICIPANT_JOINED_EXPERIMENT`, `CONVERSATION_START`) remain in `_start_experiment_session`. |
 | — | Update | `PersistenceStage` (terminal) | Renamed from `EarlyExitResponseStage`. Persists early exit responses to chat history AND saves voice attachments (tag + file). Runs after sending stages. |
 | 30 | Architecture | Voice attachment persistence | `PersistenceStage` tags the bot response as "voice" and saves synthesized audio as a file attachment. Moved from post-send logic in the old `_handle_supported_message`. |

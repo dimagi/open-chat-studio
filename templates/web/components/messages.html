@@ -2,8 +2,8 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function(){
-    htmx.on("djangoMessages", (event) => {
-      event.detail.value.messages.forEach((message) => {
+    document.body.addEventListener("djangoMessages", (event) => {
+      event.detail.messages.forEach((message) => {
         alertify.notify(message.message, message.tags, 10);
       });
     })

@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
@@ -113,6 +113,22 @@ class EditEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateV
 
     def get_success_url(self):
         return reverse("evaluations:home", args=[self.request.team.slug])
+
+
+class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
+    permission_required = "evaluations.delete_evaluationconfig"
+    model = EvaluationConfig
+
+    def get_queryset(self):
+        return EvaluationConfig.objects.filter(team=self.request.team)
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object.delete()
+        response = HttpResponse(status=200)
+        if request.GET.get("redirect") == "1":
+            response["HX-Redirect"] = reverse("evaluations:home", args=[self.request.team.slug])
+        return response
 
 
 class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

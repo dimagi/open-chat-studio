@@ -296,13 +296,34 @@ class ClaudeOpus46Parameters(BasicParameters):
         return value
 
 
-class ClaudeSonnet46Parameters(ClaudeOpus46Parameters):
+class ClaudeSonnet46Parameters(LLMModelParamBase):
+    """Parameters for Claude Sonnet 4.6.
+
+    Sonnet 4.6 was released after Claude Opus 4.6 and therefore does not support
+    setting temperature — only 1.0 is accepted for backwards compatibility, so
+    temperature is not exposed here.
+    """
+
     max_tokens: int = Field(
         title="Max Output Tokens",
         default=32000,
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
         le=64000,
+    )
+    effort: Claude46EffortParameter = Field(
+        title="Reasoning Effort",
+        default=Claude46EffortParameter.HIGH,
+        description="Control intelligence, speed, and cost tradeoffs with adaptive thinking.",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=Claude46EffortParameter.labels),
+    )
+    adaptive_thinking: bool = Field(
+        title="Enable Adaptive Thinking",
+        default=False,
+        description="Let Claude dynamically decide when and how much to think with adaptive thinking mode. "
+        "At the default effort level (high), Claude will almost always think. "
+        "At lower effort levels, Claude may skip thinking for simpler problems.",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
 

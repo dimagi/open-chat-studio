@@ -4,6 +4,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.datamodels import BaseMessage
 
 
@@ -14,6 +15,9 @@ class ChannelCallbacks:
     Methods that target a user receive `recipient: str` -- not the full context.
     """
 
+    def bind(self, ctx: MessageProcessingContext) -> None:
+        """Called after context creation. Override to store a context reference for lazy reads."""
+
     def transcription_started(self, recipient: str) -> None:
         """Called when voice transcription starts (e.g. show 'uploading voice' indicator)."""
 
@@ -23,7 +27,7 @@ class ChannelCallbacks:
     def echo_transcript(self, recipient: str, transcript: str) -> None:
         """Send the transcript back to the user."""
 
-    def submit_input_to_llm(self, recipient: str) -> None:
+    def on_submit_input_to_llm(self, recipient: str) -> None:
         """Called before LLM invocation (e.g. show 'typing' indicator)."""
 
     def get_message_audio(self, message: BaseMessage) -> BytesIO:

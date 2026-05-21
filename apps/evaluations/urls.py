@@ -144,6 +144,6 @@ urlpatterns = [
     ),
 ]
 
-urlpatterns.extend(make_crud_urls(evaluation_config_views, "Evaluation", delete=False))
+urlpatterns.extend(make_crud_urls(evaluation_config_views, "Evaluation", delete=True))
 urlpatterns.extend(make_crud_urls(evaluator_views, "Evaluator", prefix="evaluator"))
 urlpatterns.extend(make_crud_urls(dataset_views, "Dataset", prefix="dataset"))

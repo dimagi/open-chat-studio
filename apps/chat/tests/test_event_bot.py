@@ -60,7 +60,7 @@ def test_system_prompt(mock_get_context, mock_get_conversation_history, event_bo
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_get_user_message_with_llm_provider(mock_get_llm_service):
-    fake_llm_service = build_fake_llm_service(responses=["this is a test message"], token_counts=[30, 20, 10])
+    fake_llm_service = build_fake_llm_service(responses=["this is a test message"])
     mock_get_llm_service.return_value = fake_llm_service
     session = ExperimentSessionFactory.create()
     LlmProviderFactory.create(team=session.experiment.team)
