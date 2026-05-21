@@ -155,15 +155,17 @@
           </a>
         </li>
         {% flag "flag_assessments_concordance" %}
-          {% if perms.human_annotations.view_annotationqueue %}
-            <li>
-              <a href="{% url 'assessments:concordance' request.team.slug %}"
-                 {% if request.resolver_match.url_name == 'concordance' %}class="menu-active"{% endif %}>
-                <i class="fa-solid fa-scale-balanced fa-fw"></i>
-                {% translate "Concordance" %}
-              </a>
-            </li>
-          {% endif %}
+          {% flag "flag_human_annotations" %}
+            {% if perms.human_annotations.view_annotationqueue %}
+              <li>
+                <a href="{% url 'assessments:concordance' request.team.slug %}"
+                   {% if request.resolver_match.url_name == 'concordance' %}class="menu-active"{% endif %}>
+                  <i class="fa-solid fa-scale-balanced fa-fw"></i>
+                  {% translate "Concordance" %}
+                </a>
+              </li>
+            {% endif %}
+          {% endflag %}
         {% endflag %}
       </ul>
     </li>

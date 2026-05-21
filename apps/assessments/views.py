@@ -95,7 +95,11 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "assessments/concordance.html"
 
     def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        if not flag_is_active(request, "flag_assessments_concordance"):
+        if not (
+            flag_is_active(request, "flag_assessments_concordance")
+            and flag_is_active(request, "flag_evaluations")
+            and flag_is_active(request, "flag_human_annotations")
+        ):
             raise Http404("Concordance is not enabled for this team.")
         return super().dispatch(request, *args, **kwargs)
 

@@ -255,7 +255,7 @@ A new page under the existing Evaluations URL space — `/a/<team_slug>/evaluati
 
 ### URL surface
 
-```
+```text
 GET /a/<team>/evaluations/concordance/                       → picker form
 GET /a/<team>/evaluations/concordance/?eval=<id>&queue=<id>  → side-by-side view (auto-picks field if exactly one shared categorical)
 GET /a/<team>/evaluations/concordance/?eval=<id>&queue=<id>&field=<name>
@@ -306,7 +306,7 @@ All state lives in query params. No persisted concordance config in v1.
 
 Standard Django template with HTMX form swap (consistent with the rest of OCS). Summary header plus a paginated table:
 
-```
+```text
 Concordance: <eval_config.name> vs <annotation_queue.name>
 Field: <field_name>
 
