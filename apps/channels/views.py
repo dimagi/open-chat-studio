@@ -451,8 +451,8 @@ class MetaCloudAPIWebhookView(View):
             return HttpResponse()
 
         try:
-            message_values = meta_webhook.extract_message_values(data)
-            if not message_values:
+            messages = meta_webhook.extract_messages(data)
+            if not messages:
                 log.debug("Meta Cloud API webhook received payload with no messages")
                 return HttpResponse()
 
@@ -460,9 +460,9 @@ class MetaCloudAPIWebhookView(View):
             log.debug("Meta Cloud API webhook payload missing expected fields")
             return HttpResponse()
 
-        # A payload may contain values for different phone numbers (e.g. a Business Account with multiple numbers),
-        # so each value must be routed to its own channel.
-        unique_phone_ids = {v["metadata"]["phone_number_id"] for v in message_values}
+        # A payload may contain messages for different phone numbers (e.g. a Business Account with
+        # multiple numbers), so each message must be routed to its own channel.
+        unique_phone_ids = {phone_id for phone_id, _ in messages}
         channel_map = {
             ch.extra_data["phone_number_id"]: ch
             for ch in ExperimentChannel.objects.filter(
@@ -482,8 +482,7 @@ class MetaCloudAPIWebhookView(View):
             log.warning("Meta Cloud API webhook signature verification failed for channel")
             return HttpResponse()
 
-        for value in message_values:
-            phone_number_id = value["metadata"]["phone_number_id"]
+        for phone_number_id, message in messages:
             ch = channel_map.get(phone_number_id)
             if not ch:
                 continue
@@ -491,7 +490,7 @@ class MetaCloudAPIWebhookView(View):
             tasks.handle_meta_cloud_api_message.delay(
                 channel_id=ch.id,
                 team_slug=ch.team.slug,
-                message_data=value,
+                message_data=message,
             )
 
         return HttpResponse()

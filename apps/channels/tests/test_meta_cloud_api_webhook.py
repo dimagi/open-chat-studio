@@ -70,13 +70,15 @@ class TestMetaCloudAPIWebhookVerifySignature:
         assert meta_webhook.verify_signature(payload, signature, "") is False
 
 
-class TestMetaCloudAPIWebhookExtractMessageValues:
-    def test_extracts_message_values(self):
-        data = meta_cloud_api_messages.text_message()
-        values = meta_webhook.extract_message_values(data)
-        assert len(values) == 1
-        assert values[0]["metadata"]["phone_number_id"] == "12345"
-        assert values[0]["messages"][0]["text"]["body"] == "Hello"
+class TestMetaCloudAPIWebhookExtractMessages:
+    def test_extracts_messages(self):
+        data = meta_cloud_api_messages.legacy_text_message()
+        messages = meta_webhook.extract_messages(data)
+        assert len(messages) == 1
+        phone_id, message = messages[0]
+        assert phone_id == "12345"
+        assert message["text"]["body"] == "Hello"
+        assert message["from"] == "27456897512"
 
 
 @pytest.mark.django_db()
@@ -158,23 +160,23 @@ class TestNewMetaCloudApiMessage:
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_valid_message_returns_200(self, mock_delay, meta_cloud_api_channel):
-        response = self._post(meta_cloud_api_messages.text_message())
+        response = self._post(meta_cloud_api_messages.legacy_text_message())
         assert response.status_code == 200
         mock_delay.assert_called_once()
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_task_dispatched_with_correct_args(self, mock_delay, meta_cloud_api_channel):
-        self._post(meta_cloud_api_messages.text_message())
+        self._post(meta_cloud_api_messages.legacy_text_message())
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.text_message_value(),
+            message_data=meta_cloud_api_messages.legacy_text_message_value()["messages"][0],
         )
 
     def test_invalid_signature_returns_200(self, meta_cloud_api_channel):
         """Invalid signature returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
-        body = json.dumps(meta_cloud_api_messages.text_message()).encode()
+        body = json.dumps(meta_cloud_api_messages.legacy_text_message()).encode()
         request = factory.post(
             "/",
             data=body,
@@ -187,7 +189,7 @@ class TestNewMetaCloudApiMessage:
     def test_missing_signature_header_returns_200(self, meta_cloud_api_channel):
         """Missing signature header returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
-        body = json.dumps(meta_cloud_api_messages.text_message()).encode()
+        body = json.dumps(meta_cloud_api_messages.legacy_text_message()).encode()
         request = factory.post(
             "/",
             data=body,
@@ -209,25 +211,7 @@ class TestNewMetaCloudApiMessage:
             extra_data={"number": "+15559999999", "phone_number_id": "99999"},
         )
 
-        # Build a payload with two entries for two different phone numbers
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "BIZ_ID",
-                    "changes": [
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("12345"),
-                            "field": "messages",
-                        },
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("99999"),
-                            "field": "messages",
-                        },
-                    ],
-                }
-            ],
-        }
+        payload = meta_cloud_api_messages.multi_text_message(["12345", "99999"])
         response = self._post(payload)
         assert response.status_code == 200
         assert mock_delay.call_count == 2
@@ -237,31 +221,14 @@ class TestNewMetaCloudApiMessage:
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_unknown_phone_number_in_multi_payload_skipped(self, mock_delay, meta_cloud_api_channel):
         """A value with an unknown phone_number_id is skipped; other values are still dispatched."""
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "BIZ_ID",
-                    "changes": [
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("12345"),
-                            "field": "messages",
-                        },
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("unknown_id"),
-                            "field": "messages",
-                        },
-                    ],
-                }
-            ],
-        }
+        payload = meta_cloud_api_messages.multi_text_message(["12345", "unknown_id"])
         response = self._post(payload)
         assert response.status_code == 200
         assert mock_delay.call_count == 1
         mock_delay.assert_called_once_with(
             channel_id=meta_cloud_api_channel.id,
             team_slug=meta_cloud_api_channel.team.slug,
-            message_data=meta_cloud_api_messages.text_message_value("12345"),
+            message_data=meta_cloud_api_messages.legacy_text_message_value("12345")["messages"][0],
         )
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
@@ -285,26 +252,7 @@ class TestNewMetaCloudApiMessage:
             extra_data={"number": "+15550000001", "phone_number_id": "attacker_phone_id"},
         )
 
-        # Payload targeting BOTH attacker's phone_number_id and victim's phone_number_id,
-        # signed with the attacker's app_secret.
-        payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "BIZ_ID",
-                    "changes": [
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("attacker_phone_id"),
-                            "field": "messages",
-                        },
-                        {
-                            "value": meta_cloud_api_messages.text_message_value("12345"),
-                            "field": "messages",
-                        },
-                    ],
-                }
-            ],
-        }
+        payload = meta_cloud_api_messages.multi_text_message(["attacker_phone_id", "12345"])
         response = self._post(payload, app_secret=attacker_secret)
         assert response.status_code == 200
         mock_delay.assert_not_called()

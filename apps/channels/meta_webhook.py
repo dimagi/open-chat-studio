@@ -1,28 +1,55 @@
 import hashlib
 import hmac
+from typing import NotRequired, TypedDict
 
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils.crypto import constant_time_compare
 
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 
+# `from` is a Python keyword, so functional TypedDict syntax is required to express it as a field.
+MetaCloudAPIWebhookMessage = TypedDict(
+    "MetaCloudAPIWebhookMessage",
+    {
+        "id": str,
+        "timestamp": str,
+        "type": str,
+        "from": NotRequired[str],
+        "from_user_id": str,
+        "text": NotRequired[dict],
+        "audio": NotRequired[dict],
+        "voice": NotRequired[dict],
+        "image": NotRequired[dict],
+        "video": NotRequired[dict],
+        "document": NotRequired[dict],
+        "sticker": NotRequired[dict],
+        "location": NotRequired[dict],
+        "context": NotRequired[dict],
+        "interactive": NotRequired[dict],
+        "button": NotRequired[dict],
+    },
+)
 
-def extract_message_values(data: dict) -> list[dict]:
-    """Extract value dicts that contain messages from Meta webhook payload.
+
+def extract_messages(data: dict) -> list[tuple[str, MetaCloudAPIWebhookMessage]]:
+    """Extract individual messages from a Meta webhook payload.
+
+    Returns ``(phone_number_id, message)`` tuples — one per message in the
+    webhook payload.
 
     See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/create-webhook-endpoint/
-
-    See https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview for an
-    example of the payload
     """
-
-    values = []
+    results: list[tuple[str, MetaCloudAPIWebhookMessage]] = []
     for entry in data.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            if value.get("messages") and value.get("metadata", {}).get("phone_number_id"):
-                values.append(value)
-    return values
+            messages = value.get("messages") or []
+            phone_number_id = value.get("metadata", {}).get("phone_number_id")
+            if not messages or not phone_number_id:
+                continue
+            for msg in messages:
+                results.append((phone_number_id, msg))
+    return results
 
 
 def verify_webhook(request) -> HttpResponse:

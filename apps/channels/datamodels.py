@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import phonenumbers
 from mailparser_reply import EmailReplyParser
@@ -14,9 +14,24 @@ from apps.chat.channels import MESSAGE_TYPES
 from apps.documents.readers import Document
 from apps.files.models import File
 
+if TYPE_CHECKING:
+    from apps.channels.meta_webhook import MetaCloudAPIWebhookMessage
+
 logger = logging.getLogger("ocs.channels")
 
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
+
+
+def looks_like_bsuid(value: str) -> bool:
+    """Return True if `value` looks like a Meta business-scoped user ID.
+
+    BSUIDs use the format `<ISO country code>.<digits>` (e.g. US.13491208655302741918) and
+    parent BSUIDs use `<country>.ENT.<digits>`. Phone numbers (E.164 or wa_id digit string)
+    never contain a period.
+
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+    """
+    return "." in value
 
 
 class MediaCache(BaseModel):
@@ -148,13 +163,19 @@ class TwilioMessage(BaseMessage):
         prefix_to_remove = f"{prefix}:"
         platform = prefix_channel_map[prefix]
         to = message_data["To"].removeprefix(prefix_to_remove)
+        from_value = message_data["From"].removeprefix(prefix_to_remove)
+
         if platform == ChannelPlatform.WHATSAPP:
             # Parse the number to E164 format, since this is the format of numbers in the DB
             # Normally they are already in this format, but this is just an extra layer of security
             number_obj = phonenumbers.parse(to)
             to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+            participant_id = from_value
+        else:
+            participant_id = from_value
+
         return TwilioMessage(
-            participant_id=message_data["From"].removeprefix(prefix_to_remove),
+            participant_id=participant_id,
             to=to,
             message_text=message_data["Body"],
             content_type=content_type,
@@ -216,20 +237,19 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
     whatsapp_message_id: str | None = Field(default=None)
 
     @staticmethod
-    def parse(message_data: dict) -> "MetaCloudAPIMessage":
-        message = message_data["messages"][0]
-        message_type = message["type"]
+    def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage":
+        message_type = message_data["type"]
         body = ""
         if message_type == "text":
-            body = message["text"]["body"]
+            body = message_data["text"]["body"]
 
         return MetaCloudAPIMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
+            participant_id=message_data["from"],
             message_text=body,
             content_type=message_type,
-            media_id=message.get(message_type, {}).get("id", None),
+            media_id=message_data.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
-            whatsapp_message_id=message.get("id"),
+            whatsapp_message_id=message_data.get("id"),
         )
 
 

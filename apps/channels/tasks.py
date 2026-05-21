@@ -19,6 +19,7 @@ from apps.channels.datamodels import (
     TurnWhatsappMessage,
     TwilioMessage,
 )
+from apps.channels.meta_webhook import MetaCloudAPIWebhookMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     CommCareConnectChannel,
@@ -197,7 +198,7 @@ def get_experiment_channel_base_query(platform, **query_kwargs):
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
-def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: dict):
+def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: MetaCloudAPIWebhookMessage):
     message = MetaCloudAPIMessage.parse(message_data)
     experiment_channel = (
         ExperimentChannel.objects.filter(
