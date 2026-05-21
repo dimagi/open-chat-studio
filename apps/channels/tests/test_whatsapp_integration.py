@@ -5,10 +5,11 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
+from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage, TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
-from apps.chat.channels import MESSAGE_TYPES, WhatsappChannel
+from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
@@ -75,7 +76,7 @@ class TestTwilio:
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -84,7 +85,7 @@ class TestTwilio:
         bot_process_input,
         send_text_message,
         send_voice_message,
-        get_voice_transcript_mock,
+        transcribe_voice_mock,
         synthesize_voice_mock,
         incoming_message,
         message_type,
@@ -98,7 +99,7 @@ class TestTwilio:
             experiment = ExperimentFactory.create(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
             bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
-            get_voice_transcript_mock.return_value = "Hi"
+            transcribe_voice_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message)
 
@@ -117,7 +118,7 @@ class TestTwilio:
             platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider, extra_data={"number": "123"}
         )
         session = ExperimentSessionFactory.create(experiment_channel=channel, experiment=experiment)
-        channel = WhatsappChannel.from_experiment_session(session)
+        channel = WhatsappChannel(session.experiment, session.experiment_channel, session)
         file1 = FileFactory.create(name="f1", content_type="image/jpeg")
         file2 = FileFactory.create(name="f2", content_type="image/jpeg")
         # Ensure files have a non-zero content_size so can_send_file() considers them sendable
@@ -163,7 +164,7 @@ class TestTurnio:
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -172,7 +173,7 @@ class TestTurnio:
         bot_process_input,
         send_text_message,
         send_voice_message,
-        get_voice_transcript_mock,
+        transcribe_voice_mock,
         synthesize_voice_mock,
         incoming_message,
         message_type,
@@ -183,25 +184,21 @@ class TestTurnio:
         experiment = ExperimentFactory.create(conversational_consent_enabled=True)
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
-        get_voice_transcript_mock.return_value = "Hi"
+        transcribe_voice_mock.return_value = "Hi"
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         if message_type == "text":
             send_text_message.assert_called()
         elif message_type == "audio":
             send_voice_message.assert_called()
 
-    @patch("apps.chat.channels.ChannelBase._handle_supported_message")
-    @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")
-    def test_unsupported_message_type_does_nothing(
-        self, _handle_unsupported_message, _handle_supported_message, db, turnio_whatsapp_channel
-    ):
-        """Test that unsupported messages are not"""
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_unsupported_message_type_does_nothing(self, bot_process_input, db, turnio_whatsapp_channel):
+        """Test that unsupported messages are not processed by the bot"""
         incoming_message = turnio_messages.text_message()
         incoming_message["messages"][0]["type"] = "video"
         incoming_message["messages"][0]["video"] = {}
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
-        _handle_unsupported_message.assert_called()
-        _handle_supported_message.assert_not_called()
+        bot_process_input.assert_not_called()
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
@@ -220,7 +217,7 @@ class TestTurnio:
     @patch("apps.service_providers.messaging_service.TurnIOService.client")
     def test_attachment_links_attached_to_message(self, turnio_client, turnio_whatsapp_channel, experiment):
         session = ExperimentSessionFactory.create(experiment_channel=turnio_whatsapp_channel, experiment=experiment)
-        channel = WhatsappChannel.from_experiment_session(session)
+        channel = WhatsappChannel(session.experiment, session.experiment_channel, session)
         files = FileFactory.create_batch(2)
         channel.send_message_to_user("Hi there", files=files)
         call_args = turnio_client.messages.send_text.mock_calls[0].args
@@ -267,7 +264,7 @@ class TestMetaCloudApi:
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_voice_message")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -276,7 +273,7 @@ class TestMetaCloudApi:
         bot_process_input,
         send_text_message,
         send_voice_message,
-        get_voice_transcript_mock,
+        transcribe_voice_mock,
         synthesize_voice_mock,
         incoming_message,
         message_type,
@@ -287,7 +284,7 @@ class TestMetaCloudApi:
         experiment = ExperimentFactory.create(conversational_consent_enabled=True)
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
-        get_voice_transcript_mock.return_value = "Hi"
+        transcribe_voice_mock.return_value = "Hi"
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.team.slug,
@@ -298,11 +295,8 @@ class TestMetaCloudApi:
         elif message_type == "audio":
             send_voice_message.assert_called()
 
-    @patch("apps.chat.channels.ChannelBase._handle_supported_message")
-    @patch("apps.chat.channels.ChannelBase._handle_unsupported_message")
-    def test_unsupported_message_type_does_nothing(
-        self, _handle_unsupported_message, _handle_supported_message, db, meta_cloud_api_whatsapp_channel
-    ):
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_unsupported_message_type_does_nothing(self, bot_process_input, db, meta_cloud_api_whatsapp_channel):
         incoming_message = meta_cloud_api_messages.text_message_value()
         incoming_message["messages"][0]["type"] = "video"
         incoming_message["messages"][0]["video"] = {}
@@ -311,8 +305,7 @@ class TestMetaCloudApi:
             team_slug=meta_cloud_api_whatsapp_channel.team.slug,
             message_data=incoming_message,
         )
-        _handle_unsupported_message.assert_called()
-        _handle_supported_message.assert_not_called()
+        bot_process_input.assert_not_called()
 
     @pytest.mark.django_db()
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")

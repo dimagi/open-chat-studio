@@ -398,6 +398,32 @@ def test_backfill_function_marks_single_reviewer_and_downgrades_completed(team, 
 
 
 @pytest.mark.django_db()
+def test_backfill_picks_earliest_when_single_reviewer_item_has_multiple_submissions(team, second_user):
+    """For single-reviewer queues with over-budget submissions, backfill marks the
+    earliest submission authoritative."""
+    migration_module = importlib.import_module("apps.human_annotations.migrations.0004_backfill_authoritative")
+    forwards = migration_module.forwards
+
+    queue = _make_queue(team, num_reviews_required=1)
+    item = _make_item(queue)
+    user1 = team.members.first()
+    first = Annotation.objects.create(
+        item=item, team=team, reviewer=user1, data={"score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    second = Annotation.objects.create(
+        item=item, team=team, reviewer=second_user, data={"score": 3}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.filter(pk__in=[first.pk, second.pk]).update(is_authoritative=False, authoritative_set_at=None)
+
+    forwards(django_apps, None)
+
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert first.is_authoritative is True
+    assert second.is_authoritative is False
+
+
+@pytest.mark.django_db()
 def test_htmx_swap_clears_awaiting_banner_when_authoritative_set(admin_client, team, second_user):
     """After marking authoritative via HTMX, the swapped partial should no longer
     contain the awaiting-resolution banner because the item is now COMPLETED."""

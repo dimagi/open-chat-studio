@@ -40,7 +40,7 @@ class TelegramCallbacks(ChannelCallbacks):
     def transcription_started(self, recipient: str) -> None:
         self.telegram_bot.send_chat_action(chat_id=recipient, action="upload_voice")
 
-    def submit_input_to_llm(self, recipient: str) -> None:
+    def on_submit_input_to_llm(self, recipient: str) -> None:
         self.telegram_bot.send_chat_action(chat_id=recipient, action="typing")
 
     def echo_transcript(self, recipient: str, transcript: str) -> None:

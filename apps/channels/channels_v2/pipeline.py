@@ -99,6 +99,14 @@ class MessageProcessingContext:
     # channel-specific data, revisit this design.
     channel_context: dict = field(default_factory=dict)
 
+    def __post_init__(self):
+        self.sender.bind(self)
+        self.callbacks.bind(self)
+
+    @property
+    def last_activity_at(self):
+        return self.experiment_session.last_activity_at if self.experiment_session else None
+
 
 # ---------------------------------------------------------------------------
 # Pipeline Orchestrator

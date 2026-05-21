@@ -17,7 +17,7 @@
               {% if ann.is_authoritative %}
                 <span class="badge badge-primary badge-sm gap-1"
                       title="{% if ann.authoritative_set_by %}Marked authoritative by {{ ann.authoritative_set_by.get_full_name|default:ann.authoritative_set_by.username }} on {{ ann.authoritative_set_at|date:'DATETIME_FORMAT' }}{% else %}Auto-marked as authoritative on {{ ann.authoritative_set_at|date:'DATETIME_FORMAT' }}{% endif %}">
-                  <i class="fa-solid fa-star"></i> Authoritative
+                  <i class="fa-solid fa-circle-check"></i> Authoritative
                 </span>
               {% endif %}
             </div>
@@ -39,7 +39,7 @@
                           hx-target="#annotate-summary"
                           hx-swap="outerHTML"
                           hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
-                    <i class="fa-solid fa-star-half-stroke"></i> Clear authoritative
+                    <i class="fa-solid fa-xmark"></i> Clear authoritative
                   </button>
                 {% else %}
                   <button type="button"
@@ -49,7 +49,7 @@
                           hx-target="#annotate-summary"
                           hx-swap="outerHTML"
                           hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
-                    <i class="fa-regular fa-star"></i> Mark authoritative
+                    <i class="fa-regular fa-circle-check"></i> Mark authoritative
                   </button>
                 {% endif %}
               {% endif %}

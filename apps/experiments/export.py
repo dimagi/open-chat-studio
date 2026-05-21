@@ -19,6 +19,8 @@ _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
 
+UTF8_BOM = "\ufeff"  # Prepended to CSV exports so Excel detects UTF-8 encoding.
+
 
 def _format_tags(tags: list[Tag]) -> str:
     """Returns `tags` parsed into a single string in the format 'tag1, tag2, tag3'"""
@@ -213,6 +215,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
     Django's StreamingHttpResponse so the response is sent to the client
     incrementally rather than buffered entirely in memory.
     """
+    yield UTF8_BOM
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     for row in rows:

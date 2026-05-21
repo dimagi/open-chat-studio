@@ -6,23 +6,26 @@ def forwards(apps, schema_editor):
     """Backfill the authoritative flag.
 
     Two operations:
-    1. For each item in a queue with num_reviews_required==1 that has exactly one
-       submitted annotation, mark that annotation as authoritative.
+    1. For each item in a single-reviewer queue that has no authoritative annotation,
+       mark its earliest submitted annotation authoritative (matches the runtime
+       auto-mark behavior for over-budget submissions).
     2. For each item currently at COMPLETED in a multi-reviewer queue with no
        authoritative annotation, downgrade to AWAITING_RESOLUTION.
     """
     AnnotationItem = apps.get_model("human_annotations", "AnnotationItem")
     now = timezone.now()
 
-    # (1) Single-reviewer auto-mark.
+    # (1) Single-reviewer auto-mark — earliest submission wins.
     for item in AnnotationItem.objects.filter(queue__num_reviews_required=1):
-        submitted = list(item.annotations.filter(status="submitted"))
-        if len(submitted) == 1 and not submitted[0].is_authoritative:
-            ann = submitted[0]
-            ann.is_authoritative = True
-            ann.authoritative_set_by = None
-            ann.authoritative_set_at = now
-            ann.save(update_fields=["is_authoritative", "authoritative_set_by", "authoritative_set_at"])
+        if item.annotations.filter(is_authoritative=True).exists():
+            continue
+        ann = item.annotations.filter(status="submitted").order_by("created_at").first()
+        if ann is None:
+            continue
+        ann.is_authoritative = True
+        ann.authoritative_set_by = None
+        ann.authoritative_set_at = now
+        ann.save(update_fields=["is_authoritative", "authoritative_set_by", "authoritative_set_at"])
 
     # (2) Multi-reviewer COMPLETED items without authoritative -> AWAITING_RESOLUTION.
     for item in AnnotationItem.objects.filter(queue__num_reviews_required__gt=1, status="completed"):

@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from apps.annotations.models import TagCategories
 from apps.chat.conversation import BasicConversation
 from apps.chat.exceptions import ChatException
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData, SyntheticVoice
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
@@ -130,7 +130,7 @@ class PipelineBot:
         attachments = attachments or []
         state["input_message_metadata"] = {}
         if attachments:
-            state["input_message_metadata"]["ocs_attachment_file_ids"] = [
+            state["input_message_metadata"][ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS] = [
                 attachment.file_id for attachment in attachments
             ]
             state["attachments"] = [attachment.model_dump() for attachment in attachments]

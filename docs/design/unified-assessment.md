@@ -26,7 +26,9 @@ Both are in alpha/beta. They share more than they diverge:
 - They produce structurally identical results: `{field_name: value}` dicts.
 - They both attach to `ExperimentSession` (via `Chat` for tags; via `AnnotationItem` for queues).
 
-What's *missing* is the connective tissue. The #1 backlog item — concordance analysis — currently requires exporting from both systems, matching by session ID externally, and analysing in a separate tool. Four of nine 2026 backlog items are explicitly cross-system. The user-experience consequence is that workflows like "online evals with human review follow-up" require configuring five or six places that don't know about each other.
+What's *missing* is the connective tissue. The #1 backlog item — concordance analysis — currently requires exporting from both systems, matching by session ID externally, and analysing in a separate tool. The user-experience consequence is that workflows like "online evals with human review follow-up" require configuring five or six places that don't know about each other.
+
+**Current state of the backlog (May 2026).** Six of the nine 2026 backlog items have been delivered as point solutions in the existing evals + annotations subsystems: auto-population (#2), session-mode datasets (#3), evaluator tag rules (#4), session ID in exports (#7), and bidirectional dataset ↔ queue imports (#8, #9). See the [Backlog item mapping](#backlog-item-mapping) table for code references. What remains structural is the *connective tissue*: shared schema, a single value layer, in-system concordance, and a routing-rule surface that subsumes today's `EvaluatorTagRule` and the one-shot import buttons. The unified design re-pitches those point solutions as parallel paths that should be consolidated, not features that don't exist.
 
 ## User stories
 
@@ -114,6 +116,8 @@ Sessions are the primary unit being assessed. The system needs flexible ways to 
 - CSV import with column mapping: [`apps/evaluations/tasks.py:create_dataset_from_csv_task`](../../apps/evaluations/tasks.py)
 - Session clone logic: [`apps/evaluations/utils.py:make_evaluation_messages_from_sessions`](../../apps/evaluations/utils.py)
 - `ExperimentSession` model: [`apps/experiments/models.py:1412`](../../apps/experiments/models.py)
+- **Auto-population of datasets** (FR-2.3, backlog #2): [`apps/evaluations/models.py:DatasetAutoPopulationRule`](../../apps/evaluations/models.py) + periodic task [`apps/evaluations/auto_population.py:auto_populate_eval_datasets`](../../apps/evaluations/auto_population.py). Per-dataset rule with `source_experiment` + `filter_query_string`; auto-disables after 3 consecutive failures; can trigger delta runs via `auto_run_on_append`.
+- **Session-mode datasets** (FR-2.4, backlog #3): [`apps/evaluations/models.py:EvaluationMessage.create_from_sessions`](../../apps/evaluations/models.py) — one `EvaluationMessage` per session, full conversation in `history`. Selection UI: [`apps/evaluations/views/dataset_views.py`](../../apps/evaluations/views/dataset_views.py).
 
 ### FR-3: Automated scoring
 
@@ -137,6 +141,7 @@ Automated scorers run code or LLMs against session data to produce structured re
 - Celery chord orchestration: [`apps/evaluations/tasks.py:run_evaluation_task`](../../apps/evaluations/tasks.py)
 - Bot generation: [`apps/evaluations/tasks.py:run_bot_generation`](../../apps/evaluations/tasks.py)
 - Version resolution: [`apps/evaluations/models.py:EvaluationConfig.get_generation_experiment_version`](../../apps/evaluations/models.py)
+- **Tag emission from eval results** (FR-3.8, backlog #4): [`apps/evaluations/models.py:EvaluatorTagRule`](../../apps/evaluations/models.py) (rule shape) + [`apps/evaluations/tagging.py`](../../apps/evaluations/tagging.py) (matcher) + [`apps/evaluations/models.py:AppliedTag`](../../apps/evaluations/models.py) (audit row). Session-mode rules tag `session.chat`; message-mode rules tag `ChatMessage`. Generalised by `RoutingRule` / `AppliedRoutingRule` in the unified design — see D-14.
 
 ### FR-4: Human scoring
 
@@ -154,6 +159,8 @@ Human scorers (reviewers) annotate sessions one-at-a-time in the browser, produc
 | FR-4.8 | Skip items already reviewed by the current user | Must |
 | FR-4.9 | Support draft annotations (save without submitting) | Could |
 | FR-4.10 | **Auto-add sessions to queue based on eval tags** (backlog #5) | Should |
+| FR-4.11 | Detect reviewer disagreement on completed items: categorical non-unanimous, or numeric stdev above a configurable threshold. Fires the `HUMAN_DISAGREEMENT` routing trigger; intended pairing is a `RoutingRule` escalating to an adjudicator. See D-16. | Should |
+| FR-4.12 | Support **authoritative** Reviews — a Review flagged `is_authoritative=True` whose Scores override per-source consensus on the same `(target, name)`. Set by routing-rule action or by an admin override. See D-16. | Should |
 
 **Existing code:**
 - Annotation workflow: [`apps/human_annotations/views/annotate_views.py`](../../apps/human_annotations/views/annotate_views.py)
@@ -181,6 +188,7 @@ Results are the core shared artifact. Both automated and human scoring produce r
 - `Annotation`: [`apps/human_annotations/models.py`](../../apps/human_annotations/models.py)
 - CSV export (evals): [`apps/evaluations/views/evaluation_config_views.py:download_evaluation_run_csv`](../../apps/evaluations/views/evaluation_config_views.py)
 - CSV export (annotations): [`apps/human_annotations/views/queue_views.py:ExportAnnotations`](../../apps/human_annotations/views/queue_views.py)
+- **Global session ID in eval exports** (FR-5.5, backlog #7): `session` and `source_session` columns (= `ExperimentSession.external_id`) in [`apps/evaluations/const.py:EVALUATION_RUN_FIXED_HEADERS`](../../apps/evaluations/const.py), populated in `EvaluationRun.get_table_data`.
 
 ### FR-6: Aggregation & trends
 
@@ -195,6 +203,7 @@ Aggregation computes statistical summaries across results. Both systems already 
 | FR-6.5 | For batch runs: recompute `AssessmentRunAggregate` when new results land. For continuous Assessments: no stored aggregates — queries compute on demand from `Score` rows over a time window (see D-5) | Must |
 | FR-6.6 | Support trend analysis across multiple runs/time periods | Should |
 | FR-6.7 | Aggregates should be filterable by source type (show automated-only, human-only, or combined) | Should |
+| FR-6.8 | Per-source human consensus respects authoritative overrides: if any Score on `(target, name)` is from an authoritative Review, it *is* the consensus for that field; otherwise compute mean/mode normally. See D-16. | Should |
 
 **Existing code:**
 - Aggregator framework: [`apps/evaluations/aggregators.py`](../../apps/evaluations/aggregators.py)
@@ -229,6 +238,11 @@ Originally framed as "data flowing bidirectionally between automated and human a
 | FR-8.2 | **Add an `AutomatedScorer` to a human-only Assessment** to use submitted reviews as ground-truth comparison. Replaces the "import annotated sessions into an eval dataset" workflow (backlog #9). | Must |
 | FR-8.3 | Preserve provenance: every `RoutingRule` firing recorded in `AppliedRoutingRule` (see D-14) — `triggered_by` points at the originating result, `outcome` points at the produced artifact. | Should |
 | FR-8.4 | Support filtering by `Score` field values when populating queues — handled by `Source.filter_query_string` reading against `Score` rows. | Should |
+
+**Existing code (one-shot imports today; the unified design subsumes both into in-Assessment scorer composition):**
+- **Dataset → annotation queue** (backlog #8): [`apps/human_annotations/views/queue_views.py:ImportFromDataset`](../../apps/human_annotations/views/queue_views.py) + [`apps/human_annotations/forms.py:ImportFromDatasetForm`](../../apps/human_annotations/forms.py). Pulls distinct sessions from a completed eval dataset, creates `AnnotationItem`s (`item_type=SESSION`), dedupes against existing queue.
+- **Annotation queue → eval dataset** (backlog #9): [`apps/evaluations/forms.py:ImportFromAnnotationQueueForm`](../../apps/evaluations/forms.py) + dataset-view handler in [`apps/evaluations/views/dataset_views.py`](../../apps/evaluations/views/dataset_views.py); extraction via `create_dataset_from_sessions_task`. Only accepts queues whose items are `AnnotationItemType.SESSION`; produces a session-mode dataset.
+- **Limitation today:** both flows are one-shot copies, not live composition. There is no schema sharing — the eval's `Evaluator.params["output_schema"]` and the queue's `AnnotationQueue.schema` remain independent JSON blobs that happen to use the same field names. Concordance still requires an external join.
 
 ### FR-11: External escalation (cross-Assessment routing, backlog #5)
 
@@ -285,19 +299,21 @@ A separate concern from FR-8: routing items into a *different* Assessment's `Hum
 
 ## Backlog item mapping
 
-Where each 2026 backlog item lands:
+Where each 2026 backlog item lands, and what state it's in today. "Done" items work in the current evals + annotations subsystems as point solutions; the unified design subsumes them into shared shapes (single schema, single value layer, single rule surface) — see the noted limitation per row for what the unified design adds beyond the existing implementation.
 
-| # | Backlog item | Requirement(s) | Design expression |
-|---|-------------|----------------|-------------------|
-| 1 | LLM eval vs human annotation concordance | FR-7 (all) | Built-in tab on any Assessment with ≥2 scorer types; query over `Score` rows |
-| 2 | Auto-add new sessions to eval | FR-2.3 | `Source.filter_query_string` set → continuous Assessment |
-| 3 | Import entire sessions into evals | FR-2.4 | `Source.granularity = session` |
-| 4 | Evals tag sessions for filtering | FR-9 (all) | `RoutingRule(action=EMIT_TAG)`; uses existing Tag infrastructure |
-| 5 | Auto-add sessions to annotation queue from eval tags | FR-4.10, FR-9.6 (within-Assessment); FR-11 (cross-Assessment) | `RoutingRule(trigger=SCORE_VALUE, action=ESCALATE_TO_HUMAN_SCORER)` within one Assessment is the common case; cross-Assessment `ADD_TO_QUEUE` (FR-11) is the fire-and-forget escalation case |
-| 6 | Assign specific sessions to specific reviewers | FR-4.4 | Property of `HumanScorer` |
-| 7 | Export CSV with global session_id | FR-5.5 | Trivial in unified export path; targets carry session reference |
-| 8 | Import evals dataset into annotation queue | FR-8.1 | Add a `HumanScorer` to an automated-only Assessment |
-| 9 | Import annotation items into evals dataset | FR-8.2 | Add an `AutomatedScorer` to a human-only Assessment |
+| # | Backlog item | Requirement(s) | Design expression | Current state |
+|---|-------------|----------------|-------------------|---------------|
+| 1 | LLM eval vs human annotation concordance | FR-7 (all) | Built-in tab on any Assessment with ≥2 scorer types; query over `Score` rows | **Not done.** Highest priority. Requires the unified `Score` layer + shared schema to avoid external join-by-string-match. |
+| 2 | Auto-add new sessions to eval | FR-2.3 | `Source.filter_query_string` set → continuous Assessment | **Done as point solution** via [`DatasetAutoPopulationRule`](../../apps/evaluations/models.py) + periodic task. Limitation: per-dataset rule, not generalised to human queues; produces dataset items rather than continuously streaming Scores. Carries forward as the prototype for `Source.filter_query_string`. |
+| 3 | Import entire sessions into evals | FR-2.4 | `Source.granularity = session` | **Done as point solution** via session-mode `EvaluationDataset`s. Carries forward unchanged — `Source.granularity = session` is just renaming the existing mode. |
+| 4 | Evals tag sessions for filtering | FR-9 (all) | `RoutingRule(action=EMIT_TAG)`; uses existing Tag infrastructure | **Done as point solution** via [`EvaluatorTagRule`](../../apps/evaluations/models.py) + [`tagging.py`](../../apps/evaluations/tagging.py) + [`AppliedTag`](../../apps/evaluations/models.py). Limitation: rule shape is eval-result-only (no lifecycle/flag/tag triggers; no escalate/notify/add-to-queue actions). Generalised to `RoutingRule` / `AppliedRoutingRule` (D-14). |
+| 5 | Auto-add sessions to annotation queue from eval tags | FR-4.10, FR-9.6 (within-Assessment); FR-11 (cross-Assessment) | `RoutingRule(trigger=SCORE_VALUE, action=ESCALATE_TO_HUMAN_SCORER)` within one Assessment is the common case; cross-Assessment `ADD_TO_QUEUE` (FR-11) is the fire-and-forget escalation case | **Not done.** Requires the `RoutingRule` action surface (`EvaluatorTagRule` today emits tags only, doesn't add items to queues). |
+| 6 | Assign specific sessions to specific reviewers | FR-4.4 | Property of `HumanScorer` | **Not done.** Today's `AnnotationQueue.assignees` is queue-wide; per-item assignment is new. |
+| 7 | Export CSV with global session_id | FR-5.5 | Trivial in unified export path; targets carry session reference | **Done in evals**: `session` and `source_session` columns ([`EVALUATION_RUN_FIXED_HEADERS`](../../apps/evaluations/const.py)). Annotation queue exports should be audited for the same — track as a small carry-forward. |
+| 8 | Import evals dataset into annotation queue | FR-8.1 | Add a `HumanScorer` to an automated-only Assessment | **Done as point solution** via [`ImportFromDataset`](../../apps/human_annotations/views/queue_views.py). Limitation: one-shot copy, no shared schema, no live composition. Unified design replaces the import button with "add a `HumanScorer` to the Assessment." |
+| 9 | Import annotation items into evals dataset | FR-8.2 | Add an `AutomatedScorer` to a human-only Assessment | **Done as point solution** via [`ImportFromAnnotationQueueForm`](../../apps/evaluations/forms.py). Same limitation as #8 (one-shot, no shared schema). Unified design replaces with "add an `AutomatedScorer` to the Assessment." |
+
+**Net remaining backlog work (informs sequencing — out of scope for this doc):** items 1, 5, 6 are net-new and depend on unified infrastructure (Score layer, RoutingRule, per-item assignment). Items 2, 3, 4, 7, 8, 9 are carry-forward: their behaviour is preserved by the unified design but their data shapes get unified (schema, value layer, rule surface, audit row).
 
 ## Design principles
 
@@ -322,7 +338,7 @@ The conceptual model:
                         │   └── HumanScorer    (queue: assignees, num_reviews, etc.)
                         │
                         └── RoutingRules (0..N)
-                                trigger:  score-value | lifecycle | flag | tag
+                                trigger:  score-value | lifecycle | flag | disagreement | tag
                                 action:   emit-tag | escalate | notify | add-to-queue
 
        ┌────────── runtime layer (specialised, system-internal) ────────┐
@@ -424,7 +440,7 @@ The general "if X then Y" wiring. Generalises today's `EvaluatorTagRule` ([`apps
 | Field | Notes |
 |---|---|
 | `assessment` | FK |
-| `trigger_kind` | `SCORE_VALUE`, `LIFECYCLE_EVENT`, `HUMAN_FLAG`, `TAG_APPLIED` |
+| `trigger_kind` | `SCORE_VALUE`, `LIFECYCLE_EVENT`, `HUMAN_FLAG`, `HUMAN_DISAGREEMENT`, `TAG_APPLIED` |
 | `trigger_config` | JSON; shape varies by `trigger_kind` |
 | `action_kind` | `EMIT_TAG`, `ESCALATE_TO_HUMAN_SCORER`, `NOTIFY`, `ADD_TO_QUEUE` (cross-Assessment) |
 | `action_config` | JSON; shape varies by `action_kind` |
@@ -449,6 +465,7 @@ This is closer to a mini-rules engine than today's `EvaluatorTagRule`. The rich 
 | `SCORE_VALUE` | `NOTIFY` | Alert when a key signal (safety, compliance) drops below threshold in production. |
 | `SCORE_VALUE` (with `RANDOM_N_PERCENT` sample policy) | `ESCALATE_TO_HUMAN_SCORER` | Story 2 — random calibration sample for human review of judge output. |
 | `HUMAN_FLAG` | `ESCALATE_TO_HUMAN_SCORER` (different reviewer) | Story 10 — second-pass review for items a reviewer flagged as uncertain. |
+| `HUMAN_DISAGREEMENT` | `ESCALATE_TO_HUMAN_SCORER` (adjudicator, mark authoritative) | Reviewers split on a categorical or stdev-out-of-range on a numeric field; adjudicator's call becomes the authoritative answer. See D-16. |
 | `LIFECYCLE_EVENT` (session ended / run finished) | `ADD_TO_QUEUE` | Cross-Assessment routing — feed items from one Assessment's source into another's queue (backlog #5 when within-Assessment escalation isn't enough). |
 | `TAG_APPLIED` | `NOTIFY` | Alert on emergency tag applied during conversation. |
 | `TAG_APPLIED` | `ADD_TO_QUEUE` | Auto-populate an annotation queue from any tag — including human-applied UI tags, not just judge-emitted ones. |
@@ -496,7 +513,7 @@ These models stay close to their existing shapes; only their role in the archite
 - **`AssessmentRun`** — replaces `EvaluationRun`. Exists only for batch executions. Carries `bot_version` (moved from configuration to runtime — see D-3), `status`, `finished_at`, `job_id`, `error_message`. Continuous Assessments produce no `AssessmentRun` rows.
 - **`AutomatedResult`** — replaces `EvaluationResult`. Per-item-per-`AutomatedScorer`-per-run shell. Holds the raw output JSON, error string, generated bot response, etc. Each row spawns N Score rows on save (one per output schema field).
 - **`ReviewItem`** — replaces `AnnotationItem`. Per-item-per-`HumanScorer` work unit. Carries status (`pending` / `in_progress` / `completed` / `flagged`), flag history, review count, and an `is_irr_sample` bool set at item creation if the IRR sample roll succeeded (drives the `+1` completion threshold; see D-11).
-- **`Review`** — replaces `Annotation`. Per-reviewer submission. Holds the `data` JSON dict, status (`draft` / `submitted`). On submission, spawns N Score rows.
+- **`Review`** — replaces `Annotation`. Per-reviewer submission. Holds the `data` JSON dict, status (`draft` / `submitted`), and **`is_authoritative: bool`** (default `False`). On submission, spawns N Score rows. Authoritative Reviews override per-source consensus on the same `(target, name)` during aggregation. See D-16.
 - **`AppliedRoutingRule`** — generalises today's `AppliedTag`. Audit row recording every `RoutingRule` firing. See D-14.
 - **`AppliedSourceFilter`** — audit row for continuous-dispatch **failures and skips only** (filter-no-match, dedup, sample-rolled-out, scorer-error). See the [Lifecycle hooks](#operational-audit-appliedsourcefilter-failures-only) section.
 
@@ -596,7 +613,7 @@ Lifecycle hooks fire forward only. A newly-created continuous Assessment does **
 | 7 | Concordance between humans and judges | Built-in tab on any Assessment with ≥2 scorer types. Pre-aggregate Scores per `(target, name, source)` into consensus values (mean for numeric, mode for categorical), then join on `(target, name)` across sources. |
 | 8 | Trend monitoring | Two distinct views: "Runs" tab (batch comparison) and "Trends" tab (continuous time-windowed query). Both read from Score; neither uses a unified abstraction. |
 | 9 | Inter-rater reliability | `human.irr_sample_rate > 0` for the sampled-IRR pattern, or `human.num_reviews_required > 1` for everything-gets-N. Both with `human.show_prior_human_scores = False`. Skip human-side pre-aggregation; group by `Score.author` instead of `Score.source`. |
-| 10 | Second-pass review for uncertain items | `routing = [trigger=HUMAN_FLAG → action=ESCALATE_TO_HUMAN_SCORER(different reviewer)]`. Escalation flow always shows the flagging reviewer's score on the second-pass review. |
+| 10 | Second-pass review for uncertain items | `routing = [trigger=HUMAN_FLAG → action=ESCALATE_TO_HUMAN_SCORER(different reviewer)]`. Escalation flow always shows the flagging reviewer's score on the second-pass review. A parallel pattern handles system-detected disagreement: `routing = [trigger=HUMAN_DISAGREEMENT → action=ESCALATE_TO_HUMAN_SCORER(adjudicator, mark_authoritative=True)]` — see D-16. |
 
 All ten stories fit. Five of them surfaced refinements that are baked into the model above (D-3, D-4, D-7, D-10, D-11).
 
@@ -689,6 +706,7 @@ Story 10's "second-pass reviewer sees the flagging reviewer's score" is **hardco
 - **Rejected alternative:** Always require `num_reviews_required` for every item. Forces a binary "everyone reviews everything or no one does," which makes IRR prohibitively expensive at scale — the only way to measure agreement is to triple your review cost.
 - **Rejected alternative:** Decide IRR-sampling at review-time (when reviewer N+1 is about to mark an item complete). Adds randomness to completion logic and makes "which items are IRR-sampled?" un-queryable retroactively.
 - **Why:** IRR is a sampled measurement, not a property of the workflow. `num_reviews_required` describes what the workflow needs; `irr_sample_rate` describes what we'll measure to validate it. Keeping them separate lets the same `HumanScorer` express both single-review-with-IRR-sample and full-consensus-with-IRR-sample without introducing a new "review mode" enum.
+- **Note on adjudication:** IRR sampling is for *measuring agreement*, not *resolving disagreement*. When reviewers actually disagree and a canonical answer is needed, the mechanism is `HUMAN_DISAGREEMENT` + authoritative Reviews (see D-16), independent of IRR sampling.
 - **Scope of v1:** IRR sampling adds exactly one extra reviewer when triggered. If "+N extra reviewers" becomes a real need, an `irr_extra_reviews` field is non-breaking to add later.
 
 ### D-12: Reuse the filter language, not the `FilterSet` model
@@ -722,6 +740,24 @@ Story 10's "second-pass reviewer sees the flagging reviewer's score" is **hardco
 - **Rejected alternative — dispatch-ledger table for at-most-once:** Would duplicate state that already exists in the action-side uniqueness constraints. Same pattern today's `StaticTrigger.fire()` follows: keep dispatch dumb, push correctness to consumers.
 - **See:** the [Lifecycle hooks](#lifecycle-hooks) section for the event types, dispatch flow, idempotency mechanics, audit shape, and `StaticTrigger` relationship in full.
 
+### D-16: Reviewer disagreement is resolved by authoritative Reviews, not by statistical fiat
+- **Decision:** Reviewer disagreement is handled by two small additions: a new `HUMAN_DISAGREEMENT` routing trigger that fires when reviewers don't agree on a completed item, and an `is_authoritative: bool` flag on `Review` whose Scores override per-source consensus for the same `(target, name)`. The intended pairing is `RoutingRule(trigger=HUMAN_DISAGREEMENT, action=ESCALATE_TO_HUMAN_SCORER(adjudicator, mark_authoritative=True))`.
+- **What "disagreement" means:**
+  - **Categorical:** not unanimous.
+  - **Numeric:** stdev across reviewers above a per-rule threshold (in `trigger_config`).
+  - **String:** never triggers disagreement (strings don't aggregate; see FR-6.3).
+- **Three workflows on one mechanism:**
+  - **No adjudication needed** (today's implicit shape): `num_reviews_required = 1`, no routing rule. Each Review is the answer.
+  - **Statistical consensus** (multi-reviewer averaging): `num_reviews_required > 1`, no routing rule. Mean/mode is the consensus; ties for categorical surface as "no consensus established" until adjudicated.
+  - **Adjudicated consensus**: `num_reviews_required > 1` + `RoutingRule(trigger=HUMAN_DISAGREEMENT → adjudicate-authoritative)`. Most disagreements are caught and resolved by a designated adjudicator; result is a single canonical answer.
+- **Aggregation rule (FR-6.8):** "if any Score on `(target, name)` is from an authoritative Review, it *is* the consensus for that field; otherwise compute mean/mode normally." One line, no special-casing in the query layer beyond a where-clause preference.
+- **Setting `is_authoritative`:**
+  - Procedurally by routing-rule action — `ESCALATE_TO_HUMAN_SCORER` accepts `mark_authoritative=True` in its `action_config`. The escalated Review is auto-flagged on submission.
+  - Manually by a team-lead-permission user — explicit toggle in the UI on any Review.
+- **Rejected alternative — promote authoritative to a separate `Score.source` enum value (`HUMAN_AUTHORITATIVE`):** conflates "who/what produced this" (a property of the source kind) with "is this the final answer" (a property of the act of submission). Cleaner to keep `source=HUMAN_REVIEW` for all human Scores and put the authoritative flag on the producing artefact (`Review`).
+- **Rejected alternative — reviewer hierarchy / vote weighting:** introduces a ranking concept (senior reviewer, lead reviewer, etc.) that doesn't exist elsewhere in OCS. The authoritative flag captures the same outcome without adding a new dimension to the permission model. "Adjudicator" is just whoever the routing rule (or admin override) routes to.
+- **Scope:** v1 supports binary `is_authoritative`. Partial-field authority (override only the disputed fields, leave others as consensus) is expressed by submitting a Review with only the disputed fields in `output_fields` — re-uses D-10's per-scorer subset mechanism rather than adding new authority granularity.
+
 ## Mapping to existing OCS code
 
 | Today | Becomes |
@@ -739,6 +775,8 @@ Story 10's "second-pass reviewer sees the flagging reviewer's score" is **hardco
 | [`Annotation`](../../apps/human_annotations/models.py) | `Review` (workflow shell) + N `Score` rows |
 | [`EvaluatorTagRule`](../../apps/evaluations/models.py) | `RoutingRule` (broader trigger surface) |
 | [`AppliedTag`](../../apps/evaluations/models.py) | Generalised into `AppliedRoutingRule`: one audit table for all `RoutingRule` firings, regardless of action type. See D-14. |
+| [`DatasetAutoPopulationRule`](../../apps/evaluations/models.py) | Subsumed into `Source.filter_query_string` semantics (continuous mode). The auto-population rule's `source_experiment` + `filter_query_string` + `is_enabled` become properties of the Assessment's Source; the periodic Celery scan becomes the lifecycle-hook dispatch (D-15). Auto-disable-after-N-failures behaviour carries forward as an operational concern on `AppliedSourceFilter` failure counts. |
+| [`ImportFromDataset`](../../apps/human_annotations/views/queue_views.py) / [`ImportFromAnnotationQueueForm`](../../apps/evaluations/forms.py) | Retired as user-facing one-shot imports. Equivalent behaviour expressed as "add another scorer to the same Assessment" (FR-8). |
 | [`EvaluationRunAggregate`](../../apps/evaluations/models.py) | unchanged — still the eager batch-aggregate cache |
 | [`AnnotationQueueAggregate`](../../apps/human_annotations/models.py) | retired; aggregates queried from `Score` |
 | [`Tag`](../../apps/annotations/models.py), [`CustomTaggedItem`](../../apps/annotations/models.py), [`UserComment`](../../apps/annotations/models.py) | Unchanged for ad-hoc human tags and system condition tags. See D-9 for the two tag uses that migrate out. |
@@ -776,7 +814,8 @@ These need answers before sequencing. None blocks the design.
 | **AssessmentRun** | A batch execution of an Assessment. Continuous (live-filter) Assessments do not produce runs. |
 | **AutomatedResult** | Per-item, per-`AutomatedScorer`, per-run workflow shell. Holds raw output and errors. Spawns Score rows on save. |
 | **ReviewItem** | Per-item, per-`HumanScorer` work unit for human review. Replaces `AnnotationItem`. |
-| **Review** | Per-reviewer submission against a `ReviewItem`. Replaces `Annotation`. Spawns Score rows on submission. |
+| **Review** | Per-reviewer submission against a `ReviewItem`. Replaces `Annotation`. Spawns Score rows on submission. May be flagged `is_authoritative=True` — see D-16. |
+| **Authoritative Review** | A `Review` whose Scores override per-source consensus on the same `(target, name)` during aggregation. Set procedurally by a `HUMAN_DISAGREEMENT` routing rule's adjudication action, or manually by a team-lead-permission user. See D-16. |
 | **Score** | A single typed score value attached to a target. Written by all sources (automated, human, user-feedback). The unit aggregation, concordance, and trends query against. |
 | **AppliedRoutingRule** | Audit row recording a `RoutingRule` firing. Generalises today's `AppliedTag`. |
 | **AppliedSourceFilter** | Audit row recording continuous-dispatch **failures and skips** (filter-no-match, dedup, sample-rolled-out, scorer-error). Successes are not audited — visible from the produced Score row. |

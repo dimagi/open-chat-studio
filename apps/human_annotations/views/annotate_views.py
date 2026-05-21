@@ -367,14 +367,15 @@ class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
     permission_required = "human_annotations.change_annotationqueue"
 
     def post(self, request, team_slug: str, pk: int, item_pk: int, annotation_pk: int):
-        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         annotation = get_object_or_404(
             Annotation.objects.select_related("item__queue"),
             id=annotation_pk,
             item_id=item_pk,
-            item__queue=queue,
+            item__queue_id=pk,
+            item__queue__team=request.team,
             status=AnnotationStatus.SUBMITTED,
         )
+        queue = annotation.item.queue
         value = request.POST.get("value", "false").lower() == "true"
 
         with transaction.atomic():
@@ -399,12 +400,10 @@ class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
 
         annotation.recompute_queue_aggregates(queue)
 
-        if request.headers.get("HX-Request"):
-            item.refresh_from_db()
-            annotations = _build_annotations_context(item, request.user, queue)
-            return render(
-                request,
-                "human_annotations/partials/annotation_list.html",
-                {"queue": queue, "item": item, "annotations": annotations},
-            )
-        return redirect("human_annotations:annotate_item", team_slug=team_slug, pk=pk, item_pk=item_pk)
+        item.refresh_from_db()
+        annotations = _build_annotations_context(item, request.user, queue)
+        return render(
+            request,
+            "human_annotations/partials/annotation_list.html",
+            {"queue": queue, "item": item, "annotations": annotations},
+        )

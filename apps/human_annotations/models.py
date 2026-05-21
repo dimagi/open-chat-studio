@@ -254,25 +254,38 @@ class Annotation(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
-        if is_new and self.status == AnnotationStatus.SUBMITTED:
-            self._maybe_auto_mark_authoritative()
-        super().save(*args, **kwargs)
-        if is_new and self.status == AnnotationStatus.SUBMITTED:
-            self._update_item_review_count()
-            # Local import: a module-level import would form a real runtime cycle
-            # (human_annotations.models → assessments.score_writers → human_annotations.models
-            # via Score.review FK string resolution). Same pattern as recompute_queue_aggregates.
-            from apps.assessments.score_writers import write_scores_from_annotation  # noqa: PLC0415
+        if not (is_new and self.status == AnnotationStatus.SUBMITTED):
+            super().save(*args, **kwargs)
+            return
 
-            try:
-                write_scores_from_annotation(self)
-            except Exception:
-                logger.exception("Failed to write Score rows for annotation %s", self.id)
+        # Lock the item across the auto-mark check + save so two concurrent submissions
+        # on a single-review queue can't both pass the check and violate
+        # one_authoritative_annotation_per_item.
+        with transaction.atomic():
+            item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
+            self._maybe_auto_mark_authoritative()
+            super().save(*args, **kwargs)
+            item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
+            item.update_status(save=False)
+            item.save(update_fields=["review_count", "status"])
+        self.recompute_queue_aggregates(item.queue)
+
+        # Score writes happen outside the transaction so a writer failure cannot roll
+        # back the annotation save. Local import to avoid a runtime cycle
+        # (human_annotations.models → assessments.score_writers → human_annotations.models
+        # via Score.review FK string resolution).
+        from apps.assessments.score_writers import write_scores_from_annotation  # noqa: PLC0415
+
+        try:
+            write_scores_from_annotation(self)
+        except Exception:
+            logger.exception("Failed to write Score rows for annotation %s", self.id)
 
     def _maybe_auto_mark_authoritative(self):
         """For single-reviewer queues, auto-mark the first submission as authoritative.
         Skips when another authoritative annotation already exists on the item (handles
-        over-budget submissions and avoids violating the partial unique constraint)."""
+        over-budget submissions and avoids violating the partial unique constraint).
+        Caller must hold a row-level lock on the item to serialize concurrent submissions."""
         queue = self.item.queue
         if queue.num_reviews_required != 1:
             return
@@ -281,16 +294,6 @@ class Annotation(BaseTeamModel):
         self.is_authoritative = True
         self.authoritative_set_by = None
         self.authoritative_set_at = timezone.now()
-
-    def _update_item_review_count(self):
-        """Increment item review count, update status, and recompute queue aggregates."""
-        with transaction.atomic():
-            item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
-            item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
-            item.update_status(save=False)
-            item.save(update_fields=["review_count", "status"])
-
-        self.recompute_queue_aggregates(item.queue)
 
     def recompute_queue_aggregates(self, queue=None):
         """Recompute aggregates for the queue this annotation belongs to."""

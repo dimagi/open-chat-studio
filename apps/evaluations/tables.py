@@ -54,6 +54,13 @@ class EvaluationConfigTable(tables.Table):
                 icon_class="fa-solid fa-play",
                 title="Run",
             ),
+            actions.delete_action(
+                url_name="evaluations:delete",
+                confirm_message=(
+                    "Delete this evaluation? This will also delete all run history and results. This cannot be undone."
+                ),
+                required_permissions=["evaluations.delete_evaluationconfig"],
+            ),
         ]
     )
 
