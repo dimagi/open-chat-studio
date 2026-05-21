@@ -273,8 +273,29 @@ class ParticipantValidationStage(ProcessingStage):
 #### Stage 2: SessionResolutionStage
 
 ```py
+ParticipantIdentifierFilter = Callable[[MessageProcessingContext], Q]
+"""Channel-supplied resolver for the Participant lookup filter.
+
+Invoked at runtime by SessionResolutionStage with the live context, so the
+callable can read ctx.message and ctx.participant_identifier. Returns the Q
+clause used to match an existing Participant. Mirrors DeliveryErrorHandler:
+ChannelBase exposes an optional hook (default: None), and only channels
+with non-trivial matching rules (currently just WhatsappChannel) override.
+"""
+
+
 class SessionResolutionStage(ProcessingStage):
-    """Loads or creates experiment session. Also handles /reset command."""
+    """Loads or creates experiment session. Also handles /reset command.
+
+    Channels can inject a ``participant_identifier_filter`` callable via
+    ChannelBase._get_participant_identifier_filter() to customize how an
+    existing Participant is matched. The callable is invoked at runtime
+    with the live context. Default (callable is None) matches on the
+    normalized identifier alone.
+    """
+
+    def __init__(self, participant_identifier_filter: ParticipantIdentifierFilter | None = None) -> None:
+        self._participant_identifier_filter = participant_identifier_filter
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.participant_allowed
@@ -284,15 +305,24 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session:
             return  # Already have session
 
-        # Try to load existing session (with select_related for performance)
+        filter_q = self._resolve_filter(ctx)
+
+        # Filter Participant first (so the channel-supplied Q can match on
+        # alternative identifiers like a legacy phone number), then look up
+        # sessions belonging to any of those participants.
+        participants = Participant.objects.filter(
+            filter_q,
+            team=ctx.experiment.team,
+            platform=ctx.experiment_channel.platform,
+        )
         ctx.experiment_session = (
             ExperimentSession.objects
-            .select_related("experiment", "participant")
             .filter(
                 experiment=ctx.experiment.get_working_version(),
-                participant__identifier=ctx.participant_identifier,
+                participant__in=participants,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .select_related("experiment", "participant")
             .first()
         )
 
@@ -304,6 +334,17 @@ class SessionResolutionStage(ProcessingStage):
         if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)
 
+    def _resolve_filter(self, ctx: MessageProcessingContext) -> Q:
+        """Resolve the Participant lookup filter for this request.
+
+        Calls the channel-supplied callable if injected; otherwise falls
+        back to matching on the normalized identifier alone.
+        """
+        if self._participant_identifier_filter is not None:
+            return self._participant_identifier_filter(ctx)
+        identifier = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+        return Q(identifier=identifier)
+
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
         return ctx.message.message_text and ctx.message.message_text.strip() == "/reset"
 
@@ -313,14 +354,30 @@ class SessionResolutionStage(ProcessingStage):
             ctx.experiment_session.end(reason="reset by user")
 
         raise EarlyExitResponse("Session reset. Send a new message to start over.")
+
+    def _create_session(self, ctx: MessageProcessingContext):
+        """Delegates to _start_experiment_session.
+
+        The same channel-supplied filter is forwarded so that participant
+        lookup (before creation) honors the disjunctive match. The helper
+        retains its simple-vs-disjunctive Q branching unchanged.
+        """
+        return _start_experiment_session(
+            working_experiment=ctx.experiment.get_working_version(),
+            experiment_channel=ctx.experiment_channel,
+            participant_identifier=ctx.participant_identifier,
+            session_status=SessionStatus.SETUP,
+            participant_filter=self._resolve_filter(ctx),
+        )
 ```
 
-**Maps to**: `_ensure_sessions_exists()` (line 697-726) and `/reset` handling
+**Maps to**: `_ensure_sessions_exists()` (line 697-726), `/reset` handling, and `get_participant_identifier_filter()` (line 256-264 / line 1195-1205 in current code)
 
 > **Review decisions applied**:
 > - **`/reset` inside SessionResolutionStage** (Decision 7): The reset command is fundamentally about session lifecycle, so it belongs here rather than as a separate stage.
 > - **Pre-set session** (Decision 4): Web and Slack channels may pre-set `ctx.experiment_session` at creation time. This stage respects that and skips lookup.
 > - **`select_related`** (Decision 13): Session query uses `select_related("experiment", "participant")` to avoid N+1 queries downstream.
+> - **`participant_identifier_filter` injection (Fix 9)**: Channels override `ChannelBase._get_participant_identifier_filter()` to inject a callable that returns the `Q` clause used for Participant lookup. Invoked at runtime with the live context, so it can read per-message state. Default `None` → stage falls back to matching on normalized identifier alone. Currently only WhatsappChannel overrides (BSUID OR legacy phone). Mirrors the `DeliveryErrorHandler` pattern used by TelegramChannel for send-error side effects.
 
 #### Stage 3: MessageTypeValidationStage
 
@@ -1110,14 +1167,17 @@ class ChannelBase(ABC):
     def _build_pipeline(self) -> MessageProcessingPipeline:
         """Build standard processing pipeline.
 
-        All stages are zero-arg — they get dependencies from the context.
+        Stages are mostly zero-arg — they get dependencies from the context.
+        Two stages take channel-supplied callables at construction:
+          - SessionResolutionStage(participant_identifier_filter=...)
+          - SendingErrorHandlerStage(error_handlers=...)
         Core stages can be short-circuited by EarlyExitResponse.
         Terminal stages always run.
         """
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
@@ -1133,6 +1193,20 @@ class ChannelBase(ABC):
                 ActivityTrackingStage(),
             ],
         )
+
+    def _get_participant_identifier_filter(self) -> ParticipantIdentifierFilter | None:
+        """Return a channel-supplied callable for resolving the Participant lookup filter.
+
+        Each callable returns the Q clause for Participant matching. Default: None —
+        SessionResolutionStage falls back to matching on the normalized identifier
+        alone. Override in subclasses to register platform-specific matching (e.g.
+        WhatsappChannel matches BSUID OR legacy phone number for continuity across
+        the BSUID rollout).
+
+        Mirrors `_get_delivery_error_handlers`: optional channel-side hook for
+        injecting a runtime callable into a generic stage.
+        """
+        return None
 
     def new_user_message(self, message: BaseMessage) -> ChatMessage:
         """Main entry point - runs message through pipeline"""
@@ -1310,7 +1384,39 @@ class TelegramChannel(ChannelBase):
         return [handle_telegram_block]
 ```
 
-**Much simpler\!** Channel-specific behavior is isolated to callbacks, sender, capabilities, and delivery-error handlers — not spread throughout the base class. Stages are zero-arg (with the exception of `SendingErrorHandlerStage`, which takes the channel-supplied handler chain), so `_build_pipeline()` rarely needs overriding.
+**Much simpler\!** Channel-specific behavior is isolated to callbacks, sender, capabilities, delivery-error handlers, and (when needed) a Participant filter — not spread throughout the base class. Stages are mostly zero-arg, with two opt-in channel injections at construction (`SendingErrorHandlerStage.error_handlers` and `SessionResolutionStage.participant_identifier_filter`).
+
+### 7b\. WhatsApp Example: Channel-Supplied Participant Filter
+
+WhatsappChannel is the sole channel that needs non-default Participant matching today. Same pattern as `handle_telegram_block`: a plain function colocated with the channel, plugged in via a `ChannelBase` hook.
+
+```py
+# apps/channels/channels_v2/whatsapp_channel.py
+
+def whatsapp_participant_filter(ctx: MessageProcessingContext) -> Q:
+    """Match BSUID OR legacy phone number for WhatsApp BSUID-rollout continuity.
+
+    Post-rollout, new webhooks always carry a BSUID (ctx.participant_identifier);
+    some also carry a legacy phone number (ctx.message.phone_number), allowing
+    continuity with phone-keyed participants from before the BSUID rollout.
+    """
+    identifier = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+    phone = getattr(ctx.message, "phone_number", None) if ctx.message else None
+    if phone:
+        return Q(identifier=identifier) | Q(identifier=phone)
+    return Q(identifier=identifier)
+
+
+class WhatsappChannel(ChannelBase):
+    # ... callbacks/sender/capabilities (provider-dependent — see Issue 3)
+
+    def _get_participant_identifier_filter(self) -> ParticipantIdentifierFilter:
+        return whatsapp_participant_filter
+```
+
+> **Why a closure, not a precomputed `Q`?** The filter depends on `ctx.message` and `ctx.participant_identifier`, neither of which exist when `_build_pipeline()` runs (pipeline is constructed once per channel instance, before any inbound message). Deferring evaluation to a callable invoked at runtime gives the filter per-message access to the live context — identical to how `DeliveryErrorHandler` callables receive `(ctx, exc)` at runtime.
+>
+> **No injection in other channels.** Every non-WhatsApp channel inherits the default `_get_participant_identifier_filter()` → `None`, and `SessionResolutionStage` falls back to its built-in `Q(identifier=normalize_identifier(...))`. No change to existing behavior for Telegram, Slack, Facebook, etc.
 
 ### 8\. Channel-Specific Pipeline Overrides
 
@@ -1324,7 +1430,7 @@ class ApiChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
@@ -1468,7 +1574,7 @@ class CommCareConnectChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 CommCareConsentCheckStage(),  # Platform-specific consent
                 MessageTypeValidationStage(),
@@ -2041,7 +2147,8 @@ def test_format_reference_section_with_citations():
 Each stage should have tests for these edge cases (where applicable):
 
 - **ParticipantValidationStage**: Public experiment, private+allowed, private+blocked, missing participant_id
-- **SessionResolutionStage**: Existing session found, no session (create new), pre-set session (Web/Slack), /reset with active session, /reset with no session, session in completed status
+- **SessionResolutionStage**: Existing session found, no session (create new), pre-set session (Web/Slack), /reset with active session, /reset with no session, session in completed status, default filter (no callable injected → normalized identifier match), channel-supplied filter callable invoked with live context, filter callable returning disjunctive Q (e.g. WhatsApp BSUID-or-phone), filter forwarded to `_start_experiment_session` on session create
+- **`whatsapp_participant_filter`** (channel-specific filter, colocated with `WhatsappChannel`): message has no phone_number → returns simple `Q(identifier=normalized)`, message has phone_number → returns disjunctive `Q(identifier=normalized) | Q(identifier=phone)`, `ctx.message is None` (ad hoc mini-pipeline) → falls back to identifier-only
 - **MessageTypeValidationStage**: Supported type, unsupported type, empty message
 - **SessionActivationStage**: Consent disabled (activates), no consent form (activates), consent enabled with form (skips), no session (skips)
 - **ConsentFlowStage**: Each status transition (SETUP→PENDING, PENDING→ACTIVE, PENDING→PENDING_PRE_SURVEY, PENDING_PRE_SURVEY→ACTIVE), consent denied, channel without consent support
@@ -2365,7 +2472,14 @@ def test_participant_validation_blocks_private_experiment():
 
 ```py
 class SessionResolutionStage(ProcessingStage):
-    """Loads or creates experiment session. Also handles /reset."""
+    """Loads or creates experiment session. Also handles /reset.
+
+    Accepts an optional channel-supplied ParticipantIdentifierFilter
+    callable for custom Participant matching (e.g. WhatsApp BSUID-or-phone).
+    """
+
+    def __init__(self, participant_identifier_filter: ParticipantIdentifierFilter | None = None):
+        self._participant_identifier_filter = participant_identifier_filter
 
     def should_run(self, ctx) -> bool:
         return ctx.participant_allowed
@@ -2379,17 +2493,26 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session:
             return
 
-        # Try to load existing (with select_related for performance)
-        ctx.experiment_session = self._load_latest_session(ctx)
+        # Resolve the channel-supplied filter (or fall back to default)
+        filter_q = self._resolve_filter(ctx)
 
-        # Create new if needed
+        # Try to load existing (with select_related for performance)
+        ctx.experiment_session = self._load_latest_session(ctx, filter_q)
+
+        # Create new if needed (forwards the same filter)
         if not ctx.experiment_session:
-            ctx.experiment_session = self._create_new_session(ctx)
+            ctx.experiment_session = self._create_new_session(ctx, filter_q)
+
+    def _resolve_filter(self, ctx) -> Q:
+        if self._participant_identifier_filter is not None:
+            return self._participant_identifier_filter(ctx)
+        identifier = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+        return Q(identifier=identifier)
 ```
 
-**Tests**: Test session loading, creation, /reset with active session, /reset with no session, pre-set session
+**Tests**: Test session loading, creation, /reset with active session, /reset with no session, pre-set session, default filter behavior, channel-supplied filter behavior (using a WhatsApp-like BSUID-or-phone matcher fixture)
 
-**Commit**: "Extract SessionResolutionStage with /reset handling"
+**Commit**: "Extract SessionResolutionStage with /reset handling and ParticipantIdentifierFilter hook"
 
 **3.2 MessageTypeValidationStage** (Week 4):
 
@@ -2657,7 +2780,7 @@ class ChannelBase(ABC):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
@@ -2830,6 +2953,7 @@ These fixes were identified during gap analysis comparing the new pipeline appro
 | G6 | Analytics | `ctx.human_message_tags` + PersistenceStage tagging | `MessageTypeValidationStage` appends `("unsupported_message_type", ERROR)` tag. `PersistenceStage` applies tags to the human ChatMessage. Preserves current analytics behavior. |
 | G7 | CommCare | Late-binding `CommCareConnectSender` (visitor pattern) | Sender holds a channel reference and resolves `connect_channel_id`/`encryption_key` lazily on first send via `@cached_property` on the channel. |
 | G8 | Stage ordering | SessionActivation immediately after SessionResolution | Groups session lifecycle stages together: resolve → activate → validate message type. |
+| G9 | WhatsApp | `ParticipantIdentifierFilter` injection (mirrors `DeliveryErrorHandler`) | `ChannelBase._get_participant_identifier_filter()` returns an optional `Callable[[ctx], Q]` that `SessionResolutionStage` invokes at runtime to resolve the Participant lookup filter. Default `None` → stage falls back to `Q(identifier=normalize_identifier(...))`. Only `WhatsappChannel` overrides, returning `whatsapp_participant_filter` (a closure colocated with the channel) which produces `Q(identifier=BSUID) \| Q(identifier=phone)` when `ctx.message.phone_number` is present. Replaces the `get_participant_identifier_filter` method that lived on `ChannelBase` and `WhatsappChannel` in the pre-refactor code. |
 
 ### Performance Notes (Deferred)
 
@@ -2908,11 +3032,11 @@ The rollout happens one channel at a time. Each PR adds the new channel implemen
 
 ### PR 5: WhatsappChannel — [ ] Not started
 
-- [ ] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `concrete/test_whatsapp_channel.py` + `senders/test_whatsapp_sender.py` + `callbacks/test_whatsapp_callbacks.py`
+- [ ] **Add:** `WhatsappChannel` + `WhatsappSender` + `WhatsappCallbacks` + `whatsapp_participant_filter` + `concrete/test_whatsapp_channel.py` + `senders/test_whatsapp_sender.py` + `callbacks/test_whatsapp_callbacks.py` + `filters/test_whatsapp_participant_filter.py`
 - [ ] **Mark for removal:** Add `# TODO: remove after channels refactor` to `WhatsappChannel` in `apps/chat/channels.py` + `apps/channels/tests/test_whatsapp_integration.py`
 - [ ] **Update:** `get_channel_class_for_platform()` + `apps/channels/tasks.py` imports to use new implementation
 
-**Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files.
+**Why here:** First channel that delegates capabilities to `messaging_service` at runtime. Validates lazy messaging service resolution and capability delegation. Full pipeline with voice and files. **Also the first (and only) channel to override `_get_participant_identifier_filter()`** — uses `whatsapp_participant_filter` (colocated closure, mirrors `handle_telegram_block` from PR 4) to enable BSUID-or-phone Participant matching for legacy continuity across the BSUID rollout (G9).
 
 ### PR 6: SlackChannel — [ ] Not started
 

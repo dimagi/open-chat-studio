@@ -50,6 +50,12 @@ Gap analysis fixes (post-review):
             MessageTypeValidationStage sets ("unsupported_message_type", ERROR) tag for analytics.
   - Fix 7:  CommCareConnectSender uses late-binding (visitor pattern) — holds channel reference,
             resolves connect_channel_id/encryption_key lazily on first send.
+  - Fix 8:  SessionResolutionStage accepts an optional ParticipantIdentifierFilter callable.
+            Channels override ChannelBase._get_participant_identifier_filter() to inject
+            custom Participant matching. The callable receives the live context and returns
+            a Q clause. Default: None — stage falls back to Q(identifier=normalized_identifier).
+            WhatsappChannel uses this to match on BSUID OR legacy phone number, mirroring the
+            DeliveryErrorHandler pattern used by TelegramChannel for send-error side effects.
 """
 
 from __future__ import annotations
@@ -62,6 +68,8 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from io import BytesIO
 from typing import TYPE_CHECKING, ClassVar
+
+from django.db.models import Q
 
 if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
@@ -342,15 +350,36 @@ class ParticipantValidationStage(ProcessingStage):
             raise EarlyExitResponse("Sorry, you are not allowed to chat to this bot")
 
 
+ParticipantIdentifierFilter = Callable[["MessageProcessingContext"], Q]
+"""Channel-supplied resolver for the Participant lookup filter.
+
+Invoked at runtime by SessionResolutionStage with the live context, so the
+callable can read ctx.message and ctx.participant_identifier. Returns the Q
+clause used to match an existing Participant. Mirrors the DeliveryErrorHandler
+pattern: ChannelBase exposes an optional hook (default: None), and only
+channels with non-trivial matching rules (currently just WhatsappChannel)
+override it.
+"""
+
+
 class SessionResolutionStage(ProcessingStage):
     """Loads or creates an experiment session.
 
     Also handles the /reset command (Issue 7).
     For Web/Slack channels the session is pre-set on the context, so this
     stage becomes a no-op (Issue 4).
+
+    Channels can inject a ``participant_identifier_filter`` callable to
+    customize how an existing Participant is matched. The callable is
+    invoked at runtime with the live context, so it has access to
+    ``ctx.message`` and ``ctx.participant_identifier``. Default behavior
+    (callable is ``None``) matches on the normalized identifier alone.
     """
 
     RESET_COMMAND = "/reset"
+
+    def __init__(self, participant_identifier_filter: ParticipantIdentifierFilter | None = None) -> None:
+        self._participant_identifier_filter = participant_identifier_filter
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.participant_allowed
@@ -360,14 +389,24 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Try to load an existing active session (Issue 13: select_related)
-        from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-        from apps.experiments.models import ExperimentSession
+        filter_q = self._resolve_filter(ctx)
 
+        # Try to load an existing active session (Issue 13: select_related).
+        # We filter Participant first (so the channel-supplied Q can match on
+        # alternative identifiers like a legacy phone number), then look up
+        # sessions belonging to any of those participants.
+        from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
+        from apps.experiments.models import ExperimentSession, Participant
+
+        participants = Participant.objects.filter(
+            filter_q,
+            team=ctx.experiment.team,
+            platform=ctx.experiment_channel.platform,
+        )
         ctx.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=ctx.experiment.get_working_version(),
-                participant__identifier=str(ctx.participant_identifier),
+                participant__in=participants,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .select_related("participant", "chat", "experiment_channel")
@@ -384,6 +423,17 @@ class SessionResolutionStage(ProcessingStage):
         # Create a new session if none found
         if not ctx.experiment_session:
             ctx.experiment_session = self._create_session(ctx)
+
+    def _resolve_filter(self, ctx: MessageProcessingContext) -> Q:
+        """Resolve the Participant lookup filter for this request.
+
+        Calls the channel-supplied callable if one was injected; otherwise
+        falls back to matching on the normalized identifier alone.
+        """
+        if self._participant_identifier_filter is not None:
+            return self._participant_identifier_filter(ctx)
+        identifier = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+        return Q(identifier=identifier)
 
     def _is_reset_request(self, ctx: MessageProcessingContext) -> bool:
         from apps.chat.channels import MESSAGE_TYPES
@@ -402,7 +452,13 @@ class SessionResolutionStage(ProcessingStage):
         raise EarlyExitResponse("Conversation reset")
 
     def _create_session(self, ctx: MessageProcessingContext):
-        """Delegates to the existing _start_experiment_session helper."""
+        """Delegates to the existing _start_experiment_session helper.
+
+        The same channel-supplied filter is forwarded so that participant
+        lookup (before creation) honors the disjunctive match. The helper
+        itself still handles the simple-vs-disjunctive Q branching that
+        _start_experiment_session already implements.
+        """
         from apps.chat.channels import _start_experiment_session
         from apps.experiments.models import SessionStatus
 
@@ -411,6 +467,7 @@ class SessionResolutionStage(ProcessingStage):
             experiment_channel=ctx.experiment_channel,
             participant_identifier=ctx.participant_identifier,
             session_status=SessionStatus.SETUP,
+            participant_filter=self._resolve_filter(ctx),
         )
 
 
@@ -1276,7 +1333,7 @@ class ChannelBase(ABC):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
@@ -1321,6 +1378,19 @@ class ChannelBase(ABC):
         TelegramChannel registers a 403 "bot blocked" → consent revocation handler).
         """
         return []
+
+    def _get_participant_identifier_filter(self) -> ParticipantIdentifierFilter | None:
+        """Return a channel-supplied callable that resolves the Participant lookup filter.
+
+        Default: ``None`` — SessionResolutionStage falls back to matching on the
+        normalized identifier alone. Override to inject custom matching rules
+        (e.g. WhatsappChannel matches BSUID OR legacy phone number to keep
+        continuity across the BSUID rollout).
+
+        Mirrors ``_get_delivery_error_handlers``: only channels that need
+        non-default behavior override; everyone else inherits the no-op.
+        """
+        return None
 
     @abstractmethod
     def _get_callbacks(self) -> ChannelCallbacks:
@@ -1564,9 +1634,35 @@ class WhatsappCallbacks(ChannelCallbacks):
         self._sender.send_text(text=f"I heard: {transcript}", recipient=recipient)
 
 
+def whatsapp_participant_filter(ctx: MessageProcessingContext) -> Q:
+    """Match an existing WhatsApp participant on either BSUID or legacy phone number.
+
+    Post-rollout, new WhatsApp webhooks always carry a BSUID
+    (``ctx.participant_identifier``); some also carry a legacy phone number
+    (``ctx.message.phone_number``), allowing continuity with phone-keyed
+    participants from before the BSUID rollout. When the phone number is
+    present, the filter becomes disjunctive — _start_experiment_session
+    detects this and uses an ``.exists()`` probe instead of
+    ``get_or_create`` for participant lookup.
+
+    Mirrors ``handle_telegram_block`` (the Telegram delivery error handler):
+    a plain function colocated with the channel, plugged in via the
+    ``_get_participant_identifier_filter`` hook.
+    """
+    identifier = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+    phone = getattr(ctx.message, "phone_number", None) if ctx.message else None
+    if phone:
+        return Q(identifier=identifier) | Q(identifier=phone)
+    return Q(identifier=identifier)
+
+
 class WhatsappChannel(ChannelBase):
     """WhatsApp channel — capabilities are determined at runtime from the
-    messaging service (Twilio vs TurnIO). This is Issue 3 in action."""
+    messaging service (Twilio vs TurnIO). This is Issue 3 in action.
+
+    Also overrides ``_get_participant_identifier_filter`` to enable BSUID
+    OR phone-number Participant matching during the BSUID rollout (Fix 8).
+    """
 
     def __init__(self, experiment, experiment_channel, experiment_session=None):
         super().__init__(experiment, experiment_channel, experiment_session)
@@ -1595,6 +1691,11 @@ class WhatsappChannel(ChannelBase):
             supported_message_types=self.messaging_service.supported_message_types,
             can_send_file=self.messaging_service.can_send_file,
         )
+
+    def _get_participant_identifier_filter(self) -> ParticipantIdentifierFilter:
+        # BSUID-OR-phone matching is WhatsApp-specific and lives next to the
+        # channel, not in the generic SessionResolutionStage.
+        return whatsapp_participant_filter
 
 
 # ---------------------------------------------------------------------------
@@ -1865,7 +1966,7 @@ class ApiChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
@@ -2146,7 +2247,7 @@ class CommCareConnectChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_identifier_filter=self._get_participant_identifier_filter()),
                 SessionActivationStage(),
                 CommCareConsentCheckStage(),  # Platform-specific consent
                 MessageTypeValidationStage(),
