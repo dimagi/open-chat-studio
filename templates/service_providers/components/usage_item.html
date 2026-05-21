@@ -1,8 +1,24 @@
-{% with obj_url=obj.get_absolute_url|default_if_none:"" %}
-  {% if obj_url %}
-    <a class="link" href="{{ obj_url }}">{{ obj.name|default:obj }}</a>
-  {% else %}
-    <span>{{ obj.name|default:obj }}</span>
-  {% endif %}
-  {% if obj.is_archived %}<span class="badge badge-warning badge-sm ml-1">archived</span>{% endif %}
+{% comment %}
+  Versioned objects route their edit UI through the working version, so
+  link there even when displaying an older copy. ``get_working_version``
+  silently returns falsy for non-versioned objects → falls back to obj.
+  Append ``#versions`` when the referenced obj is itself an older version,
+  so the link drops the user into the versions tab.
+{% endcomment %}
+{% with link_target=obj.get_working_version|default:obj %}
+  {% with obj_url=link_target.get_absolute_url|default_if_none:"" %}
+    {% if obj_url %}
+      <a class="link" href="{{ obj_url }}{% if obj.is_a_version %}#versions{% endif %}">{{ obj.name|default:obj }}</a>
+    {% else %}
+      <span>{{ obj.name|default:obj }}</span>
+    {% endif %}
+  {% endwith %}
 {% endwith %}
+{% if obj.is_working_version %}
+  <span class="badge badge-info badge-sm ml-1">working version</span>
+{% elif obj.is_default_version %}
+  <span class="badge badge-success badge-sm ml-1">published {{ obj.get_version_name }}</span>
+{% elif obj.get_version_name %}
+  <span class="badge badge-ghost badge-sm ml-1">{{ obj.get_version_name }}</span>
+{% endif %}
+{% if obj.is_archived %}<span class="badge badge-warning badge-sm ml-1">archived</span>{% endif %}
