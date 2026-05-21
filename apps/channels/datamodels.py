@@ -194,6 +194,10 @@ class TwilioMessage(BaseMessage):
                 phone_number = phonenumbers.format_number(
                     phonenumbers.parse(from_value), phonenumbers.PhoneNumberFormat.E164
                 )
+
+            # Sending BSUIDs are not yet supported, so we use the phone number for now. Once this is supported,
+            # remove this line
+            participant_id = phone_number
         else:
             # Facebook Messenger: no BSUID concept; use the sender id as before.
             participant_id = from_value
@@ -275,8 +279,11 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
         # BSUID (`from_user_id`) is the stable identifier — it's present on every post-rollout
         # webhook regardless of whether the user adopted a username. A missing field means a
         # malformed payload, so we let the KeyError surface.
-        participant_id = message_data["from_user_id"]
         from_value = message_data.get("from")
+        # Sending BSUIDs are not yet supported, so we use the phone number (from_value) for now. Once this is supported,
+        # remove this line
+        participant_id = from_value or message_data["from_user_id"]
+
         phone_number = from_value if from_value and not looks_like_bsuid(from_value) else None
         return MetaCloudAPIMessage(
             participant_id=participant_id,
