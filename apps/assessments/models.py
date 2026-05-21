@@ -28,6 +28,7 @@ class Score(BaseTeamModel):
         CATEGORICAL = "categorical", "Categorical"
         BOOLEAN = "boolean", "Boolean"
 
+    # Currently only ExperimentSession; will be other types in future (e.g. Trace, EvaluationMessage).
     target_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     target_object_id = models.PositiveIntegerField()
     target = GenericForeignKey("target_content_type", "target_object_id")
