@@ -31,11 +31,27 @@ _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG = {
     ServiceProvider.llm.slug: "llm_provider_id",
 }
 
+# Display overrides for category labels derived from ``verbose_name_plural``.
+# "Experiment" is the internal model name; users know them as "Chatbots".
+_CATEGORY_LABEL_OVERRIDES = {
+    "experiments": "Chatbots",
+}
+
+
+def _category_label_for(model) -> str:
+    plural = str(model._meta.verbose_name_plural)
+    return _CATEGORY_LABEL_OVERRIDES.get(plural.lower(), plural.title())
+
 
 @dataclass
 class UsageCategory:
     label: str
     items: list = field(default_factory=list)
+    # ``kind`` lets the template pick the right item layout:
+    #   "list"  — items are model instances (default).
+    #   "chatbots_with_pipelines" — items are ``{"chatbot": exp, "pipelines": [...]}`` dicts.
+    #   "pipelines" — items are unlinked Pipeline instances.
+    kind: str = "list"
 
     def __len__(self) -> int:
         return len(self.items)
@@ -73,33 +89,93 @@ def get_provider_usages(provider) -> ProviderUsages:
         if model.__name__ == "Pipeline":
             pipelines.append(obj)
             continue
-        grouped[model._meta.verbose_name_plural.title()].append(obj)
+        grouped[_category_label_for(model)].append(obj)
 
     categories = [UsageCategory(label=label, items=items) for label, items in sorted(grouped.items())]
 
     if pipelines:
-        categories.append(_build_pipeline_category(pipelines))
+        categories.extend(_build_pipeline_categories(pipelines))
 
     return ProviderUsages(provider=provider, categories=categories)
 
 
-def _build_pipeline_category(pipelines: list) -> UsageCategory:
-    """Group pipelines together with the Experiments that reference them."""
-    from apps.experiments.models import Experiment  # noqa: PLC0415 — avoids app-import cycle
+def _build_pipeline_categories(pipelines: list) -> list[UsageCategory]:
+    """Return up to two categories built from pipeline references.
 
-    pipeline_ids = {p.id for p in pipelines}
-    experiments_by_pipeline: dict[int, list] = defaultdict(list)
-    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team"):
-        experiments_by_pipeline[exp.pipeline_id].append(exp)
+    Chatbots are the primary grouping: each entry lists the pipelines that
+    a single chatbot routes through. Pipelines with no chatbot reaching
+    them appear in a separate "Unlinked Pipelines" category so they're
+    still discoverable. A chatbot may reach a pipeline directly
+    (``Experiment.pipeline``) or via an event-configuration
+    ``pipeline_start`` action.
+    """
+    unique_pipelines = _dedupe_by_id(pipelines)
+    pipeline_ids = {p.id for p in unique_pipelines}
+    experiments_by_pipeline = _experiments_for_pipelines(pipeline_ids)
 
-    items = []
-    seen: set[int] = set()
-    for pipeline in pipelines:
-        if pipeline.id in seen:
+    chatbots: dict[int, dict] = {}
+    unlinked: list = []
+    for pipeline in unique_pipelines:
+        experiments = experiments_by_pipeline.get(pipeline.id, [])
+        if not experiments:
+            unlinked.append(pipeline)
             continue
-        seen.add(pipeline.id)
-        items.append({"pipeline": pipeline, "experiments": experiments_by_pipeline.get(pipeline.id, [])})
-    return UsageCategory(label="Pipelines", items=items)
+        for exp in experiments:
+            entry = chatbots.setdefault(exp.id, {"chatbot": exp, "pipelines": []})
+            if all(p.id != pipeline.id for p in entry["pipelines"]):
+                entry["pipelines"].append(pipeline)
+
+    categories: list[UsageCategory] = []
+    if chatbots:
+        categories.append(
+            UsageCategory(label="Chatbots", kind="chatbots_with_pipelines", items=list(chatbots.values()))
+        )
+    if unlinked:
+        categories.append(UsageCategory(label="Unlinked Pipelines", kind="pipelines", items=unlinked))
+    return categories
+
+
+def _dedupe_by_id(items: list) -> list:
+    seen: set[int] = set()
+    result = []
+    for item in items:
+        if item.id in seen:
+            continue
+        seen.add(item.id)
+        result.append(item)
+    return result
+
+
+def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
+    from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger  # noqa: PLC0415 — app cycle
+    from apps.experiments.models import Experiment  # noqa: PLC0415 — app cycle
+
+    by_pipeline: dict[int, dict[int, object]] = defaultdict(dict)
+    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team"):
+        by_pipeline[exp.pipeline_id][exp.id] = exp
+
+    # Indirect link: an EventAction of type "pipeline_start" stores the
+    # pipeline id in ``params["pipeline_id"]`` (stored as int or str).
+    pipeline_id_values: list = [*pipeline_ids, *(str(pid) for pid in pipeline_ids)]
+    trigger_filter = {
+        "action__action_type": EventActionType.PIPELINE_START,
+        "action__params__pipeline_id__in": pipeline_id_values,
+    }
+    for trigger_qs in (
+        StaticTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
+        TimeoutTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
+    ):
+        for trigger in trigger_qs:
+            raw_pipeline_id = trigger.action.params.get("pipeline_id")
+            try:
+                pid = int(raw_pipeline_id)
+            except (TypeError, ValueError):
+                continue
+            if pid not in pipeline_ids:
+                continue
+            by_pipeline[pid][trigger.experiment_id] = trigger.experiment
+
+    return {pid: list(exps.values()) for pid, exps in by_pipeline.items()}
 
 
 def _service_provider_for(provider) -> ServiceProvider:

@@ -26,22 +26,10 @@
       <p class="mb-4">This provider is referenced by {{ usages.total }} object{{ usages.total|pluralize }}:</p>
       {% for category in usages.categories %}
         <h2 class="font-semibold my-2">{{ category.label }} ({{ category.items|length }})</h2>
-        {% if category.label == "Pipelines" %}
+        {% if category.kind == "chatbots_with_pipelines" %}
           <ul class="list-disc list-inside ml-2">
             {% for entry in category.items %}
-              <li>
-                {% include "service_providers/components/usage_item.html" with obj=entry.pipeline %}
-                {% if entry.experiments %}
-                  <ul class="list-[circle] list-inside ml-6 mt-1">
-                    {% for experiment in entry.experiments %}
-                      <li class="text-sm">
-                        Chatbot:
-                        {% include "service_providers/components/usage_item.html" with obj=experiment %}
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% endif %}
-              </li>
+              <li>{% include "service_providers/components/usage_item.html" with obj=entry.chatbot %}</li>
             {% endfor %}
           </ul>
         {% else %}
