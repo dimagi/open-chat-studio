@@ -254,32 +254,35 @@ class Annotation(BaseTeamModel):
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
-        if not (is_new and self.status == AnnotationStatus.SUBMITTED):
+        submitted = self.status == AnnotationStatus.SUBMITTED
+
+        if is_new and submitted:
+            # Lock the item across the auto-mark check + save so two concurrent submissions
+            # on a single-review queue can't both pass the check and violate
+            # one_authoritative_annotation_per_item.
+            with transaction.atomic():
+                item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
+                self._maybe_auto_mark_authoritative()
+                super().save(*args, **kwargs)
+                item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
+                item.update_status(save=False)
+                item.save(update_fields=["review_count", "status"])
+            self.recompute_queue_aggregates(item.queue)
+        else:
             super().save(*args, **kwargs)
-            return
 
-        # Lock the item across the auto-mark check + save so two concurrent submissions
-        # on a single-review queue can't both pass the check and violate
-        # one_authoritative_annotation_per_item.
-        with transaction.atomic():
-            item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
-            self._maybe_auto_mark_authoritative()
-            super().save(*args, **kwargs)
-            item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
-            item.update_status(save=False)
-            item.save(update_fields=["review_count", "status"])
-        self.recompute_queue_aggregates(item.queue)
+        # Re-run score writes on every save of a SUBMITTED annotation (including edits)
+        # so concordance never reads stale data. Writer is idempotent. Runs outside the
+        # transaction so a writer failure cannot roll back the annotation save.
+        # Local import to avoid a runtime cycle (human_annotations.models →
+        # assessments.score_writers → human_annotations.models via Score.review FK).
+        if submitted:
+            from apps.assessments.score_writers import write_scores_from_annotation  # noqa: PLC0415
 
-        # Score writes happen outside the transaction so a writer failure cannot roll
-        # back the annotation save. Local import to avoid a runtime cycle
-        # (human_annotations.models → assessments.score_writers → human_annotations.models
-        # via Score.review FK string resolution).
-        from apps.assessments.score_writers import write_scores_from_annotation  # noqa: PLC0415
-
-        try:
-            write_scores_from_annotation(self)
-        except Exception:
-            logger.exception("Failed to write Score rows for annotation %s", self.id)
+            try:
+                write_scores_from_annotation(self)
+            except Exception:
+                logger.exception("Failed to write Score rows for annotation %s", self.id)
 
     def _maybe_auto_mark_authoritative(self):
         """For single-reviewer queues, auto-mark the first submission as authoritative.

@@ -169,7 +169,9 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
                 target_content_type=session_ct,
                 name=field_name,
                 source__in=[Score.Source.LLM_JUDGE, Score.Source.PROGRAMMATIC],
-                automated_result__evaluator__in=eval_config.evaluators.all(),
+                # Filter by run.config so scores from other configs sharing the same
+                # evaluator (Evaluator ↔ EvaluationConfig is M2M) are not pulled in.
+                automated_result__run__config=eval_config,
             )
             .select_related("automated_result")
             .order_by("created_at", "id")
