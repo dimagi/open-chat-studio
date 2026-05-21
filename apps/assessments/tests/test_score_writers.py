@@ -147,7 +147,8 @@ def test_score_from_field_unsupported_value_returns_none(session_target, caplog)
     assert s_list is None
     assert s_dict is None
     warnings = [r for r in caplog.records if "unsupported value type" in r.message.lower()]
-    assert len(warnings) == 3  # each unsupported call emits one warning
+    # None returns silently (skipped, not "unsupported"); list and dict each emit one warning.
+    assert len(warnings) == 2
 
 
 def test_score_from_field_sets_target_gfk_fields(session_target):

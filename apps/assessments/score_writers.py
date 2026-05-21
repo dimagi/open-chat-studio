@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 
 from apps.assessments.models import Score
 
@@ -56,6 +57,9 @@ def _score_from_field(
     schema_field: dict | None = None,
 ) -> Score | None:
     """Build an unsaved Score for one schema field. Returns None for unsupported values."""
+    if raw_value is None:
+        return None
+
     schema_type = (schema_field or {}).get("type")
 
     # Force categorical when the schema declares a choice — handles numeric-looking
@@ -167,8 +171,9 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
         if score is not None:
             scores.append(score)
 
-    Score.objects.filter(automated_result=result).delete()
-    Score.objects.bulk_create(scores)
+    with transaction.atomic():
+        Score.objects.filter(automated_result=result).delete()
+        Score.objects.bulk_create(scores)
 
 
 def write_scores_from_annotation(annotation: Annotation) -> None:
@@ -203,5 +208,6 @@ def write_scores_from_annotation(annotation: Annotation) -> None:
         if score is not None:
             scores.append(score)
 
-    Score.objects.filter(review=annotation).delete()
-    Score.objects.bulk_create(scores)
+    with transaction.atomic():
+        Score.objects.filter(review=annotation).delete()
+        Score.objects.bulk_create(scores)

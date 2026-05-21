@@ -32,11 +32,20 @@ class Command(IdempotentCommand):
             return
 
         written = 0
+        failed = 0
         for result in eval_qs.iterator(chunk_size=500):
-            write_scores_from_evaluation_result(result)
-            written += 1
+            try:
+                write_scores_from_evaluation_result(result)
+                written += 1
+            except Exception as exc:
+                failed += 1
+                self.stderr.write(f"Failed eval result {result.id}: {exc}")
         for annotation in ann_qs.iterator(chunk_size=500):
-            write_scores_from_annotation(annotation)
-            written += 1
-        self.stdout.write(f"Backfill processed {written} source rows")
+            try:
+                write_scores_from_annotation(annotation)
+                written += 1
+            except Exception as exc:
+                failed += 1
+                self.stderr.write(f"Failed annotation {annotation.id}: {exc}")
+        self.stdout.write(f"Backfill processed {written} source rows (failed: {failed})")
         return written
