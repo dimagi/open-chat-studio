@@ -26,7 +26,7 @@
       <p class="mb-4">This provider is referenced by {{ usages.total }} object{{ usages.total|pluralize }}:</p>
       {% for category in usages.categories %}
         <h2 class="font-semibold my-2">{{ category.label }} ({{ category.items|length }})</h2>
-        {% if category.kind == "chatbots_with_pipelines" %}
+        {% if category.kind == "chatbots_with_pipelines" or category.kind == "chatbots_with_channels" %}
           <ul class="list-disc list-inside ml-2">
             {% for entry in category.items %}
               <li>{% include "service_providers/components/usage_item.html" with obj=entry.chatbot %}</li>
