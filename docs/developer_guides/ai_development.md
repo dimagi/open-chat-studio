@@ -1,8 +1,8 @@
 # AI-Assisted Development
 
-This project uses an agentic development workflow built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). Other agentic coding tools (Codex, opencode, etc.) can follow the same process.
+This project uses an agentic development workflow built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). Other agentic coding tools (Gemini CLI, Codex CLI, opencode, etc.) can follow the same process.
 
-Our shared Claude workflows, commands, and configuration are maintained in the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. Refer to that repository for setup instructions and usage guidance.
+Before following this workflow, complete the [AI Tool Setup](../getting-started/ai-setup.md) to install Claude Code and the project's shared skills.
 
 ## Recommended Workflow
 
@@ -50,13 +50,9 @@ Work through the implementation plan. The agentic tool handles code generation, 
 
 Before opening a PR, run the project's linters, type checkers, and tests. Use code review agents to catch issues early. Then open a PR following the project's [pull request guidelines](../contributing/pull_requests.md).
 
-## Setup
-
-See [AI Tool Setup](../getting-started/ai-setup.md).
-
 ## Key Skills
 
-These are the Claude Code skills referenced in the workflow above. If your tool has equivalent capabilities, use those instead.
+These skills are installed as part of the [AI Tool Setup](../getting-started/ai-setup.md) via the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. If your tool has equivalent capabilities, use those instead.
 
 | Skill | Purpose |
 |-------|---------|
