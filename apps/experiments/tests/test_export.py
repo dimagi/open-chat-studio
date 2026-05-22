@@ -85,7 +85,7 @@ def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_
     csv_in_memory = filtered_export_to_csv(experiment, filtered_queryset)
     csv_content = csv_in_memory.getvalue()
     csv_lines = csv_content.strip().split("\n") if csv_content.strip() else []
-    # Each trace produces 2 rows (human + AI), plus 1 header
+    # Each session produces 2 rows (human + AI message), plus 1 header
     expected_rows = len(filtered_indices) * 2 + 1
     assert len(csv_lines) == expected_rows
 

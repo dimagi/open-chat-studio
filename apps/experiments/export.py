@@ -132,10 +132,8 @@ def _build_session_cache_entry(session) -> dict:
     }
 
 
-def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list | None:
-    """Return an export row list for *message*, or None if the message is absent."""
-    if message is None:
-        return None
+def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list:
+    """Return an export row list for *message*."""
     content = get_message_content(message, translation_language) if translation_language else message.content
     row = [
         message.id,
@@ -163,7 +161,7 @@ def _build_message_row(message, participant_data, sc, experiment, trace_id, tran
     return row
 
 
-def _yield_row_for_message(message, session_cache, experiment, translation_language) -> list | None:
+def _yield_row_for_message(message, session_cache, experiment, translation_language) -> list:
     """Return an export row for a single message."""
     session = message.chat.experiment_session
     if session.id not in session_cache:
@@ -181,7 +179,8 @@ def generate_export_rows(experiment, sessions_queryset, translation_language=Non
     that memory usage stays bounded regardless of dataset size.  Session-level values
     (platform name, state JSON, participant fields, chat tags/comments) are cached the
     first time each session is encountered so they are serialised only once no matter
-    how many messages belong to that session.
+    how many messages belong to that session.  The cache stores plain strings/dicts
+    (not ORM objects) so its footprint is small even for experiments with many sessions.
     """
     yield _get_export_header(translation_language)
 
@@ -195,9 +194,7 @@ def generate_export_rows(experiment, sessions_queryset, translation_language=Non
             break
 
         for message in chunk:
-            row = _yield_row_for_message(message, session_cache, experiment, translation_language)
-            if row is not None:
-                yield row
+            yield _yield_row_for_message(message, session_cache, experiment, translation_language)
 
         last_pk = chunk[-1].pk
         if len(chunk) < EXPORT_CHUNK_SIZE:
