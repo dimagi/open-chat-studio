@@ -68,6 +68,7 @@ nav:
     - Local Setup: getting-started/local-setup.md
     - Docker Setup: getting-started/docker-setup.md
     - Common Tasks: getting-started/common-tasks.md
+    - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
   - Developer Guides:
