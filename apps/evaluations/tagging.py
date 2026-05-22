@@ -12,13 +12,14 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.contenttypes.models import ContentType
 
 from apps.annotations.models import CustomTaggedItem
-from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode
+from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
     from apps.evaluations.models import (
         EvaluationMessage,
         EvaluationResult,
+        EvaluationRun,
         Evaluator,
         EvaluatorTagRule,
     )
@@ -134,3 +135,43 @@ def apply_rules_to_result(
             for rule in matched_rules
         ]
     )
+
+
+def reverse_stale_tags(run: EvaluationRun) -> None:
+    """Remove stale eval-driven tags after a run completes.
+
+    For each message evaluated in the run, any tag managed by the run's evaluators
+    but not applied in this run is removed from the resolved target object.
+    PREVIEW runs are skipped entirely.
+    """
+    if run.type == EvaluationRunType.PREVIEW:
+        return
+
+    evaluators = list(run.config.evaluators.prefetch_related("tag_rules").all())
+    possible_tags = frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
+    if not possible_tags:
+        return
+
+    evaluator = evaluators[0]
+    messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
+    for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
+        target = resolve_target(evaluator, message)
+        if target is None:
+            continue
+
+        applied_tags = frozenset(
+            AppliedTag.objects.filter(
+                evaluation_result__run=run,
+                evaluation_result__message=message,
+            ).values_list("tag_id", flat=True)
+        )
+        stale_tags = possible_tags - applied_tags
+        if not stale_tags:
+            continue
+
+        content_type = ContentType.objects.get_for_model(type(target))
+        CustomTaggedItem.objects.filter(
+            content_type=content_type,
+            object_id=target.pk,
+            tag_id__in=stale_tags,
+        ).delete()
