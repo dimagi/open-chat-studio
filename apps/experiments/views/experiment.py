@@ -837,12 +837,16 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
         File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
     )
+    # An empty FileField (no underlying storage) raises ValueError when opened.
+    # Treat this the same as a missing file on disk.
+    if not resource.file:
+        raise Http404()
     try:
         file = resource.file.open()
         return FileResponse(
             file, as_attachment=True, filename=resource.file.name, content_type=resource.content_type or None
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, ValueError):
         raise Http404() from None
 
 
@@ -855,6 +859,11 @@ def get_image_html(request, team_slug: str, session_id: int, pk: int):
 
     if not resource.is_image:
         raise Http404("File is not an image")
+
+    # Avoid rendering an <img> that points to a File row without underlying
+    # storage (would trigger ValueError on download).
+    if not resource.file:
+        raise Http404("File has no associated content")
 
     # Generate the image URL
     image_url = reverse("experiments:download_file", args=[team_slug, session_id, pk])
