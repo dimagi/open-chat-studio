@@ -65,6 +65,9 @@ nav:
     - User Docs: contributing/user_docs.md
   - Getting Started:
     - Overview: getting-started/index.md
+    - Local Setup: getting-started/local-setup.md
+    - Docker Setup: getting-started/docker-setup.md
+    - Common Tasks: getting-started/common-tasks.md
   - Architecture:
     - Overview: architecture/index.md
   - Developer Guides:
