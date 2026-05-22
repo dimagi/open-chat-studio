@@ -1,0 +1,71 @@
+<div id="annotate-summary">
+  {% if item.status == "awaiting_resolution" %}
+    <div role="alert" class="alert alert-warning alert-soft mb-3">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <span><strong>Awaiting resolution.</strong> All required reviews submitted. An admin must mark one annotation as authoritative to resolve.</span>
+    </div>
+  {% endif %}
+<div id="annotation-list" class="card bg-base-100 shadow-sm">
+  <div class="card-body">
+    <h3 class="card-title text-sm">Annotations ({{ annotations|length }})</h3>
+    <div class="flex flex-col gap-3">
+      {% for ann in annotations %}
+        <div class="border rounded-lg p-3 {% if ann.is_authoritative %}border-primary{% endif %}">
+          <div class="flex justify-between items-center mb-2">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-sm">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>
+              {% if ann.is_authoritative %}
+                <span class="badge badge-primary badge-sm gap-1"
+                      title="{% if ann.authoritative_set_by %}Marked authoritative by {{ ann.authoritative_set_by.get_full_name|default:ann.authoritative_set_by.username }} on {{ ann.authoritative_set_at|date:'DATETIME_FORMAT' }}{% else %}Auto-marked as authoritative on {{ ann.authoritative_set_at|date:'DATETIME_FORMAT' }}{% endif %}">
+                  <i class="fa-solid fa-circle-check"></i> Authoritative
+                </span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-500">{{ ann.created_at|date:'DATETIME_FORMAT' }}</span>
+              {% if ann.can_edit %}
+                <a href="{% url 'human_annotations:edit_annotation' request.team.slug queue.pk item.pk ann.annotation_id %}"
+                   class="btn btn-xs btn-ghost"
+                   title="Edit annotation">
+                  <i class="fa-solid fa-pencil"></i> Edit
+                </a>
+              {% endif %}
+              {% if ann.can_set_authoritative %}
+                {% if ann.is_authoritative %}
+                  <button type="button"
+                          class="btn btn-xs btn-ghost"
+                          hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
+                          hx-vals='{"value":"false"}'
+                          hx-target="#annotate-summary"
+                          hx-swap="outerHTML"
+                          hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
+                    <i class="fa-solid fa-xmark"></i> Clear authoritative
+                  </button>
+                {% else %}
+                  <button type="button"
+                          class="btn btn-xs btn-outline btn-primary"
+                          hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
+                          hx-vals='{"value":"true"}'
+                          hx-target="#annotate-summary"
+                          hx-swap="outerHTML"
+                          hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
+                    <i class="fa-regular fa-circle-check"></i> Mark authoritative
+                  </button>
+                {% endif %}
+              {% endif %}
+            </div>
+          </div>
+          <div class="flex flex-col gap-1">
+            {% for field_name, field_value in ann.fields %}
+              <div class="flex gap-2 text-sm">
+                <span class="font-medium text-gray-500 min-w-24">{{ field_name }}:</span>
+                <span>{{ field_value|default:'—' }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+</div>

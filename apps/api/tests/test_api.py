@@ -7,12 +7,11 @@ import uuid
 from typing import Any
 from unittest.mock import patch
 
-from django.core import mail
-
 import httpx
 import pytest
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
+from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -595,7 +594,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
         "prompt_text": "Tell the user to take a break and make a beverege",
     }
     url = reverse("api:trigger_bot")
-    with mock_llm(["Time to take a break and brew some coffee"], [0]):
+    with mock_llm(["Time to take a break and brew some coffee"]):
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
@@ -607,12 +606,18 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
     first_message = session.chat.messages.first()
     assert first_message.message_type == "ai"
     assert first_message.content == "Time to take a break and brew some coffee"
+    response_data = response.json()
+    assert response_data["session_id"] == str(session.external_id)
+    assert response_data["channel"] == ChannelPlatform.COMMCARE_CONNECT
+    assert response_data["team"] == {"name": experiment.team.name, "slug": experiment.team.slug}
+    assert f"/api/sessions/{session.external_id}/" in response_data["url"]
 
     # Call it a second time to make sure the session is reused
-    with mock_llm(["Time to take a break and brew some tea"], [0]):
+    with mock_llm(["Time to take a break and brew some tea"]):
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
+    assert response.json()["session_id"] == str(session.external_id)  # same session reused
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
     assert session.chat.messages.count() == 2
     last_message = session.chat.messages.last()
@@ -622,7 +627,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
     # Call it a third time, but this time we want to start a new session
     first_session = session
     data["start_new_session"] = True
-    with mock_llm(["Time to take a break an juice some fruit"], [0]):
+    with mock_llm(["Time to take a break an juice some fruit"]):
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
@@ -633,6 +638,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
         .order_by("-created_at")
         .first()
     )
+    assert response.json()["session_id"] == str(new_session.external_id)  # new session ID returned
     assert new_session.chat.messages.count() == 1
     last_message = new_session.chat.messages.last()
     assert last_message.message_type == "ai"
@@ -645,7 +651,9 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
 )
 @patch("apps.chat.channels.CommCareConnectClient")
 @pytest.mark.parametrize("consented", [True, False])
-def test_generate_bot_message_auto_creates_participant(ConnectClient, experiment, httpx_mock, consented, django_capture_on_commit_callbacks):
+def test_generate_bot_message_auto_creates_participant(
+    ConnectClient, experiment, httpx_mock, consented, django_capture_on_commit_callbacks
+):
     """
     Test that trigger_bot_message auto-creates participant and participant_data if they don't exist.
     This supports the auto-consent flow from CommCare Connect.
@@ -687,7 +695,7 @@ def test_generate_bot_message_auto_creates_participant(ConnectClient, experiment
         "prompt_text": "Welcome to the bot!",
     }
     url = reverse("api:trigger_bot")
-    with mock_llm(["Welcome! How can I help you today?"], [0]):
+    with mock_llm(["Welcome! How can I help you today?"]):
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
 
@@ -747,7 +755,7 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
         "prompt_text": "Say hello",
     }
     url = reverse("api:trigger_bot")
-    with mock_llm(["Hello from the bot"], [0]):
+    with mock_llm(["Hello from the bot"]):
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
 
@@ -760,6 +768,9 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
     bot_message = session.chat.messages.first()
     assert bot_message.message_type == "ai"
     assert bot_message.content == "Hello from the bot"
+    response_data = response.json()
+    assert response_data["session_id"] == str(session.external_id)
+    assert response_data["channel"] == ChannelPlatform.EMAIL
 
     # Email actually delivered through the EmailSender
     assert len(mail.outbox) == 1
@@ -779,7 +790,9 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
 @patch("apps.api.views.channels.CommCareConnectClient")
 @patch("apps.chat.channels.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_trigger_bot_direct_message(ConnectClientChat, ConnectClientView, experiment, auth_method, django_capture_on_commit_callbacks):
+def test_trigger_bot_direct_message(
+    ConnectClientChat, ConnectClientView, experiment, auth_method, django_capture_on_commit_callbacks
+):
     """
     trigger_bot with message_text delivers the message directly without going through the LLM.
     """
@@ -821,6 +834,9 @@ def test_trigger_bot_direct_message(ConnectClientChat, ConnectClientView, experi
     saved_msg = session.chat.messages.first()
     assert saved_msg.message_type == "ai"
     assert saved_msg.content == message
+    response_data = response.json()
+    assert response_data["session_id"] == str(session.external_id)
+    assert response_data["channel"] == ChannelPlatform.COMMCARE_CONNECT
 
 
 @pytest.mark.django_db()
@@ -900,7 +916,7 @@ def test_trigger_bot_direct_message_consent_required(ConnectClientChat, ConnectC
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    "data_override,expected_error",
+    ("data_override", "expected_error"),
     [
         ({}, "Either 'prompt_text' or 'message_text' must be provided."),
         (
@@ -912,7 +928,9 @@ def test_trigger_bot_direct_message_consent_required(ConnectClientChat, ConnectC
 def test_trigger_bot_requires_prompt_or_message_text(experiment, data_override, expected_error):
     """trigger_bot must reject requests that supply neither or both text fields."""
     ExperimentChannelFactory.create(
-        team=experiment.team, experiment=experiment, platform=ChannelPlatform.EMAIL,
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.EMAIL,
         extra_data={"email_address": "bot@chat.openchatstudio.com"},
     )
     api_user = experiment.team.members.first()

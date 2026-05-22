@@ -9,11 +9,11 @@ from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.datamodels import Attachment
-from apps.chat.bots import EventBot, get_bot
+from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
@@ -348,7 +348,8 @@ class ChatMessageCreationStage(ProcessingStage):
         return ctx.user_query is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        metadata = {"ocs_attachment_file_ids": []}
+        attachments_key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
+        metadata = {attachments_key: []}
         is_voice = ctx.message.content_type == MESSAGE_TYPES.VOICE
 
         # Save voice note as attachment
@@ -362,11 +363,11 @@ class ChatMessageCreationStage(ProcessingStage):
                 content_type=ctx.message.cached_media_data.content_type,
             )
             ctx.experiment_session.chat.attach_files("voice_message", [file])
-            metadata["ocs_attachment_file_ids"].append(file.id)
+            metadata[attachments_key].append(file.id)
 
         # Record attachment IDs
         if ctx.message.attachments:
-            metadata["ocs_attachment_file_ids"].extend([att.file_id for att in ctx.message.attachments])
+            metadata[attachments_key].extend([att.file_id for att in ctx.message.attachments])
 
         # Add trace metadata
         if ctx.trace_service:
@@ -413,12 +414,42 @@ class BotInteractionStage(ProcessingStage):
         return SpanNotificationConfig(permissions=["experiments.change_experiment"])
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        ctx.callbacks.submit_input_to_llm(ctx.participant_identifier)
+        ctx.callbacks.on_submit_input_to_llm(ctx.participant_identifier)
 
         # Lazy bot creation -- reuse if already created (e.g. by ConsentFlowStage seed message)
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
 
+        ctx.bot_response = ctx.bot.process_input(
+            ctx.user_query,
+            attachments=ctx.message.attachments,
+            human_message=ctx.human_message,
+        )
+        ctx.files_to_send = ctx.bot_response.get_attached_files() or []
+
+
+# ---------------------------------------------------------------------------
+# EvalsBotInteractionStage
+# ---------------------------------------------------------------------------
+
+
+class EvalsBotInteractionStage(ProcessingStage):
+    """Bot interaction for evaluations -- uses EvalsBot with in-memory participant_data.
+
+    Reads participant_data from ctx.channel_context (set by EvaluationChannel),
+    bypassing the DB-backed ParticipantData model.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.user_query is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        ctx.bot = EvalsBot(
+            ctx.experiment_session,
+            ctx.experiment,
+            ctx.trace_service,
+            participant_data=ctx.channel_context["participant_data"],
+        )
         ctx.bot_response = ctx.bot.process_input(
             ctx.user_query,
             attachments=ctx.message.attachments,
@@ -534,7 +565,7 @@ class ResponseFormattingStage(ProcessingStage):
         if not files:
             return text
         links = [f"{f.name}\n{f.download_link(ctx.experiment_session.id)}" for f in files]
-        return f"{text}\n\n{''.join(links)}"
+        return f"{text}\n\n{'\n\n'.join(links)}\n"
 
 
 # ---------------------------------------------------------------------------

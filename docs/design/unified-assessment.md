@@ -159,6 +159,8 @@ Human scorers (reviewers) annotate sessions one-at-a-time in the browser, produc
 | FR-4.8 | Skip items already reviewed by the current user | Must |
 | FR-4.9 | Support draft annotations (save without submitting) | Could |
 | FR-4.10 | **Auto-add sessions to queue based on eval tags** (backlog #5) | Should |
+| FR-4.11 | Detect reviewer disagreement on completed items: categorical non-unanimous, or numeric stdev above a configurable threshold. Fires the `HUMAN_DISAGREEMENT` routing trigger; intended pairing is a `RoutingRule` escalating to an adjudicator. See D-16. | Should |
+| FR-4.12 | Support **authoritative** Reviews — a Review flagged `is_authoritative=True` whose Scores override per-source consensus on the same `(target, name)`. Set by routing-rule action or by an admin override. See D-16. | Should |
 
 **Existing code:**
 - Annotation workflow: [`apps/human_annotations/views/annotate_views.py`](../../apps/human_annotations/views/annotate_views.py)
@@ -201,6 +203,7 @@ Aggregation computes statistical summaries across results. Both systems already 
 | FR-6.5 | For batch runs: recompute `AssessmentRunAggregate` when new results land. For continuous Assessments: no stored aggregates — queries compute on demand from `Score` rows over a time window (see D-5) | Must |
 | FR-6.6 | Support trend analysis across multiple runs/time periods | Should |
 | FR-6.7 | Aggregates should be filterable by source type (show automated-only, human-only, or combined) | Should |
+| FR-6.8 | Per-source human consensus respects authoritative overrides: if any Score on `(target, name)` is from an authoritative Review, it *is* the consensus for that field; otherwise compute mean/mode normally. See D-16. | Should |
 
 **Existing code:**
 - Aggregator framework: [`apps/evaluations/aggregators.py`](../../apps/evaluations/aggregators.py)
@@ -335,7 +338,7 @@ The conceptual model:
                         │   └── HumanScorer    (queue: assignees, num_reviews, etc.)
                         │
                         └── RoutingRules (0..N)
-                                trigger:  score-value | lifecycle | flag | tag
+                                trigger:  score-value | lifecycle | flag | disagreement | tag
                                 action:   emit-tag | escalate | notify | add-to-queue
 
        ┌────────── runtime layer (specialised, system-internal) ────────┐
@@ -437,7 +440,7 @@ The general "if X then Y" wiring. Generalises today's `EvaluatorTagRule` ([`apps
 | Field | Notes |
 |---|---|
 | `assessment` | FK |
-| `trigger_kind` | `SCORE_VALUE`, `LIFECYCLE_EVENT`, `HUMAN_FLAG`, `TAG_APPLIED` |
+| `trigger_kind` | `SCORE_VALUE`, `LIFECYCLE_EVENT`, `HUMAN_FLAG`, `HUMAN_DISAGREEMENT`, `TAG_APPLIED` |
 | `trigger_config` | JSON; shape varies by `trigger_kind` |
 | `action_kind` | `EMIT_TAG`, `ESCALATE_TO_HUMAN_SCORER`, `NOTIFY`, `ADD_TO_QUEUE` (cross-Assessment) |
 | `action_config` | JSON; shape varies by `action_kind` |
@@ -462,6 +465,7 @@ This is closer to a mini-rules engine than today's `EvaluatorTagRule`. The rich 
 | `SCORE_VALUE` | `NOTIFY` | Alert when a key signal (safety, compliance) drops below threshold in production. |
 | `SCORE_VALUE` (with `RANDOM_N_PERCENT` sample policy) | `ESCALATE_TO_HUMAN_SCORER` | Story 2 — random calibration sample for human review of judge output. |
 | `HUMAN_FLAG` | `ESCALATE_TO_HUMAN_SCORER` (different reviewer) | Story 10 — second-pass review for items a reviewer flagged as uncertain. |
+| `HUMAN_DISAGREEMENT` | `ESCALATE_TO_HUMAN_SCORER` (adjudicator, mark authoritative) | Reviewers split on a categorical or stdev-out-of-range on a numeric field; adjudicator's call becomes the authoritative answer. See D-16. |
 | `LIFECYCLE_EVENT` (session ended / run finished) | `ADD_TO_QUEUE` | Cross-Assessment routing — feed items from one Assessment's source into another's queue (backlog #5 when within-Assessment escalation isn't enough). |
 | `TAG_APPLIED` | `NOTIFY` | Alert on emergency tag applied during conversation. |
 | `TAG_APPLIED` | `ADD_TO_QUEUE` | Auto-populate an annotation queue from any tag — including human-applied UI tags, not just judge-emitted ones. |
@@ -509,7 +513,7 @@ These models stay close to their existing shapes; only their role in the archite
 - **`AssessmentRun`** — replaces `EvaluationRun`. Exists only for batch executions. Carries `bot_version` (moved from configuration to runtime — see D-3), `status`, `finished_at`, `job_id`, `error_message`. Continuous Assessments produce no `AssessmentRun` rows.
 - **`AutomatedResult`** — replaces `EvaluationResult`. Per-item-per-`AutomatedScorer`-per-run shell. Holds the raw output JSON, error string, generated bot response, etc. Each row spawns N Score rows on save (one per output schema field).
 - **`ReviewItem`** — replaces `AnnotationItem`. Per-item-per-`HumanScorer` work unit. Carries status (`pending` / `in_progress` / `completed` / `flagged`), flag history, review count, and an `is_irr_sample` bool set at item creation if the IRR sample roll succeeded (drives the `+1` completion threshold; see D-11).
-- **`Review`** — replaces `Annotation`. Per-reviewer submission. Holds the `data` JSON dict, status (`draft` / `submitted`). On submission, spawns N Score rows.
+- **`Review`** — replaces `Annotation`. Per-reviewer submission. Holds the `data` JSON dict, status (`draft` / `submitted`), and **`is_authoritative: bool`** (default `False`). On submission, spawns N Score rows. Authoritative Reviews override per-source consensus on the same `(target, name)` during aggregation. See D-16.
 - **`AppliedRoutingRule`** — generalises today's `AppliedTag`. Audit row recording every `RoutingRule` firing. See D-14.
 - **`AppliedSourceFilter`** — audit row for continuous-dispatch **failures and skips only** (filter-no-match, dedup, sample-rolled-out, scorer-error). See the [Lifecycle hooks](#operational-audit-appliedsourcefilter-failures-only) section.
 
@@ -609,7 +613,7 @@ Lifecycle hooks fire forward only. A newly-created continuous Assessment does **
 | 7 | Concordance between humans and judges | Built-in tab on any Assessment with ≥2 scorer types. Pre-aggregate Scores per `(target, name, source)` into consensus values (mean for numeric, mode for categorical), then join on `(target, name)` across sources. |
 | 8 | Trend monitoring | Two distinct views: "Runs" tab (batch comparison) and "Trends" tab (continuous time-windowed query). Both read from Score; neither uses a unified abstraction. |
 | 9 | Inter-rater reliability | `human.irr_sample_rate > 0` for the sampled-IRR pattern, or `human.num_reviews_required > 1` for everything-gets-N. Both with `human.show_prior_human_scores = False`. Skip human-side pre-aggregation; group by `Score.author` instead of `Score.source`. |
-| 10 | Second-pass review for uncertain items | `routing = [trigger=HUMAN_FLAG → action=ESCALATE_TO_HUMAN_SCORER(different reviewer)]`. Escalation flow always shows the flagging reviewer's score on the second-pass review. |
+| 10 | Second-pass review for uncertain items | `routing = [trigger=HUMAN_FLAG → action=ESCALATE_TO_HUMAN_SCORER(different reviewer)]`. Escalation flow always shows the flagging reviewer's score on the second-pass review. A parallel pattern handles system-detected disagreement: `routing = [trigger=HUMAN_DISAGREEMENT → action=ESCALATE_TO_HUMAN_SCORER(adjudicator, mark_authoritative=True)]` — see D-16. |
 
 All ten stories fit. Five of them surfaced refinements that are baked into the model above (D-3, D-4, D-7, D-10, D-11).
 
@@ -702,6 +706,7 @@ Story 10's "second-pass reviewer sees the flagging reviewer's score" is **hardco
 - **Rejected alternative:** Always require `num_reviews_required` for every item. Forces a binary "everyone reviews everything or no one does," which makes IRR prohibitively expensive at scale — the only way to measure agreement is to triple your review cost.
 - **Rejected alternative:** Decide IRR-sampling at review-time (when reviewer N+1 is about to mark an item complete). Adds randomness to completion logic and makes "which items are IRR-sampled?" un-queryable retroactively.
 - **Why:** IRR is a sampled measurement, not a property of the workflow. `num_reviews_required` describes what the workflow needs; `irr_sample_rate` describes what we'll measure to validate it. Keeping them separate lets the same `HumanScorer` express both single-review-with-IRR-sample and full-consensus-with-IRR-sample without introducing a new "review mode" enum.
+- **Note on adjudication:** IRR sampling is for *measuring agreement*, not *resolving disagreement*. When reviewers actually disagree and a canonical answer is needed, the mechanism is `HUMAN_DISAGREEMENT` + authoritative Reviews (see D-16), independent of IRR sampling.
 - **Scope of v1:** IRR sampling adds exactly one extra reviewer when triggered. If "+N extra reviewers" becomes a real need, an `irr_extra_reviews` field is non-breaking to add later.
 
 ### D-12: Reuse the filter language, not the `FilterSet` model
@@ -734,6 +739,24 @@ Story 10's "second-pass reviewer sees the flagging reviewer's score" is **hardco
 - **Rejected alternative — extend `StaticTrigger`:** `StaticTrigger.experiment` ties each trigger to one `Experiment` version. Assessments aren't experiment-scoped, so shoehorning them in would force a per-Experiment shape (or a special-case "no experiment" trigger). Share the architectural pattern, not the data model.
 - **Rejected alternative — dispatch-ledger table for at-most-once:** Would duplicate state that already exists in the action-side uniqueness constraints. Same pattern today's `StaticTrigger.fire()` follows: keep dispatch dumb, push correctness to consumers.
 - **See:** the [Lifecycle hooks](#lifecycle-hooks) section for the event types, dispatch flow, idempotency mechanics, audit shape, and `StaticTrigger` relationship in full.
+
+### D-16: Reviewer disagreement is resolved by authoritative Reviews, not by statistical fiat
+- **Decision:** Reviewer disagreement is handled by two small additions: a new `HUMAN_DISAGREEMENT` routing trigger that fires when reviewers don't agree on a completed item, and an `is_authoritative: bool` flag on `Review` whose Scores override per-source consensus for the same `(target, name)`. The intended pairing is `RoutingRule(trigger=HUMAN_DISAGREEMENT, action=ESCALATE_TO_HUMAN_SCORER(adjudicator, mark_authoritative=True))`.
+- **What "disagreement" means:**
+  - **Categorical:** not unanimous.
+  - **Numeric:** stdev across reviewers above a per-rule threshold (in `trigger_config`).
+  - **String:** never triggers disagreement (strings don't aggregate; see FR-6.3).
+- **Three workflows on one mechanism:**
+  - **No adjudication needed** (today's implicit shape): `num_reviews_required = 1`, no routing rule. Each Review is the answer.
+  - **Statistical consensus** (multi-reviewer averaging): `num_reviews_required > 1`, no routing rule. Mean/mode is the consensus; ties for categorical surface as "no consensus established" until adjudicated.
+  - **Adjudicated consensus**: `num_reviews_required > 1` + `RoutingRule(trigger=HUMAN_DISAGREEMENT → adjudicate-authoritative)`. Most disagreements are caught and resolved by a designated adjudicator; result is a single canonical answer.
+- **Aggregation rule (FR-6.8):** "if any Score on `(target, name)` is from an authoritative Review, it *is* the consensus for that field; otherwise compute mean/mode normally." One line, no special-casing in the query layer beyond a where-clause preference.
+- **Setting `is_authoritative`:**
+  - Procedurally by routing-rule action — `ESCALATE_TO_HUMAN_SCORER` accepts `mark_authoritative=True` in its `action_config`. The escalated Review is auto-flagged on submission.
+  - Manually by a team-lead-permission user — explicit toggle in the UI on any Review.
+- **Rejected alternative — promote authoritative to a separate `Score.source` enum value (`HUMAN_AUTHORITATIVE`):** conflates "who/what produced this" (a property of the source kind) with "is this the final answer" (a property of the act of submission). Cleaner to keep `source=HUMAN_REVIEW` for all human Scores and put the authoritative flag on the producing artefact (`Review`).
+- **Rejected alternative — reviewer hierarchy / vote weighting:** introduces a ranking concept (senior reviewer, lead reviewer, etc.) that doesn't exist elsewhere in OCS. The authoritative flag captures the same outcome without adding a new dimension to the permission model. "Adjudicator" is just whoever the routing rule (or admin override) routes to.
+- **Scope:** v1 supports binary `is_authoritative`. Partial-field authority (override only the disputed fields, leave others as consensus) is expressed by submitting a Review with only the disputed fields in `output_fields` — re-uses D-10's per-scorer subset mechanism rather than adding new authority granularity.
 
 ## Mapping to existing OCS code
 
@@ -791,7 +814,8 @@ These need answers before sequencing. None blocks the design.
 | **AssessmentRun** | A batch execution of an Assessment. Continuous (live-filter) Assessments do not produce runs. |
 | **AutomatedResult** | Per-item, per-`AutomatedScorer`, per-run workflow shell. Holds raw output and errors. Spawns Score rows on save. |
 | **ReviewItem** | Per-item, per-`HumanScorer` work unit for human review. Replaces `AnnotationItem`. |
-| **Review** | Per-reviewer submission against a `ReviewItem`. Replaces `Annotation`. Spawns Score rows on submission. |
+| **Review** | Per-reviewer submission against a `ReviewItem`. Replaces `Annotation`. Spawns Score rows on submission. May be flagged `is_authoritative=True` — see D-16. |
+| **Authoritative Review** | A `Review` whose Scores override per-source consensus on the same `(target, name)` during aggregation. Set procedurally by a `HUMAN_DISAGREEMENT` routing rule's adjudication action, or manually by a team-lead-permission user. See D-16. |
 | **Score** | A single typed score value attached to a target. Written by all sources (automated, human, user-feedback). The unit aggregation, concordance, and trends query against. |
 | **AppliedRoutingRule** | Audit row recording a `RoutingRule` firing. Generalises today's `AppliedTag`. |
 | **AppliedSourceFilter** | Audit row recording continuous-dispatch **failures and skips** (filter-no-match, dedup, sample-rolled-out, scorer-error). Successes are not audited — visible from the produced Score row. |

@@ -60,7 +60,7 @@ class StubCallbacks(ChannelCallbacks):
     def echo_transcript(self, recipient, transcript):
         self.echo_transcript_calls.append((recipient, transcript))
 
-    def submit_input_to_llm(self, recipient):
+    def on_submit_input_to_llm(self, recipient):
         self.submit_input_calls.append(recipient)
 
     def get_message_audio(self, message):

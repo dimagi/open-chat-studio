@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
 from django.db.models import Q
-from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from openai import NOT_GIVEN, OpenAI
@@ -18,15 +17,8 @@ from pydantic import BaseModel
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.callbacks import TokenCountingCallbackHandler
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
-from apps.service_providers.llm_service.token_counters import (
-    AnthropicTokenCounter,
-    GeminiTokenCounter,
-    GoogleVertexAITokenCounter,
-    OpenAITokenCounter,
-)
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
@@ -66,9 +58,6 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
     def transcribe_audio(self, audio: BytesIO) -> str:
-        raise NotImplementedError
-
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
         raise NotImplementedError
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
@@ -184,9 +173,6 @@ class OpenAIGenericService(LlmService):
                 case _:
                     model.tiktoken_model_name = "gpt-4"
         return model
-
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         if effort := kwargs.pop("effort", None):
@@ -358,9 +344,6 @@ class AzureLlmService(LlmService):
             **kwargs,
         )
 
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
@@ -395,9 +378,6 @@ class AnthropicLlmService(LlmService):
 
         return kwargs
 
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(AnthropicTokenCounter(model, self.anthropic_api_key))
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         config = config or {}
         tools = []
@@ -430,9 +410,6 @@ class DeepSeekLlmService(LlmService):
             model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
         )
 
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(OpenAITokenCounter(model))
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
 
@@ -444,9 +421,6 @@ class GoogleLlmService(LlmService):
         from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
-
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        return TokenCountingCallbackHandler(GeminiTokenCounter(model, self.google_api_key))
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
@@ -476,9 +450,6 @@ class VoyageAILlmService(LlmService):
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
 
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
 
@@ -505,11 +476,6 @@ class GoogleVertexAILlmService(LlmService):
             api_transport=self.api_transport,
             **kwargs,
         )
-
-    def get_callback_handler(self, model: str) -> BaseCallbackHandler:
-        chat_model = self.get_chat_model(llm_model=model)
-        token_counter = GoogleVertexAITokenCounter(chat_model)
-        return TokenCountingCallbackHandler(token_counter)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []

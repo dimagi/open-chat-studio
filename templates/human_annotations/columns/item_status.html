@@ -19,6 +19,8 @@
       <button type="submit" class="btn btn-ghost btn-xs">{% translate "unflag" %}</button>
     </form>
   </div>
+{% elif record.status == "awaiting_resolution" %}
+  <span class="badge badge-soft badge-warning">{{ record.get_status_display }}</span>
 {% elif record.status == "completed" %}
   <span class="badge badge-soft badge-success">{{ record.get_status_display }}</span>
 {% elif record.status == "in_progress" %}
