@@ -263,14 +263,26 @@ class PersistenceStage(ProcessingStage):
         if ctx.voice_audio is not None and ctx.bot_response is not None:
             ctx.bot_response.create_and_add_tag("voice", ctx.experiment.team, TagCategories.MEDIA_TYPE)
             ctx.voice_audio.audio.seek(0)
-            file = File.create(
-                "voice_note.ogg",
-                ctx.voice_audio.audio,
-                ctx.experiment.team_id,
-                purpose=FilePurpose.MESSAGE_MEDIA,
-                content_type=ctx.voice_audio.content_type,
-            )
-            ctx.bot_response.add_attachment_id(file.id)
+            # Guard against zero-byte / exhausted audio streams. Persisting a
+            # File row without storage leads to ValueError later when the
+            # attachment is downloaded (see OPEN-CHAT-STUDIO-248).
+            audio_bytes = ctx.voice_audio.audio.read()
+            if not audio_bytes:
+                logger.warning(
+                    "Skipping voice_note.ogg attachment for experiment=%s session=%s: empty audio stream",
+                    ctx.experiment.id,
+                    getattr(ctx.experiment_session, "id", None),
+                )
+            else:
+                ctx.voice_audio.audio.seek(0)
+                file = File.create(
+                    "voice_note.ogg",
+                    ctx.voice_audio.audio,
+                    ctx.experiment.team_id,
+                    purpose=FilePurpose.MESSAGE_MEDIA,
+                    content_type=ctx.voice_audio.content_type,
+                )
+                ctx.bot_response.add_attachment_id(file.id)
 
 
 # ---------------------------------------------------------------------------
