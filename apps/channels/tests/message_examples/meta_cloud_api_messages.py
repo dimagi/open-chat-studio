@@ -1,4 +1,4 @@
-def legacy_text_message_value(phone_number_id="12345"):
+def text_message_value(phone_number_id="12345"):
     """Default webhook value: both wa_id/from (phone) and user_id/from_user_id (BSUID)
     present. Represents a non-username-adopter or a username-adopter whose phone is
     visible via the contact book / 30-day cache."""
@@ -22,7 +22,7 @@ def legacy_text_message_value(phone_number_id="12345"):
     }
 
 
-def legacy_text_message(phone_number_id="12345"):
+def text_message(phone_number_id="12345"):
     """Default full webhook payload: both wa_id/from (phone) and user_id/from_user_id (BSUID)
     present."""
     return {
@@ -32,7 +32,7 @@ def legacy_text_message(phone_number_id="12345"):
                 "id": "BIZ_ID",
                 "changes": [
                     {
-                        "value": legacy_text_message_value(phone_number_id),
+                        "value": text_message_value(phone_number_id),
                         "field": "messages",
                     }
                 ],
@@ -50,7 +50,7 @@ def multi_text_message(phone_number_ids):
                 "id": "BIZ_ID",
                 "changes": [
                     {
-                        "value": legacy_text_message_value(phone_number_id),
+                        "value": text_message_value(phone_number_id),
                         "field": "messages",
                     }
                     for phone_number_id in phone_number_ids

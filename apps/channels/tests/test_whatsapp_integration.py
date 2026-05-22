@@ -225,7 +225,7 @@ class TestMetaCloudApi:
     @pytest.mark.parametrize(
         ("incoming_value", "message_type"),
         [
-            (meta_cloud_api_messages.legacy_text_message_value(), "text"),
+            (meta_cloud_api_messages.text_message_value(), "text"),
             (meta_cloud_api_messages.audio_message_value(), "audio"),
         ],
     )
@@ -264,7 +264,7 @@ class TestMetaCloudApi:
 
     @patch("apps.chat.bots.PipelineBot.process_input")
     def test_unsupported_message_type_does_nothing(self, bot_process_input, db, meta_cloud_api_whatsapp_channel):
-        incoming_value = meta_cloud_api_messages.legacy_text_message_value()
+        incoming_value = meta_cloud_api_messages.text_message_value()
         message = incoming_value["messages"][0]
         message["type"] = "video"
         message["video"] = {}
@@ -291,7 +291,7 @@ class TestMetaCloudApi:
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
 
-        incoming_message = meta_cloud_api_messages.legacy_text_message_value()["messages"][0]
+        incoming_message = meta_cloud_api_messages.text_message_value()["messages"][0]
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
