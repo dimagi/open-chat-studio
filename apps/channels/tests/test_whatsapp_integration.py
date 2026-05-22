@@ -331,9 +331,9 @@ def _meta_message(*, bsuid: str, phone: str | None, msg_id: str = "wamid.abc", t
 class TestWhatsappParticipantResolution:
     """End-to-end participant-resolution scenarios for the WhatsApp BSUID rollout.
 
-    Five lifecycle scenarios are exercised through the Meta Cloud API webhook entry point.
-    The Twilio code path resolves through the same ``WhatsappChannel`` logic — its own
-    parser is covered by ``TestTwilioMessageParse`` in ``test_datamodels.py``.
+    Three of the five lifecycle scenarios are exercised here. Scenarios 2 and 3 — which
+    expect BSUID as the canonical participant identifier when a phone is also present —
+    are deferred until Meta supports BSUID in outbound message payloads.
 
     Each scenario inlines the message it delivers; the presence or absence of ``from``
     (the phone number) is visible at a glance via the ``phone=`` argument to
@@ -362,51 +362,6 @@ class TestWhatsappParticipantResolution:
         Expected: a new Participant is created, keyed by the BSUID.
         """
         message = _meta_message(bsuid=BSUID, phone=None)
-
-        self._deliver(channel=meta_cloud_api_whatsapp_channel, message=message)
-
-        participants = self._whatsapp_participants(meta_cloud_api_whatsapp_channel.experiment.team)
-        assert participants.count() == 1
-        assert participants.get().identifier == BSUID
-
-    def test_scenario_2_username_adopter_later_reveals_phone_keeps_same_participant(
-        self, meta_cloud_api_whatsapp_channel
-    ):
-        """A username-adopter sends their first message (BSUID only). Later they share their
-        phone — via the contact-info button, or because Meta's contact-book / 30-day cache
-        starts including it — and subsequent webhooks now carry both BSUID and phone.
-
-        Expected: the second webhook resolves to the SAME participant created at T1. No
-        duplicate is created.
-        """
-        team = meta_cloud_api_whatsapp_channel.experiment.team
-
-        # T1: phone hidden — webhook has BSUID only.
-        self._deliver(
-            channel=meta_cloud_api_whatsapp_channel,
-            message=_meta_message(bsuid=BSUID, phone=None, msg_id="wamid.t1"),
-        )
-
-        # T2: phone now visible — webhook has BSUID + phone.
-        self._deliver(
-            channel=meta_cloud_api_whatsapp_channel,
-            message=_meta_message(bsuid=BSUID, phone=PHONE, msg_id="wamid.t2"),
-        )
-
-        participants = self._whatsapp_participants(team)
-        assert participants.count() == 1
-        assert participants.get().identifier == BSUID
-
-    def test_scenario_3_new_user_without_username_creates_bsuid_keyed_participant(
-        self, meta_cloud_api_whatsapp_channel
-    ):
-        """A brand-new user who has NOT adopted a username sends their first message. The
-        webhook carries both BSUID and phone.
-
-        Expected: a new Participant is created, keyed by the BSUID — not the phone. From
-        this point on, the participant is BSUID-keyed regardless of phone visibility.
-        """
-        message = _meta_message(bsuid=BSUID, phone=PHONE)
 
         self._deliver(channel=meta_cloud_api_whatsapp_channel, message=message)
 
