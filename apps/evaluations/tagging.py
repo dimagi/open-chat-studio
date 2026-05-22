@@ -7,6 +7,7 @@ at the bottom is called from the evaluation task.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
@@ -143,6 +144,9 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     For each message evaluated in the run, any tag managed by the run's evaluators
     but not applied in this run is removed from the resolved target object.
     PREVIEW runs are skipped entirely.
+
+    Note: not wrapped in transaction.atomic(). A failure mid-loop may leave some
+    stale tags in place; a subsequent rerun will complete the cleanup.
     """
     if run.type == EvaluationRunType.PREVIEW:
         return
@@ -152,24 +156,29 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     if not possible_tags:
         return
 
-    evaluator = evaluators[0]
+    # All evaluators in a config share the dataset's evaluation_mode (enforced by
+    # form validation). Use the first as a representative to carry mode into resolve_target.
+    representative_evaluator = evaluators[0]
+
+    # Batch all AppliedTag lookups for this run to avoid an O(N) query per message.
+    applied_by_message: defaultdict[int, set[int]] = defaultdict(set)
+    for row in AppliedTag.objects.filter(evaluation_result__run=run).values("evaluation_result__message_id", "tag_id"):
+        applied_by_message[row["evaluation_result__message_id"]].add(row["tag_id"])
+
+    content_type = None
     messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
     for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
-        target = resolve_target(evaluator, message)
+        target = resolve_target(representative_evaluator, message)
         if target is None:
             continue
 
-        applied_tags = frozenset(
-            AppliedTag.objects.filter(
-                evaluation_result__run=run,
-                evaluation_result__message=message,
-            ).values_list("tag_id", flat=True)
-        )
-        stale_tags = possible_tags - applied_tags
+        if content_type is None:
+            content_type = ContentType.objects.get_for_model(type(target))
+
+        stale_tags = possible_tags - applied_by_message[message.pk]
         if not stale_tags:
             continue
 
-        content_type = ContentType.objects.get_for_model(type(target))
         CustomTaggedItem.objects.filter(
             content_type=content_type,
             object_id=target.pk,

@@ -148,6 +148,44 @@ class TestReverseStaleTags:
 
         assert chat_message.tags.filter(pk=tag_a.pk).exists()
 
+    def test_multi_evaluator_stale_tags_from_both_evaluators_removed(self, team, tag_a):
+        """possible_tags aggregates rules from all evaluators; stale tags from each are removed."""
+        tag_b = EvaluationTagFactory.create(team=team, name="tag-b")
+        evaluator_a = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
+        evaluator_b = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
+        EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=evaluator_a,
+            tag=tag_a,
+            field_name="sentiment",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "negative"},
+        )
+        EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=evaluator_b,
+            tag=tag_b,
+            field_name="quality",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "low"},
+        )
+        message = EvaluationMessageFactory.create(create_chat_messages=True)
+        chat_message = message.expected_output_chat_message
+
+        chat_message.tags.add(tag_a, through_defaults={"team": team})
+        chat_message.tags.add(tag_b, through_defaults={"team": team})
+
+        dataset = EvaluationDatasetFactory.create(team=team, messages=[message])
+        config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator_a, evaluator_b])
+        run = EvaluationRunFactory.create(team=team, config=config)
+        EvaluationResultFactory.create(team=team, evaluator=evaluator_a, message=message, run=run, output={})
+        EvaluationResultFactory.create(team=team, evaluator=evaluator_b, message=message, run=run, output={})
+
+        reverse_stale_tags(run)
+
+        assert not chat_message.tags.filter(pk=tag_a.pk).exists()
+        assert not chat_message.tags.filter(pk=tag_b.pk).exists()
+
     def test_session_mode_stale_tag_removed_from_chat(self, team, tag_a):
         """Session-mode evaluators target the Chat; stale tags are removed from Chat."""
         session_evaluator = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.SESSION)
