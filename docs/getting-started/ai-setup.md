@@ -7,7 +7,7 @@ New to AI-assisted development on this project? Complete this setup first, then 
 This project's AI workflow is built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
 
 1. Install Claude Code following the [official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
-2. Install the shared workflows and skills from the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. Refer to that repository for setup instructions and usage guidance. This provides the skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) that the [AI development workflow](../developer_guides/ai_development.md) depends on.
+2. Install the shared workflows and skills from the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. Refer to that repository for setup instructions and usage guidance. It provides the skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) that the [AI development workflow](../developer_guides/ai_development.md) depends on.
 
 ## Project AI Instructions
 
@@ -19,16 +19,26 @@ The project's [`AGENTS.md`](https://github.com/dimagi/open-chat-studio/blob/main
 
 The project includes a `.claude/settings.json` that configures Claude Code's behavior in this repo:
 
-- **Permissions** — pre-approved commands (pytest, ruff, git, gh, etc.) so Claude Code can run them without prompting.
+- **Permissions** — pre-approved safe commands (pytest, ruff, git, gh, etc.) so Claude Code can run them without prompting.
+- **Hooks** — see the `.claude/hooks/` directory and the [Claude documentation on hooks](https://code.claude.com/docs/en/agent-sdk/hooks).
 
 You do not need to configure these — they are already checked in and active as soon as you open the project in Claude Code.
 
 ## Other Tools
 
-Other agentic coding tools (Gemini CLI, Codex CLI, opencode, Aider, Cline, etc.) can follow the same [AI development workflow](../developer_guides/ai_development.md). Create a symlink named for your tool that points to `AGENTS.md`:
+Other agentic coding tools (Gemini CLI, Codex CLI, opencode, Aider, Cline, etc.) can follow the same [AI development workflow](../developer_guides/ai_development.md).
+
+### For Gemini CLI
+Google's CLI agent; reads GEMINI.md natively. Create a symlink named for your tool that points to `AGENTS.md`:
 
 ```bash
 ln -s AGENTS.md GEMINI.md
 ```
 
 Add the symlink to `.gitignore` — don't commit it.
+
+### For Codex CLI
+OpenAI's open-source CLI agent; reads AGENTS.md natively.
+
+### For other tools
+Refer to your tool's documentation on how to specify instruction files.
