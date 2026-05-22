@@ -43,6 +43,29 @@ def test_get_usages_empty_when_unreferenced(anthropic_provider):
 
 
 @pytest.mark.django_db()
+def test_usages_view_handles_versioned_object_without_version_number(team_with_users, client):
+    """Regression: VersionsMixin subclasses that don't declare ``version_number``
+    (e.g. DocumentSource) used to crash the usages page because the template
+    called ``get_version_name`` which assumed the field existed."""
+    from apps.utils.factories.documents import DocumentSourceFactory  # noqa: PLC0415
+    from apps.utils.factories.service_provider_factories import AuthProviderFactory  # noqa: PLC0415
+
+    auth_provider = AuthProviderFactory(team=team_with_users)
+    working = DocumentSourceFactory(team=team_with_users, auth_provider=auth_provider)
+    DocumentSourceFactory(team=team_with_users, auth_provider=auth_provider, working_version=working)
+
+    user = team_with_users.members.first()
+    client.force_login(user)
+    response = client.get(
+        reverse(
+            "service_providers:usages",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": auth_provider.pk},
+        )
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
 def test_messaging_channels_roll_up_to_chatbots(team_with_users):
     from apps.utils.factories.channels import ExperimentChannelFactory  # noqa: PLC0415
 

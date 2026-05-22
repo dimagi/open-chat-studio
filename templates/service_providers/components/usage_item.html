@@ -14,11 +14,16 @@
     {% endif %}
   {% endwith %}
 {% endwith %}
+{% comment %}
+  Reading ``version_number`` directly rather than calling
+  ``get_version_name`` — the latter raises AttributeError on VersionsMixin
+  subclasses that don't define ``version_number`` (e.g. DocumentSource).
+{% endcomment %}
 {% if obj.is_working_version %}
   <span class="badge badge-info badge-sm ml-1">working version</span>
 {% elif obj.is_default_version %}
-  <span class="badge badge-success badge-sm ml-1">published {{ obj.get_version_name }}</span>
-{% elif obj.get_version_name %}
-  <span class="badge badge-ghost badge-sm ml-1">{{ obj.get_version_name }}</span>
+  <span class="badge badge-success badge-sm ml-1">published v{{ obj.version_number }}</span>
+{% elif obj.version_number %}
+  <span class="badge badge-ghost badge-sm ml-1">v{{ obj.version_number }}</span>
 {% endif %}
 {% if obj.is_archived %}<span class="badge badge-warning badge-sm ml-1">archived</span>{% endif %}
