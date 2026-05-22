@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -27,6 +28,9 @@ class ChannelSender:
 
     def send_file(self, file: File, recipient: str, session_id: int) -> None:
         raise NotImplementedError
+
+    def bind(self, ctx: MessageProcessingContext) -> None:
+        """Called after context creation. Override to store a context reference for lazy reads."""
 
     def flush(self) -> None:
         """Called by ResponseSendingStage after all text/voice/file sends.

@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Sum
 from django.urls import reverse
+from django.utils import timezone
 from pydantic import TypeAdapter
 
 from apps.evaluations.field_definitions import FieldDefinition
@@ -24,6 +25,7 @@ class QueueStatus(models.TextChoices):
 class AnnotationItemStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     IN_PROGRESS = "in_progress", "In Progress"
+    AWAITING_RESOLUTION = "awaiting_resolution", "Awaiting resolution"
     COMPLETED = "completed", "Completed"
     FLAGGED = "flagged", "Flagged"
 
@@ -98,6 +100,7 @@ class AnnotationQueue(BaseTeamModel):
         """Return progress stats including review-level progress for multi-review queues."""
         total_items = self.items.count()
         completed_items = self.items.filter(status=AnnotationItemStatus.COMPLETED).count()
+        awaiting_resolution_items = self.items.filter(status=AnnotationItemStatus.AWAITING_RESOLUTION).count()
         flagged_items = self.items.filter(status=AnnotationItemStatus.FLAGGED).count()
 
         total_reviews_needed = total_items * self.num_reviews_required
@@ -107,6 +110,7 @@ class AnnotationQueue(BaseTeamModel):
         return {
             "total_items": total_items,
             "completed_items": completed_items,
+            "awaiting_resolution_items": awaiting_resolution_items,
             "flagged_items": flagged_items,
             "total_reviews_needed": total_reviews_needed,
             "reviews_done": reviews_done,
@@ -180,17 +184,26 @@ class AnnotationItem(BaseTeamModel):
             return f"Message {self.message_id}"
         return f"Item {self.id}"
 
+    def _has_authoritative_annotation(self) -> bool:
+        return self.annotations.filter(status=AnnotationStatus.SUBMITTED, is_authoritative=True).exists()
+
     def update_status(self, save=True):
-        """Update item status based on review count vs queue requirement.
+        """Update item status based on review count, authoritative flag, and queue requirement.
         Preserves FLAGGED status — only explicit unflagging clears it."""
         if self.status == AnnotationItemStatus.FLAGGED:
             return
-        if self.review_count >= self.queue.num_reviews_required:
-            self.status = AnnotationItemStatus.COMPLETED
-        elif self.review_count > 0:
-            self.status = AnnotationItemStatus.IN_PROGRESS
-        else:
+
+        required = self.queue.num_reviews_required
+
+        if self.review_count == 0:
             self.status = AnnotationItemStatus.PENDING
+        elif self.review_count < required:
+            self.status = AnnotationItemStatus.IN_PROGRESS
+        elif required == 1 or self._has_authoritative_annotation():
+            self.status = AnnotationItemStatus.COMPLETED
+        else:
+            self.status = AnnotationItemStatus.AWAITING_RESOLUTION
+
         if save:
             self.save(update_fields=["status"])
 
@@ -209,6 +222,15 @@ class Annotation(BaseTeamModel):
         on_delete=models.CASCADE,
         related_name="annotations",
     )
+    is_authoritative = models.BooleanField(default=False)
+    authoritative_set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authoritative_annotations_set",
+    )
+    authoritative_set_at = models.DateTimeField(null=True, blank=True)
     data = SanitizedJSONField(default=dict, help_text="Annotation data matching the queue's schema")
     status = models.CharField(
         max_length=20,
@@ -219,25 +241,48 @@ class Annotation(BaseTeamModel):
     class Meta:
         unique_together = ("item", "reviewer")
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item"],
+                condition=models.Q(is_authoritative=True),
+                name="one_authoritative_annotation_per_item",
+            ),
+        ]
 
     def __str__(self):
         return f"Annotation by {self.reviewer} on item {self.item_id}"
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
-        super().save(*args, **kwargs)
-        if is_new and self.status == AnnotationStatus.SUBMITTED:
-            self._update_item_review_count()
+        if not (is_new and self.status == AnnotationStatus.SUBMITTED):
+            super().save(*args, **kwargs)
+            return
 
-    def _update_item_review_count(self):
-        """Increment item review count, update status, and recompute queue aggregates."""
+        # Lock the item across the auto-mark check + save so two concurrent submissions
+        # on a single-review queue can't both pass the check and violate
+        # one_authoritative_annotation_per_item.
         with transaction.atomic():
             item = AnnotationItem.objects.select_for_update().get(pk=self.item_id)
+            self._maybe_auto_mark_authoritative()
+            super().save(*args, **kwargs)
             item.review_count = item.annotations.filter(status=AnnotationStatus.SUBMITTED).count()
             item.update_status(save=False)
             item.save(update_fields=["review_count", "status"])
-
         self.recompute_queue_aggregates(item.queue)
+
+    def _maybe_auto_mark_authoritative(self):
+        """For single-reviewer queues, auto-mark the first submission as authoritative.
+        Skips when another authoritative annotation already exists on the item (handles
+        over-budget submissions and avoids violating the partial unique constraint).
+        Caller must hold a row-level lock on the item to serialize concurrent submissions."""
+        queue = self.item.queue
+        if queue.num_reviews_required != 1:
+            return
+        if Annotation.objects.filter(item=self.item, is_authoritative=True).exists():
+            return
+        self.is_authoritative = True
+        self.authoritative_set_by = None
+        self.authoritative_set_at = timezone.now()
 
     def recompute_queue_aggregates(self, queue=None):
         """Recompute aggregates for the queue this annotation belongs to."""

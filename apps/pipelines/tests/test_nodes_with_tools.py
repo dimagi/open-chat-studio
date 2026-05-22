@@ -135,7 +135,6 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
             _tool_call(AgentTools.APPEND_TO_PARTICIPANT_DATA, {"key": "test", "value": "next"}),
             "123",
         ],
-        token_counts=[0],
     )
     get_llm_service.return_value = service
     nodes = [
@@ -182,7 +181,6 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
             _tool_call(AgentTools.UPDATE_PARTICIPANT_DATA, {"arg1": "test arg"}),
             "ai response after tool",
         ],
-        token_counts=[0],
     )
     get_configured_tools.return_value = [tool]
 

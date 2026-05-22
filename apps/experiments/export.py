@@ -9,15 +9,17 @@ import dictdiffer
 
 from apps.analysis.translation import get_message_content
 from apps.annotations.models import Tag, UserComment
+from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
-from apps.trace.models import Trace
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
+
+UTF8_BOM = "\ufeff"  # Prepended to CSV exports so Excel detects UTF-8 encoding.
 
 
 def _format_tags(tags: list[Tag]) -> str:
@@ -42,46 +44,48 @@ def get_filtered_sessions(experiment, query_params, timezone):
     return sessions_queryset
 
 
-def _get_participant_data_for_trace(trace):
-    """Returns (start_data, end_data) for a trace.
+def _get_participant_data_for_message(message) -> dict:
+    """Return participant data for a message by looking up its associated trace.
 
-    start_data is the participant_data snapshot at the beginning of the trace.
-    end_data is computed by applying participant_data_diff to start_data.
-    If the diff is empty, end_data equals start_data.
+    For human (input) messages: returns the snapshot at the start of the trace.
+    For AI (output) messages: applies the trace diff to get the end snapshot.
     """
-    start_data = trace.participant_data or {}
-    if trace.participant_data_diff:
-        end_data = dictdiffer.patch(trace.participant_data_diff, start_data)
-    else:
-        end_data = start_data
-    return start_data, end_data
+    if message.is_human_message:
+        traces = list(message.input_message_trace.all())
+        if traces:
+            return traces[0].participant_data or {}
+    elif message.is_ai_message:
+        traces = list(message.output_message_trace.all())
+        if traces:
+            trace = traces[0]
+            start_data = trace.participant_data or {}
+            if trace.participant_data_diff:
+                return dictdiffer.patch(trace.participant_data_diff, start_data)
+            return start_data
+    return {}
 
 
-def _build_trace_queryset(sessions_queryset):
-    """Return the base Trace queryset for export, ordered by pk for keyset pagination."""
+def _build_message_queryset(sessions_queryset):
+    """Return the base ChatMessage queryset for export, ordered by pk for keyset pagination."""
     return (
-        Trace.objects.filter(
-            session__in=sessions_queryset,
-            input_message__isnull=False,
+        ChatMessage.objects.filter(
+            chat__experiment_session__in=sessions_queryset,
         )
         .select_related(
-            "input_message",
-            "output_message",
-            "session",
-            "session__participant",
-            "session__experiment_channel",
-            "session__chat",  # OneToOneField: explicit JOIN beats implicit prefetch
+            "chat",
+            "chat__experiment_session",
+            "chat__experiment_session__participant",
+            "chat__experiment_session__experiment_channel",
         )
         .prefetch_related(
-            "input_message__tags",
-            "input_message__comments",
-            "input_message__comments__user",
-            "output_message__tags",
-            "output_message__comments",
-            "output_message__comments__user",
-            "session__chat__tags",
-            "session__chat__comments",
-            "session__chat__comments__user",
+            "tags",
+            "comments",
+            "comments__user",
+            "chat__tags",
+            "chat__comments",
+            "chat__comments__user",
+            "input_message_trace",
+            "output_message_trace",
         )
         .order_by("pk")
     )
@@ -128,10 +132,8 @@ def _build_session_cache_entry(session) -> dict:
     }
 
 
-def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list | None:
-    """Return an export row list for *message*, or None if the message is absent."""
-    if message is None:
-        return None
+def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list:
+    """Return an export row list for *message*."""
     content = get_message_content(message, translation_language) if translation_language else message.content
     row = [
         message.id,
@@ -159,37 +161,31 @@ def _build_message_row(message, participant_data, sc, experiment, trace_id, tran
     return row
 
 
-def _yield_rows_for_trace(trace, session_cache, experiment, translation_language) -> Generator[list]:
-    """Yield one export row per message (input + output) for a single trace."""
-    start_data, end_data = _get_participant_data_for_trace(trace)
-    trace_id = _get_trace_id_for_export(trace.input_message)
-    session = trace.session
-
+def _yield_row_for_message(message, session_cache, experiment, translation_language) -> list:
+    """Return an export row for a single message."""
+    session = message.chat.experiment_session
     if session.id not in session_cache:
         session_cache[session.id] = _build_session_cache_entry(session)
     sc = session_cache[session.id]
-
-    for message, participant_data in [(trace.input_message, start_data), (trace.output_message, end_data)]:
-        row = _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language)
-        if row is not None:
-            yield row
+    participant_data = _get_participant_data_for_message(message)
+    trace_id = _get_trace_id_for_export(message)
+    return _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language)
 
 
 def generate_export_rows(experiment, sessions_queryset, translation_language=None) -> Generator[list]:
-    """Yield the header row, then one data row per message across all matching traces.
+    """Yield the header row, then one data row per message across all matching sessions.
 
-    Traces are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
+    Messages are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
     that memory usage stays bounded regardless of dataset size.  Session-level values
     (platform name, state JSON, participant fields, chat tags/comments) are cached the
     first time each session is encountered so they are serialised only once no matter
-    how many traces belong to that session.
+    how many messages belong to that session.  The cache stores plain strings/dicts
+    (not ORM objects) so its footprint is small even for experiments with many sessions.
     """
     yield _get_export_header(translation_language)
 
-    base_qs = _build_trace_queryset(sessions_queryset)
+    base_qs = _build_message_queryset(sessions_queryset)
     last_pk = 0
-    # Cache stores plain strings/dicts (not ORM objects) so its footprint is small
-    # even for experiments with many sessions.
     session_cache: dict[int, dict] = {}
 
     while True:
@@ -197,12 +193,11 @@ def generate_export_rows(experiment, sessions_queryset, translation_language=Non
         if not chunk:
             break
 
-        for trace in chunk:
-            yield from _yield_rows_for_trace(trace, session_cache, experiment, translation_language)
+        for message in chunk:
+            yield _yield_row_for_message(message, session_cache, experiment, translation_language)
 
         last_pk = chunk[-1].pk
         if len(chunk) < EXPORT_CHUNK_SIZE:
-            # Partial chunk means we've reached the end; skip the extra query.
             break
 
 
@@ -213,6 +208,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
     Django's StreamingHttpResponse so the response is sent to the client
     incrementally rather than buffered entirely in memory.
     """
+    yield UTF8_BOM
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
     for row in rows:
@@ -290,6 +286,9 @@ def _get_trace_id_for_export(message):
     """Returns the trace info from the message.
     This will return the first non-OCS trace info if it exists.
     """
+    if not message:
+        return ""
+
     if trace_infos := message.trace_info:
         non_ocs_trace = [
             info

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from apps.service_providers.llm_service.model_parameters import GPT52Parameters, get_schema
+from apps.service_providers.llm_service.model_parameters import ClaudeSonnet46Parameters, GPT52Parameters, get_schema
 
 
 class TestGPT52ParametersNoneEffort:
@@ -48,3 +48,26 @@ class TestGPT52ParametersSchema:
     def test_top_p_has_default_on_show_in_schema(self):
         schema = get_schema(GPT52Parameters)
         assert schema["properties"]["top_p"]["ui:onShowDefault"] == 1.0
+
+
+class TestClaudeSonnet46Parameters:
+    """Claude Sonnet 4.6 was released after Opus 4.6 and does not support
+    temperature. Verify the parameter class omits it entirely."""
+
+    def test_temperature_not_in_fields(self):
+        assert "temperature" not in ClaudeSonnet46Parameters.model_fields
+
+    def test_temperature_not_in_model_dump(self):
+        params = ClaudeSonnet46Parameters()
+        assert "temperature" not in params.model_dump()
+
+    def test_defaults(self):
+        params = ClaudeSonnet46Parameters()
+        assert params.max_tokens == 32000
+        assert params.effort == "high"
+        assert params.adaptive_thinking is False
+
+    def test_effort_and_adaptive_thinking_configurable(self):
+        params = ClaudeSonnet46Parameters(effort="low", adaptive_thinking=True)
+        assert params.effort == "low"
+        assert params.adaptive_thinking is True

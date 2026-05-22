@@ -44,7 +44,7 @@ def experiment_session():
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
-    service = build_fake_llm_service(None, [0], llm)
+    service = build_fake_llm_service(None, llm)
     get_llm_service.return_value = service
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
@@ -119,7 +119,7 @@ def test_llm_with_node_history(get_llm_service, provider, pipeline, experiment_s
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
-    service = build_fake_llm_service(None, [0], llm)
+    service = build_fake_llm_service(None, llm)
     get_llm_service.return_value = service
     llm_1 = llm_response_with_prompt_node(
         str(provider.id),
@@ -197,7 +197,7 @@ def test_llm_with_multiple_node_histories(get_llm_service, provider, pipeline, e
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_global_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
-    service = build_fake_llm_service(None, [0], llm)
+    service = build_fake_llm_service(None, llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
@@ -287,7 +287,7 @@ def test_global_history(get_llm_service, provider, pipeline, experiment_session,
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
-    service = build_fake_llm_service(None, [0], llm)
+    service = build_fake_llm_service(None, llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
@@ -364,7 +364,7 @@ def test_llm_with_named_history(get_llm_service, provider, pipeline, experiment_
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_session, provider_model):
     llm = FakeLlmEcho()
-    service = build_fake_llm_service(None, [0], llm)
+    service = build_fake_llm_service(None, llm)
     get_llm_service.return_value = service
 
     llm_1 = llm_response_with_prompt_node(
