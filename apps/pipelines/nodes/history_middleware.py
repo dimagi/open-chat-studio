@@ -19,9 +19,20 @@ def get_token_counter(model=None):
     """Return a callable that counts tokens for a given messages list.
 
     If no model is provided, returns langchain's built-in approximate counter.
-    When a model is provided, returns its exact tokenizer method.
+    When a model is provided, attempts to use its exact tokenizer and falls back
+    to the approximate counter if the model's encoding cannot be resolved (e.g.
+    Azure deployments where the deployment name is not a recognised tiktoken model).
     """
-    return model.get_num_tokens_from_messages if model else count_tokens_approximately
+    if model is None:
+        return count_tokens_approximately
+
+    def _counter(messages):
+        try:
+            return model.get_num_tokens_from_messages(messages)
+        except Exception:
+            return count_tokens_approximately(messages)
+
+    return _counter
 
 
 if TYPE_CHECKING:
