@@ -21,14 +21,14 @@ Ask the team member to find their device serial number:
 
 ### Step 2: Register their device
 
-1. Go to **Settings → WARP Client → Device posture**.
-2. Open your serial number rule.
+1. Go to **Zero Trust → Reusable components → Lists**.
+2. Select your serial number list (or create one: Create manual list → set List Type to Serial numbers → enter serial numbers → Save)
 3. Add their serial number.
 4. Click **Save**.
 
 ### Step 3: Add their email to the Access policy
 
-1. Go to **Access → Applications → Open Chat Studio → Policies**.
+1. Go to **Zero Trust → Access controls → Applications**.
 2. Edit your Allow policy.
 3. Under **Include**, add their email address.
 4. Click **Save**.
@@ -156,7 +156,7 @@ Work through this checklist:
 4. Is their email address in the Access policy?
 5. Is the tunnel healthy? Go to **Networks → Tunnels**; status should show **Healthy**.
 6. Can they reach the app by **CIDR IP**? Try `http://172.18.0.7:8000`. If this works but the hostname doesn't, the issue is **DNS**, not access.
-7. Is Local Domain Fallback configured with the correct dnsmasq IP? Go to **Settings → WARP Client → Device profiles → Default profile → Local Domain Fallback**.
+7. Is Local Domain Fallback configured? Go to **Self Host → Team & Resources → Devices → Default profiles → Default Profile Configure → Local Domain Fallback**; the hostname must be listed with the host IP e.g `ocs.your-org  - 172.18.0.100` .
 8. Is Gateway Proxy enabled with **UDP**? Go to **Traffic policies → Traffic settings → Proxy and inspection**. UDP must be on for DNS resolution to private IPs.
 
 If all of the above are correct, check the Access logs. The deny reason will identify exactly which check is failing.
@@ -167,9 +167,9 @@ The private hostname cannot be resolved. This is a DNS issue, not an access issu
 
 1. Is **WARP connected**? Private hostnames only resolve through WARP.
 2. Has the user toggled **WARP OFF** and on since the last profile change? Profile updates require a reconnect.
-3. Is Local Domain Fallback configured? Go to **Settings → WARP Client → Device profiles → Default profile → Local Domain Fallback**; the hostname must be listed with the dnsmasq IP.
+3. Is Local Domain Fallback configured? Go to **Self Host → Team & Resources → Devices → Default profiles → Default Profile Configure → Local Domain Fallback**; the hostname must be listed with the host IP e.g `ocs.your-org  - 172.18.0.100` .
 4. Is Gateway Proxy enabled with UDP? Go to **Traffic policies → Traffic settings**; UDP must be on.
-5. Is the dnsmasq container running? Check on the server: `docker compose -f docker-compose.cloudflare.yml logs dns`
+5. Is the `\etc\hosts` inside the server have been set using  `sudo sed -i 's/172.18.0.7 openchatstudio.semabu/172.18.0.6 openchatstudio.semabu/' /etc/hosts`
 6. Is the hostname using `.local`? The `.local` TLD is reserved for mDNS and will not resolve through WARP. Use a different name.
 
 ### A device is lost or stolen
@@ -219,7 +219,6 @@ docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml resta
 | Change WARP session duration | Settings → WARP Client → Global settings |
 | Configure Local Domain Fallback | Settings → WARP Client → Device profiles → Default → Local Domain Fallback |
 | Enable Gateway Proxy | Traffic policies → Traffic settings → Proxy and inspection |
-| Check dnsmasq status | On server: `docker compose -f docker-compose.cloudflare.yml logs dns` |
 
 ---
 

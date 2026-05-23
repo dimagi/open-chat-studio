@@ -14,11 +14,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView, Request
 
 from apps.api.permissions import verify_hmac
-from apps.api.serializers import TriggerBotMessageRequest
+from apps.api.serializers import TriggerBotMessageRequest, TriggerBotMessageResponse
 from apps.api.tasks import create_connect_channel_for_participant, trigger_bot_message_task
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.chat.channels import ChannelBase
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.teams.utils import current_team
 
 connect_logger = logging.getLogger("api.connect_channel")
 
@@ -94,9 +97,7 @@ def _get_or_create_participant_data(request, identifier, platform, experiment, i
     ).first()
 
     if not participant_data:
-        participant, _ = Participant.objects.get_or_create(
-            identifier=identifier, platform=platform, team=request.team
-        )
+        participant, _ = Participant.objects.get_or_create(identifier=identifier, platform=platform, team=request.team)
         participant_data, created = ParticipantData.objects.get_or_create(
             participant=participant,
             experiment=experiment,
@@ -147,9 +148,7 @@ def _ensure_commcare_connect_ready(channel, identifier, participant_data):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         except httpx.HTTPError as e:
-            connect_logger.error(
-                f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}"
-            )
+            connect_logger.error(f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}")
             return JsonResponse(
                 {"detail": "Failed to create channel: Unable to connect to CommCare Connect service"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -170,7 +169,7 @@ class TriggerBotMessageView(APIView):
         tags=["Channels"],
         request=TriggerBotMessageRequest(),
         responses={
-            200: {},
+            200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
             404: {"description": "Not Found"},
         },
@@ -249,6 +248,19 @@ class TriggerBotMessageView(APIView):
             if error := _ensure_commcare_connect_ready(channel, identifier, participant_data):
                 return error
 
-        trigger_bot_message_task.delay_on_commit(data)
+        target_experiment = resolve_published_or_working(experiment)
+        ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
+        bot_channel = ChannelClass(experiment=target_experiment, experiment_channel=channel)
+        with current_team(experiment.team):
+            bot_channel.ensure_session_exists_for_participant(identifier, new_session=data["start_new_session"])
+            session = bot_channel.experiment_session
+            if data.get("session_data"):
+                session.state = {**session.state, **data["session_data"]}
+                session.save(update_fields=["state"])
 
-        return Response(status=status.HTTP_200_OK)
+        trigger_bot_message_task.delay_on_commit(
+            str(session.external_id), data.get("prompt_text"), data.get("message_text")
+        )
+
+        response_serializer = TriggerBotMessageResponse(instance=session, context={"request": request})
+        return Response(response_serializer.data, status=status.HTTP_200_OK)

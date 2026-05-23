@@ -15,7 +15,8 @@ def _get_aggregatable_fields(queue) -> set[str]:
 def compute_aggregates_for_queue(queue) -> AnnotationQueueAggregate:
     """Compute and store aggregates for all submitted annotations in a queue.
 
-    Groups annotation data by schema field and applies numeric/categorical aggregators.
+    Per item: use authoritative annotation if one exists, else fall back to all
+    submitted annotations. Numeric / categorical aggregators are applied per field.
     Text (string) fields are excluded from aggregation.
     """
     aggregatable_fields = _get_aggregatable_fields(queue)
@@ -28,7 +29,10 @@ def compute_aggregates_for_queue(queue) -> AnnotationQueueAggregate:
     ).all()
 
     for item in items:
-        for ann in item.annotations.all():
+        submitted = list(item.annotations.all())
+        authoritative = [a for a in submitted if a.is_authoritative]
+        contributing = authoritative if authoritative else submitted
+        for ann in contributing:
             for field_name, value in ann.data.items():
                 if field_name in aggregatable_fields and value is not None:
                     field_values[field_name].append(value)

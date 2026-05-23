@@ -22,8 +22,8 @@ class TestLifecycleHooks:
         callbacks.transcription_started("12345")
         telebot.send_chat_action.assert_called_once_with(chat_id="12345", action="upload_voice")
 
-    def test_submit_input_to_llm_sends_typing_action(self, callbacks, telebot):
-        callbacks.submit_input_to_llm("12345")
+    def test_on_submit_input_to_llm_sends_typing_action(self, callbacks, telebot):
+        callbacks.on_submit_input_to_llm("12345")
         telebot.send_chat_action.assert_called_once_with(chat_id="12345", action="typing")
 
     def test_echo_transcript_sends_message(self, callbacks, telebot):

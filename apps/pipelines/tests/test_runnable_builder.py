@@ -56,7 +56,6 @@ from apps.utils.langchain import (
     FakeLlmEcho,
     FakeLlmService,
     FakeLlmSimpleTokenCount,
-    FakeTokenCounter,
     build_fake_llm_echo_service,
     build_fake_llm_service,
 )
@@ -114,7 +113,7 @@ class TestEmailPipeline:
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_full_email_sending_pipeline(self, get_llm_service, provider, provider_model, pipeline):
-        service = build_fake_llm_service(responses=['{"summary": "Ice is cold"}'], token_counts=[0])
+        service = build_fake_llm_service(responses=['{"summary": "Ice is cold"}'])
         get_llm_service.return_value = service
 
         nodes = [
@@ -154,7 +153,7 @@ class TestLLMResponse:
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_llm_response(self, get_llm_service, provider, provider_model, pipeline):
-        service = build_fake_llm_service(responses=["123"], token_counts=[0])
+        service = build_fake_llm_service(responses=["123"])
         get_llm_service.return_value = service
         nodes = [
             start_node(),
@@ -223,7 +222,6 @@ class TestLLMResponse:
 
         service = build_fake_llm_service(
             responses=[_tool_call(), "Done"],
-            token_counts=[0],
         )
         get_llm_service.return_value = service
         start = start_node()
@@ -401,7 +399,6 @@ class TestRouterNode:
                 _tool_call("D"),
                 _tool_call("z"),
             ],
-            token_counts=[0],
         )
         get_llm_service.return_value = service
         start = start_node()
@@ -520,7 +517,7 @@ class TestRouterNode:
         self, get_llm_service, LLMClass, provider, provider_model, experiment_session
     ):
         refusing_llm = LLMClass(include_system_message=True)
-        service = FakeLlmService(llm=refusing_llm, token_counter=FakeTokenCounter(token_counts=[0]))
+        service = FakeLlmService(llm=refusing_llm)
         get_llm_service.return_value = service
         node = RouterNode(
             node_id="test",
@@ -795,7 +792,7 @@ def main(input, **kwargs):
         """A code node sets attachment.send_to_llm = False, then the LLM node
         should not include that attachment in the API call."""
         fake_llm = FakeLlmSimpleTokenCount(responses=["LLM response"])
-        service = build_fake_llm_service(responses=["LLM response"], token_counts=[0], fake_llm=fake_llm)
+        service = build_fake_llm_service(responses=["LLM response"], fake_llm=fake_llm)
         get_llm_service.return_value = service
 
         code_disable_attachment = """
@@ -852,7 +849,7 @@ class TestDataExtraction:
         tool_response = AIMessage(
             tool_calls=[ToolCall(name="CustomModel", args={"name": "John"}, id="123")], content="Hi"
         )
-        service = build_fake_llm_service(responses=[tool_response], token_counts=[0], fake_llm=llm)
+        service = build_fake_llm_service(responses=[tool_response], fake_llm=llm)
 
         with (
             mock.patch(
@@ -1005,7 +1002,7 @@ class TestDataExtraction:
         initial_data: dict,
     ):
         tool_call = AIMessage(tool_calls=[ToolCall(name="CustomModel", args=extracted_data, id="123")], content="Hi")
-        service = build_fake_llm_service(responses=[tool_call], token_counts=[0])
+        service = build_fake_llm_service(responses=[tool_call])
         with (
             mock.patch(
                 "apps.service_providers.models.LlmProvider.get_llm_service",

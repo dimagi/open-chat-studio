@@ -536,6 +536,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "session_id": self._get_session_external_id(item),
             "annotated_at": "",
             "flagged": True,
+            "is_authoritative": False,
             "flags": item.flags,
         }
 
@@ -550,6 +551,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "session_id",
             "annotated_at",
             "flagged",
+            "is_authoritative",
             "flags",
         ] + schema_fields
 
@@ -563,6 +565,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "session_id": self._get_session_external_id(ann.item),
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": False,
+                "is_authoritative": ann.is_authoritative,
                 "flags": json.dumps(ann.item.flags),
             }
             for field in schema_fields:
@@ -587,6 +590,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
                 "session_id": self._get_session_external_id(ann.item),
                 "annotated_at": ann.created_at.isoformat(),
                 "flagged": False,
+                "is_authoritative": ann.is_authoritative,
                 "flags": ann.item.flags,
                 "annotation": ann.data,
             }

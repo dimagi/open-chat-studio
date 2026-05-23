@@ -173,7 +173,7 @@ def test_run_bot_generation_creates_evaluations_participant(
     get_llm_service, experiment, evaluation_message, team_with_users
 ):
     """Test that _run_bot_generation creates the evaluations participant if it doesn't exist"""
-    service = build_fake_llm_service(responses=["Bot generated response"], token_counts=[30])
+    service = build_fake_llm_service(responses=["Bot generated response"])
     get_llm_service.return_value = service
 
     # Verify participant doesn't exist initially
@@ -200,7 +200,7 @@ def test_run_bot_generation_creates_session(get_llm_service, experiment, evaluat
     """Test that _run_bot_generation creates a session"""
 
     # Mock the LLM service
-    service = build_fake_llm_service(responses=["Bot response"], token_counts=[30])
+    service = build_fake_llm_service(responses=["Bot response"])
     get_llm_service.return_value = service
 
     # Call the bot generation function

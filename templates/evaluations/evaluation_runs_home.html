@@ -20,6 +20,13 @@
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">{{ title }}</h1>
       <div class="flex gap-2">
+        {% if perms.evaluations.change_evaluationconfig %}
+          <a href="{% url 'evaluations:edit' request.team.slug config.id %}"
+             class="btn btn-outline">
+            <i class="fa-solid fa-pencil"></i>
+            Edit
+          </a>
+        {% endif %}
         <a href="{% url 'evaluations:create_evaluation_preview' request.team.slug config.id %}"
            class="btn btn-outline">
           <i class="fa-solid fa-eye"></i>
@@ -30,6 +37,22 @@
           <i class="fa-solid fa-play"></i>
           Run Evaluation
         </a>
+        {% if perms.evaluations.delete_evaluationconfig %}
+          <button id="delete-evaluation-button"
+                  class="btn btn-outline btn-error"
+                  type="button"
+                  hx-delete="{% url 'evaluations:delete' request.team.slug config.id %}?redirect=1"
+                  hx-trigger="confirmed"
+                  onclick="alertify.confirm().setting({
+                    title: 'Confirm',
+                    message: 'Delete this evaluation? This will also delete all run history and results. This cannot be undone.',
+                    transition: 'fade',
+                    onok: function() { htmx.trigger('#delete-evaluation-button', 'confirmed'); },
+                  }).show();">
+            <i class="fa-solid fa-trash"></i>
+            Delete
+          </button>
+        {% endif %}
       </div>
     </div>
 

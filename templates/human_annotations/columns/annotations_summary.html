@@ -2,7 +2,7 @@
   {% if annotations %}
     {% for ann in annotations|slice:":3" %}
       <div class="text-xs">
-        <span class="font-medium">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>:
+        {% if ann.is_authoritative %}<i class="fa-solid fa-circle-check text-primary" title="Authoritative"></i> {% endif %}<span class="font-medium">{{ ann.reviewer.get_full_name|default:ann.reviewer.username }}</span>:
         {% for key, value in ann.data.items %}{% if forloop.counter <= 3 %}{% if not forloop.first %}, {% endif %}{{ key }}: {{ value }}{% endif %}{% endfor %}
       </div>
     {% endfor %}

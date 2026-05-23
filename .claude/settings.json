@@ -26,18 +26,6 @@
     "MAX_THINKING_TOKENS": "32000"
   },
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-lint.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "matcher": "startup",
