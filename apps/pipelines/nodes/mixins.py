@@ -31,6 +31,7 @@ from apps.pipelines.nodes.history_middleware import (
     MaxHistoryLengthHistoryMiddleware,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
+    get_token_counter,
 )
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -241,9 +242,7 @@ class HistoryMixin(LLMResponseMixin):
         )
 
         # Reserve space for the system message so trigger/keep thresholds reflect usable context
-        from apps.pipelines.nodes.history_middleware import _count_tokens  # noqa: PLC0415
-
-        system_message_tokens = _count_tokens(model, [system_message]) if model is not None else 0
+        system_message_tokens = get_token_counter(model)([system_message])
         token_limit = max(specified_token_limit - system_message_tokens, 100)
 
         if history_mode == PipelineChatHistoryModes.SUMMARIZE:

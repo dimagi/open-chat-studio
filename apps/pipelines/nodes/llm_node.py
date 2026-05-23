@@ -14,7 +14,7 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
-from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware, _count_tokens
+from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware, get_token_counter
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -100,8 +100,8 @@ def build_node_agent(
     prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
-    model = node.get_chat_model()
 
+    model = node.get_chat_model()
     middleware = []
     if history_middleware := node.build_history_middleware(system_message=system_message, model=model):
         middleware.append(history_middleware)
@@ -124,7 +124,8 @@ def _build_size_validation_middleware(
     max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
     if not max_token_limit:
         return None
-    system_tokens = _count_tokens(model, [system_message])
+    token_counter = get_token_counter(model)
+    system_tokens = token_counter([system_message])
     effective_limit = max(max_token_limit - system_tokens, 0)
     return MessageSizeValidationMiddleware(token_limit=effective_limit, model=model)
 

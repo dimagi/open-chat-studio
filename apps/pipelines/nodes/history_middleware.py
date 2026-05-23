@@ -15,17 +15,13 @@ from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.exceptions import MessageTooLargeError
 
 
-def _count_tokens(model, messages: list) -> int:
-    """Count tokens using the model's tokenizer, falling back to an approximation.
+def get_token_counter(model=None):
+    """Return a callable that counts tokens for a given messages list.
 
-    Some models (e.g. AzureChatOpenAI with only a deployment_name) do not expose
-    a model name that tiktoken can resolve. In those cases we fall back to
-    langchain's built-in approximate counter so that token budgets remain useful.
+    If no model is provided, returns langchain's built-in approximate counter.
+    When a model is provided, returns its exact tokenizer method.
     """
-    try:
-        return model.get_num_tokens_from_messages(messages)
-    except Exception:
-        return count_tokens_approximately(messages)
+    return model.get_num_tokens_from_messages if model else count_tokens_approximately
 
 
 if TYPE_CHECKING:
@@ -157,7 +153,7 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
 
     def __init__(self, token_limit: int | None, model):
         self._token_limit = token_limit
-        self._model = model
+        self._token_counter = get_token_counter(model)
 
     def before_model(self, state, runtime):
         if self._token_limit is None:
@@ -165,11 +161,10 @@ class MessageSizeValidationMiddleware(AgentMiddleware):
         human_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
         if not human_messages:
             return None
-        token_count = _count_tokens(self._model, [human_messages[-1]])
+        token_count = self._token_counter([human_messages[-1]])
         if token_count > self._token_limit:
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "
                 f"It uses approximately {token_count} tokens, but only {self._token_limit} tokens are available "
-                f"after accounting for the system prompt."
             )
         return None
