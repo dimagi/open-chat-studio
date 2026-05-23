@@ -122,6 +122,9 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = TurnWhatsappMessage.parse(message_data)
+    if message is None:
+        # Non-conversational payload (e.g. system/status). Nothing to do.
+        return
     experiment_channel = get_experiment_channel(
         ChannelPlatform.WHATSAPP,
         experiment__public_id=experiment_id,
@@ -200,6 +203,9 @@ def get_experiment_channel_base_query(platform, **query_kwargs):
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: MetaCloudAPIWebhookMessage):
     message = MetaCloudAPIMessage.parse(message_data)
+    if message is None:
+        # Non-conversational payload (e.g. system/status). Nothing to do.
+        return
     experiment_channel = (
         ExperimentChannel.objects.filter(
             id=channel_id,

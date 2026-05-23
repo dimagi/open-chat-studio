@@ -226,6 +226,30 @@ class SureAdhereMessage(BaseMessage):
         )
 
 
+# Meta/Turn WhatsApp message types that are NOT user-authored conversational
+# messages. These payloads may omit the top-level "contacts" array entirely
+# (e.g. "system" notifications like user_changed_number).
+_NON_CONVERSATIONAL_WA_MESSAGE_TYPES = frozenset({"system", "unsupported"})
+
+
+def _extract_wa_participant_id(message_data: dict, message: dict) -> str | None:
+    """Best-effort extraction of the WhatsApp participant id (wa_id).
+
+    Standard inbound messages include a top-level ``contacts`` array, but
+    Meta system/status payloads omit it. In those cases we fall back to the
+    ``from`` field on the message itself, or to ``message["system"]["wa_id"]``.
+    """
+    contacts = message_data.get("contacts") or []
+    if contacts:
+        wa_id = contacts[0].get("wa_id")
+        if wa_id:
+            return wa_id
+    if message.get("from"):
+        return message["from"]
+    system = message.get("system") or {}
+    return system.get("wa_id")
+
+
 class TurnWhatsappMessage(BaseMessage):
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
@@ -243,12 +267,25 @@ class TurnWhatsappMessage(BaseMessage):
     def parse(message_data: dict):
         message = message_data["messages"][0]
         message_type = message["type"]
+        # Meta/Turn deliver non-conversational payloads (e.g. type="system" for
+        # user_changed_number, or "unsupported") that have a "messages" array
+        # but no "contacts" key. These are not user-authored messages, so
+        # short-circuit before attempting to dereference contacts.
+        if message_type in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES:
+            logger.info("Ignoring non-conversational WhatsApp message of type=%s", message_type)
+            return None
+
         body = ""
         if message_type == "text":
             body = message["text"]["body"]
 
+        participant_id = _extract_wa_participant_id(message_data, message)
+        if not participant_id:
+            logger.info("Ignoring WhatsApp message with no resolvable participant_id (type=%s)", message_type)
+            return None
+
         return TurnWhatsappMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
+            participant_id=participant_id,
             message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),
@@ -270,8 +307,15 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
     `participant_id` (BSUID) to match legacy phone-keyed participants."""
 
     @staticmethod
-    def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage":
+    def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage | None":
         message_type = message_data["type"]
+        # Meta delivers non-conversational payloads (e.g. type="system" for
+        # user_changed_number, or "unsupported") that may omit the identifier
+        # fields we expect. Short-circuit before attempting to parse them.
+        if message_type in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES:
+            logger.info("Ignoring non-conversational Meta Cloud API message of type=%s", message_type)
+            return None
+
         body = ""
         if message_type == "text":
             body = message_data["text"]["body"]
