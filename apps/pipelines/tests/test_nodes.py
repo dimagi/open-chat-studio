@@ -9,7 +9,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineState
-from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
+from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware, MessageSizeValidationMiddleware
 from apps.pipelines.nodes.mixins import (
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
@@ -110,6 +110,8 @@ class HistoryNodeStub(HistoryMixin):
 
     @property
     def repo(self):
+        if self._repo is None:
+            return ORMRepository()
         return self._repo
 
 
@@ -241,10 +243,11 @@ class TestHistoryMixin:
         assert result is None
         mock_repo.get_pipeline_chat_history.assert_not_called()
 
-    def test_build_history_middleware_returns_none_when_history_disabled(self, history_node_factory):
+    def test_build_history_middleware_returns_only_size_validation_when_history_disabled(self, history_node_factory):
         node = history_node_factory(history_type=PipelineChatHistoryTypes.NONE)
         middleware = node.build_history_middleware(SystemMessage(content="system"))
-        assert middleware is None
+        assert len(middleware) == 1
+        assert isinstance(middleware[0], MessageSizeValidationMiddleware)
 
     @patch("apps.pipelines.nodes.nodes.LLMResponseMixin.get_chat_model")
     def test_build_history_middleware_uses_max_history_length(self, get_chat_model, history_node_factory):
@@ -255,7 +258,9 @@ class TestHistoryMixin:
             max_history_length=5,
         )
         middleware = node.build_history_middleware(SystemMessage(content="system"))
-        assert isinstance(middleware, MaxHistoryLengthHistoryMiddleware)
+        assert len(middleware) == 2
+        assert isinstance(middleware[0], MaxHistoryLengthHistoryMiddleware)
+        assert isinstance(middleware[1], MessageSizeValidationMiddleware)
 
     def test_build_history_middleware_uses_summarize_mode(
         self,
@@ -276,7 +281,9 @@ class TestHistoryMixin:
 
         middleware = node.build_history_middleware(system_message, model=model)
 
-        assert isinstance(middleware, SummarizeHistoryMiddleware)
+        assert len(middleware) == 2
+        assert isinstance(middleware[0], SummarizeHistoryMiddleware)
+        assert isinstance(middleware[1], MessageSizeValidationMiddleware)
         model.get_num_tokens_from_messages.assert_called_once_with([system_message])
 
     @patch("apps.pipelines.nodes.mixins.LLMResponseMixin.get_chat_model")
@@ -302,7 +309,9 @@ class TestHistoryMixin:
 
         middleware = node.build_history_middleware(system_message, model=model)
 
-        assert isinstance(middleware, TruncateTokensHistoryMiddleware)
+        assert len(middleware) == 2
+        assert isinstance(middleware[0], TruncateTokensHistoryMiddleware)
+        assert isinstance(middleware[1], MessageSizeValidationMiddleware)
         model.get_num_tokens_from_messages.assert_called_once_with([system_message])
 
 

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
 import tiktoken
 from langchain_core.messages import BaseMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -27,8 +28,8 @@ from apps.pipelines.nodes.base import (
     Widgets,
 )
 from apps.pipelines.nodes.history_middleware import (
-    BaseNodeHistoryMiddleware,
     MaxHistoryLengthHistoryMiddleware,
+    MessageSizeValidationMiddleware,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
     get_token_counter,
@@ -222,34 +223,44 @@ class HistoryMixin(LLMResponseMixin):
             history_mode=self.get_history_mode(),
         )
 
-    def build_history_middleware(self, system_message: BaseMessage, model=None) -> BaseNodeHistoryMiddleware | None:
-        """Construct the history compression middleware configured for this node."""
-        if self.history_is_disabled:
-            return None
+    def build_history_middleware(self, system_message: BaseMessage, model=None) -> list:
+        """Returns compression and size-validation middleware for this node."""
+        middleware = []
+        llm_provider_model = self.repo.get_llm_provider_model(self.llm_provider_model_id)
+        max_token_limit = llm_provider_model.max_token_limit
+        try:
+            token_counter = get_token_counter(model)
+            system_message_tokens = token_counter([system_message])
+        except Exception:
+            # Azure deployment names are often unrecognised by tiktoken.
+            token_counter = count_tokens_approximately
+            system_message_tokens = token_counter([system_message])
 
-        history_mode = self.get_history_mode()
+        if not self.history_is_disabled:
+            history_mode = self.get_history_mode()
+            compressor_kwargs = {"node": self}
 
-        compressor_kwargs = {
-            "node": self,
-        }
-        if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-            return MaxHistoryLengthHistoryMiddleware(max_history_length=self.max_history_length, **compressor_kwargs)
+            if history_mode == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+                middleware.append(
+                    MaxHistoryLengthHistoryMiddleware(max_history_length=self.max_history_length, **compressor_kwargs)
+                )
+            else:
+                # Reserve space for the system message so trigger/keep thresholds reflect usable context
+                specified_token_limit = (
+                    self.user_max_token_limit if self.user_max_token_limit is not None else max_token_limit
+                )
+                token_limit = max(specified_token_limit - system_message_tokens, 100)
 
-        specified_token_limit = (
-            self.user_max_token_limit
-            if self.user_max_token_limit is not None
-            else self.repo.get_llm_provider_model(self.llm_provider_model_id).max_token_limit
-        )
+                if history_mode == PipelineChatHistoryModes.SUMMARIZE:
+                    middleware.append(SummarizeHistoryMiddleware(token_limit=token_limit, **compressor_kwargs))
+                elif history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
+                    middleware.append(TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs))
 
-        # Reserve space for the system message so trigger/keep thresholds reflect usable context
-        system_message_tokens = get_token_counter(model)([system_message])
-        token_limit = max(specified_token_limit - system_message_tokens, 100)
+        if max_token_limit:
+            effective_limit = max(max_token_limit - system_message_tokens, 0)
+            middleware.append(MessageSizeValidationMiddleware(token_limit=effective_limit, token_counter=token_counter))
 
-        if history_mode == PipelineChatHistoryModes.SUMMARIZE:
-            return SummarizeHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
-
-        if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
-            return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+        return middleware
 
     def save_history(self, human_message: str, ai_message: str):
         if self.history_is_disabled:

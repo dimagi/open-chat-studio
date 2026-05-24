@@ -14,7 +14,6 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_system_message
-from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware, get_token_counter
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
@@ -102,11 +101,7 @@ def build_node_agent(
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     model = node.get_chat_model()
-    middleware = []
-    if history_middleware := node.build_history_middleware(system_message=system_message, model=model):
-        middleware.append(history_middleware)
-    if size_middleware := _build_size_validation_middleware(node, system_message, model):
-        middleware.append(size_middleware)
+    middleware = node.build_history_middleware(system_message=system_message, model=model)
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
@@ -116,18 +111,6 @@ def build_node_agent(
         middleware=middleware,
         state_schema=StateSchema,
     )
-
-
-def _build_size_validation_middleware(
-    node: PipelineNode, system_message, model
-) -> MessageSizeValidationMiddleware | None:
-    max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
-    if not max_token_limit:
-        return None
-    token_counter = get_token_counter(model)
-    system_tokens = token_counter([system_message])
-    effective_limit = max(max_token_limit - system_tokens, 0)
-    return MessageSizeValidationMiddleware(token_limit=effective_limit, model=model)
 
 
 def _process_files(node: PipelineNode, cited_files: set[File], generated_files: set[File]) -> dict:
