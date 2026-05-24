@@ -77,7 +77,7 @@ class ChannelBase(ABC):
                 with self.trace_service.trace(
                     trace_name=self.experiment.name,
                     session=ctx.experiment_session,
-                    inputs={"input": message.model_dump()},
+                    inputs={"input": message.model_dump(mode="json")},
                 ) as span:
                     ctx = pipeline.process(ctx)
 
