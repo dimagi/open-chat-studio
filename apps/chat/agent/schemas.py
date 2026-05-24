@@ -61,7 +61,7 @@ class UpdateUserDataSchema(BaseModel):
 
 class AppendToParticipantData(BaseModel):
     key: str = Field(description="The key in the user data to append to")
-    value: str | int | list = Field(description="The value to append")
+    value: str | int | dict | list = Field(description="The value to append")
     tool_call_id: Annotated[str, InjectedToolCallId]
     graph_state: Annotated[dict, InjectedState]
 

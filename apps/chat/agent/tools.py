@@ -360,7 +360,7 @@ class AppendToParticipantDataTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.AppendToParticipantData] = schemas.AppendToParticipantData
 
-    def action(self, key: str, value: str | int | list, tool_call_id: str, graph_state: dict):
+    def action(self, key: str, value: str | int | dict | list, tool_call_id: str, graph_state: dict):
         data_proxy = ParticipantDataProxy(graph_state, self.experiment_session)
         new_value = data_proxy.append_to_key(key, value)
         if len(new_value) > 10:
