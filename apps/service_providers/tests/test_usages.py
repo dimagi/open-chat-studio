@@ -43,16 +43,34 @@ def test_get_usages_empty_when_unreferenced(anthropic_provider):
 
 
 @pytest.mark.django_db()
-def test_usages_view_handles_versioned_object_without_version_number(team_with_users, client):
-    """Regression: VersionsMixin subclasses that don't declare ``version_number``
-    (e.g. DocumentSource) used to crash the usages page because the template
-    called ``get_version_name`` which assumed the field existed."""
-    from apps.utils.factories.documents import DocumentSourceFactory  # noqa: PLC0415
-    from apps.utils.factories.service_provider_factories import AuthProviderFactory  # noqa: PLC0415
+def test_document_sources_roll_up_to_collections(team_with_users, client):
+    from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory  # noqa: PLC0415
+    from apps.utils.factories.service_provider_factories import (  # noqa: PLC0415
+        AuthProviderFactory,
+        EmbeddingProviderModelFactory,
+        LlmProviderFactory,
+    )
 
     auth_provider = AuthProviderFactory(team=team_with_users)
-    working = DocumentSourceFactory(team=team_with_users, auth_provider=auth_provider)
-    DocumentSourceFactory(team=team_with_users, auth_provider=auth_provider, working_version=working)
+    # Share the LlmProvider / EmbeddingProviderModel across collections so the
+    # team-scoped unique constraints aren't violated by CollectionFactory.
+    shared_llm = LlmProviderFactory(team=team_with_users)
+    shared_embedding = EmbeddingProviderModelFactory(team=team_with_users)
+    collection_a = CollectionFactory(
+        team=team_with_users, name="Alpha", llm_provider=shared_llm, embedding_provider_model=shared_embedding
+    )
+    collection_b = CollectionFactory(
+        team=team_with_users, name="Beta", llm_provider=shared_llm, embedding_provider_model=shared_embedding
+    )
+    DocumentSourceFactory(team=team_with_users, collection=collection_a, auth_provider=auth_provider)
+    DocumentSourceFactory(team=team_with_users, collection=collection_a, auth_provider=auth_provider)
+    DocumentSourceFactory(team=team_with_users, collection=collection_b, auth_provider=auth_provider)
+
+    usages = get_provider_usages(auth_provider)
+
+    collections = next(c for c in usages.categories if c.label == "Collections")
+    assert {c.id for c in collections.items} == {collection_a.id, collection_b.id}
+    assert len(collections.items) == 2, "duplicate collection should be deduped"
 
     user = team_with_users.members.first()
     client.force_login(user)
@@ -63,6 +81,26 @@ def test_usages_view_handles_versioned_object_without_version_number(team_with_u
         )
     )
     assert response.status_code == 200
+    body = response.content.decode()
+    assert f'href="{collection_a.get_absolute_url()}"' in body
+    assert "#versions" not in body, "the #versions anchor is reserved for chatbots"
+
+
+@pytest.mark.django_db()
+def test_voice_provider_excludes_synthetic_voices(team_with_users):
+    from apps.utils.factories.experiment import SyntheticVoiceFactory  # noqa: PLC0415
+
+    voice = VoiceProviderFactory(team=team_with_users)
+    chatbot = ExperimentFactory(team=team_with_users, voice_provider=voice)
+    SyntheticVoiceFactory(voice_provider=voice)
+
+    usages = get_provider_usages(voice)
+
+    labels = {c.label for c in usages.categories}
+    assert "Synthetic Voices" not in labels
+    assert "Chatbots" in labels
+    chatbots = next(c for c in usages.categories if c.label == "Chatbots")
+    assert [item.id for item in chatbots.items] == [chatbot.id]
 
 
 @pytest.mark.django_db()

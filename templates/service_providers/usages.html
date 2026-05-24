@@ -29,13 +29,19 @@
         {% if category.kind == "chatbots_with_pipelines" or category.kind == "chatbots_with_channels" %}
           <ul class="list-disc list-inside ml-2">
             {% for entry in category.items %}
-              <li>{% include "service_providers/components/usage_item.html" with obj=entry.chatbot %}</li>
+              <li>{% include "service_providers/components/usage_item.html" with obj=entry.chatbot link_to_versions_anchor=True %}</li>
             {% endfor %}
           </ul>
         {% else %}
           <ul class="list-disc list-inside ml-2">
             {% for obj in category.items %}
-              <li>{% include "service_providers/components/usage_item.html" with obj=obj %}</li>
+              <li>
+                {% if category.label == "Chatbots" %}
+                  {% include "service_providers/components/usage_item.html" with obj=obj link_to_versions_anchor=True %}
+                {% else %}
+                  {% include "service_providers/components/usage_item.html" with obj=obj %}
+                {% endif %}
+              </li>
             {% endfor %}
           </ul>
         {% endif %}

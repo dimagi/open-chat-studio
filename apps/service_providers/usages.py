@@ -37,6 +37,11 @@ _CATEGORY_LABEL_OVERRIDES = {
     "experiments": "Chatbots",
 }
 
+# Reverse-FK related models that aren't useful to surface on the usages page.
+# SyntheticVoice rows are managed inside the voice provider's own edit view,
+# so showing them on the usages page just adds noise.
+_EXCLUDED_REFERENCE_MODELS = {"SyntheticVoice"}
+
 
 def _category_label_for(model) -> str:
     plural = str(model._meta.verbose_name_plural)
@@ -85,12 +90,17 @@ def get_provider_usages(provider) -> ProviderUsages:
     grouped: dict[str, list] = defaultdict(list)
     pipelines: list = []
     channels: list = []
+    document_sources: list = []
     for obj in related:
         model = obj.__class__
+        if model.__name__ in _EXCLUDED_REFERENCE_MODELS:
+            continue
         if model.__name__ == "Pipeline":
             pipelines.append(obj)
         elif model.__name__ == "ExperimentChannel":
             channels.append(obj)
+        elif model.__name__ == "DocumentSource":
+            document_sources.append(obj)
         else:
             grouped[_category_label_for(model)].append(obj)
 
@@ -100,6 +110,8 @@ def get_provider_usages(provider) -> ProviderUsages:
         categories.extend(_build_pipeline_categories(pipelines))
     if channels:
         categories.extend(_build_channel_categories(channels))
+    if document_sources:
+        categories.extend(_build_document_source_categories(document_sources))
 
     return ProviderUsages(provider=provider, categories=categories)
 
@@ -173,6 +185,23 @@ def _build_channel_categories(channels: list) -> list[UsageCategory]:
     if unlinked:
         categories.append(UsageCategory(label="Unlinked Channels", kind="list", items=unlinked))
     return categories
+
+
+def _build_document_source_categories(document_sources: list) -> list[UsageCategory]:
+    """Roll up document sources to the Collection they belong to.
+
+    Document sources don't have their own user-facing page; users find them
+    inside the parent collection's edit view. So we report each unique
+    collection once, with the collection's own version status surfaced via
+    the shared item partial.
+    """
+    from apps.documents.models import Collection  # noqa: PLC0415 — avoids app cycle
+
+    collection_ids = {ds.collection_id for ds in document_sources if ds.collection_id}
+    if not collection_ids:
+        return []
+    collections = list(Collection.objects.filter(id__in=collection_ids).select_related("team").order_by("name"))
+    return [UsageCategory(label="Collections", kind="list", items=collections)]
 
 
 def _dedupe_by_id(items: list) -> list:
