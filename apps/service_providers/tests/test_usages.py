@@ -117,11 +117,8 @@ def test_messaging_channels_roll_up_to_chatbots(team_with_users):
     labels = {c.label for c in usages.categories}
     assert labels == {"Chatbots", "Unlinked Channels"}
 
-    chatbots_cat = next(c for c in usages.categories if c.kind == "chatbots_with_channels")
-    assert len(chatbots_cat.items) == 1
-    entry = chatbots_cat.items[0]
-    assert entry["chatbot"].id == chatbot.id
-    assert len(entry["channels"]) == 2
+    chatbots_cat = next(c for c in usages.categories if c.label == "Chatbots")
+    assert [item.id for item in chatbots_cat.items] == [chatbot.id]
 
     unlinked = next(c for c in usages.categories if c.label == "Unlinked Channels")
     assert len(unlinked.items) == 1
@@ -155,10 +152,8 @@ def test_pipeline_chatbots_via_event_configuration(anthropic_provider):
 
     usages = get_provider_usages(anthropic_provider)
 
-    chatbot_categories = [c for c in usages.categories if c.kind == "chatbots_with_pipelines"]
-    assert chatbot_categories, "expected a chatbots-with-pipelines category"
-    entry = next(item for item in chatbot_categories[0].items if item["chatbot"].id == indirect_experiment.id)
-    assert pipeline in entry["pipelines"]
+    chatbots = next(c for c in usages.categories if c.label == "Chatbots")
+    assert indirect_experiment.id in {item.id for item in chatbots.items}
 
 
 @pytest.mark.django_db()
@@ -186,7 +181,7 @@ def test_pipelines_without_chatbots_appear_in_unlinked_category(anthropic_provid
     assert "Chatbots" in labels
     assert "Unlinked Pipelines" in labels
 
-    unlinked = next(c for c in usages.categories if c.kind == "pipelines")
+    unlinked = next(c for c in usages.categories if c.label == "Unlinked Pipelines")
     assert [p.id for p in unlinked.items] == [lonely_pipeline.id]
 
 
@@ -205,12 +200,10 @@ def test_pipeline_chatbots_dedupe_direct_and_event_links(anthropic_provider):
 
     usages = get_provider_usages(anthropic_provider)
 
-    chatbot_categories = [c for c in usages.categories if c.kind == "chatbots_with_pipelines"]
-    assert len(chatbot_categories) == 1
-    entries = chatbot_categories[0].items
-    assert len(entries) == 1, "direct + event-driven references to the same chatbot should dedupe"
-    assert entries[0]["chatbot"].id == experiment.id
-    assert [p.id for p in entries[0]["pipelines"]] == [pipeline.id]
+    chatbots = next(c for c in usages.categories if c.label == "Chatbots")
+    assert [item.id for item in chatbots.items] == [experiment.id], (
+        "direct + event-driven references to the same chatbot should dedupe"
+    )
 
 
 @pytest.mark.django_db()
