@@ -65,7 +65,7 @@
                 class="join-item btn btn-sm"
                 :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
                 @click="setMode('all_matching')">
-          {% translate "All" %} <span x-text="totalCount"></span> {% translate "matching" %}
+          {% translate "All matching" %} (<span x-text="totalCount"></span>)
         </button>
         {% if dataset.evaluation_mode != 'session' %}
         <button type="button"
@@ -94,10 +94,7 @@
         </div>
       </template>
 
-      <div class="ml-auto flex items-center gap-3">
-        <span class="text-sm text-base-content/70">
-          <span x-text="totalCount"></span> {% translate "sessions" %}
-        </span>
+      <div class="ml-auto flex items-center gap-2">
         <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
           <span x-text="buttonLabel">{% translate "Add to Dataset" %}</span>
         </button>
@@ -166,10 +163,9 @@
 </div>
 
 <style>
-  /* Hide the leftmost (selection) column when not in 'selected' mode.
-     The selection column is always the first column of the rendered table. */
-  .hide-selection-col #sessions-table table th:first-child,
-  .hide-selection-col #sessions-table table td:first-child {
+  /* Hide the selection (checkbox) column when not in 'selected' mode. */
+  .hide-selection-col #sessions-table table th.selection-col,
+  .hide-selection-col #sessions-table table td.selection-col {
     display: none;
   }
 </style>

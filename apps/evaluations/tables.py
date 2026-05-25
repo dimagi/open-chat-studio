@@ -270,6 +270,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         template_name="evaluations/session_checkbox.html",
         verbose_name="",
         orderable=False,
+        attrs={"th": {"class": "selection-col"}, "td": {"class": "selection-col"}},
         extra_context={
             "css_class": "checkbox checkbox-primary session-checkbox",
             "js_function": "updateSelectedSessions()",
