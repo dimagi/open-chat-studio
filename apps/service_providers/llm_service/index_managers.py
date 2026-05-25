@@ -283,6 +283,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         # Voyage rejects empty input; OpenAI and Google return API errors.
                         # Skipping avoids aborting the whole file over a NUL-only chunk and
                         # leaving partial embeddings behind for a CollectionFile marked FAILED.
+                        logger.warning(
+                            "Skipping empty chunk after NUL stripping",
+                            extra={"file_id": file.id, "chunk_index": idx, "total_chunks": len(text_chunks)},
+                        )
                         continue
                     embedding_vector = self.get_embedding_vector(safe_chunk, input_type="document")
                     embeddings.append(
