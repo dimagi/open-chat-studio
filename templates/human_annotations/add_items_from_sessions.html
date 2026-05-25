@@ -12,7 +12,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-<div x-data="annotationQueueSessionSelector({ sessionIdsFetchUrl: '{{ sessions_json_url }}' })"
+<div x-data="annotationQueueSessionSelector({ sessionCountUrl: '{{ sessions_count_url }}' })"
      x-init="init()"
      data-queue-name="{{ queue.name }}">
 

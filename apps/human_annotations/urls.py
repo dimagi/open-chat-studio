@@ -17,8 +17,8 @@ urlpatterns = [
     ),
     path(
         "queue/<int:pk>/sessions-json/",
-        queue_views.annotation_queue_sessions_json,
-        name="queue_sessions_json",
+        queue_views.annotation_queue_sessions_count,
+        name="queue_sessions_count",
     ),
     path(
         "queue/<int:pk>/import-from-dataset/",
