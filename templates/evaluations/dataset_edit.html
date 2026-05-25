@@ -13,36 +13,43 @@
 
 {% block post_form %}
   {% if object.is_processing or object.is_pending %}
-    <div class="mb-6">
-      <h2 class="text-lg font-semibold mb-4">{% translate "Creating Dataset Messages" %}</h2>
-      <div class="progress-wrapper">
-        <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+    {% if celery_job_id %}
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-4">{% translate "Creating Dataset Messages" %}</h2>
+        <div class="progress-wrapper">
+          <div id="progress-bar" class="progress-bar h-4 bg-blue-200 dark:bg-blue-700 rounded-full overflow-hidden">
+          </div>
         </div>
+        <div id="progress-bar-message" class="mt-2 text-sm text-center">{% translate "Waiting for task to start..." %}</div>
       </div>
-      <div id="progress-bar-message" class="mt-2 text-sm text-center">{% translate "Waiting for task to start..." %}</div>
-    </div>
 
-    <script>
-      const progressUrl = "{% url 'celery_progress:task_status' celery_job_id %}";
-      CeleryProgressBar.initProgressBar(progressUrl, {
-        onSuccess: () => {
-          location.reload()  // Reload to show completed dataset
-        },
-        onProgress: (progressBarElement, progressBarMessageElement, progress) => {
-          progressBarElement.style.width = progress.percent + "%";
-          let description = progress.description || progress.current + ' of ' + progress.total + ' processed';
-          if (progress.current === 0) {
-            if (progress.pending === true) {
-              progressBarMessageElement.textContent = '{% translate "Waiting for task to start..." %}';
+      <script>
+        const progressUrl = "{% url 'celery_progress:task_status' celery_job_id %}";
+        CeleryProgressBar.initProgressBar(progressUrl, {
+          onSuccess: () => {
+            location.reload()  // Reload to show completed dataset
+          },
+          onProgress: (progressBarElement, progressBarMessageElement, progress) => {
+            progressBarElement.style.width = progress.percent + "%";
+            let description = progress.description || progress.current + ' of ' + progress.total + ' processed';
+            if (progress.current === 0) {
+              if (progress.pending === true) {
+                progressBarMessageElement.textContent = '{% translate "Waiting for task to start..." %}';
+              } else {
+                progressBarMessageElement.textContent = '{% translate "Task started..." %}';
+              }
             } else {
-              progressBarMessageElement.textContent = '{% translate "Task started..." %}';
+              progressBarMessageElement.textContent = description;
             }
-          } else {
-            progressBarMessageElement.textContent = description;
           }
-        }
-      });
-    </script>
+        });
+      </script>
+    {% else %}
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-4">{% translate "Creating Dataset Messages" %}</h2>
+        <div class="mt-2 text-sm text-center">{% translate "Queued. Waiting for task to start..." %}</div>
+      </div>
+    {% endif %}
   {% else %}
     {% if object.is_failed and object.error_message %}
       <div class="alert alert-error mb-4">
