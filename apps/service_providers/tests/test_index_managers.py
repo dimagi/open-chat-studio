@@ -39,7 +39,7 @@ class LocalIndexManagerMock(LocalIndexManager):
     def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
         return ["test", "content"]
 
-    def get_embedding_vector(self, text):  # ty: ignore[invalid-method-override]
+    def get_embedding_vector(self, text, input_type):  # ty: ignore[invalid-method-override]
         """Mock method to return a fixed embedding vector"""
         return [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
@@ -102,6 +102,26 @@ class TestLocalIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+
+    def test_add_files_calls_get_embedding_vector_with_document_input_type(self, local_index_instance, index_manager):
+        file = FileFactory.create()
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with (
+            mock.patch.object(file, "read_content", return_value="test content"),
+            mock.patch.object(
+                index_manager,
+                "get_embedding_vector",
+                wraps=index_manager.get_embedding_vector,
+            ) as spy,
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        assert spy.call_count == 2
+        for call in spy.call_args_list:
+            assert call.kwargs == {"input_type": "document"} or call.args[1:] == ("document",)
 
     def test_delete_embeddings(self, local_index_instance):
         file = FileFactory.create()

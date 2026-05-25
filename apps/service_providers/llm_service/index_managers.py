@@ -2,6 +2,7 @@ import contextlib
 import logging
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
+from typing import Literal
 
 import openai
 from django.conf import settings
@@ -250,12 +251,15 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
-    def get_embedding_vector(self, content: str) -> Vector:
+    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
         """
         Generate an embedding vector for the given text content.
 
         Args:
             content: The text content to generate embeddings for.
+            input_type: "document" when indexing source text, "query" when embedding
+                a retrieval query. Voyage and Google return different embeddings for
+                each; OpenAI ignores it.
 
         Returns:
             Vector: A list of floats representing the embedding vector.
@@ -274,7 +278,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
-                    embedding_vector = self.get_embedding_vector(chunk)
+                    embedding_vector = self.get_embedding_vector(chunk, input_type="document")
                     embeddings.append(
                         FileChunkEmbedding.objects.create(
                             team_id=file.team_id,
@@ -346,7 +350,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             list[FileChunkEmbedding]: List of FileChunkEmbedding instances matching the query.
         """
 
-        embedding_vector = self.get_embedding_vector(query)
+        embedding_vector = self.get_embedding_vector(query, input_type="query")
         return (
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", embedding_vector))
             .filter(collection_id=index_id)
@@ -365,7 +369,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
     text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
     """
 
-    def get_embedding_vector(self, content: str) -> Vector:
+    def get_embedding_vector(self, content: str) -> Vector:  # ty: ignore[invalid-method-override]
         from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         embeddings = OpenAIEmbeddings(
@@ -375,7 +379,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 
 class GoogleLocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str) -> Vector:
+    def get_embedding_vector(self, content: str) -> Vector:  # ty: ignore[invalid-method-override]
         from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             GoogleGenerativeAIEmbeddings,
         )
@@ -387,7 +391,7 @@ class GoogleLocalIndexManager(LocalIndexManager):
 
 
 class VoyageAILocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str) -> Vector:
+    def get_embedding_vector(self, content: str) -> Vector:  # ty: ignore[invalid-method-override]
         if not content:
             raise ValueError("Cannot embed empty string")
 
