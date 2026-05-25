@@ -125,6 +125,39 @@ class TestLocalIndexManager:
         for call in spy.call_args_list:
             assert call.kwargs == {"input_type": "document"} or call.args[1:] == ("document",)
 
+    def test_add_files_skips_chunks_that_are_empty_after_nul_stripping(self, local_index_instance, index_manager):
+        """A chunk made up only of NUL bytes becomes "" after sanitization. Skip it so the
+        embedder is never called with an empty string (Voyage raises; OpenAI/Google reject
+        via the API) and no partial chunks are persisted for a file that then fails."""
+        file = FileFactory.create()
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with (
+            mock.patch.object(file, "read_content", return_value="irrelevant"),
+            mock.patch.object(index_manager, "chunk_file", return_value=["test", "\x00\x00", "content"]),
+            mock.patch.object(
+                index_manager,
+                "get_embedding_vector",
+                wraps=index_manager.get_embedding_vector,
+            ) as spy,
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.COMPLETED
+
+        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance).order_by(
+            "chunk_number"
+        )
+        assert embeddings.count() == 2
+        assert list(embeddings.values_list("text", flat=True)) == ["test", "content"]
+
+        assert spy.call_count == 2
+        embedded_texts = [call.args[0] for call in spy.call_args_list]
+        assert "" not in embedded_texts
+
     def test_query_calls_get_embedding_vector_with_query_input_type(self, local_index_instance, index_manager):
         with mock.patch.object(
             index_manager,

@@ -279,6 +279,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
+                    if not safe_chunk:
+                        # Voyage rejects empty input; OpenAI and Google return API errors.
+                        # Skipping avoids aborting the whole file over a NUL-only chunk and
+                        # leaving partial embeddings behind for a CollectionFile marked FAILED.
+                        continue
                     embedding_vector = self.get_embedding_vector(safe_chunk, input_type="document")
                     embeddings.append(
                         FileChunkEmbedding.objects.create(
