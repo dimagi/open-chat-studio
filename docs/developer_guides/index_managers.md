@@ -12,6 +12,8 @@ RemoteIndexManager (ABC)
 
 LocalIndexManager (ABC)
 ├── OpenAILocalIndexManager
+├── GoogleLocalIndexManager
+└── VoyageAILocalIndexManager
 ```
 
 The system supports two indexing strategies:
@@ -80,22 +82,18 @@ index_manager.delete_remote_index()
 
 ### Local Index Operations
 
+`get_embedding_vector` requires an `input_type` of `"document"` or `"query"`. For Voyage and Google embedding providers this routes to different underlying calls (`embed_documents` vs `embed_query`) which return different vectors — labelling each side correctly is what makes retrieval work as well as the provider can deliver. OpenAI ignores the parameter, so the choice is behaviourally a no-op there but still required for the interface.
+
 ```python
-# Generate embedding for text content
-content = "This is a sample document content."
-embedding_vector = index_manager.get_embedding_vector(content)
+# Embed a retrieval query (matches the path used by Collection.get_query_vector)
+query = "What does the user want to know?"
+query_vector = index_manager.get_embedding_vector(query, input_type="query")
 
-# Chunk large text with overlap
-text = "Long document content here..."
-chunks = index_manager.chunk_content(
-    text=text,
-    chunk_size=500,
-    chunk_overlap=50
-)
-
-# Process each chunk for storage
-for i, chunk in enumerate(chunks):
-    embedding = index_manager.get_embedding_vector(chunk)
+# Embed each document chunk during indexing
+file = File.objects.get(id=file_id)
+chunks = index_manager.chunk_file(file, chunk_size=500, chunk_overlap=50)
+for chunk in chunks:
+    embedding = index_manager.get_embedding_vector(chunk, input_type="document")
     # Store in FileChunkEmbedding model...
 ```
 
