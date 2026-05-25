@@ -69,9 +69,8 @@ class BasicConversation:
     @property
     def system_prompt(self):
         prompt_to_use = SystemMessagePromptTemplate.from_template(self.prompt_str)
-        if self.source_material:
-            with contextlib.suppress(KeyError):
-                prompt_to_use = prompt_to_use.format(source_material=self.source_material)
+        with contextlib.suppress(KeyError):
+            prompt_to_use = prompt_to_use.format(source_material=self.source_material or "")
         return prompt_to_use
 
     def load_memory_from_messages(self, messages: list[BaseMessage]):
