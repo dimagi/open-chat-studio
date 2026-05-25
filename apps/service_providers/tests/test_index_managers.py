@@ -41,7 +41,7 @@ class LocalIndexManagerMock(LocalIndexManager):
     def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
         return ["test", "content"]
 
-    def get_embedding_vector(self, text, input_type):  # ty: ignore[invalid-method-override]
+    def get_embedding_vector(self, text, *, input_type):  # ty: ignore[invalid-method-override]
         """Mock method to return a fixed embedding vector"""
         return [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
@@ -427,6 +427,11 @@ class TestOpenAILocalIndexManager:
             dimensions=settings.EMBEDDING_VECTOR_SIZE,
         )
 
+    def test_get_embedding_vector_raises_on_unknown_input_type(self, index_manager):
+        with mock.patch("langchain_openai.OpenAIEmbeddings"):
+            with pytest.raises(ValueError, match="Unknown input_type"):
+                index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
+
 
 class TestGoogleLocalIndexManager:
     @pytest.fixture()
@@ -465,6 +470,11 @@ class TestGoogleLocalIndexManager:
         mock_cls.return_value.embed_documents.assert_not_called()
         assert result == expected_vector
 
+    def test_get_embedding_vector_raises_on_unknown_input_type(self, index_manager):
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings"):
+            with pytest.raises(ValueError, match="Unknown input_type"):
+                index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
+
 
 class TestVoyageAILocalIndexManager:
     @pytest.fixture()
@@ -499,6 +509,11 @@ class TestVoyageAILocalIndexManager:
     def test_get_embedding_vector_raises_for_empty_content(self, index_manager):
         with pytest.raises(ValueError, match="Cannot embed empty string"):
             index_manager.get_embedding_vector("", input_type="document")
+
+    def test_get_embedding_vector_raises_on_unknown_input_type(self, index_manager):
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings"):
+            with pytest.raises(ValueError, match="Unknown input_type"):
+                index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
 
 
 class TestOpenAILlmServiceLocalIndexManager:

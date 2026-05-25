@@ -19,6 +19,7 @@ from apps.service_providers.exceptions import UnableToLinkFileException
 logger = logging.getLogger("ocs.index_manager")
 
 Vector = list[float]
+EmbeddingInputType = Literal["document", "query"]
 
 
 class IndexManager(metaclass=ABCMeta):
@@ -251,7 +252,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
-    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
         """
         Generate an embedding vector for the given text content.
 
@@ -377,7 +378,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
         super().__init__(api_key=api_key, embedding_model_name=embedding_model_name)
         self._openai_api_base = openai_api_base
 
-    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
         from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         kwargs: dict = {
@@ -390,11 +391,13 @@ class OpenAILocalIndexManager(LocalIndexManager):
         embeddings = OpenAIEmbeddings(**kwargs)
         if input_type == "document":
             return embeddings.embed_documents([content])[0]
-        return embeddings.embed_query(content)
+        if input_type == "query":
+            return embeddings.embed_query(content)
+        raise ValueError(f"Unknown input_type: {input_type!r}")
 
 
 class GoogleLocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
         from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             GoogleGenerativeAIEmbeddings,
         )
@@ -403,20 +406,24 @@ class GoogleLocalIndexManager(LocalIndexManager):
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
         )
         if input_type == "document":
+            # task_type is required on embed_documents: langchain-google-genai
+            # does not default it (only embed_query defaults to RETRIEVAL_QUERY).
             return embeddings.embed_documents(
                 [content],
                 output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
                 task_type="RETRIEVAL_DOCUMENT",
             )[0]
-        return embeddings.embed_query(
-            content,
-            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
-            task_type="RETRIEVAL_QUERY",
-        )
+        if input_type == "query":
+            return embeddings.embed_query(
+                content,
+                output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+                task_type="RETRIEVAL_QUERY",
+            )
+        raise ValueError(f"Unknown input_type: {input_type!r}")
 
 
 class VoyageAILocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
         if not content:
             raise ValueError("Cannot embed empty string")
 
@@ -429,4 +436,6 @@ class VoyageAILocalIndexManager(LocalIndexManager):
         )
         if input_type == "document":
             return embeddings.embed_documents([content])[0]
-        return embeddings.embed_query(content)
+        if input_type == "query":
+            return embeddings.embed_query(content)
+        raise ValueError(f"Unknown input_type: {input_type!r}")
