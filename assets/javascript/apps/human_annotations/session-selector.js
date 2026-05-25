@@ -55,6 +55,10 @@ window.annotationQueueSessionSelector = function (options = {}) {
       return `~${estimated} sessions (${this.samplePercent}%)`;
     },
 
+    get hasActiveFilters() {
+      return this.filterParams.some((p) => p.name.startsWith('filter_'));
+    },
+
     get pillClass() {
       if (this.mode === 'selected' && this.selectedSessionIds.size === 0) {
         return 'badge-warning';
