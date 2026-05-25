@@ -14,7 +14,8 @@
 {% block app %}
 <div x-data="annotationQueueSessionSelector({ sessionCountUrl: '{{ sessions_count_url }}' })"
      x-init="init()"
-     data-queue-name="{{ dataset.name }}">
+     data-queue-name="{{ dataset.name }}"
+     :class="{ 'hide-selection-col': mode !== 'selected' }">
 
   <div class="flex flex-col gap-4">
     <h2 class="text-xl font-bold">{% blocktranslate with name=dataset.name %}Add Sessions to "{{ name }}"{% endblocktranslate %}</h2>
@@ -29,15 +30,74 @@
       </div>
     </div>
 
-    <!-- Filter controls + session count + top-level action buttons -->
+    <!-- Row 1: filter bar (left) + Clone toggle (right, conditional) -->
     <div class="flex items-center justify-between flex-wrap gap-2">
       <div>
         {% include "experiments/filters.html" %}
       </div>
-      <div class="flex items-center gap-3">
-        <div class="text-sm font-medium">
-          <span x-text="totalCount"></span> {% translate "sessions" %}
+      {% if dataset.evaluation_mode != 'session' %}
+      <div x-show="hasActiveFilters" x-cloak class="flex items-center gap-3 text-sm">
+        <span class="font-medium">{% translate "Clone" %}:</span>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="message_scope_ui" value="all" x-model="messageScope" class="radio radio-sm radio-primary">
+          <span>{% translate "All messages" %}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="message_scope_ui" value="filtered" x-model="messageScope" class="radio radio-sm radio-primary">
+          <span>{% translate "Filtered messages only" %}</span>
+        </label>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Row 2: unified action bar (sentence-style) -->
+    <div class="flex items-center flex-wrap gap-3 bg-base-200 rounded-lg px-4 py-2">
+      <span class="text-sm font-medium">{% translate "Add to dataset" %}:</span>
+
+      <div class="join">
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('selected')">
+          {% translate "Selected" %} (<span x-text="selectedSessionIds.size"></span>)
+        </button>
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('all_matching')">
+          {% translate "All" %} <span x-text="totalCount"></span> {% translate "matching" %}
+        </button>
+        {% if dataset.evaluation_mode != 'session' %}
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('sample')">
+          {% translate "Sample" %} <span x-text="samplePercent"></span>%
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Sample percent inputs (visible only in sample mode) -->
+      <template x-if="mode === 'sample'">
+        <div class="flex items-center gap-2">
+          <input type="number"
+                 x-model.number="samplePercent"
+                 @change="clampSamplePercent()"
+                 min="1" max="100"
+                 class="input input-sm input-bordered w-16 text-center">
+          <span class="text-sm">%</span>
+          <input type="range"
+                 x-model.number="samplePercent"
+                 @change="clampSamplePercent()"
+                 min="1" max="100"
+                 class="range range-sm range-primary w-32">
         </div>
+      </template>
+
+      <div class="ml-auto flex items-center gap-3">
+        <span class="text-sm text-base-content/70">
+          <span x-text="totalCount"></span> {% translate "sessions" %}
+        </span>
         <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
           <span x-text="buttonLabel">{% translate "Add to Dataset" %}</span>
         </button>
@@ -48,100 +108,28 @@
       </div>
     </div>
 
-    <!-- Scope selector bar -->
-    <div class="flex items-center justify-between flex-wrap gap-3 bg-base-200 rounded-lg px-4 py-2">
-      <div class="flex items-center gap-3">
-        <span class="text-sm font-medium">{% translate "Add" %}:</span>
-        <div class="join">
-          <button type="button"
-                  class="join-item btn btn-sm"
-                  :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setMode('selected')">
-            {% translate "Selected only" %}
-          </button>
-          <button type="button"
-                  class="join-item btn btn-sm"
-                  :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setMode('all_matching')">
-            {% translate "All matching filters" %}
-          </button>
-          {% if dataset.evaluation_mode != 'session' %}
-          <button type="button"
-                  class="join-item btn btn-sm"
-                  :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setMode('sample')">
-            {% translate "Sample" %}
-          </button>
-          {% endif %}
-        </div>
-
-        <!-- Sample controls (visible only in sample mode) -->
-        <template x-if="mode === 'sample'">
-          <div class="flex items-center gap-2">
-            <input type="number"
-                   x-model.number="samplePercent"
-                   @change="clampSamplePercent()"
-                   min="1" max="100"
-                   class="input input-sm input-bordered w-16 text-center">
-            <span class="text-sm">%</span>
-            <input type="range"
-                   x-model.number="samplePercent"
-                   @change="clampSamplePercent()"
-                   min="1" max="100"
-                   class="range range-sm range-primary w-32">
-          </div>
-        </template>
-      </div>
-
-      <!-- Live count pill -->
-      <div class="badge" :class="pillClass" x-text="pillText"></div>
-    </div>
-
-    {% if dataset.evaluation_mode != 'session' %}
-    <!-- Message scope selector (message-mode datasets only) -->
-    <div class="flex items-center gap-3 bg-base-200 rounded-lg px-4 py-2">
-      <span class="text-sm font-medium">{% translate "Messages to clone" %}:</span>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="radio" name="message_scope_ui" value="all" x-model="messageScope" class="radio radio-sm radio-primary">
-        <span class="text-sm">{% translate "All messages" %}</span>
-      </label>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="radio" name="message_scope_ui" value="filtered" x-model="messageScope" class="radio radio-sm radio-secondary">
-        <span class="text-sm">{% translate "Filtered messages only" %}</span>
-      </label>
-    </div>
-    {% endif %}
-
-    <!-- Hint for selected mode with zero selections -->
+    <!-- Selected-mode helpers -->
     <div x-show="mode === 'selected' && selectedSessionIds.size === 0" x-cloak
          class="text-sm text-warning">
-      {% translate "Select at least one session." %}
+      {% translate "Select at least one session below." %}
     </div>
-
-    <!-- Clear selections (visible in selected mode when selections exist) -->
     <div x-show="mode === 'selected' && selectedSessionIds.size > 0" x-cloak class="text-sm">
-      <span x-text="selectedSessionIds.size"></span>
-      {% translate "selected" %}
+      <span x-text="selectedSessionIds.size"></span> {% translate "selected" %}
       <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
         {% translate "Clear" %}
       </button>
     </div>
 
-    <!-- Dimming hint for non-selected modes -->
-    <div x-show="mode !== 'selected'" x-cloak class="text-sm text-base-content/60">
-      {% translate "Row selections do not affect this mode." %}
-    </div>
-
-    <!-- Sessions table (HTMX lazy-loaded) -->
-    <div id="sessions-table"
-         :class="{ 'opacity-60': mode !== 'selected' }"
-         data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
-      {% include "table/table_placeholder.html" %}
-    </div>
-
-    <!-- Sample hint -->
+    <!-- Sample mode hint -->
     <div x-show="mode === 'sample'" x-cloak class="text-xs text-base-content/50">
       {% translate "Sessions are randomly sampled at the time of adding." %}
+    </div>
+
+    <!-- Sessions table (HTMX lazy-loaded). When mode !== 'selected', the leftmost
+         (selection) column is hidden via CSS on the parent .hide-selection-col class. -->
+    <div id="sessions-table"
+         data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
+      {% include "table/table_placeholder.html" %}
     </div>
 
     <!-- Submission form -->
@@ -151,19 +139,9 @@
       <input type="hidden" name="mode" :value="mode">
       <input type="hidden" name="sample_percent" :value="samplePercent">
       <input type="hidden" name="message_scope" :value="messageScope">
-      <!-- Pass filter params so server can reconstruct the queryset for all_matching/sample -->
       <template x-for="param in filterParams" :key="param.name">
         <input type="hidden" :name="param.name" :value="param.value">
       </template>
-      <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn btn-primary" :disabled="isSubmitDisabled">
-          <span x-text="buttonLabel">{% translate "Add to Dataset" %}</span>
-        </button>
-        <a href="{% url 'evaluations:dataset_edit' team_slug=request.team.slug pk=dataset.pk %}"
-           class="btn btn-ghost">
-          {% translate "Cancel" %}
-        </a>
-      </div>
     </form>
   </div>
 
@@ -186,17 +164,36 @@
   </div>
 
 </div>
+
+<style>
+  /* Hide the leftmost (selection) column when not in 'selected' mode.
+     The selection column is always the first column of the rendered table. */
+  .hide-selection-col #sessions-table table th:first-child,
+  .hide-selection-col #sessions-table table td:first-child {
+    display: none;
+  }
+</style>
 {% endblock app %}
 
 {% block page_js %}
   <script src="{% static 'js/human_annotations-bundle.js' %}"></script>
   <script>
-    // Extend annotationQueueSessionSelector with message scope for message-mode datasets
+    // Extend the shared annotationQueueSessionSelector with messageScope state
+    // and a watcher that resets it whenever filters clear.
     const _baseSelector = window.annotationQueueSessionSelector;
     window.annotationQueueSessionSelector = function(options) {
       const base = _baseSelector(options);
+      const baseInit = base.init.bind(base);
       return Object.assign(base, {
         messageScope: 'all',
+        init() {
+          baseInit();
+          this.$watch('hasActiveFilters', (now) => {
+            if (!now && this.messageScope !== 'all') {
+              this.messageScope = 'all';
+            }
+          });
+        },
       });
     };
   </script>
