@@ -7,17 +7,16 @@
  * - "sample": random percentage of sessions matching current filters
  *
  * Usage:
- *   x-data="annotationQueueSessionSelector({ sessionIdsFetchUrl: '...' })"
+ *   x-data="annotationQueueSessionSelector({ sessionCountUrl: '...' })"
  */
 window.annotationQueueSessionSelector = function (options = {}) {
   return {
     selectedSessionIds: new Set(),
-    allSessionIds: new Set(),
     totalCount: 0,
-    sessionIdsFetchUrl: options.sessionIdsFetchUrl || '',
+    sessionCountUrl: options.sessionCountUrl || '',
     sessionIdsString: '',
     errorMessages: [],
-    sessionIdsIsLoading: false,
+    sessionCountIsLoading: false,
 
     // Scope mode: 'selected', 'all_matching', or 'sample'
     mode: 'selected',
@@ -32,10 +31,10 @@ window.annotationQueueSessionSelector = function (options = {}) {
       });
       window.addEventListener('filter:change', () => {
         this.clearAllSelections();
-        this.loadSessionIds();
+        this.loadCount();
         this._syncFilterParams();
       });
-      this.loadSessionIds();
+      this.loadCount();
     },
 
     _syncFilterParams() {
@@ -116,11 +115,11 @@ window.annotationQueueSessionSelector = function (options = {}) {
       this.samplePercent = val;
     },
 
-    async loadSessionIds() {
-      if (this.sessionIdsIsLoading) return;
-      this.sessionIdsIsLoading = true;
+    async loadCount() {
+      if (this.sessionCountIsLoading) return;
+      this.sessionCountIsLoading = true;
       try {
-        const res = await fetch(this.sessionIdsFetchUrl + window.location.search, {
+        const res = await fetch(this.sessionCountUrl + window.location.search, {
           credentials: 'same-origin',
           headers: {
             'X-CSRFToken': window.SiteJS.app.Cookies.get('csrftoken'),
@@ -128,12 +127,11 @@ window.annotationQueueSessionSelector = function (options = {}) {
           },
         });
         const data = await res.json();
-        this.allSessionIds = new Set(data.ids.map(String));
         this.totalCount = data.total;
       } catch (_e) {
         this.errorMessages = ['Failed to load sessions. Please refresh the page.'];
       } finally {
-        this.sessionIdsIsLoading = false;
+        this.sessionCountIsLoading = false;
       }
     },
 
@@ -157,7 +155,10 @@ window.annotationQueueSessionSelector = function (options = {}) {
     toggleSelectedSessions() {
       const header = document.querySelector('thead .session-checkbox');
       if (header && header.checked) {
-        this.allSessionIds.forEach((id) => this.selectedSessionIds.add(String(id)));
+        // Select only the current visible page
+        document.querySelectorAll('tbody .session-checkbox').forEach((cb) => {
+          this.selectedSessionIds.add(cb.value);
+        });
       } else {
         document.querySelectorAll('tbody .session-checkbox').forEach((cb) => {
           this.selectedSessionIds.delete(cb.value);

@@ -248,17 +248,11 @@ class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequ
 
 @login_and_team_required
 @permission_required("human_annotations.add_annotationitem", raise_exception=True)
-def annotation_queue_sessions_json(request, team_slug: str, pk: int):
-    """Returns filtered session external_ids and total count as JSON for the Alpine session selector.
-
-    pk is validated for queue ownership but not used for filtering — returns all matching
-    team sessions excluding those already in the queue.
-    """
-    # Validate queue ownership
+def annotation_queue_sessions_count(request, team_slug: str, pk: int):
+    """Returns the count of available sessions matching current filters as JSON."""
     get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-    queryset = _get_available_sessions_queryset(request, pk)
-    session_keys = list(queryset.values_list("external_id", flat=True))
-    return JsonResponse({"ids": session_keys, "total": len(session_keys)})
+    count = _get_available_sessions_queryset(request, pk).count()
+    return JsonResponse({"total": count})
 
 
 class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -267,7 +261,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
     def get(self, request, team_slug: str, pk: int):
         queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
         table_url = reverse("human_annotations:queue_sessions_table", args=[team_slug, pk])
-        sessions_json_url = reverse("human_annotations:queue_sessions_json", args=[team_slug, pk])
+        sessions_count_url = reverse("human_annotations:queue_sessions_count", args=[team_slug, pk])
         filter_context = get_filter_context_data(
             request.team,
             columns=AnnotationSessionFilter.columns(request.team),
@@ -281,7 +275,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
             "human_annotations/add_items_from_sessions.html",
             {
                 "queue": queue,
-                "sessions_json_url": sessions_json_url,
+                "sessions_count_url": sessions_count_url,
                 "active_tab": "annotation_queues",
                 **filter_context,
             },
