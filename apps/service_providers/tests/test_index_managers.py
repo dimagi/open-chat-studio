@@ -15,6 +15,7 @@ from apps.service_providers.llm_service.index_managers import (
     RemoteIndexManager,
     VoyageAILocalIndexManager,
 )
+from apps.service_providers.llm_service.main import OpenAILlmService
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 
@@ -365,6 +366,54 @@ class TestOpenAILocalIndexManager:
         response = index_manager.chunk_file(file, chunk_size=2, chunk_overlap=0)
         assert response == ["This is", "test", "c", "on", "te", "nt", "."]
 
+    def test_get_embedding_vector_document_calls_embed_documents(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = [expected_vector]
+            result = index_manager.get_embedding_vector("some text", input_type="document")
+
+        mock_cls.return_value.embed_documents.assert_called_once_with(["some text"])
+        mock_cls.return_value.embed_query.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_query_calls_embed_query(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text", input_type="query")
+
+        mock_cls.return_value.embed_query.assert_called_once_with("some text")
+        mock_cls.return_value.embed_documents.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_passes_base_url_when_provided(self):
+        manager = OpenAILocalIndexManager(
+            api_key="api-123",
+            embedding_model_name="embedding-model",
+            openai_api_base="https://proxy.example.com/v1",
+        )
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = [0.0] * settings.EMBEDDING_VECTOR_SIZE
+            manager.get_embedding_vector("text", input_type="query")
+
+        mock_cls.assert_called_once_with(
+            api_key="api-123",
+            model="embedding-model",
+            dimensions=settings.EMBEDDING_VECTOR_SIZE,
+            base_url="https://proxy.example.com/v1",
+        )
+
+    def test_get_embedding_vector_omits_base_url_when_unset(self, index_manager):
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = [0.0] * settings.EMBEDDING_VECTOR_SIZE
+            index_manager.get_embedding_vector("text", input_type="query")
+
+        mock_cls.assert_called_once_with(
+            api_key="api-123",
+            model="embedding-model",
+            dimensions=settings.EMBEDDING_VECTOR_SIZE,
+        )
+
 
 class TestVoyageAILocalIndexManager:
     @pytest.fixture()
@@ -387,3 +436,21 @@ class TestVoyageAILocalIndexManager:
     def test_get_embedding_vector_raises_for_empty_content(self, index_manager):
         with pytest.raises(ValueError, match="Cannot embed empty string"):
             index_manager.get_embedding_vector("")
+
+
+class TestOpenAILlmServiceLocalIndexManager:
+    def test_get_local_index_manager_threads_openai_api_base(self):
+        service = OpenAILlmService(
+            openai_api_key="api-123",
+            openai_api_base="https://proxy.example.com/v1",
+        )
+        manager = service.get_local_index_manager(embedding_model_name="text-embedding-3-small")
+
+        assert isinstance(manager, OpenAILocalIndexManager)
+        assert manager._openai_api_base == "https://proxy.example.com/v1"
+
+    def test_get_local_index_manager_no_base_url(self):
+        service = OpenAILlmService(openai_api_key="api-123")
+        manager = service.get_local_index_manager(embedding_model_name="text-embedding-3-small")
+
+        assert manager._openai_api_base is None

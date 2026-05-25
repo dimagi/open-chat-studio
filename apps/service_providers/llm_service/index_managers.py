@@ -364,17 +364,32 @@ class OpenAILocalIndexManager(LocalIndexManager):
     """
     OpenAI-specific implementation of LocalIndexManager.
 
-    This class provides concrete implementations for local embedding operations
-    using OpenAI's embedding models and text processing utilities. It handles
-    text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
+    Supports custom OpenAI-compatible endpoints via `openai_api_base` so local
+    indexing works against gateways like LiteLLM or self-hosted proxies.
     """
 
-    def get_embedding_vector(self, content: str) -> Vector:  # ty: ignore[invalid-method-override]
+    def __init__(
+        self,
+        api_key: str,
+        embedding_model_name: str,
+        openai_api_base: str | None = None,
+    ):
+        super().__init__(api_key=api_key, embedding_model_name=embedding_model_name)
+        self._openai_api_base = openai_api_base
+
+    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
         from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        embeddings = OpenAIEmbeddings(
-            api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
-        )
+        kwargs: dict = {
+            "api_key": self._api_key,
+            "model": self.embedding_model_name,
+            "dimensions": settings.EMBEDDING_VECTOR_SIZE,
+        }
+        if self._openai_api_base:
+            kwargs["base_url"] = self._openai_api_base
+        embeddings = OpenAIEmbeddings(**kwargs)
+        if input_type == "document":
+            return embeddings.embed_documents([content])[0]
         return embeddings.embed_query(content)
 
 
