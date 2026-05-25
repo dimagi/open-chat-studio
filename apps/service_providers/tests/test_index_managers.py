@@ -9,6 +9,7 @@ from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.llm_service.index_managers import (
+    GoogleLocalIndexManager,
     LocalIndexManager,
     OpenAILocalIndexManager,
     OpenAIRemoteIndexManager,
@@ -413,6 +414,44 @@ class TestOpenAILocalIndexManager:
             model="embedding-model",
             dimensions=settings.EMBEDDING_VECTOR_SIZE,
         )
+
+
+class TestGoogleLocalIndexManager:
+    @pytest.fixture()
+    def index_manager(self):
+        return GoogleLocalIndexManager(api_key="test-api-key", embedding_model_name="text-embedding-004")
+
+    def test_get_embedding_vector_document_calls_embed_documents_with_dimensionality(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = [expected_vector]
+            result = index_manager.get_embedding_vector("some text", input_type="document")
+
+        mock_cls.assert_called_once_with(
+            google_api_key="test-api-key",
+            model="models/text-embedding-004",
+        )
+        mock_cls.return_value.embed_documents.assert_called_once_with(
+            ["some text"],
+            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+            task_type="RETRIEVAL_DOCUMENT",
+        )
+        mock_cls.return_value.embed_query.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_query_calls_embed_query_with_dimensionality(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text", input_type="query")
+
+        mock_cls.return_value.embed_query.assert_called_once_with(
+            "some text",
+            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+            task_type="RETRIEVAL_QUERY",
+        )
+        mock_cls.return_value.embed_documents.assert_not_called()
+        assert result == expected_vector
 
 
 class TestVoyageAILocalIndexManager:
