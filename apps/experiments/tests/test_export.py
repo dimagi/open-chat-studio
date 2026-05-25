@@ -85,7 +85,7 @@ def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_
     csv_in_memory = filtered_export_to_csv(experiment, filtered_queryset)
     csv_content = csv_in_memory.getvalue()
     csv_lines = csv_content.strip().split("\n") if csv_content.strip() else []
-    # Each trace produces 2 rows (human + AI), plus 1 header
+    # Each session produces 2 rows (human + AI message), plus 1 header
     expected_rows = len(filtered_indices) * 2 + 1
     assert len(csv_lines) == expected_rows
 
@@ -228,96 +228,82 @@ def test_participant_data_export_empty_data():
     assert json.loads(rows[2][pd_index]) == {}
 
 
-def test_trace_id_export():
-    input_msg_legacy = Mock(
-        id="msg1",
-        message_type="human",
-        content="Hello",
-        created_at="2024-01-01",
-        trace_info=[{"trace_id": "trace123"}],
-        tags=Mock(all=Mock(return_value=[])),
-        comments=Mock(all=Mock(return_value=[])),
-    )
-    output_msg_legacy = Mock(
-        id="msg2",
-        message_type="ai",
-        content="Hi",
-        created_at="2024-01-01",
-        trace_info=[],
-        tags=Mock(all=Mock(return_value=[])),
-        comments=Mock(all=Mock(return_value=[])),
-    )
+def test_trace_id_resolved_per_message_trace_info():
+    """Each message's Trace ID column comes from its own trace_info, not from a paired message.
 
-    input_msg_langfuse = Mock(
-        id="msg3",
-        message_type="human",
-        content="Hello again",
-        created_at="2024-01-01",
-        trace_info=[
-            {"trace_id": "traceABC", "trace_provider": OCS_TRACE_PROVIDER},
-            {"trace_id": "trace456", "trace_provider": "langfuse"},
-        ],
-        tags=Mock(all=Mock(return_value=[])),
-        comments=Mock(all=Mock(return_value=[])),
-    )
-    output_msg_langfuse = Mock(
-        id="msg4",
-        message_type="ai",
-        content="Hi again",
-        created_at="2024-01-01",
-        trace_info=[],
-        tags=Mock(all=Mock(return_value=[])),
-        comments=Mock(all=Mock(return_value=[])),
-    )
-
+    Verifies three cases:
+    - Legacy trace_info (no trace_provider): trace_id is used as-is.
+    - Multiple providers: OCS entries are excluded; the first non-OCS entry wins.
+    - Messages with no trace_info (e.g. AI responses): Trace ID column is empty.
+    """
     session = Mock(
+        id=1,
         external_id="session123",
         state={},
         get_platform_name=Mock(return_value="TestPlatform"),
         participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
         chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
     )
+    empty_trace = Mock(participant_data={}, participant_data_diff=[])
 
-    trace1 = Mock(
-        input_message=input_msg_legacy,
-        output_message=output_msg_legacy,
-        session=session,
-        participant_data={},
-        participant_data_diff=[],
-        timestamp="2024-01-01T00:00:00",
-    )
-    trace2 = Mock(
-        input_message=input_msg_langfuse,
-        output_message=output_msg_langfuse,
-        session=session,
-        participant_data={},
-        participant_data_diff=[],
-        timestamp="2024-01-01T00:01:00",
-    )
+    def make_message(msg_id, is_human, content, trace_info):
+        msg = Mock(
+            id=msg_id,
+            message_type="human" if is_human else "ai",
+            content=content,
+            created_at="2024-01-01",
+            trace_info=trace_info,
+            is_human_message=is_human,
+            is_ai_message=not is_human,
+            tags=Mock(all=Mock(return_value=[])),
+            comments=Mock(all=Mock(return_value=[])),
+        )
+        msg.chat.experiment_session = session
+        if is_human:
+            msg.input_message_trace.all.return_value = [empty_trace]
+        else:
+            msg.output_message_trace.all.return_value = [empty_trace]
+        return msg
+
+    messages = [
+        make_message("msg1", True, "Hello", [{"trace_id": "trace123"}]),
+        make_message("msg2", False, "Hi", []),
+        make_message(
+            "msg3",
+            True,
+            "Hello again",
+            [
+                {"trace_id": "traceABC", "trace_provider": OCS_TRACE_PROVIDER},
+                {"trace_id": "trace456", "trace_provider": "langfuse"},
+            ],
+        ),
+        make_message("msg4", False, "Hi again", []),
+    ]
 
     experiment = Mock(public_id="exp123", name="Test Experiment")
 
     # Build a chainable mock queryset that supports the keyset-pagination pattern:
-    # Trace.objects.filter(...).select_related(...).prefetch_related(...).order_by("pk")
-    # then base_qs.filter(pk__gt=last_pk)[:CHUNK_SIZE] → [trace1, trace2]
-    mock_traces_qs = MagicMock()
-    mock_traces_qs.select_related.return_value = mock_traces_qs
-    mock_traces_qs.prefetch_related.return_value = mock_traces_qs
-    mock_traces_qs.order_by.return_value = mock_traces_qs
-    # .filter(pk__gt=...) returns a sliceable mock; [:chunk_size] yields the two traces
-    mock_traces_qs.filter.return_value.__getitem__ = Mock(return_value=[trace1, trace2])
+    # ChatMessage.objects.filter(...).select_related(...).prefetch_related(...).order_by("pk")
+    # then base_qs.filter(pk__gt=last_pk)[:CHUNK_SIZE] → messages
+    mock_messages_qs = MagicMock()
+    mock_messages_qs.select_related.return_value = mock_messages_qs
+    mock_messages_qs.prefetch_related.return_value = mock_messages_qs
+    mock_messages_qs.order_by.return_value = mock_messages_qs
+    mock_messages_qs.filter.return_value.__getitem__ = Mock(return_value=messages)
 
-    with patch("apps.experiments.export.Trace.objects.filter", return_value=mock_traces_qs):
+    with patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs):
         csv_in_memory = filtered_export_to_csv(experiment, Mock())
         rows = list(csv.reader(io.StringIO(csv_in_memory.getvalue()), delimiter=","))
 
     header = rows[0]
     trace_id_index = header.index("Trace ID")
 
-    assert rows[1][trace_id_index] == "trace123"  # human msg from trace1 (legacy)
-    assert rows[2][trace_id_index] == "trace123"  # ai msg from trace1 (same trace_id)
-    assert rows[3][trace_id_index] == "trace456"  # human msg from trace2 (langfuse)
-    assert rows[4][trace_id_index] == "trace456"  # ai msg from trace2 (same trace_id)
+    # Each message's trace_id comes from its own trace_info; AI messages with no
+    # trace_info get an empty string.
+    assert rows[1][trace_id_index] == "trace123"  # human msg (legacy trace_info)
+    assert rows[2][trace_id_index] == ""  # ai msg has no trace_info
+    assert rows[3][trace_id_index] == "trace456"  # human msg (langfuse, OCS excluded)
+    assert rows[4][trace_id_index] == ""  # ai msg has no trace_info
 
 
 @pytest.mark.django_db()

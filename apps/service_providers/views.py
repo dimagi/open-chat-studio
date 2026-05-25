@@ -30,6 +30,7 @@ from ..generics.chips import Chip
 from ..generics.referenced_objects import render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
+from .usages import get_provider_usages
 from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms
 
 log = logging.getLogger("ocs.service_providers")
@@ -48,6 +49,30 @@ class ServiceProviderMixin:
     def provider_type(self) -> ServiceProvider:
         type_ = self.kwargs["provider_type"]
         return ServiceProvider[type_]
+
+
+class ServiceProviderUsagesView(
+    LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin, django_views.View
+):
+    template_name = "service_providers/usages.html"
+
+    def get_permission_required(self):
+        return (self.provider_type.get_permission("view"),)
+
+    def get(self, request, *args, **kwargs):
+        provider = get_object_or_404(self.provider_type.model, team=request.team, pk=self.kwargs["pk"])
+        usages = get_provider_usages(provider)
+        return render(
+            request,
+            self.template_name,
+            {
+                "provider": provider,
+                "provider_type": self.provider_type,
+                "usages": usages,
+                "title": f"Usages of {provider.name}",
+                "active_tab": "manage-team",
+            },
+        )
 
 
 class ServiceProviderTableView(

@@ -6,13 +6,13 @@
     </div>
 
     <div id="filtersContent">
-      <template x-if="!savedFilters || savedFilters.length === 0">
+      <template x-if="!Array.isArray(savedFilters) || savedFilters.filter(Boolean).length === 0">
         <div class="text-center text-gray-500 py-4">No saved filter sets</div>
       </template>
-      
-      <template x-if="savedFilters && savedFilters.length > 0">
+
+      <template x-if="Array.isArray(savedFilters) && savedFilters.filter(Boolean).length > 0">
         <div class="space-y-4">
-          <template x-for="filter in savedFilters" :key="filter.id">
+          <template x-for="filter in (savedFilters || []).filter(Boolean)" :key="filter.id">
             <div class="flex items-center justify-between">
               <div class="flex-1">
                 <div class="font-medium cursor-pointer hover:text-primary hover:bg-base-200 hover:border-base-300 p-2 rounded"

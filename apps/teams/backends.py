@@ -103,6 +103,7 @@ CONTENT_TYPES = {
         "datasetautopopulationrule",
     ],
     "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
+    "assessments": ["score"],
     "trace": ["trace"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
@@ -201,6 +202,7 @@ GROUPS = [
             ModelPermSetDef("annotations", "usercomment", ALL),
             CustomPermissionSetDef("experiments", CUSTOM_PERMISSIONS["experiments"]),
             AppPermSetDef("documents", ALL),
+            ModelPermSetDef("files", "file", [VIEW]),
         ],
     ),
     GroupDef(
@@ -208,6 +210,7 @@ GROUPS = [
         [
             AppPermSetDef("chat", [VIEW]),
             AppPermSetDef("annotations", [VIEW]),
+            ModelPermSetDef("files", "file", [VIEW]),
         ],
     ),
     GroupDef(

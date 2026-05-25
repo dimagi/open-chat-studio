@@ -88,6 +88,15 @@ class File(BaseTeamModel, VersionsMixin):
     ):
         content = file_obj.read() if file_obj else None
 
+        if not content and not external_id:
+            # Refuse to persist a File row without any underlying storage.
+            # Doing so would create rows whose FileField is empty, which then
+            # causes ValueError('The "file" attribute has no file associated
+            # with it.') the next time anyone tries to open/serve the file.
+            # External references (e.g. OpenAI assistant files) are exempt
+            # because the content lives at the external source.
+            raise ValueError(f"Cannot create File '{filename}' with empty content")
+
         if not content_type:
             content_type = detect_content_type(content or b"", filename=filename)
 

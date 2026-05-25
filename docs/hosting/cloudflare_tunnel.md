@@ -6,16 +6,14 @@ Cloudflare Tunnel is one option for exposing Open Chat Studio without opening in
 
 ## How it works
 
-`cloudflared` runs as a Docker container alongside your app. It opens outbound connections to Cloudflare's network. Cloudflare routes incoming traffic through those connections to your `web` container. Your server never needs an inbound firewall rule.
-
-A `dnsmasq` container provides private DNS resolution so team members can access the app by hostname (e.g. `ocs.your-org`) instead of IP address. This hostname only resolves when WARP is connected; it does not appear in public DNS, certificate transparency logs, or any external registry.
+`cloudflared` runs as a Docker container alongside your app. It opens outbound connections to Cloudflare's network. Cloudflare routes incoming traffic through those connections to your `web` container. Your server never needs an inbound firewall rule. It also add `extra_hosts` that takes in private hostname and APP IP that provides private DNS resolution so team members can access the app by hostname (e.g. `ocs.your-org`) instead of IP address. This hostname only resolves when WARP is connected; it does not appear in public DNS, certificate transparency logs, or any external registry.
 
 ```mermaid
 flowchart LR
     Internet([Internet / Messaging platforms])
     CF["Cloudflare edge<br/>(cloud relay)"]
     CFD["cloudflared container<br/>(outbound QUIC tunnel)"]
-    DNS["dnsmasq container<br/>(resolves ocs.your-org → app IP)"]
+    DNS["extra_hosts inside cloudflared container<br/>(resolves ocs.your-org → app IP)"]
     WEB["web container<br/>gunicorn :8000"]
     PG[("PostgreSQL")]
     RD[("Redis")]
@@ -36,7 +34,7 @@ The `cloudflared` container initiates the tunnel, your server opens no inbound p
 - Open Chat Studio running via `docker-compose.prod.yml`
 
 ## Step 1: Create a tunnel in the Cloudflare dashboard
-1. Go to **Zero Trust → Networks → Tunnels → Create a tunnel**
+1. Go to **Zero Trust → Networks → Overview → Manage Tunnels → Add a tunnel**
 2. Name it (e.g. `open-chat-studio-prod`)
 3. Select **Docker** as operating system
 4. Copy your **token** - you will need it in Step 4
@@ -75,7 +73,7 @@ Note the IP address (e.g. `172.18.0.7`); the subnet is the /16 range (e.g. `172.
 
 ## Step 3: Configure Cloudflare Zero Trust
 ### Enable Gateway Proxy
-Gateway Proxy is **required** for private hostname resolution. Without it, WARP cannot send DNS queries to your private dnsmasq container.
+Gateway Proxy is **required** for private hostname resolution. Without it, WARP cannot send DNS queries to your private host.
 
 1. Go to **Zero Trust → Traffic policies → Traffic settings**
 2. Under **Proxy and inspection**, enable **Allow Secure Web Gateway to proxy traffic**
@@ -90,7 +88,7 @@ Gateway Proxy is **required** for private hostname resolution. Without it, WARP 
 ### Create a DNS Location
 A DNS location tells Cloudflare Gateway where to receive DNS queries. Without it, private hostnames like ocs.your-org will not resolve, even with WARP connected.
 
-1. Go to **Zero Trust → Settings → Locations**
+1. Go to **Zero Trust → Networks → Resolvers & Proxies → DNS locations**
 2. Click Create a location
 3. Name: Default DNS Location
 4. Set as default: ✅ Yes
@@ -103,7 +101,7 @@ A DNS location tells Cloudflare Gateway where to receive DNS queries. Without it
 ### Configure Split Tunnels
 By default, WARP excludes private IP ranges from routing through the tunnel. You must remove these exclusions so WARP sends traffic to your Docker network.
 
-1. Go to **Zero Trust → Settings → WARP Client → Device profiles → Default profile**
+1. Go to **Zero Trust → Team & Resources → Devices → Device profiles → Configure Default Device**
 2. Under Split Tunnels, click Exclude
 3. Remove `172.16.0.0/12` (this covers `172.18.0.0/16`, your Docker network)
 4. Remove `192.168.0.0/16` if your Docker network uses that range
@@ -113,32 +111,34 @@ By default, WARP excludes private IP ranges from routing through the tunnel. You
     Removing `172.16.0.0/12` means all traffic to the `172.16.x.x` – `172.31.x.x` range routes through WARP. This is usually fine since home and office networks rarely use `172.18.x.x.` If users experience issues reaching local resources on those ranges, add specific sub-ranges back to the exclude list instead.
 
 ### Configure Local Domain Fallback
-Local Domain Fallback tells WARP to send DNS queries for your private hostname to your dnsmasq container instead of Cloudflare's public DNS.
+Local Domain Fallback tells WARP to send DNS queries for your private hostname to your host dns instead of Cloudflare's public DNS.
 
-1. Go to **Zero Trust → Settings → WARP Client → Device profiles → Default profile**
+1. Go to **Zero Trust → Team & Resources → Devices → Device profiles → Default profile**
 2. Under Local Domain Fallback, click Add
 3. Domain suffix: `ocs.your-org` (match the private hostname from Step 2)
-4. DNS server IP: `172.18.0.100` (the dnsmasq container IP; see Step 4)
+4. DNS server IP: `172.18.0.100` (the host dns IP; see Step 4)
 5. Save
 
 !!! note
-    Resolver Policies (Cloudflare resolves hostnames natively without a DNS server) require an Enterprise plan. Local Domain Fallback with a self-hosted dnsmasq container works on all plans including Free.
+    Resolver Policies (Cloudflare resolves hostnames natively without a DNS server) require an Enterprise plan. Local Domain Fallback with a self-hosted dns works on all plans including Free.
 
 !!! tip "Toggle WARP after profile changes"
     After changing Split Tunnels, Local Domain Fallback, or any device profile setting, users must disconnect and reconnect WARP to pick up the updated profile. Changes are not applied to connected clients automatically.
 
 ## Step 4: Start the Cloudflare services
-The repository ships `docker-compose.cloudflare.yml` as an opt-in compose override. It includes two services: `cloudflared` (the tunnel connector) and dns (private DNS resolution via dnsmasq).
+The repository ships `docker-compose.cloudflare.yml` as an opt-in compose override. It includes two services: `cloudflared` (the tunnel connector) and dns (private DNS resolution via extra hosts in cloudflare).
 
 ```yml
 # docker-compose.cloudflare.yml
 services:
   cloudflared:
-    image: cloudflare/cloudflared:2025.4.0
+    image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
+    command: tunnel --no-autoupdate --protocol http2 run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+    extra_hosts:
+      - "${PRIVATE_HOSTNAME}:${APP_IP}"
     networks:
       - open-chat-studio_default
     logging:
@@ -146,14 +146,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  dns:
-    image: jpillora/dnsmasq
-    restart: unless-stopped
-    command: --address=/${PRIVATE_HOSTNAME:-ocs.local}/${APP_IP:-172.18.0.7}
-    networks:
-      open-chat-studio_default:
-        ipv4_address: ${DNS_IP:-172.18.0.100}
 
 networks:
   open-chat-studio_default:
@@ -167,8 +159,8 @@ Private hostnames like `ocs.your-org` don't exist in public DNS. Here's the full
 1. User types `ocs.your-org` in browser
 2. WARP intercepts the DNS query
 3. WARP checks Local Domain Fallback → matches `ocs.your-org`
-4. WARP forwards DNS query to dnsmasq at `172.18.0.100` (through the tunnel)
-5. dnsmasq returns `172.18.0.7` (the web container IP)
+4. WARP forwards DNS query to extra hosts at `172.18.0.100` (through the tunnel)
+5. Extra hosts in cloudflare returns `172.18.0.7` (the web container IP)
 6. Browser connects to `172.18.0.7:8000`
 7. WARP routes traffic through the tunnel (CIDR `172.18.0.0/16` matches)
 8. Traffic reaches the web container
@@ -179,8 +171,8 @@ Each component has a specific role:
 | Component | Role |
 |---|---|
 | `cloudflared` | Routes traffic between the Cloudflare edge and the Docker network. |
-| `dnsmasq` | Maps `ocs.your-org` → `172.18.0.7` using private DNS resolution. |
-| `Local Domain Fallback` | Configures WARP to forward DNS queries to `dnsmasq` for local/private domains. |
+| `extra_hosts` | Maps `ocs.your-org` → `172.18.0.7` using private DNS resolution. |
+| `Local Domain Fallback` | Configures WARP to forward DNS queries to `extra hosts` for local/private domains. |
 | `Split Tunnels` | Ensures traffic for `172.18.0.0/16` is routed through WARP instead of the public internet. |
 | `CIDR Route` | Informs WARP that Docker network traffic should be sent through the Cloudflare tunnel. |
 | `Gateway Proxy (UDP)` | Allows WARP to forward DNS queries over UDP to private/internal IP addresses. |
@@ -199,6 +191,11 @@ The `APP_IP` variable must match the web container's IP on the Docker network:
 docker inspect open-chat-studio-web-1 | grep -A 5 "IPAddress"
 ```
 
+In order to allow hostname to work, inside the server, set the host based on App_Ip
+```bash
+sudo sh -c 'echo "172.18.0.7 openchatstudio.semabu" >> /etc/hosts'
+```
+
 Set this in your `.env` file.
 
 ### Configure environment variables
@@ -209,13 +206,12 @@ Add to your `.env.prod` (or create a separate .env for the Cloudflare compose):
 CLOUDFLARE_TUNNEL_TOKEN=eyJ...your-token...
 PRIVATE_HOSTNAME=ocs.your-org
 APP_IP=172.18.0.7
-DNS_IP=172.18.0.100
 ```
 
 ### Start the stack
 ```bash
 # Start the app first (creates the network)
-docker compose -f docker-compose.prod.yml up -d
+POSTGRES_PASSWORD=yourpassword docker compose -f docker-compose.prod.yml up -d
 
 # Start the Cloudflare services (joins the network)
 docker compose -f docker-compose.cloudflare.yml --env-file .env.prod up -d
@@ -226,7 +222,7 @@ Verify both containers are running:
 docker compose -f docker-compose.cloudflare.yml logs
 ```
 
-You should see dnsmasq report using `nameserver 1.1.1.1#53` and read `/etc/hosts`.
+You should see local dns report using `nameserver 1.1.1.1#53` and read `/etc/hosts`.
 
 !!! warning "Remove the exposed port from docker-compose.prod.yml"
     The default `docker-compose.prod.yml` includes `ports: "8000:8000"` on the `web` service. This makes the app accessible at `http://your-server-ip:8000` directly, bypassing Zero Trust entirely. Remove or comment out the `ports` mapping:
@@ -240,6 +236,16 @@ You should see dnsmasq report using `nameserver 1.1.1.1#53` and read `/etc/hosts
 
     The tunnel handles all access. No inbound ports are needed.
 
+!!! note "Assign a fixed IP to the web container"
+    Set static IP inside docker to avoid losing connections when address changes for web app.
+
+    ```yaml
+    web:
+      networks:
+        open-chat-studio_default:
+           ipv4_address: 172.18.0.7
+    ```
+
 ## Step 5: Update Django settings
 
 Add the private hostname to the trusted origins. If you also configure a public hostname for webhooks (see Step 6), add that too:
@@ -247,7 +253,7 @@ Add the private hostname to the trusted origins. If you also configure a public 
 ```bash
 # .env.prod
 DJANGO_ALLOWED_HOSTS=ocs.your-org,ocs.yourdomain.com
-CSRF_TRUSTED_ORIGINS=https://ocs.your-org,https://ocs.yourdomain.com
+CSRF_TRUSTED_ORIGINS=http://ocs.your-org,http://ocs.yourdomain.com
 ```
 
 ## Verify access
@@ -331,7 +337,9 @@ flowchart TD
     subgraph CF["Cloudflare"]
         HIT["Webhook hits ocs.yourdomain.com<br/>(TLS terminated by Cloudflare)"]
         BYPASS["Bypass Policy<br/>(webhook paths; no WARP needed)"]
+        DENY["Deny Policy<br/>(all other paths blocked)"]
         HIT --> BYPASS
+        HIT --> DENY
     end
 
     subgraph TUN["Tunnel"]
@@ -346,13 +354,22 @@ flowchart TD
 
     HMAC -->|POST request| HIT
     BYPASS --> TUNNEL
+    DENY -->|blocked| X["❌ Access Denied"]
     TUNNEL --> DJANGO
 ```
 
-Add each Bypass policy to the **same application** created in Part A:
+### Create the Webhook Access application
+
+1. Go to **Zero Trust → Access → Applications → Add an application**
+2. Select `Self-hosted and Private` then select `Public DNS`
+3. Application name: e.g., ocs-webhooks
+4. Application domain: ocs.yourdomain.com
+5. Save with no policies for now
+
+Add each Bypass policy to the **same application** created above:
 
 1. Open the application → **Policies** tab → **Add a policy**
-2. Set **Action** to Bypass
+2. Set **Action** to **Bypass**
 3. Under **Include**, select **Everyone**
 4. Set the **Path** field to one of the paths from the table below
 5. Save, then repeat for each remaining path
@@ -371,6 +388,17 @@ Add each Bypass policy to the **same application** created in Part A:
 
 !!! tip
     Platform-level security is unchanged. Each platform enforces its own request verification (Meta HMAC-SHA256, Telegram token in the URL, Twilio HMAC-SHA1, Slack signing secret). The Bypass policy only removes the Cloudflare Access cookie requirement for those paths.
+
+### Add a Deny catch-all policy
+
+!!! danger "Required — blocks all non-webhook paths"
+    Without this policy, the public hostname exposes the entire application (UI, admin panel, etc.) to the internet. The Deny policy ensures only the explicitly Bypassed webhook paths are reachable.
+
+1. Open the **application → Policies tab → Add a policy**
+2. Policy name: `Deny - All other paths`
+3. Set **Action** to **Deny**
+4. Under **Include**, select **Everyone**
+5. Save
 
 !!! warning "Policy order matters"
     Cloudflare evaluates policies top to bottom and stops at the first match. Place all Bypass policies above the Allow policy in the list. If the Allow policy is evaluated first, webhook requests will be rejected before the Bypass rule is reached.

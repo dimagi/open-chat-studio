@@ -1,0 +1,192 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:home' request.team.slug %}">{% translate "Evaluations" %}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Concordance" %}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <h1 class="text-2xl font-bold mb-4">{% translate "Concordance" %}</h1>
+
+  <form method="get" class="mb-6 flex gap-4 items-end flex-wrap">
+    <label class="form-control">
+      <span class="label-text">{% translate "Evaluation" %}</span>
+      <select name="eval" class="select select-bordered">
+        <option value="">—</option>
+        {% for ec in eval_configs %}
+          <option value="{{ ec.id }}" {% if selected_eval_id|stringformat:"s" == ec.id|stringformat:"s" %}selected{% endif %}>{{ ec.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">{% translate "Annotation queue" %}</span>
+      <select name="queue" class="select select-bordered">
+        <option value="">—</option>
+        {% for q in queues %}
+          <option value="{{ q.id }}" {% if selected_queue_id|stringformat:"s" == q.id|stringformat:"s" %}selected{% endif %}>{{ q.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    {% if candidate_fields %}
+    <label class="form-control">
+      <span class="label-text">{% translate "Field" %}</span>
+      <select name="field" class="select select-bordered">
+        {% for name in candidate_fields %}
+          <option value="{{ name }}" {% if selected_field_name == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">{% translate "Show" %}</span>
+      <select name="show" class="select select-bordered">
+        <option value="matched" {% if selected_show == "matched" %}selected{% endif %}>{% translate "Matched only" %}</option>
+        <option value="eval_only" {% if selected_show == "eval_only" %}selected{% endif %}>{% translate "Eval only" %}</option>
+        <option value="human_only" {% if selected_show == "human_only" %}selected{% endif %}>{% translate "Human only" %}</option>
+        <option value="all" {% if selected_show == "all" %}selected{% endif %}>{% translate "All" %}</option>
+      </select>
+    </label>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">{% translate "Compare" %}</button>
+  </form>
+
+  {% if eval_config and queue %}
+    {% if no_candidates %}
+      <div class="alert alert-warning">
+        {% translate "No shared categorical fields between this evaluation and queue." %}
+      </div>
+    {% elif selected_field_name %}
+      <div class="mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm pg-text-muted">
+        <span>{% translate "Comparing" %}</span>
+        <span class="font-semibold text-base-content">{{ eval_config.name }}</span>
+        <span>{% translate "to" %}</span>
+        <span class="font-semibold text-base-content">{{ queue.name }}</span>
+        <span>{% translate "on field" %}</span>
+        <code class="px-1.5 py-0.5 bg-base-200 rounded text-xs">{{ selected_field_name }}</code>
+      </div>
+
+      <div class="stats stats-vertical sm:stats-horizontal bg-base-200 rounded-box shadow-sm mb-6 w-full">
+        <div class="stat">
+          <div class="stat-figure {{ agreement_color_class }}">
+            <i class="fa-solid fa-handshake-simple fa-2x"></i>
+          </div>
+          <div class="stat-title">{% translate "Agreement" %}</div>
+          {% if agree_pct is not None %}
+            <div class="stat-value {{ agreement_color_class }}">{{ agree_pct }}%</div>
+            <div class="stat-desc">{{ agree_count }} / {{ matched_count }} {% translate "matched" %}</div>
+          {% else %}
+            <div class="stat-value {{ agreement_color_class }}">—</div>
+            <div class="stat-desc">{% translate "No matched sessions" %}</div>
+          {% endif %}
+        </div>
+
+        <div class="stat">
+          <div class="stat-figure pg-text-muted">
+            <i class="fa-solid fa-link fa-lg"></i>
+          </div>
+          <div class="stat-title">{% translate "Matched" %}</div>
+          <div class="stat-value text-2xl">{{ matched_count }}</div>
+          <div class="stat-desc">{% translate "sessions scored by both" %}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-figure pg-text-muted">
+            <i class="fa-solid fa-chart-simple fa-lg"></i>
+          </div>
+          <div class="stat-title">{% translate "Eval only" %}</div>
+          <div class="stat-value text-2xl">{{ eval_only_count }}</div>
+          <div class="stat-desc">{% translate "awaiting human review" %}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-figure pg-text-muted">
+            <i class="fa-solid fa-pen-to-square fa-lg"></i>
+          </div>
+          <div class="stat-title">{% translate "Human only" %}</div>
+          <div class="stat-value text-2xl">{{ human_only_count }}</div>
+          <div class="stat-desc">{% translate "awaiting eval" %}</div>
+        </div>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{% translate "Session" %}</th>
+            <th>{% translate "Judge value" %}</th>
+            <th>{% translate "Human value" %}</th>
+            <th>{% translate "Agree?" %}</th>
+            <th class="text-right">{% translate "Links" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% if row.session_external_id and row.experiment_public_id %}
+                  {% url 'chatbots:chatbot_session_view' request.team.slug row.experiment_public_id row.session_external_id as session_url %}
+                  {% include "generic/chip_button.html" with url=session_url label=row.session_external_id %}
+                {% else %}
+                  {{ row.session_external_id|default:"—" }}
+                {% endif %}
+              </td>
+              <td>{{ row.judge_value|default:"—" }}</td>
+              <td>{{ row.human_value|default:"—" }}</td>
+              <td>
+                {% if row.agree is None %}
+                  <span class="badge badge-ghost">—</span>
+                {% elif row.agree %}
+                  <span class="badge badge-success">{% translate "Agree" %}</span>
+                {% else %}
+                  <span class="badge badge-error">{% translate "Disagree" %}</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <div class="join">
+                  {% if row.eval_run_id %}
+                    {% url 'evaluations:evaluation_results_home' request.team.slug eval_config.id row.eval_run_id as eval_results_url %}
+                    <a class="btn btn-xs join-item" title="{% translate "Eval result" %}"
+                       href="{{ eval_results_url }}{% if row.eval_result_id %}?result_id={{ row.eval_result_id }}{% endif %}">
+                      <i class="fa-solid fa-chart-simple fa-fw"></i> {% translate "Eval" %}
+                    </a>
+                  {% endif %}
+                  {% if row.annotation_item_id %}
+                    <a class="btn btn-xs join-item" title="{% translate "Annotation item" %}"
+                       href="{% url 'human_annotations:annotate_item' request.team.slug queue.id row.annotation_item_id %}">
+                      <i class="fa-solid fa-pen-to-square fa-fw"></i> {% translate "Annotation" %}
+                    </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                {% if selected_show == "matched" %}
+                  {% translate "No matched sessions yet." %}
+                {% elif selected_show == "eval_only" %}
+                  {% translate "No eval-only sessions." %}
+                {% elif selected_show == "human_only" %}
+                  {% translate "No human-only sessions." %}
+                {% else %}
+                  {% translate "No sessions to compare yet." %}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="alert alert-info">
+        {% translate "Multiple shared fields — pick one above to compare." %}
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock app %}
