@@ -1,12 +1,19 @@
 import pytest
 from django.urls import reverse
 
+from apps.events.models import EventActionType
 from apps.service_providers.models import LlmProviderTypes, MessagingProviderType, TraceProviderType, VoiceProviderType
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.service_providers.utils import ServiceProvider
 from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory
+from apps.utils.factories.experiment import ExperimentFactory, SyntheticVoiceFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
+    AuthProviderFactory,
+    EmbeddingProviderModelFactory,
     LlmProviderFactory,
     MessagingProviderFactory,
     TraceProviderFactory,
@@ -44,13 +51,6 @@ def test_get_usages_empty_when_unreferenced(anthropic_provider):
 
 @pytest.mark.django_db()
 def test_document_sources_roll_up_to_collections(team_with_users, client):
-    from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory  # noqa: PLC0415
-    from apps.utils.factories.service_provider_factories import (  # noqa: PLC0415
-        AuthProviderFactory,
-        EmbeddingProviderModelFactory,
-        LlmProviderFactory,
-    )
-
     auth_provider = AuthProviderFactory(team=team_with_users)
     # Share the LlmProvider / EmbeddingProviderModel across collections so the
     # team-scoped unique constraints aren't violated by CollectionFactory.
@@ -88,7 +88,6 @@ def test_document_sources_roll_up_to_collections(team_with_users, client):
 
 @pytest.mark.django_db()
 def test_voice_provider_excludes_synthetic_voices(team_with_users):
-    from apps.utils.factories.experiment import SyntheticVoiceFactory  # noqa: PLC0415
 
     voice = VoiceProviderFactory(team=team_with_users)
     chatbot = ExperimentFactory(team=team_with_users, voice_provider=voice)
@@ -105,7 +104,6 @@ def test_voice_provider_excludes_synthetic_voices(team_with_users):
 
 @pytest.mark.django_db()
 def test_messaging_channels_roll_up_to_chatbots(team_with_users):
-    from apps.utils.factories.channels import ExperimentChannelFactory  # noqa: PLC0415
 
     messaging = MessagingProviderFactory(team=team_with_users)
     chatbot = ExperimentFactory(team=team_with_users)
@@ -143,10 +141,6 @@ def test_experiment_category_displays_as_chatbots(team_with_users):
 
 @pytest.mark.django_db()
 def test_pipeline_chatbots_via_event_configuration(anthropic_provider):
-    from apps.events.models import EventActionType  # noqa: PLC0415 — keep test imports local
-    from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory  # noqa: PLC0415
-    from apps.utils.factories.pipelines import NodeFactory, PipelineFactory  # noqa: PLC0415
-
     team = anthropic_provider.team
     pipeline = PipelineFactory(team=team)
     NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": anthropic_provider.id})
@@ -169,7 +163,6 @@ def test_pipeline_chatbots_via_event_configuration(anthropic_provider):
 
 @pytest.mark.django_db()
 def test_pipelines_without_chatbots_appear_in_unlinked_category(anthropic_provider):
-    from apps.utils.factories.pipelines import NodeFactory, PipelineFactory  # noqa: PLC0415
 
     team = anthropic_provider.team
     lonely_pipeline = PipelineFactory(team=team, name="Lonely")
@@ -199,10 +192,6 @@ def test_pipelines_without_chatbots_appear_in_unlinked_category(anthropic_provid
 
 @pytest.mark.django_db()
 def test_pipeline_chatbots_dedupe_direct_and_event_links(anthropic_provider):
-    from apps.events.models import EventActionType  # noqa: PLC0415
-    from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory  # noqa: PLC0415
-    from apps.utils.factories.pipelines import NodeFactory, PipelineFactory  # noqa: PLC0415
-
     team = anthropic_provider.team
     pipeline = PipelineFactory(team=team)
     NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": anthropic_provider.id})
