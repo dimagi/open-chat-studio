@@ -21,6 +21,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from apps.documents.models import Collection
+from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
+from apps.experiments.models import Experiment
 from apps.utils.deletion import get_related_objects
 
 from .utils import ServiceProvider
@@ -159,7 +162,6 @@ def _build_channel_categories(channels: list) -> list[UsageCategory]:
     roll up to chatbots — the same shape the LLM page uses for pipelines —
     and leave any unowned channels in an "Unlinked Channels" bucket.
     """
-    from apps.experiments.models import Experiment  # noqa: PLC0415 — app-import cycle
 
     unique_channels = _dedupe_by_id(channels)
     experiment_ids = {ch.experiment_id for ch in unique_channels if ch.experiment_id}
@@ -195,8 +197,6 @@ def _build_document_source_categories(document_sources: list) -> list[UsageCateg
     collection once, with the collection's own version status surfaced via
     the shared item partial.
     """
-    from apps.documents.models import Collection  # noqa: PLC0415 — avoids app cycle
-
     collection_ids = {ds.collection_id for ds in document_sources if ds.collection_id}
     if not collection_ids:
         return []
@@ -216,9 +216,6 @@ def _dedupe_by_id(items: list) -> list:
 
 
 def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
-    from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger  # noqa: PLC0415 — app cycle
-    from apps.experiments.models import Experiment  # noqa: PLC0415 — app cycle
-
     by_pipeline: dict[int, dict[int, object]] = defaultdict(dict)
     for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team"):
         by_pipeline[exp.pipeline_id][exp.id] = exp
