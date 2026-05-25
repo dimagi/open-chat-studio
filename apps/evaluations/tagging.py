@@ -11,6 +11,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
 
 from apps.annotations.models import CustomTaggedItem
 from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType
@@ -166,6 +167,7 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
         applied_by_message[row["evaluation_result__message_id"]].add(row["tag_id"])
 
     content_type = None
+    stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
     messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
     for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
         target = resolve_target(representative_evaluator, message)
@@ -176,11 +178,14 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
             content_type = ContentType.objects.get_for_model(type(target))
 
         stale_tags = possible_tags - applied_by_message[message.pk]
-        if not stale_tags:
-            continue
+        if stale_tags:
+            stale_by_target[target.pk] |= stale_tags
 
-        CustomTaggedItem.objects.filter(
-            content_type=content_type,
-            object_id=target.pk,
-            tag_id__in=stale_tags,
-        ).delete()
+    if not stale_by_target or content_type is None:
+        return
+
+    filter_q = Q()
+    for target_pk, tag_ids in stale_by_target.items():
+        filter_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
+
+    CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q).delete()
