@@ -394,7 +394,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 
 class GoogleLocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str) -> Vector:  # ty: ignore[invalid-method-override]
+    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
         from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             GoogleGenerativeAIEmbeddings,
         )
@@ -402,7 +402,17 @@ class GoogleLocalIndexManager(LocalIndexManager):
         embeddings = GoogleGenerativeAIEmbeddings(
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
         )
-        return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)
+        if input_type == "document":
+            return embeddings.embed_documents(
+                [content],
+                output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+                task_type="RETRIEVAL_DOCUMENT",
+            )[0]
+        return embeddings.embed_query(
+            content,
+            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+            task_type="RETRIEVAL_QUERY",
+        )
 
 
 class VoyageAILocalIndexManager(LocalIndexManager):
