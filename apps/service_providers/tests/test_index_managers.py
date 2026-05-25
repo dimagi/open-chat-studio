@@ -125,6 +125,18 @@ class TestLocalIndexManager:
         for call in spy.call_args_list:
             assert call.kwargs == {"input_type": "document"} or call.args[1:] == ("document",)
 
+    def test_query_calls_get_embedding_vector_with_query_input_type(self, local_index_instance, index_manager):
+        with mock.patch.object(
+            index_manager,
+            "get_embedding_vector",
+            wraps=index_manager.get_embedding_vector,
+        ) as spy:
+            index_manager.query(index_id=local_index_instance.id, query="a question")
+
+        assert spy.call_count == 1
+        call = spy.call_args_list[0]
+        assert call.kwargs == {"input_type": "query"} or call.args[1:] == ("query",)
+
     def test_delete_embeddings(self, local_index_instance):
         file = FileFactory.create()
         embedding = FileChunkEmbedding.objects.create(
