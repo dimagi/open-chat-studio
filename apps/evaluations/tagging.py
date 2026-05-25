@@ -139,6 +139,39 @@ def apply_rules_to_result(
     )
 
 
+def _get_possible_tags(evaluators: list[Evaluator]) -> frozenset[int]:
+    return frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
+
+
+def _build_applied_by_message(run: EvaluationRun) -> defaultdict[int, set[int]]:
+    """Batch all AppliedTag lookups for this run to avoid an O(N) query per message."""
+    applied: defaultdict[int, set[int]] = defaultdict(set)
+    for row in AppliedTag.objects.filter(evaluation_result__run=run).values("evaluation_result__message_id", "tag_id"):
+        applied[row["evaluation_result__message_id"]].add(row["tag_id"])
+    return applied
+
+
+def _compute_stale_by_target(
+    run: EvaluationRun,
+    possible_tags: frozenset[int],
+    applied_by_message: defaultdict[int, set[int]],
+    representative_evaluator: Evaluator,
+) -> tuple[defaultdict[int, set[int]], ContentType | None]:
+    content_type = None
+    stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
+    messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
+    for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
+        target = resolve_target(representative_evaluator, message)
+        if target is None:
+            continue
+        if content_type is None:
+            content_type = ContentType.objects.get_for_model(type(target))
+        stale_tags = possible_tags - applied_by_message[message.pk]
+        if stale_tags:
+            stale_by_target[target.pk] |= stale_tags
+    return stale_by_target, content_type
+
+
 def reverse_stale_tags(run: EvaluationRun) -> None:
     """Remove stale eval-driven tags after a run completes.
 
@@ -153,33 +186,17 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
         return
 
     evaluators = list(run.config.evaluators.prefetch_related("tag_rules").all())
-    possible_tags = frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
+    possible_tags = _get_possible_tags(evaluators)
     if not possible_tags:
         return
 
     # All evaluators in a config share the dataset's evaluation_mode (enforced by
     # form validation). Use the first as a representative to carry mode into resolve_target.
     representative_evaluator = evaluators[0]
-
-    # Batch all AppliedTag lookups for this run to avoid an O(N) query per message.
-    applied_by_message: defaultdict[int, set[int]] = defaultdict(set)
-    for row in AppliedTag.objects.filter(evaluation_result__run=run).values("evaluation_result__message_id", "tag_id"):
-        applied_by_message[row["evaluation_result__message_id"]].add(row["tag_id"])
-
-    content_type = None
-    stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
-    messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
-    for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
-        target = resolve_target(representative_evaluator, message)
-        if target is None:
-            continue
-
-        if content_type is None:
-            content_type = ContentType.objects.get_for_model(type(target))
-
-        stale_tags = possible_tags - applied_by_message[message.pk]
-        if stale_tags:
-            stale_by_target[target.pk] |= stale_tags
+    applied_by_message = _build_applied_by_message(run)
+    stale_by_target, content_type = _compute_stale_by_target(
+        run, possible_tags, applied_by_message, representative_evaluator
+    )
 
     if not stale_by_target or content_type is None:
         return
