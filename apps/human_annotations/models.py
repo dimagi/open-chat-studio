@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from pydantic import TypeAdapter
 
+from apps.assessments.score_writers import write_scores_from_annotation
 from apps.evaluations.field_definitions import FieldDefinition
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -274,11 +275,7 @@ class Annotation(BaseTeamModel):
         # Re-run score writes on every save of a SUBMITTED annotation (including edits)
         # so concordance never reads stale data. Writer is idempotent. Runs outside the
         # transaction so a writer failure cannot roll back the annotation save.
-        # Local import to avoid a runtime cycle (human_annotations.models →
-        # assessments.score_writers → human_annotations.models via Score.review FK).
         if submitted:
-            from apps.assessments.score_writers import write_scores_from_annotation  # noqa: PLC0415
-
             try:
                 write_scores_from_annotation(self)
             except Exception:

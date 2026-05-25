@@ -397,8 +397,8 @@ def test_annotation_save_survives_score_writer_failure(annotation_on_session, ca
     def _boom(_annotation):
         raise RuntimeError("simulated db failure")
 
-    # Patch the writer at the import site used by Annotation.save (which does a local import).
-    monkeypatch.setattr("apps.assessments.score_writers.write_scores_from_annotation", _boom)
+    # Patch at the use site — Annotation.save uses the symbol imported into human_annotations.models.
+    monkeypatch.setattr("apps.human_annotations.models.write_scores_from_annotation", _boom)
 
     # Annotation creation must succeed despite the writer raising.
     new_annotation = Annotation.objects.create(

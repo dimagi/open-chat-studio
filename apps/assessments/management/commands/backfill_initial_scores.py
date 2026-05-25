@@ -1,4 +1,10 @@
+from apps.assessments.score_writers import (
+    write_scores_from_annotation,
+    write_scores_from_evaluation_result,
+)
 from apps.data_migrations.management.commands.base import IdempotentCommand
+from apps.evaluations.models import EvaluationResult
+from apps.human_annotations.models import Annotation, AnnotationStatus
 
 
 class Command(IdempotentCommand):
@@ -7,20 +13,17 @@ class Command(IdempotentCommand):
     atomic = False  # per-row work is independent; let each commit on its own
 
     def perform_migration(self, dry_run=False):
-        # Local imports keep import-time light; this command is rarely invoked.
-        from apps.assessments.score_writers import (  # noqa: PLC0415
-            write_scores_from_annotation,
-            write_scores_from_evaluation_result,
-        )
-        from apps.evaluations.models import EvaluationResult  # noqa: PLC0415
-        from apps.human_annotations.models import Annotation, AnnotationStatus  # noqa: PLC0415
-
-        eval_qs = EvaluationResult.objects.select_related(
+        # Both writers no-op when the source row has no session; pre-filter at the
+        # queryset so we don't iterate (and log/count) work we'd just throw away.
+        eval_qs = EvaluationResult.objects.filter(message__session__isnull=False).select_related(
             "message__session",
             "evaluator",
             "team",
         )
-        ann_qs = Annotation.objects.filter(status=AnnotationStatus.SUBMITTED).select_related(
+        ann_qs = Annotation.objects.filter(
+            status=AnnotationStatus.SUBMITTED,
+            item__session__isnull=False,
+        ).select_related(
             "item__queue",
             "item__session",
             "team",
