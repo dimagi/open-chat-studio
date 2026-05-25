@@ -1,7 +1,14 @@
 import pytest
 
-from apps.channels.datamodels import BaseMessage, MetaCloudAPIMessage, TwilioMessage, looks_like_bsuid
-from apps.channels.tests.message_examples import meta_cloud_api_messages
+from apps.channels.datamodels import (
+    BaseMessage,
+    MetaCloudAPIMessage,
+    TurnWhatsappMessage,
+    TwilioMessage,
+    _extract_wa_participant_id,
+    looks_like_bsuid,
+)
+from apps.channels.tests.message_examples import meta_cloud_api_messages, turnio_messages
 
 
 class TestBaseMessage:
@@ -18,6 +25,83 @@ class TestBaseMessage:
         msg = BaseMessage(participant_id="u1", message_text="hi", attachment_file_ids=[42])
         rebuilt = BaseMessage(**msg.model_dump())
         assert rebuilt.attachment_file_ids == [42]
+
+
+class TestExtractWaParticipantId:
+    def test_prefers_contacts_wa_id(self):
+        message_data = {"contacts": [{"wa_id": "27000000001"}]}
+        message = {"from": "27000000002"}
+        assert _extract_wa_participant_id(message_data, message) == "27000000001"
+
+    def test_falls_back_to_message_from_when_contacts_missing(self):
+        message_data = {}
+        message = {"from": "27000000002"}
+        assert _extract_wa_participant_id(message_data, message) == "27000000002"
+
+    def test_falls_back_to_message_from_when_contacts_empty(self):
+        message_data = {"contacts": []}
+        message = {"from": "27000000002"}
+        assert _extract_wa_participant_id(message_data, message) == "27000000002"
+
+    def test_falls_back_to_system_wa_id_when_contacts_and_from_missing(self):
+        message_data = {}
+        message = {"system": {"wa_id": "27000000003"}}
+        assert _extract_wa_participant_id(message_data, message) == "27000000003"
+
+    def test_returns_none_when_no_identifiers_available(self):
+        assert _extract_wa_participant_id({}, {}) is None
+
+    def test_returns_none_when_contacts_entry_has_no_wa_id(self):
+        """If contacts is present but the entry lacks wa_id, we should fall
+        through to the next source rather than returning a stale value."""
+        message_data = {"contacts": [{"profile": {"name": "User"}}]}
+        message = {"from": "27000000004"}
+        assert _extract_wa_participant_id(message_data, message) == "27000000004"
+
+
+class TestTurnWhatsappMessageParse:
+    def test_parse_text_message_returns_message(self):
+        parsed = TurnWhatsappMessage.parse(turnio_messages.text_message())
+        assert parsed is not None
+        assert parsed.participant_id == "27456897512"
+        assert parsed.message_text == "Hi there!"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            turnio_messages.system_user_changed_number_message(),
+            turnio_messages.unsupported_message(),
+        ],
+    )
+    def test_parse_non_conversational_returns_none(self, payload):
+        """``system`` and ``unsupported`` payloads must short-circuit
+        instead of raising a KeyError on the missing ``contacts`` key."""
+        assert TurnWhatsappMessage.parse(payload) is None
+
+    def test_parse_does_not_raise_when_contacts_missing(self):
+        """Regression test for the KeyError fixed in this PR: a payload
+        without a top-level ``contacts`` array used to crash on
+        ``message_data["contacts"][0]["wa_id"]``."""
+        payload = turnio_messages.text_message()
+        del payload["contacts"]
+        parsed = TurnWhatsappMessage.parse(payload)
+        assert parsed is not None
+        assert parsed.participant_id == "27456897512"
+
+    def test_parse_returns_none_when_no_participant_id_resolvable(self):
+        """A text payload missing contacts, ``from``, and ``system`` should
+        be ignored rather than crash."""
+        payload = {
+            "messages": [
+                {
+                    "id": "wamid.no_participant",
+                    "timestamp": "1706709716",
+                    "type": "text",
+                    "text": {"body": "Hello"},
+                }
+            ],
+        }
+        assert TurnWhatsappMessage.parse(payload) is None
 
 
 class TestMetaCloudAPIMessageParse:
@@ -49,6 +133,20 @@ class TestMetaCloudAPIMessageParse:
         parsed = MetaCloudAPIMessage.parse(message)
         assert parsed.media_id == "1215194677037265"
         assert parsed.whatsapp_message_id == "wamid.abc456"
+
+    @pytest.mark.parametrize(
+        "payload_value",
+        [
+            meta_cloud_api_messages.system_user_changed_number_value(),
+            meta_cloud_api_messages.unsupported_message_value(),
+        ],
+    )
+    def test_parse_non_conversational_returns_none(self, payload_value):
+        """``system`` and ``unsupported`` payloads short-circuit before hitting
+        the identifier-resolution logic that would otherwise KeyError on the
+        missing ``from_user_id`` field for system events."""
+        message = payload_value["messages"][0]
+        assert MetaCloudAPIMessage.parse(message) is None
 
 
 class TestTwilioMessageParse:

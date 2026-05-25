@@ -118,6 +118,42 @@ def audio_message():
     }
 
 
+def system_user_changed_number_message():
+    """A non-conversational ``system`` payload (e.g. user_changed_number)
+    that Turn.io forwards from Meta. Note: no top-level ``contacts`` array."""
+    return {
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.sys456",
+                "timestamp": "1706709716",
+                "type": "system",
+                "system": {
+                    "body": "User changed number from 27000000000 to 27456897512",
+                    "wa_id": "27456897512",
+                    "type": "user_changed_number",
+                },
+            }
+        ],
+    }
+
+
+def unsupported_message():
+    """A non-conversational ``unsupported`` payload (e.g. unknown message type)
+    that Turn.io forwards from Meta. Note: no top-level ``contacts`` array."""
+    return {
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.unsup2",
+                "timestamp": "1706709716",
+                "type": "unsupported",
+                "errors": [{"code": 131051, "title": "Message type is not currently supported."}],
+            }
+        ],
+    }
+
+
 def voice_message():
     return {
         "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],

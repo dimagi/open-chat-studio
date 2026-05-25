@@ -187,6 +187,27 @@ class TestTurnio:
         bot_process_input.assert_not_called()
 
     @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        "incoming_message",
+        [
+            turnio_messages.system_user_changed_number_message(),
+            turnio_messages.unsupported_message(),
+        ],
+    )
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_non_conversational_payloads_do_not_dispatch_bot(
+        self, bot_process_input, incoming_message, turnio_whatsapp_channel
+    ):
+        """Regression test for the KeyError fix: system/unsupported payloads
+        from Turn.io have no top-level ``contacts`` array, so the task must
+        short-circuit on ``parse()`` returning None instead of crashing."""
+        handle_turn_message(
+            experiment_id=turnio_whatsapp_channel.experiment.public_id,
+            message_data=incoming_message,
+        )
+        bot_process_input.assert_not_called()
+
+    @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
     @patch("apps.channels.tasks.handle_turn_message")
     def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):
@@ -272,6 +293,29 @@ class TestMetaCloudApi:
             channel_id=meta_cloud_api_whatsapp_channel.id,
             team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
             message_data=message,
+        )
+        bot_process_input.assert_not_called()
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        "incoming_value",
+        [
+            meta_cloud_api_messages.system_user_changed_number_value(),
+            meta_cloud_api_messages.unsupported_message_value(),
+        ],
+    )
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_non_conversational_payloads_do_not_dispatch_bot(
+        self, bot_process_input, incoming_value, meta_cloud_api_whatsapp_channel
+    ):
+        """Regression test for the non-conversational short-circuit: ``system`` and
+        ``unsupported`` payloads from Meta omit the identifier fields the parser
+        relies on, so the task must short-circuit on ``parse()`` returning None
+        instead of crashing."""
+        handle_meta_cloud_api_message(
+            channel_id=meta_cloud_api_whatsapp_channel.id,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
+            message_data=incoming_value["messages"][0],
         )
         bot_process_input.assert_not_called()
 

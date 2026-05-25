@@ -100,3 +100,49 @@ def audio_message(phone_number_id="12345"):
             }
         ],
     }
+
+
+def system_user_changed_number_value(phone_number_id="12345"):
+    """A non-conversational system payload from Meta indicating the user
+    changed their WhatsApp number. Note: no top-level ``contacts`` array."""
+    return {
+        "messaging_product": "whatsapp",
+        "metadata": {
+            "display_phone_number": "+15551234567",
+            "phone_number_id": phone_number_id,
+        },
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.sys123",
+                "timestamp": "1706709716",
+                "type": "system",
+                "system": {
+                    "body": "User changed number from 27000000000 to 27456897512",
+                    "wa_id": "27456897512",
+                    "type": "user_changed_number",
+                },
+            }
+        ],
+    }
+
+
+def unsupported_message_value(phone_number_id="12345"):
+    """A non-conversational ``unsupported`` payload (e.g. unknown message type).
+    Note: no top-level ``contacts`` array."""
+    return {
+        "messaging_product": "whatsapp",
+        "metadata": {
+            "display_phone_number": "+15551234567",
+            "phone_number_id": phone_number_id,
+        },
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.unsup1",
+                "timestamp": "1706709716",
+                "type": "unsupported",
+                "errors": [{"code": 131051, "title": "Message type is not currently supported."}],
+            }
+        ],
+    }
