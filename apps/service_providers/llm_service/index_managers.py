@@ -279,7 +279,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
-                    embedding_vector = self.get_embedding_vector(chunk, input_type="document")
+                    embedding_vector = self.get_embedding_vector(safe_chunk, input_type="document")
                     embeddings.append(
                         FileChunkEmbedding.objects.create(
                             team_id=file.team_id,
@@ -375,10 +375,22 @@ class OpenAILocalIndexManager(LocalIndexManager):
         embedding_model_name: str,
         openai_api_base: str | None = None,
     ):
+        """Build an OpenAI local index manager.
+
+        When `openai_api_base` is set, it is passed as `base_url` to
+        `OpenAIEmbeddings` so local indexing routes through an
+        OpenAI-compatible endpoint (e.g. LiteLLM, a self-hosted gateway).
+        """
         super().__init__(api_key=api_key, embedding_model_name=embedding_model_name)
         self._openai_api_base = openai_api_base
 
     def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
+        """Generate an OpenAI embedding for the given content.
+
+        The document/query branches call `embed_documents` vs `embed_query`.
+        OpenAI's API treats both identically; the routing is applied for
+        interface consistency with Voyage and Google.
+        """
         from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         kwargs: dict = {
@@ -397,7 +409,15 @@ class OpenAILocalIndexManager(LocalIndexManager):
 
 
 class GoogleLocalIndexManager(LocalIndexManager):
+    """Google Gemini-specific implementation of LocalIndexManager."""
+
     def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
+        """Generate a Google embedding, routing by `input_type`.
+
+        Document path uses `task_type="RETRIEVAL_DOCUMENT"`; query path uses
+        `task_type="RETRIEVAL_QUERY"`. Both paths pass `output_dimensionality`
+        so the result fits the fixed-size `HalfVectorField` column.
+        """
         from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             GoogleGenerativeAIEmbeddings,
         )
@@ -423,7 +443,15 @@ class GoogleLocalIndexManager(LocalIndexManager):
 
 
 class VoyageAILocalIndexManager(LocalIndexManager):
+    """Voyage-specific implementation of LocalIndexManager."""
+
     def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
+        """Generate a Voyage embedding, routing by `input_type`.
+
+        The langchain wrapper maps `embed_documents` and `embed_query` to
+        Voyage's `input_type=document` and `input_type=query` API params
+        respectively, which return different vectors for documents vs queries.
+        """
         if not content:
             raise ValueError("Cannot embed empty string")
 
