@@ -12,8 +12,8 @@ if [ "$CURRENT_PATH" != "$ROOT_WORKTREE_PATH" ]; then
     echo "[ocs] Setting up worktree at $CURRENT_PATH"
     export ROOT_WORKTREE_PATH
 
-    [ -f "$ROOT_WORKTREE_PATH/.env" ]   && [ ! -f ".env" ]   && cp "$ROOT_WORKTREE_PATH/.env"   .env
-    [ -f "$ROOT_WORKTREE_PATH/.envrc" ] && [ ! -f ".envrc" ] && cp "$ROOT_WORKTREE_PATH/.envrc" .envrc
+    [ -f "$ROOT_WORKTREE_PATH/.env" ]   && [ ! -e ".env" ]   && ln -s "$ROOT_WORKTREE_PATH/.env"   .env
+    [ -f "$ROOT_WORKTREE_PATH/.envrc" ] && [ ! -e ".envrc" ] && ln -s "$ROOT_WORKTREE_PATH/.envrc" .envrc
     if [ -f "$ROOT_WORKTREE_PATH/.python-version" ] && [ ! -f ".python-version" ]; then
         cp "$ROOT_WORKTREE_PATH/.python-version" .python-version
     fi
