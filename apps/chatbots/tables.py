@@ -51,6 +51,11 @@ class ChatbotTable(tables.Table):
         align="left",
         orderable=True,
     )
+    consent_status = columns.TemplateColumn(
+        verbose_name="Consent",
+        template_name="chatbots/components/consent_status_indicator.html",
+        orderable=False,
+    )
     participant_count = columns.Column(verbose_name="Total Participants", orderable=True)
     last_activity = TimeAgoColumn(verbose_name="Last Activity", orderable=True)
     session_count = ColumnWithHelp(verbose_name="Total Sessions", orderable=True)
@@ -66,7 +71,15 @@ class ChatbotTable(tables.Table):
 
     class Meta:
         model = Experiment
-        fields = ("name", "participant_count", "session_count", "interaction_count", "last_activity", "trends")
+        fields = (
+            "name",
+            "consent_status",
+            "participant_count",
+            "session_count",
+            "interaction_count",
+            "last_activity",
+            "trends",
+        )
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": _chatbot_url_factory,

@@ -1,0 +1,22 @@
+{% if not record.consent_form_id %}
+  <div class="tooltip" data-tip="No consent form configured — participants are never asked for consent">
+    <span class="badge badge-warning badge-sm gap-1">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      None
+    </span>
+  </div>
+{% elif not record.conversational_consent_enabled %}
+  <div class="tooltip" data-tip="Consent form attached but conversational consent is disabled">
+    <span class="badge badge-info badge-sm gap-1">
+      <i class="fa-solid fa-circle-info"></i>
+      Form only
+    </span>
+  </div>
+{% else %}
+  <div class="tooltip" data-tip="Consent form attached and conversational consent is enabled">
+    <span class="badge badge-success badge-sm gap-1">
+      <i class="fa-solid fa-circle-check"></i>
+      Enabled
+    </span>
+  </div>
+{% endif %}
