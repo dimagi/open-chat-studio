@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 
+from apps.analysis.models import TranscriptAnalysis
 from apps.events.models import EventActionType
 from apps.service_providers.models import LlmProviderTypes, MessagingProviderType, TraceProviderType, VoiceProviderType
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
@@ -28,6 +29,41 @@ def anthropic_provider(team_with_users):
         type=str(LlmProviderTypes.anthropic),
         config={"anthropic_api_key": "sk-ant-secret-AbCdEf", "anthropic_api_base": "https://api.anthropic.com"},
     )
+
+
+@pytest.mark.django_db()
+def test_other_categories_dedupe_and_sort(anthropic_provider):
+    # TranscriptAnalysis has two FKs to LlmProvider (llm_provider +
+    # translation_llm_provider). A row that sets both to the same provider
+    # would otherwise surface twice in the bucket.
+    team = anthropic_provider.team
+    experiment = ExperimentFactory(team=team)
+    user = team.members.first()
+    common = {"team": team, "experiment": experiment, "created_by": user}
+    TranscriptAnalysis.objects.create(
+        **common, name="zebra", llm_provider=anthropic_provider, translation_llm_provider=anthropic_provider
+    )
+    TranscriptAnalysis.objects.create(**common, name="apple", llm_provider=anthropic_provider)
+    TranscriptAnalysis.objects.create(**common, name="Mango", translation_llm_provider=anthropic_provider)
+
+    usages = get_provider_usages(anthropic_provider)
+    analyses = next(c for c in usages.categories if "Analysis" in c.label or "Analyses" in c.label)
+    assert [a.name for a in analyses.items] == ["apple", "Mango", "zebra"], (
+        "rows reachable via multiple FKs should appear once, sorted case-insensitively"
+    )
+
+
+@pytest.mark.django_db()
+def test_chatbots_category_sorted_by_name(team_with_users):
+    voice = VoiceProviderFactory(team=team_with_users)
+    ExperimentFactory(team=team_with_users, voice_provider=voice, name="zebra")
+    ExperimentFactory(team=team_with_users, voice_provider=voice, name="apple")
+    ExperimentFactory(team=team_with_users, voice_provider=voice, name="Mango")
+
+    usages = get_provider_usages(voice)
+
+    chatbots = next(c for c in usages.categories if c.label == "Chatbots")
+    assert [c.name for c in chatbots.items] == ["apple", "Mango", "zebra"], "chatbots should be sorted case-insensitive"
 
 
 @pytest.mark.django_db()
