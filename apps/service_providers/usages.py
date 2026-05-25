@@ -34,32 +34,16 @@ _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG = {
     ServiceProvider.llm.slug: "llm_provider_id",
 }
 
-# Display overrides for category labels derived from ``verbose_name_plural``.
-# "Experiment" is the internal model name; users know them as "Chatbots".
-_CATEGORY_LABEL_OVERRIDES = {
-    "experiments": "Chatbots",
-}
-
 # Reverse-FK related models that aren't useful to surface on the usages page.
 # SyntheticVoice rows are managed inside the voice provider's own edit view,
 # so showing them on the usages page just adds noise.
 _EXCLUDED_REFERENCE_MODELS = {"SyntheticVoice"}
 
 
-def _category_label_for(model) -> str:
-    plural = str(model._meta.verbose_name_plural)
-    return _CATEGORY_LABEL_OVERRIDES.get(plural.lower(), plural.title())
-
-
 @dataclass
 class UsageCategory:
     label: str
     items: list = field(default_factory=list)
-    # ``kind`` lets the template pick the right item layout:
-    #   "list"  — items are model instances (default).
-    #   "chatbots_with_pipelines" — items are ``{"chatbot": exp, "pipelines": [...]}`` dicts.
-    #   "pipelines" — items are unlinked Pipeline instances.
-    kind: str = "list"
 
     def __len__(self) -> int:
         return len(self.items)
@@ -81,59 +65,74 @@ class ProviderUsages:
 def get_provider_usages(provider) -> ProviderUsages:
     """Return all objects that depend on ``provider``.
 
-    Walks the reverse-FK relations Django would follow on delete, and — for
-    LLM providers — additionally walks pipeline ``Node.params`` that
-    reference the provider by id, then collects the chatbots (Experiments)
-    whose pipeline contains those nodes.
+    Chatbots reached either directly (reverse FK to Experiment) or
+    indirectly (via pipelines or ExperimentChannels) are merged into a
+    single deduped "Chatbots" category. Pipelines or channels that aren't
+    reached by any chatbot stay visible in "Unlinked Pipelines" /
+    "Unlinked Channels" categories. Document sources roll up to their
+    parent Collection.
     """
     service_provider = _service_provider_for(provider)
     pipeline_param_key = _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
     related = get_related_objects(provider, pipeline_param_key=pipeline_param_key)
 
-    grouped: dict[str, list] = defaultdict(list)
+    other_grouped: dict[str, list] = defaultdict(list)
     pipelines: list = []
     channels: list = []
     document_sources: list = []
+    chatbots: dict[int, Experiment] = {}
+
     for obj in related:
         model = obj.__class__
         if model.__name__ in _EXCLUDED_REFERENCE_MODELS:
             continue
-        if model.__name__ == "Pipeline":
+        if model.__name__ == "Experiment":
+            chatbots[obj.id] = obj
+        elif model.__name__ == "Pipeline":
             pipelines.append(obj)
         elif model.__name__ == "ExperimentChannel":
             channels.append(obj)
         elif model.__name__ == "DocumentSource":
             document_sources.append(obj)
         else:
-            grouped[_category_label_for(model)].append(obj)
+            other_grouped[str(model._meta.verbose_name_plural).title()].append(obj)
 
-    categories = [UsageCategory(label=label, items=items) for label, items in sorted(grouped.items())]
-
+    trailing_categories: list[UsageCategory] = []
     if pipelines:
-        categories.extend(_build_pipeline_categories(pipelines))
+        chatbots_from_pipelines, unlinked_pipelines = _resolve_pipeline_chatbots(pipelines)
+        chatbots.update({exp.id: exp for exp in chatbots_from_pipelines})
+        if unlinked_pipelines:
+            trailing_categories.append(UsageCategory(label="Unlinked Pipelines", items=unlinked_pipelines))
     if channels:
-        categories.extend(_build_channel_categories(channels))
+        chatbots_from_channels, unlinked_channels = _resolve_channel_chatbots(channels)
+        chatbots.update({exp.id: exp for exp in chatbots_from_channels})
+        if unlinked_channels:
+            trailing_categories.append(UsageCategory(label="Unlinked Channels", items=unlinked_channels))
     if document_sources:
-        categories.extend(_build_document_source_categories(document_sources))
+        trailing_categories.extend(_build_document_source_categories(document_sources))
+
+    categories: list[UsageCategory] = []
+    if chatbots:
+        categories.append(UsageCategory(label="Chatbots", items=list(chatbots.values())))
+    for label in sorted(other_grouped):
+        categories.append(UsageCategory(label=label, items=other_grouped[label]))
+    categories.extend(trailing_categories)
 
     return ProviderUsages(provider=provider, categories=categories)
 
 
-def _build_pipeline_categories(pipelines: list) -> list[UsageCategory]:
-    """Return up to two categories built from pipeline references.
+def _resolve_pipeline_chatbots(pipelines: list) -> tuple[list[Experiment], list]:
+    """Return chatbots reachable via the given pipelines, and any unreached pipelines.
 
-    Chatbots are the primary grouping: each entry lists the pipelines that
-    a single chatbot routes through. Pipelines with no chatbot reaching
-    them appear in a separate "Unlinked Pipelines" category so they're
-    still discoverable. A chatbot may reach a pipeline directly
-    (``Experiment.pipeline``) or via an event-configuration
-    ``pipeline_start`` action.
+    A chatbot may reach a pipeline directly (``Experiment.pipeline``) or
+    indirectly through a ``pipeline_start`` event action configured on a
+    StaticTrigger / TimeoutTrigger.
     """
     unique_pipelines = _dedupe_by_id(pipelines)
     pipeline_ids = {p.id for p in unique_pipelines}
     experiments_by_pipeline = _experiments_for_pipelines(pipeline_ids)
 
-    chatbots: dict[int, dict] = {}
+    chatbots: dict[int, Experiment] = {}
     unlinked: list = []
     for pipeline in unique_pipelines:
         experiments = experiments_by_pipeline.get(pipeline.id, [])
@@ -141,28 +140,12 @@ def _build_pipeline_categories(pipelines: list) -> list[UsageCategory]:
             unlinked.append(pipeline)
             continue
         for exp in experiments:
-            entry = chatbots.setdefault(exp.id, {"chatbot": exp, "pipelines": []})
-            if all(p.id != pipeline.id for p in entry["pipelines"]):
-                entry["pipelines"].append(pipeline)
-
-    categories: list[UsageCategory] = []
-    if chatbots:
-        categories.append(
-            UsageCategory(label="Chatbots", kind="chatbots_with_pipelines", items=list(chatbots.values()))
-        )
-    if unlinked:
-        categories.append(UsageCategory(label="Unlinked Pipelines", kind="pipelines", items=unlinked))
-    return categories
+            chatbots[exp.id] = exp
+    return list(chatbots.values()), unlinked
 
 
-def _build_channel_categories(channels: list) -> list[UsageCategory]:
-    """Return up to two categories built from ExperimentChannel references.
-
-    Channels are owned by chatbots (``ExperimentChannel.experiment``), so we
-    roll up to chatbots — the same shape the LLM page uses for pipelines —
-    and leave any unowned channels in an "Unlinked Channels" bucket.
-    """
-
+def _resolve_channel_chatbots(channels: list) -> tuple[list[Experiment], list]:
+    """Return chatbots that own the given channels, and any orphaned channels."""
     unique_channels = _dedupe_by_id(channels)
     experiment_ids = {ch.experiment_id for ch in unique_channels if ch.experiment_id}
     experiments_by_id = (
@@ -171,22 +154,15 @@ def _build_channel_categories(channels: list) -> list[UsageCategory]:
         else {}
     )
 
-    chatbots: dict[int, dict] = {}
+    chatbots: dict[int, Experiment] = {}
     unlinked: list = []
     for channel in unique_channels:
         exp = experiments_by_id.get(channel.experiment_id) if channel.experiment_id else None
         if exp is None:
             unlinked.append(channel)
             continue
-        entry = chatbots.setdefault(exp.id, {"chatbot": exp, "channels": []})
-        entry["channels"].append(channel)
-
-    categories: list[UsageCategory] = []
-    if chatbots:
-        categories.append(UsageCategory(label="Chatbots", kind="chatbots_with_channels", items=list(chatbots.values())))
-    if unlinked:
-        categories.append(UsageCategory(label="Unlinked Channels", kind="list", items=unlinked))
-    return categories
+        chatbots[exp.id] = exp
+    return list(chatbots.values()), unlinked
 
 
 def _build_document_source_categories(document_sources: list) -> list[UsageCategory]:
@@ -201,7 +177,7 @@ def _build_document_source_categories(document_sources: list) -> list[UsageCateg
     if not collection_ids:
         return []
     collections = list(Collection.objects.filter(id__in=collection_ids).select_related("team").order_by("name"))
-    return [UsageCategory(label="Collections", kind="list", items=collections)]
+    return [UsageCategory(label="Collections", items=collections)]
 
 
 def _dedupe_by_id(items: list) -> list:
