@@ -61,7 +61,11 @@ class Attachment(BaseModel):
         try:
             return File.objects.get(id=self.file_id)
         except File.DoesNotExist:
-            logger.error(f"Attachment with id {self.file_id} not found", exc_info=True, extra=self.model_dump())
+            logger.error(
+                f"Attachment with id {self.file_id} not found",
+                exc_info=True,
+                extra={"attachment": self.model_dump(mode="json")},
+            )
             return None
 
     @cached_property
