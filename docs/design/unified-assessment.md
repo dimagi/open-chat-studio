@@ -85,7 +85,7 @@ A schema defines the structured fields that scorers (automated or human) produce
 | FR-1.1 | Define schemas as named, reusable objects owned by a team | Must |
 | FR-1.2 | Support field types: string, int, float, choice | Must |
 | FR-1.3 | Support validation constraints per field type (min/max, pattern, choices) | Must |
-| FR-1.4 | Support `required` and `use_in_aggregations` flags per field | Must |
+| FR-1.4 | Support `required` flag per field | Must |
 | FR-1.5 | A schema is reusable across multiple Assessments and is shared by all scorers within an Assessment (both automated and human, with each scorer addressing a subset via `output_fields` — see D-10) | Must |
 | FR-1.6 | Schemas are logically immutable once `Score` rows reference them; edits create a new schema row and repoint the Assessment (clone-and-repoint, not in-place edit). See D-8. | Must |
 
@@ -198,8 +198,7 @@ Aggregation computes statistical summaries across results. Both systems already 
 |----|------------|----------|
 | FR-6.1 | Compute numeric aggregates: mean, median, min, max, stdev | Must |
 | FR-6.2 | Compute categorical aggregates: mode, distribution (percentage per category) | Must |
-| FR-6.3 | Exclude string fields from aggregation by default | Must |
-| FR-6.4 | Respect per-field `use_in_aggregations` flag | Should |
+| FR-6.3 | Exclude string fields from aggregation — `String` field type is never aggregated; all `Numeric`, `Choice`, and `Boolean` fields are always aggregated | Must |
 | FR-6.5 | For batch runs: recompute `AssessmentRunAggregate` when new results land. For continuous Assessments: no stored aggregates — queries compute on demand from `Score` rows over a time window (see D-5) | Must |
 | FR-6.6 | Support trend analysis across multiple runs/time periods | Should |
 | FR-6.7 | Aggregates should be filterable by source type (show automated-only, human-only, or combined) | Should |
