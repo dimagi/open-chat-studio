@@ -459,22 +459,34 @@ class TestVoyageAILocalIndexManager:
     def index_manager(self):
         return VoyageAILocalIndexManager(api_key="test-api-key", embedding_model_name="voyage-4-large")
 
-    def test_get_embedding_vector(self, index_manager):
+    def test_get_embedding_vector_document_calls_embed_documents(self, index_manager):
         expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
         with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
-            mock_embeddings_cls.return_value.embed_query.return_value = expected_vector
-            result = index_manager.get_embedding_vector("some text")
+            mock_embeddings_cls.return_value.embed_documents.return_value = [expected_vector]
+            result = index_manager.get_embedding_vector("some text", input_type="document")
 
         mock_embeddings_cls.assert_called_once_with(
             voyage_api_key="test-api-key",
             model="voyage-4-large",
             output_dimension=settings.EMBEDDING_VECTOR_SIZE,
         )
+        mock_embeddings_cls.return_value.embed_documents.assert_called_once_with(["some text"])
+        mock_embeddings_cls.return_value.embed_query.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_query_calls_embed_query(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
+            mock_embeddings_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text", input_type="query")
+
+        mock_embeddings_cls.return_value.embed_query.assert_called_once_with("some text")
+        mock_embeddings_cls.return_value.embed_documents.assert_not_called()
         assert result == expected_vector
 
     def test_get_embedding_vector_raises_for_empty_content(self, index_manager):
         with pytest.raises(ValueError, match="Cannot embed empty string"):
-            index_manager.get_embedding_vector("")
+            index_manager.get_embedding_vector("", input_type="document")
 
 
 class TestOpenAILlmServiceLocalIndexManager:

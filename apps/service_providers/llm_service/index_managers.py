@@ -416,7 +416,7 @@ class GoogleLocalIndexManager(LocalIndexManager):
 
 
 class VoyageAILocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str) -> Vector:  # ty: ignore[invalid-method-override]
+    def get_embedding_vector(self, content: str, input_type: Literal["document", "query"]) -> Vector:
         if not content:
             raise ValueError("Cannot embed empty string")
 
@@ -427,4 +427,6 @@ class VoyageAILocalIndexManager(LocalIndexManager):
             model=self.embedding_model_name,
             output_dimension=settings.EMBEDDING_VECTOR_SIZE,
         )
+        if input_type == "document":
+            return embeddings.embed_documents([content])[0]
         return embeddings.embed_query(content)
