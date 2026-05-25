@@ -16,6 +16,7 @@ in SQL; we have to iterate and decrypt-on-access.
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -27,6 +28,8 @@ from apps.experiments.models import Experiment
 from apps.utils.deletion import get_related_objects
 
 from .utils import ServiceProvider
+
+logger = logging.getLogger(__name__)
 
 MatchMode = Literal["exact", "suffix", "contains"]
 
@@ -262,7 +265,17 @@ def search_providers_by_api_key(
 
 def _secret_field_names(provider) -> Iterable[str]:
     """The set of config keys that hold credentials for ``provider``'s subtype."""
-    form_cls = getattr(provider.type_enum, "form_cls", None)
+    try:
+        type_enum = provider.type_enum
+    except (KeyError, ValueError):
+        logger.warning(
+            "Skipping provider %s (id=%s) with unrecognised type %r",
+            type(provider).__name__,
+            provider.pk,
+            provider.type,
+        )
+        return ()
+    form_cls = getattr(type_enum, "form_cls", None)
     if form_cls is None:
         return ()
     return getattr(form_cls, "obfuscate_fields", ()) or ()

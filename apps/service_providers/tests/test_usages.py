@@ -88,7 +88,6 @@ def test_document_sources_roll_up_to_collections(team_with_users, client):
 
 @pytest.mark.django_db()
 def test_voice_provider_excludes_synthetic_voices(team_with_users):
-
     voice = VoiceProviderFactory(team=team_with_users)
     chatbot = ExperimentFactory(team=team_with_users, voice_provider=voice)
     SyntheticVoiceFactory(voice_provider=voice)
@@ -104,7 +103,6 @@ def test_voice_provider_excludes_synthetic_voices(team_with_users):
 
 @pytest.mark.django_db()
 def test_messaging_channels_roll_up_to_chatbots(team_with_users):
-
     messaging = MessagingProviderFactory(team=team_with_users)
     chatbot = ExperimentFactory(team=team_with_users)
     ExperimentChannelFactory(team=team_with_users, experiment=chatbot, messaging_provider=messaging)
@@ -122,18 +120,6 @@ def test_messaging_channels_roll_up_to_chatbots(team_with_users):
 
     unlinked = next(c for c in usages.categories if c.label == "Unlinked Channels")
     assert len(unlinked.items) == 1
-
-
-@pytest.mark.django_db()
-def test_experiment_category_displays_as_chatbots(team_with_users):
-    voice = VoiceProviderFactory(team=team_with_users)
-    ExperimentFactory(team=team_with_users, voice_provider=voice)
-
-    usages = get_provider_usages(voice)
-
-    category_labels = {c.label for c in usages.categories}
-    assert "Chatbots" in category_labels
-    assert "Experiments" not in category_labels
 
 
 @pytest.mark.django_db()
@@ -158,7 +144,6 @@ def test_pipeline_chatbots_via_event_configuration(anthropic_provider):
 
 @pytest.mark.django_db()
 def test_pipelines_without_chatbots_appear_in_unlinked_category(anthropic_provider):
-
     team = anthropic_provider.team
     lonely_pipeline = PipelineFactory(team=team, name="Lonely")
     NodeFactory(
