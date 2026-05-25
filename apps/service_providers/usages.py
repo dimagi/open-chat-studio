@@ -79,7 +79,10 @@ def get_provider_usages(provider) -> ProviderUsages:
     pipeline_param_key = _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
     related = get_related_objects(provider, pipeline_param_key=pipeline_param_key)
 
-    other_grouped: dict[str, list] = defaultdict(list)
+    # Per-category dicts dedupe rows that are reachable through more than one
+    # reverse relation (e.g. TranscriptAnalysis has both llm_provider and
+    # translation_llm_provider FKs to LlmProvider).
+    other_grouped: dict[str, dict[int, object]] = defaultdict(dict)
     pipelines: list = []
     channels: list = []
     document_sources: list = []
@@ -98,30 +101,40 @@ def get_provider_usages(provider) -> ProviderUsages:
         elif model.__name__ == "DocumentSource":
             document_sources.append(obj)
         else:
-            other_grouped[str(model._meta.verbose_name_plural).title()].append(obj)
+            other_grouped[str(model._meta.verbose_name_plural).title()][obj.pk] = obj
 
     trailing_categories: list[UsageCategory] = []
     if pipelines:
         chatbots_from_pipelines, unlinked_pipelines = _resolve_pipeline_chatbots(pipelines)
         chatbots.update({exp.id: exp for exp in chatbots_from_pipelines})
         if unlinked_pipelines:
-            trailing_categories.append(UsageCategory(label="Unlinked Pipelines", items=unlinked_pipelines))
+            trailing_categories.append(
+                UsageCategory(label="Unlinked Pipelines", items=sorted(unlinked_pipelines, key=_display_key))
+            )
     if channels:
         chatbots_from_channels, unlinked_channels = _resolve_channel_chatbots(channels)
         chatbots.update({exp.id: exp for exp in chatbots_from_channels})
         if unlinked_channels:
-            trailing_categories.append(UsageCategory(label="Unlinked Channels", items=unlinked_channels))
+            trailing_categories.append(
+                UsageCategory(label="Unlinked Channels", items=sorted(unlinked_channels, key=_display_key))
+            )
     if document_sources:
         trailing_categories.extend(_build_document_source_categories(document_sources))
 
     categories: list[UsageCategory] = []
     if chatbots:
-        categories.append(UsageCategory(label="Chatbots", items=list(chatbots.values())))
+        categories.append(UsageCategory(label="Chatbots", items=sorted(chatbots.values(), key=_display_key)))
     for label in sorted(other_grouped):
-        categories.append(UsageCategory(label=label, items=other_grouped[label]))
+        categories.append(UsageCategory(label=label, items=sorted(other_grouped[label].values(), key=_display_key)))
     categories.extend(trailing_categories)
 
     return ProviderUsages(provider=provider, categories=categories)
+
+
+def _display_key(obj) -> tuple[str, int]:
+    """Sort key for usage items: case-insensitive name, then pk for stability."""
+    name = getattr(obj, "name", None) or str(obj)
+    return (name.lower(), obj.pk)
 
 
 def _resolve_pipeline_chatbots(pipelines: list) -> tuple[list[Experiment], list]:
