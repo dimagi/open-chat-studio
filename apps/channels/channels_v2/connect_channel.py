@@ -65,6 +65,10 @@ class CommCareConnectChannel(ChannelBase):
     Uses the base pipeline as-is. Platform-level consent is enforced by the
     generic ConsentCheckStage, configured via ``_get_capabilities()`` to
     require explicit ParticipantData with ``consent=True``.
+
+    For local development and testing, ``scripts/mock_connect_server.py``
+    runs a local HTTP server that impersonates the Connect backend and handles
+    the full key-negotiation + message send/receive flow.
     """
 
     supported_message_types = (MESSAGE_TYPES.TEXT,)
