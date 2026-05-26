@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Unified Assessment System
 
 > Single canonical document covering context, user stories, requirements, and design for OCS's unified assessment system. This consolidates and supersedes the earlier separate `unified-assessment-requirements.md`, `unified-assessment-design.md`, and `ocs-assessments-stories.md` documents. Where prior decisions conflict, this document takes precedence.
