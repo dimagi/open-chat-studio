@@ -23,6 +23,11 @@ from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
+from apps.evaluations.dataset_clone import (
+    dispatch_clone_task,
+    mark_dataset_pending,
+    resolve_add_sessions_external_ids,
+)
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
     EvaluationDatasetForm,
@@ -42,7 +47,6 @@ from apps.evaluations.tables import (
     EvaluationSessionsSelectionTable,
 )
 from apps.evaluations.tasks import (
-    create_dataset_from_session_messages_task,
     create_dataset_from_sessions_task,
     update_dataset_from_csv_task,
 )
@@ -787,6 +791,7 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
 
 # ===== Add Sessions sub-page (issue #3354) =====
 
+
 def _get_dataset_available_sessions(request, dataset_pk, filter_params=None):
     """Return filtered team sessions excluding those already in the dataset."""
     tz = request.session.get("detected_tz", None)
@@ -825,10 +830,7 @@ class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequired
         get_object_or_404(EvaluationDataset, id=self.kwargs["pk"], team=self.request.team)
         qs = _get_dataset_available_sessions(self.request, self.kwargs["pk"])
         msg_count_sq = (
-            ChatMessage.objects.filter(chat=OuterRef("chat"))
-            .values("chat")
-            .annotate(c=Count("id"))
-            .values("c")
+            ChatMessage.objects.filter(chat=OuterRef("chat")).values("chat").annotate(c=Count("id")).values("c")
         )
         return (
             qs.annotate(message_count=Coalesce(Subquery(msg_count_sq), 0))
@@ -870,74 +872,32 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
 
     def post(self, request, team_slug: str, pk: int):
         dataset = self._get_dataset(request, pk)
-        mode = request.POST.get("mode", "selected")
-        session_ids_str = request.POST.get("session_ids", "")
-        sample_percent = request.POST.get("sample_percent", "20")
-        message_scope = request.POST.get("message_scope", "all")  # 'all' or 'filtered'
-        filter_params = FilterParams.from_request(request)
-        tz = request.session.get("detected_tz", None)
-
+        # Filter params are submitted in the POST body (the form replicates them as
+        # hidden inputs), not the query string, so build FilterParams from request.POST.
+        filter_params = FilterParams(request.POST)
         base_qs = _get_dataset_available_sessions(request, pk, filter_params=filter_params)
-
-        if mode == "all_matching":
-            external_ids = list(base_qs.values_list("external_id", flat=True))
-        elif mode == "sample":
-            try:
-                pct = max(1, min(100, int(sample_percent)))
-            except (ValueError, TypeError):
-                pct = 20
-            total = base_qs.count()
-            sample_count = max(1, round(total * pct / 100))
-            external_ids = list(
-                base_qs.order_by("?").values_list("external_id", flat=True)[:sample_count]
-            )
-        else:
-            external_ids = [sid.strip() for sid in session_ids_str.split(",") if sid.strip()]
-
+        external_ids = resolve_add_sessions_external_ids(
+            mode=request.POST.get("mode", "selected"),
+            post_data=request.POST,
+            base_qs=base_qs,
+            team=request.team,
+        )
         if not external_ids:
             messages.error(request, "No sessions selected.")
             return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
 
-        # Validate all IDs belong to the team
-        valid_ids = list(
-            ExperimentSession.objects.filter(team=request.team, external_id__in=external_ids)
-            .values_list("external_id", flat=True)
+        mark_dataset_pending(dataset)
+        task = dispatch_clone_task(
+            dataset=dataset,
+            external_ids=external_ids,
+            message_scope=request.POST.get("message_scope", "all"),
+            filter_query=filter_params.to_query() if filter_params else None,
+            timezone=request.session.get("detected_tz", None),
         )
-        valid_ids_str = [str(i) for i in valid_ids]
-
-        if not valid_ids_str:
-            messages.error(request, "None of the selected sessions could be found.")
-            return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
-
-        # Clear any prior error state
-        if dataset.is_failed or dataset.error_message:
-            dataset.error_message = ""
-        dataset.status = DatasetCreationStatus.PENDING
-        dataset.save(update_fields=["status", "error_message"])
-
-        if dataset.evaluation_mode == EvaluationMode.SESSION:
-            task = create_dataset_from_sessions_task.delay(
-                dataset.id, request.team.id, valid_ids_str
-            )
-        else:
-            if message_scope == "filtered":
-                s_ids, f_ids = [], valid_ids_str
-            else:
-                s_ids, f_ids = valid_ids_str, []
-            task = create_dataset_from_session_messages_task.delay(
-                dataset.id,
-                request.team.id,
-                s_ids,
-                f_ids,
-                filter_params.to_query() if filter_params else None,
-                tz,
-            )
-
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
-
         messages.success(
             request,
-            f"Adding {len(valid_ids_str)} session(s) to dataset. This may take a moment.",
+            f"Adding {len(external_ids)} session(s) to dataset. This may take a moment.",
         )
         return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)
