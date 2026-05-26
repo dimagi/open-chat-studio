@@ -56,6 +56,7 @@ plugins:
 
 extra_css:
   - assets/css/extra.css
+  - assets/css/adr-status.css
 
 nav:
   - Home: index.md
@@ -67,6 +68,9 @@ nav:
     - Overview: getting-started/index.md
   - Architecture:
     - Overview: architecture/index.md
+    - Decisions:
+      - Index: adr/index.md
+      - 0000 Record architecture decisions: adr/0000-record-architecture-decisions.md
   - Developer Guides:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md

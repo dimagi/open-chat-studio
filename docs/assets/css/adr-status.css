@@ -1,0 +1,20 @@
+.adr-status {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+.adr-status-draft      { background: #9ca3af; }
+.adr-status-proposed   { background: #3b82f6; }
+.adr-status-accepted   { background: #10b981; }
+.adr-status-rejected   { background: #ef4444; }
+.adr-status-superseded { background: #f59e0b; }
+
+.adr-meta {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.9em;
+  margin-bottom: 1.5em;
+}
