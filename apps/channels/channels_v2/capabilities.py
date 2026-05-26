@@ -46,6 +46,6 @@ class ChannelCapabilities:
     # File-level checking is delegated to a callable so that channel-specific
     # size/mime rules don't leak into the capabilities dataclass.
     can_send_file: Callable[[File], bool] = _default_can_send_file
-    # When set, ConsentCheckStage runs after SessionActivationStage and
-    # raises EarlyAbort if the participant has not consented.
+    # When set, ConsentCheckStage runs immediately after SessionResolutionStage
+    # and raises EarlyAbort if the participant has not consented.
     consent_config: ConsentConfig | None = None
