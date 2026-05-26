@@ -253,10 +253,14 @@ def test_chatbot_list_shows_consent_status_column(client, team_with_users):
     assert response.status_code == 200
     # Column header
     assert "Consent" in content
-    # Each badge variant should appear once
+    # Each badge variant should appear with its consent-specific label and tooltip,
+    # so the assertions match the consent indicator and not unrelated badges.
     assert "badge-warning" in content
     assert "badge-info" in content
     assert "badge-success" in content
+    assert "No consent form configured" in content
+    assert "conversational consent is disabled" in content
+    assert "conversational consent is enabled" in content
 
 
 @pytest.mark.django_db()
