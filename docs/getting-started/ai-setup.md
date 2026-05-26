@@ -7,11 +7,14 @@ New to AI-assisted development on this project? Complete this setup first, then 
 This project's AI workflow is built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
 
 1. Install Claude Code following the [official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
-2. Install the shared workflows and skills from the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. Refer to that repository for setup instructions and usage guidance. It provides the skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) that the [AI development workflow](../developer_guides/ai_development.md) depends on.
+2. Install the Dimagi Claude Code Toolkit which includes workflows and skills from the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository.
+    - Refer to that repository `README` for setup instructions and usage guidance.
+    - The Dimagi Claude Code Toolkit includes plugins that extend Claude Code's capabilities
+    - It provides the skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) that the [AI development workflow](../developer_guides/ai_development.md) depends on.
 
 ## Project AI Instructions
 
-The project's [`AGENTS.md`](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md) file provides project-specific context that guides AI agent behavior. It covers project architecture, conventions, key file paths, and which docs to consult for specific features. This file is loaded automatically — you do not need to reference it manually.
+The project's [`AGENTS.md`](../../AGENTS.md) file provides project-specific context that guides AI agent behavior. It covers project architecture, conventions, key file paths, and which docs to consult for specific features. This file is loaded automatically — you do not need to reference it manually.
 
 `CLAUDE.md` is a one-line file that points to `AGENTS.md`. Other tools read `AGENTS.md` directly (see [Other Tools](#other-tools) below).
 

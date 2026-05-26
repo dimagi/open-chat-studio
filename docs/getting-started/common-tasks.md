@@ -2,7 +2,7 @@
 
 These commands apply to both [local](local-setup.md) and [Docker](docker-setup.md) setups unless noted.
 
-### Running Tests
+## Running Tests
 
 ```bash
 pytest
@@ -14,13 +14,13 @@ Or to test a specific app/module:
 pytest apps/utils/tests/test_slugs.py
 ```
 
-### Updating Translations
+## Updating Translations
 
 ```bash
 inv translations
 ```
 
-### Linting and Formatting
+## Linting and Formatting
 
 The project uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting:
 
@@ -28,7 +28,7 @@ The project uses [ruff](https://docs.astral.sh/ruff/) for linting and formatting
 inv ruff
 ```
 
-### Updating Requirements
+## Updating Requirements
 
 ```bash
 inv requirements

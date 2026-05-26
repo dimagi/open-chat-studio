@@ -2,14 +2,14 @@
 
 Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installation/) and [Invoke](https://www.pyinvoke.org/) for dev automation.
 
-### Prerequisites
+## Prerequisites
 
 - Python 3.13 (recommended)
 - Node.js >= 24.0.0
 - Docker and Docker Compose
 - Git
 
-### Installation Steps
+## Installation Steps
 
 1. **Clone the repository**
 
@@ -47,7 +47,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
         prek install --install-hooks
         ```
 
-        #### Set up database
+        ### Set up database
 
         Start the database and redis services and run the DB migrations:
 
@@ -57,7 +57,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
         ./manage.py migrate
         ```
 
-        #### Build the front-end resources
+        ### Build the front-end resources
 
         To build JavaScript and CSS files, first install npm packages:
 
@@ -75,7 +75,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
 
         To check which version you are using use `node --version`.
 
-        #### Create a superuser
+        ### Create a superuser
 
         ```bash
         ./manage.py createsuperuser

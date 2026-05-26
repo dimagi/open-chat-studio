@@ -2,11 +2,11 @@
 
 As an alternative to running Django and Celery on the host, you can run the full stack inside Docker. This requires only Docker — no local Python or Node installation needed.
 
-### Prerequisites
+## Prerequisites
 
 - Docker and Docker Compose
 
-### Setup
+## Setup
 
 1. **Clone the repository**
 
@@ -50,7 +50,7 @@ As an alternative to running Django and Celery on the host, you can run the full
     docker compose run --rm web python manage.py createsuperuser
     ```
 
-### Services
+## Services
 
 | Service | Description |
 |---|---|
@@ -61,7 +61,7 @@ As an alternative to running Django and Celery on the host, you can run the full
 | `celery_worker` | Celery worker for background tasks |
 | `celery_beat` | Celery Beat scheduler (uses `django_celery_beat` database scheduler) |
 
-### Useful commands
+## Useful commands
 
 Run a management command:
 
@@ -89,9 +89,9 @@ Stop all services and remove containers:
 docker compose down
 ```
 
-### Troubleshooting
+## Troubleshooting
 
-#### `type "halfvec" does not exist` during migrations
+### `type "halfvec" does not exist` during migrations
 
 This error means the `pgvector` extension in your PostgreSQL container is too old. The `halfvec` type requires pgvector ≥ 0.7.0.
 
@@ -114,7 +114,7 @@ docker compose exec db psql -U postgres -d open_chat_studio -c "ALTER EXTENSION 
 docker compose run --rm migrate
 ```
 
-#### Database `open_chat_studio` does not exist
+### Database `open_chat_studio` does not exist
 
 PostgreSQL only creates the database named in `POSTGRES_DB` when initialising a **fresh** data volume. If a `postgres_data` volume already exists from a previous run without the database, you will see this error.
 
