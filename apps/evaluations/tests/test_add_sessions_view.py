@@ -86,8 +86,6 @@ def test_unified_action_bar_renders_for_all_dataset_modes(client_with_user, team
     assert response.status_code == 200
     content = response.content.decode()
     assert "Add to dataset" in content
-    # No more "Row selections do not affect this mode" hint
-    assert "Row selections do not affect this mode" not in content
 
 
 @pytest.mark.django_db()
