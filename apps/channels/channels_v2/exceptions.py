@@ -18,11 +18,4 @@ class EarlyAbort(Exception):
     stop but reporting anything back to the user (or attempting to)
     would be wrong -- e.g. the participant has revoked platform-level
     consent, or the channel can no longer reach them.
-
-    ``reason`` is optional diagnostic context shown in logs/traces; it
-    is never surfaced to the user.
     """
-
-    def __init__(self, reason: str = ""):
-        self.reason = reason
-        super().__init__(reason)
