@@ -11,7 +11,7 @@ from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
+from apps.channels.channels_v2.capabilities import ChannelCapabilities, ConsentConfig
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.sender import ChannelSender
@@ -130,6 +130,10 @@ class TelegramChannel(ChannelBase):
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,
             can_send_file=self._can_send_file,
+            # Lenient: only block when consent was explicitly revoked (e.g.
+            # handle_telegram_block sets consent=False after a 403). Participants
+            # with no ParticipantData row or no consent key are allowed through.
+            consent_config=ConsentConfig(strict=False, default_consent=True),
         )
 
     def _can_send_file(self, file: File) -> bool:
