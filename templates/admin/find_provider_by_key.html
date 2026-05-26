@@ -1,0 +1,70 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="pg-title">{% translate "Find provider by API key" %}</h1>
+      <a href="{% url 'ocs_admin:home' %}" class="btn btn-ghost btn-sm">{% translate "Back to admin" %}</a>
+    </div>
+    <p class="text-sm text-gray-500 mb-4">
+      {% translate "Paste a full API key, the last few characters, or any substring, then pick a provider type. The search iterates all providers of that type and decrypts each config to match against its secret fields. Use \"Suffix\" or \"Contains\" when you only have part of the key." %}
+    </p>
+
+    <form method="post" class="flex flex-col gap-3 max-w-2xl">
+      {% csrf_token %}
+      {% render_form_fields form %}
+      <div>
+        <button type="submit" class="btn btn-primary">{% translate "Search" %}</button>
+      </div>
+    </form>
+
+    {% if results is not None %}
+      <div class="divider"></div>
+      {% if not results %}
+        <div class="alert alert-warning">{% translate "No providers matched." %}</div>
+      {% else %}
+        <h2 class="font-semibold mb-2">{% blocktranslate count count=results|length %}Matches ({{ count }}){% plural %}Matches ({{ count }}){% endblocktranslate %}</h2>
+        {% for entry in results %}
+          {% with provider=entry.provider service_provider=entry.service_provider usages=entry.usages %}
+            <div class="card bg-base-200 mb-4">
+              <div class="card-body p-4">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <span class="font-semibold">{{ provider.name }}</span>
+                    <span class="text-sm text-gray-500">
+                      — {{ service_provider.label }}
+                      {% if provider.type %} / {{ provider.type_enum.label }}{% endif %}
+                    </span>
+                  </div>
+                  <div class="text-sm">
+                    {% translate "Team:" %} <span class="font-mono">{{ provider.team.slug }}</span>
+                    (id={{ provider.team_id }})
+                  </div>
+                </div>
+                <div class="mt-2 text-sm">
+                  <a class="link" href="{% url 'service_providers:usages' provider.team.slug service_provider.slug provider.pk %}">
+                    {% translate "Open per-provider usages page →" %}
+                  </a>
+                </div>
+
+                {% if usages.is_empty %}
+                  <div class="text-sm mt-2 italic">{% translate "No usages found." %}</div>
+                {% else %}
+                  <div class="mt-2 text-sm">
+                    {% blocktranslate count total=usages.total %}{{ total }} usage across:{% plural %}{{ total }} usages across:{% endblocktranslate %}
+                    <ul class="list-disc list-inside ml-2">
+                      {% for category in usages.categories %}
+                        <li>{{ category.label }} ({{ category.items|length }})</li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% endwith %}
+        {% endfor %}
+      {% endif %}
+    {% endif %}
+  </section>
+{% endblock app %}

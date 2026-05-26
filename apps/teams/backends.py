@@ -103,6 +103,7 @@ CONTENT_TYPES = {
         "datasetautopopulationrule",
     ],
     "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
+    "assessments": ["score"],
     "trace": ["trace"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],

@@ -776,7 +776,8 @@ class ChannelBase(ABC):
             file = self._create_voice_note_attachment(
                 self.message.cached_media_data.data, self.message.cached_media_data.content_type
             )
-            metadata[attachments_key].append(file.id)
+            if file is not None:
+                metadata[attachments_key].append(file.id)
 
         attachments = self.message.attachments
         if attachments:
@@ -789,7 +790,20 @@ class ChannelBase(ABC):
 
         return human_message
 
-    def _create_voice_note_attachment(self, data: BytesIO, content_type: str) -> File:
+    def _create_voice_note_attachment(self, data: BytesIO, content_type: str) -> File | None:
+        # Guard against zero-byte / exhausted audio streams. Persisting a File
+        # row without storage leads to ValueError later when the attachment is
+        # downloaded (see OPEN-CHAT-STUDIO-248).
+        data.seek(0)
+        audio_bytes = data.read()
+        if not audio_bytes:
+            logger.warning(
+                "Skipping voice_note attachment for experiment=%s session=%s: empty audio stream",
+                self.experiment.id,
+                getattr(self.experiment_session, "id", None),
+            )
+            return None
+        data.seek(0)
         ext = content_type.split("/")[1]
         file = File.create(
             f"voice_note.{ext}",
@@ -805,7 +819,8 @@ class ChannelBase(ABC):
         """Save synthesized voice audio as attachment on message."""
         audio.audio.seek(0)
         file = self._create_voice_note_attachment(audio.audio, audio.content_type)
-        message.add_attachment_id(file.id)
+        if file is not None:
+            message.add_attachment_id(file.id)
 
     def _add_message_to_history(self, message: str, message_type: ChatMessageType, metadata=None):
         """Use this to update the chat history when not using the normal bot flow"""
