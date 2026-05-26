@@ -14,11 +14,10 @@ from django.urls import reverse
 from apps.channels.clients.connect_client import CommCareConnectClient, Message, NewMessagePayload
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_commcare_connect_message
-from apps.chat.channels import CommCareConnectChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
+from apps.utils.factories.experiment import ParticipantFactory
 
 
 def _setup_participant(experiment) -> tuple:
@@ -91,7 +90,7 @@ class TestHandleConnectMessageTask:
         # The version will be used when chatting to the bot
         experiment.create_new_version(make_default=True)
 
-        with patch("apps.chat.channels.CommCareConnectClient") as ConnectClientMock:
+        with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
             handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
             assert client_mock.send_message_to_user.call_count == 1
@@ -166,24 +165,3 @@ class TestApiEndpoint:
         )
         assert response.status_code == 404
         assert response.json() == expected_response
-
-
-class TestCommCareConnectChannel:
-    @pytest.mark.django_db()
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_get_encryption_key_generates_missing_key(self):
-        """Missing encryption keys should be generated"""
-        session = ExperimentSessionFactory.create(experiment_channel__platform=ChannelPlatform.COMMCARE_CONNECT)
-        channel = CommCareConnectChannel.from_experiment_session(session)
-        participant_data = ParticipantData.objects.create(
-            team=session.team,
-            participant=session.participant,
-            experiment=session.experiment,
-        )
-
-        assert len(participant_data.encryption_key) == 0
-        # A call to encryption_key() should generate a new key if one is missing
-        key = channel.encryption_key
-        participant_data.refresh_from_db()
-        assert key is not None
-        assert participant_data.get_encryption_key_bytes() == key
