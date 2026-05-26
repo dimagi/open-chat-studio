@@ -789,9 +789,6 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
         return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)
 
 
-# ===== Add Sessions sub-page (issue #3354) =====
-
-
 def _get_dataset_available_sessions(request, dataset_pk, filter_params=None):
     """Return filtered team sessions excluding those already in the dataset."""
     tz = request.session.get("detected_tz", None)

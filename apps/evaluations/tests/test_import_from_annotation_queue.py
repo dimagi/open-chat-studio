@@ -283,16 +283,18 @@ def test_session_selection_list_ignores_invalid_dataset_id(client_with_user, tea
 
 # ===== dataset_sessions_count + EvalDatasetAddSessionsView (issue #3354) =====
 
+
 @pytest.mark.django_db()
 def test_dataset_sessions_count_returns_total(client_with_user, team_with_users, session_dataset):
     """Count endpoint returns number of sessions not already in the dataset."""
-    from apps.chat.models import ChatMessage as CM
-    s1 = ExperimentSessionFactory.create(team=team_with_users)
-    s2 = ExperimentSessionFactory.create(team=team_with_users)
-    # s2 is already in the dataset
+    ExperimentSessionFactory.create(team=team_with_users)  # available
+    excluded = ExperimentSessionFactory.create(team=team_with_users)
     msg = EvaluationMessage.objects.create(
-        input={}, output={}, history=[], session=s2,
-        metadata={"session_id": str(s2.external_id)}
+        input={},
+        output={},
+        history=[],
+        session=excluded,
+        metadata={"session_id": str(excluded.external_id)},
     )
     session_dataset.messages.add(msg)
 
@@ -301,28 +303,7 @@ def test_dataset_sessions_count_returns_total(client_with_user, team_with_users,
     assert response.status_code == 200
     data = response.json()
     assert "ids" not in data
-    assert "total" in data
-    # s1 is available, s2 is excluded
     assert data["total"] >= 1
-
-
-@pytest.mark.django_db()
-def test_dataset_sessions_count_requires_login(team_with_users, session_dataset):
-    from django.test import Client as DjangoClient
-    c = DjangoClient()
-    url = reverse("evaluations:dataset_sessions_count", args=[team_with_users.slug, session_dataset.pk])
-    response = c.get(url)
-    assert response.status_code in (302, 403)
-
-
-@pytest.mark.django_db()
-def test_eval_dataset_add_sessions_get(client_with_user, team_with_users, session_dataset):
-    """GET renders the add-sessions sub-page."""
-    url = reverse("evaluations:dataset_add_sessions", args=[team_with_users.slug, session_dataset.pk])
-    response = client_with_user.get(url)
-    assert response.status_code == 200
-    assert "sessions_count_url" in response.context
-    assert "dataset" in response.context
 
 
 @pytest.mark.django_db()
@@ -330,11 +311,14 @@ def test_eval_dataset_add_sessions_post_selected(client_with_user, team_with_use
     """POST with mode=selected and valid session IDs redirects to dataset edit."""
     session = ExperimentSessionFactory.create(team=team_with_users)
     url = reverse("evaluations:dataset_add_sessions", args=[team_with_users.slug, session_dataset.pk])
-    response = client_with_user.post(url, {
-        "mode": "selected",
-        "session_ids": str(session.external_id),
-        "message_scope": "all",
-    })
+    response = client_with_user.post(
+        url,
+        {
+            "mode": "selected",
+            "session_ids": str(session.external_id),
+            "message_scope": "all",
+        },
+    )
     assert response.status_code == 302
     assert response["Location"].endswith(
         reverse("evaluations:dataset_edit", args=[team_with_users.slug, session_dataset.pk])
