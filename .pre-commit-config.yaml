@@ -59,7 +59,9 @@ repos:
       # Run the type checker.
       - id: ty-check
         # docs/plans/ contains design sketches, not runtime code.
-        exclude: ^docs/plans/
+        # scripts/ contains dev-only tools whose imports (e.g. flask) are not
+        # in the project's runtime deps.
+        exclude: ^(docs/plans/|scripts/)
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
