@@ -55,6 +55,7 @@
             const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
             Alpine.store('promptBuilder', {
                 llm_models: [],
+                missingProvider: false,
 
                 init() {
                     Alpine.effect(() => {
@@ -67,8 +68,17 @@
                     });
                     Alpine.effect(() => {
                         if (this.currentState && this.currentState.provider !== undefined) {
-                            this.llm_models = llmModelOptions[this.currentState.provider].models
-                            this.currentState.providerModelId = this.llm_models[0].value;
+                            const opts = llmModelOptions[this.currentState.provider];
+                            if (!opts) {
+                                this.llm_models = [];
+                                this.missingProvider = true;
+                                return;
+                            }
+                            this.missingProvider = false;
+                            this.llm_models = opts.models || [];
+                            if (this.llm_models.length > 0) {
+                                this.currentState.providerModelId = this.llm_models[0].value;
+                            }
                         }
                     });
                 },
