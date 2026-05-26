@@ -14,8 +14,7 @@
 {% block app %}
 <div x-data="annotationQueueSessionSelector({ sessionCountUrl: '{{ sessions_count_url }}' })"
      x-init="init()"
-     data-queue-name="{{ dataset.name }}"
-     :class="{ 'disable-selection-col': mode !== 'selected' }">
+     data-queue-name="{{ dataset.name }}">
 
   <div class="flex flex-col gap-4">
     <h2 class="text-xl font-bold">{% blocktranslate with name=dataset.name %}Add Sessions to "{{ name }}"{% endblocktranslate %}</h2>
@@ -105,28 +104,36 @@
       </div>
     </div>
 
-    <!-- Selected-mode helpers -->
+    <!-- Hint for selected mode with zero selections -->
     <div x-show="mode === 'selected' && selectedSessionIds.size === 0" x-cloak
          class="text-sm text-warning">
-      {% translate "Select at least one session below." %}
+      {% translate "Select at least one session." %}
     </div>
+
+    <!-- Clear selections (visible in selected mode when selections exist) -->
     <div x-show="mode === 'selected' && selectedSessionIds.size > 0" x-cloak class="text-sm">
-      <span x-text="selectedSessionIds.size"></span> {% translate "selected" %}
+      <span x-text="selectedSessionIds.size"></span>
+      {% translate "selected" %}
       <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
         {% translate "Clear" %}
       </button>
     </div>
 
+    <!-- Dimming hint for non-selected modes -->
+    <div x-show="mode !== 'selected'" x-cloak class="text-sm text-base-content/60">
+      {% translate "Row selections do not affect this mode." %}
+    </div>
+
+    <!-- Sessions table (HTMX lazy-loaded). Dimmed when not in 'selected' mode. -->
+    <div id="sessions-table"
+         :class="{ 'opacity-60': mode !== 'selected' }"
+         data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
+      {% include "table/table_placeholder.html" %}
+    </div>
+
     <!-- Sample mode hint -->
     <div x-show="mode === 'sample'" x-cloak class="text-xs text-base-content/50">
       {% translate "Sessions are randomly sampled at the time of adding." %}
-    </div>
-
-    <!-- Sessions table (HTMX lazy-loaded). When mode !== 'selected', the leftmost
-         (selection) column is hidden via CSS on the parent .hide-selection-col class. -->
-    <div id="sessions-table"
-         data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
-      {% include "table/table_placeholder.html" %}
     </div>
 
     <!-- Submission form -->
@@ -162,13 +169,6 @@
 
 </div>
 
-<style>
-  /* Disable (grey out + block clicks) the selection column when not in 'selected' mode. */
-  .disable-selection-col #sessions-table .selection-col {
-    opacity: 0.4;
-    pointer-events: none;
-  }
-</style>
 {% endblock app %}
 
 {% block page_js %}
