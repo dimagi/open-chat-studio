@@ -371,7 +371,7 @@ def main() -> None:
     print()
     print("OCS .env settings:")
     print(f"  COMMCARE_CONNECT_SERVER_URL=http://localhost:{args.port}")
-    print(f"  COMMCARE_CONNECT_SERVER_SECRET={_config['secret']}")
+    print("  COMMCARE_CONNECT_SERVER_SECRET=***REDACTED***")
     print(f"  COMMCARE_CONNECT_SERVER_ID={_config['server_id']}")
     print(f"  COMMCARE_CONNECT_GET_CONNECT_ID_URL=http://localhost:{args.port}/o/userinfo/")
 
