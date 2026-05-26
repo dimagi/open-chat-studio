@@ -35,6 +35,10 @@ from apps.service_providers.tracing import TracingService
 from apps.teams.utils import current_team
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from django.db.models import Q
+
     from apps.channels.channels_v2.callbacks import ChannelCallbacks
     from apps.channels.channels_v2.sender import ChannelSender
     from apps.channels.datamodels import BaseMessage
@@ -119,7 +123,7 @@ class ChannelBase(ABC):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_id_filter=self._get_participant_id_filter()),
                 SessionActivationStage(),
                 AttachmentHydrationStage(),
                 MessageTypeValidationStage(),
@@ -136,6 +140,14 @@ class ChannelBase(ABC):
                 ActivityTrackingStage(),
             ],
         )
+
+    def _get_participant_id_filter(self) -> Callable[[str, BaseMessage | None], Q] | None:
+        """Return a callable for participant lookup, or None for the default (identifier match).
+
+        Override in channels that need to match on more than one identifier
+        (e.g. WhatsApp matches BSUID OR legacy phone number).
+        """
+        return None
 
     def _get_delivery_error_handlers(self) -> list[DeliveryErrorHandler]:
         """Return channel-specific handlers that get first crack at send failures.

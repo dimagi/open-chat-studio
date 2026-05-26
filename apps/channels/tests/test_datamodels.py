@@ -72,27 +72,24 @@ class TestTwilioMessageParse:
             TwilioMessage.parse(message)
 
 
-class TestLooksLikeBsuid:
-    """Unit tests for the ``looks_like_bsuid`` predicate."""
-
-    def test_bsuid_shapes_accepted(self):
-        """Meta's BSUID spec: ISO 3166 alpha-2 country code + period + up to 128 alphanumeric
-        characters. Parent BSUIDs (cross-portfolio) insert ``ENT.`` between country and identifier.
-        """
-        assert looks_like_bsuid("US.13491208655302741918") is True
-        assert looks_like_bsuid("US.ENT.11815799212886844830") is True
-        assert looks_like_bsuid("ZA.abc123XYZ") is True  # Alphanumeric tail, not just digits.
-        assert looks_like_bsuid("US." + "a" * 128) is True  # Spec maximum.
-
-    def test_non_bsuid_strings_are_rejected(self):
-        """Locale-formatted phones and other not-quite-BSUID strings must not pass."""
-        assert looks_like_bsuid("+1.212.555.2368") is False
-        assert looks_like_bsuid("us.13491208655302741918") is False  # Lowercase country.
-        assert looks_like_bsuid("USA.13491208655302741918") is False  # 3-letter country.
-        assert looks_like_bsuid("US.13491208655302741918.extra") is False  # Tail contains period.
-        assert looks_like_bsuid("US.has-dash") is False  # Non-alphanumeric in tail.
-        assert looks_like_bsuid("US." + "a" * 129) is False  # Tail exceeds 128 chars.
-        assert looks_like_bsuid("US.") is False  # Empty tail.
-        assert looks_like_bsuid("27456897512") is False  # Plain wa_id.
-        assert looks_like_bsuid("+27456897512") is False  # E.164.
-        assert looks_like_bsuid("") is False
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("US.13491208655302741918", True),
+        ("US.ENT.11815799212886844830", True),
+        ("ZA.abc123XYZ", True),  # Alphanumeric tail, not just digits.
+        ("US." + "a" * 128, True),  # Spec maximum.
+        ("+1.212.555.2368", False),
+        ("us.13491208655302741918", False),  # Lowercase country.
+        ("USA.13491208655302741918", False),  # 3-letter country.
+        ("US.13491208655302741918.extra", False),  # Tail contains period.
+        ("US.has-dash", False),  # Non-alphanumeric in tail.
+        ("US." + "a" * 129, False),  # Tail exceeds 128 chars.
+        ("US.", False),  # Empty tail.
+        ("27456897512", False),  # Plain wa_id.
+        ("+27456897512", False),  # E.164.
+        ("", False),
+    ],
+)
+def test_looks_like_bsuid(value, expected):
+    assert looks_like_bsuid(value) is expected

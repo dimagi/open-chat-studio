@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 from django.db.models import Q, QuerySet
 
@@ -27,6 +29,9 @@ from apps.ocs_notifications.notifications import (
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
+
+if TYPE_CHECKING:
+    from apps.channels.datamodels import BaseMessage
 
 logger = logging.getLogger("ocs.channels")
 
@@ -64,7 +69,15 @@ class SessionResolutionStage(ProcessingStage):
     Also handles the /reset command (Issue 7).
     For Web/Slack channels the session is pre-set on the context, so this
     stage becomes a no-op (Issue 4).
+
+    ``participant_id_filter`` is an optional build-time callable injected by
+    the channel (via ``ChannelBase._get_participant_id_filter``). It lets
+    channels like WhatsApp match participants on more than one identifier
+    (BSUID OR legacy phone) without coupling the stage to the callbacks.
     """
+
+    def __init__(self, participant_id_filter: Callable[[str, BaseMessage | None], Q] | None = None) -> None:
+        self._participant_id_filter_fn = participant_id_filter
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return True
@@ -146,7 +159,9 @@ class SessionResolutionStage(ProcessingStage):
         )
 
     def participant_id_filter(self, ctx: MessageProcessingContext) -> Q:
-        return ctx.callbacks.get_participant_identifier_filter(ctx.participant_identifier, ctx.message)
+        if self._participant_id_filter_fn is not None:
+            return self._participant_id_filter_fn(ctx.participant_identifier, ctx.message)
+        return Q(identifier=str(ctx.participant_identifier))
 
 
 # ---------------------------------------------------------------------------

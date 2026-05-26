@@ -115,15 +115,6 @@ class WhatsappCallbacks(ChannelCallbacks):
         except Exception:
             logger.exception("Failed to send typing indicator")
 
-    def get_participant_identifier_filter(self, participant_id: str, message) -> Q:
-        """Match on BSUID (``participant_id``) or phone number to preserve continuity
-        with legacy phone-keyed participants from before the WhatsApp username rollout.
-        """
-        phone = getattr(message, "phone_number", None) if message else None
-        if phone:
-            return Q(identifier=participant_id) | Q(identifier=phone)
-        return super().get_participant_identifier_filter(participant_id, message)
-
 
 class WhatsappChannel(ChannelBase):
     """WhatsApp channel supporting Twilio, TurnIO, and Meta Cloud API providers.
@@ -162,6 +153,15 @@ class WhatsappChannel(ChannelBase):
 
     def _get_callbacks(self) -> WhatsappCallbacks:
         return WhatsappCallbacks(service=self.messaging_service, from_number=self._from_identifier)
+
+    def _get_participant_id_filter(self):
+        def _filter(participant_id: str, message) -> Q:
+            phone = getattr(message, "phone_number", None) if message else None
+            if phone:
+                return Q(identifier=participant_id) | Q(identifier=phone)
+            return Q(identifier=str(participant_id))
+
+        return _filter
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
