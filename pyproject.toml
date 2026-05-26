@@ -203,7 +203,7 @@ python-version = "3.13"
 python = ".venv"
 
 [tool.ty.src]
-exclude = ["migrations/", "locust/", "docs/plans/"]
+exclude = ["migrations/", "locust/", "docs/plans/", "scripts/"]
 
 [tool.ty.rules]
 all = "ignore"

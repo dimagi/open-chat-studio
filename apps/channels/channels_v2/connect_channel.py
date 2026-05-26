@@ -29,7 +29,10 @@ class CommCareConnectSender(ChannelSender):
         self._ctx = ctx
 
     def send_text(self, text: str, recipient: str) -> None:
-        assert self._ctx is not None, "CommCareConnectSender must be bound to a context before sending"
+        if self._ctx is None:
+            # Runtime guard rather than assert: asserts are stripped under
+            # `python -O` and would degrade to an AttributeError below.
+            raise ChannelException("CommCareConnectSender must be bound to a context before sending")
 
         participant_data = self._ctx.participant_data
         if participant_data is None:

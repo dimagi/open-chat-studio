@@ -287,20 +287,59 @@ def send_user_message(channel_id: str, message: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+_HELP_LINES = (
+    "  send <channel_id> <message>  — encrypt and send a user message",
+    "  send <message>               — shorthand when only one channel exists",
+    "  list                         — show known channels and key status",
+    "  quit                         — stop the server",
+)
+
+
+def _handle_list_command() -> None:
+    if not _channels:
+        print("  (no channels yet)")
+        return
+    for cid, ch in _channels.items():
+        key_status = "ready" if ch["encryption_key"] else "pending"
+        print(f"  {cid}  connect_id={ch['connect_id']}  key={key_status}  consent={ch['consent']}")
+
+
+def _handle_send_command(parts: list[str]) -> None:
+    if len(_channels) == 1 and len(parts) >= 2:
+        channel_id = next(iter(_channels))
+        message = " ".join(parts[1:])
+    elif len(parts) >= 3:
+        channel_id = parts[1]
+        message = parts[2]
+    else:
+        print("  Usage: send <channel_id> <message>")
+        return
+    send_user_message(channel_id, message)
+
+
+def _handle_help_command() -> None:
+    for line in _HELP_LINES:
+        print(line)
+
+
 def _interactive_loop() -> None:
     print("\nServer is running. Use the prompt below to send user messages to OCS.")
     print("Commands:")
-    print("  send <channel_id> <message>  — encrypt and send a user message")
-    print("  send <message>               — shorthand when only one channel exists")
-    print("  list                         — show known channels and key status")
-    print("  quit                         — stop the server\n")
+    _handle_help_command()
+    print()
+
+    handlers = {
+        "list": lambda parts: _handle_list_command(),
+        "send": _handle_send_command,
+        "help": lambda parts: _handle_help_command(),
+    }
 
     while True:
         try:
             line = input("> ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nShutting down...")
-            break
+            return
 
         if not line:
             continue
@@ -310,35 +349,13 @@ def _interactive_loop() -> None:
 
         if cmd in ("quit", "exit", "q"):
             print("Shutting down...")
-            break
+            return
 
-        elif cmd == "list":
-            if not _channels:
-                print("  (no channels yet)")
-            for cid, ch in _channels.items():
-                key_status = "ready" if ch["encryption_key"] else "pending"
-                print(f"  {cid}  connect_id={ch['connect_id']}  key={key_status}  consent={ch['consent']}")
-
-        elif cmd == "send":
-            if len(_channels) == 1 and len(parts) >= 2:
-                channel_id = list(_channels.keys())[0]
-                message = " ".join(parts[1:])
-            elif len(parts) >= 3:
-                channel_id = parts[1]
-                message = parts[2]
-            else:
-                print("  Usage: send <channel_id> <message>")
-                continue
-            send_user_message(channel_id, message)
-
-        elif cmd == "help":
-            print("  send <channel_id> <message>  — encrypt and send a user message")
-            print("  send <message>               — shorthand when only one channel exists")
-            print("  list                         — show known channels and key status")
-            print("  quit                         — stop the server")
-
-        else:
+        handler = handlers.get(cmd)
+        if handler is None:
             print(f"  Unknown command: {cmd!r}. Type 'help' for usage.")
+        else:
+            handler(parts)
 
 
 # ---------------------------------------------------------------------------
