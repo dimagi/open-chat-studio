@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities, ConsentConfig
+from apps.channels.channels_v2.capabilities import ChannelCapabilities, PlatformConsentConfig
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.sender import ChannelSender
@@ -81,5 +81,5 @@ class CommCareConnectChannel(ChannelBase):
             can_send_file=self._can_send_file,
             # Strict consent: a participant must have ParticipantData with
             # consent=True. Matches the v1 channel's _check_consent() behavior.
-            consent_config=ConsentConfig(strict=True, default_consent=False),
+            consent_config=PlatformConsentConfig(strict=True, default_consent=False),
         )
