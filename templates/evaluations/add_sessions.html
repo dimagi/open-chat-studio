@@ -180,7 +180,7 @@
     window.annotationQueueSessionSelector = function(options) {
       const base = _baseSelector(options);
       const baseInit = base.init;
-      return Object.assign(base, {
+      Object.assign(base, {
         messageScope: 'all',
         init() {
           // Run base init with `this` = Alpine proxy so reactive
@@ -193,7 +193,11 @@
             }
           });
         },
-        get datasetButtonLabel() {
+      });
+      // Use defineProperty so the getter stays a getter (Object.assign would
+      // invoke the source getter at assign time, freezing the value).
+      Object.defineProperty(base, 'datasetButtonLabel', {
+        get() {
           let n;
           if (this.mode === 'selected') {
             n = this.selectedSessionIds.size;
@@ -204,7 +208,10 @@
           }
           return `Add ${n} to dataset`;
         },
+        enumerable: true,
+        configurable: true,
       });
+      return base;
     };
   </script>
 {% endblock page_js %}
