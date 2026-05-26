@@ -65,7 +65,6 @@ class ParticipantValidationStage(ProcessingStage):
 class ParticipantResolverStage(ProcessingStage):
     """Resolves (or creates) the Participant record for the validated identifier.
 
-    Runs after ParticipantValidationStage (which sets ctx.participant_identifier).
     Always sets ctx.participant; new participants are created here so that
     SessionResolutionStage can use the FK directly without a separate creation step.
 
