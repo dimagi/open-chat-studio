@@ -1,0 +1,30 @@
+{% comment %}
+  Versioned objects route their edit UI through the working version, so
+  link there even when displaying an older copy. ``get_working_version``
+  silently returns falsy for non-versioned objects → falls back to obj.
+  Callers can set ``link_to_versions_anchor=True`` (only meaningful for
+  chatbots today) to append ``#versions`` on non-working references so
+  the link drops the user into the chatbot's versions tab.
+{% endcomment %}
+{% with link_target=obj.get_working_version|default:obj %}
+  {% with obj_url=link_target.get_absolute_url|default_if_none:"" %}
+    {% if obj_url %}
+      <a class="link" href="{{ obj_url }}{% if link_to_versions_anchor and obj.is_a_version %}#versions{% endif %}">{{ obj.name|default:obj }}</a>
+    {% else %}
+      <span>{{ obj.name|default:obj }}</span>
+    {% endif %}
+  {% endwith %}
+{% endwith %}
+{% comment %}
+  Reading ``version_number`` directly rather than calling
+  ``get_version_name`` — the latter raises AttributeError on VersionsMixin
+  subclasses that don't define ``version_number`` (e.g. DocumentSource).
+{% endcomment %}
+{% if obj.is_working_version %}
+  <span class="badge badge-info badge-sm ml-1">working version</span>
+{% elif obj.is_default_version %}
+  <span class="badge badge-success badge-sm ml-1">published v{{ obj.version_number }}</span>
+{% elif obj.version_number %}
+  <span class="badge badge-ghost badge-sm ml-1">v{{ obj.version_number }}</span>
+{% endif %}
+{% if obj.is_archived %}<span class="badge badge-warning badge-sm ml-1">archived</span>{% endif %}

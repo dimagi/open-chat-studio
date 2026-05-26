@@ -354,16 +354,29 @@ class ChatMessageCreationStage(ProcessingStage):
 
         # Save voice note as attachment
         if is_voice and ctx.message.cached_media_data:
-            ext = ctx.message.cached_media_data.content_type.split("/")[1]
-            file = File.create(
-                f"voice_note.{ext}",
-                ctx.message.cached_media_data.data,
-                ctx.experiment.team_id,
-                purpose=FilePurpose.MESSAGE_MEDIA,
-                content_type=ctx.message.cached_media_data.content_type,
-            )
-            ctx.experiment_session.chat.attach_files("voice_message", [file])
-            metadata[attachments_key].append(file.id)
+            # Guard against zero-byte / exhausted audio streams. Persisting a
+            # File row without storage leads to ValueError later when the
+            # attachment is downloaded (see OPEN-CHAT-STUDIO-248).
+            ctx.message.cached_media_data.data.seek(0)
+            audio_bytes = ctx.message.cached_media_data.data.read()
+            if not audio_bytes:
+                logger.warning(
+                    "Skipping voice_note attachment for experiment=%s session=%s: empty audio stream",
+                    ctx.experiment.id,
+                    getattr(ctx.experiment_session, "id", None),
+                )
+            else:
+                ctx.message.cached_media_data.data.seek(0)
+                ext = ctx.message.cached_media_data.content_type.split("/")[1]
+                file = File.create(
+                    f"voice_note.{ext}",
+                    ctx.message.cached_media_data.data,
+                    ctx.experiment.team_id,
+                    purpose=FilePurpose.MESSAGE_MEDIA,
+                    content_type=ctx.message.cached_media_data.content_type,
+                )
+                ctx.experiment_session.chat.attach_files("voice_message", [file])
+                metadata[attachments_key].append(file.id)
 
         # Record attachment IDs
         if ctx.message.attachments:

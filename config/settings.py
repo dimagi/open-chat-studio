@@ -117,6 +117,7 @@ PROJECT_APPS = [
     "apps.dashboard",
     "apps.evaluations",
     "apps.human_annotations",
+    "apps.assessments",
     "apps.trace",
     "apps.mcp_integrations",
     "apps.filters",

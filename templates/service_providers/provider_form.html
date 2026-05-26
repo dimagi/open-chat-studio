@@ -17,7 +17,16 @@
 
 {% block app %}
   <div class="app-card max-w-5xl mx-auto">
-    <h1 class="pg-title">{{ title }}</h1>
+    <div class="flex items-center justify-between gap-2">
+      <h1 class="pg-title">{{ title }}</h1>
+      {% if object.id %}
+        <a class="btn btn-outline btn-sm"
+           href="{% url 'service_providers:usages' request.team.slug provider.slug object.id %}">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          Show usages
+        </a>
+      {% endif %}
+    </div>
     {% block pre_form %}{% endblock %}
     <form method="post" class="my-2" enctype="multipart/form-data">
       {% csrf_token %}

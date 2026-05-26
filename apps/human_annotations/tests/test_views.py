@@ -1007,24 +1007,23 @@ def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, 
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_json_returns_external_ids(client, team_with_users, queue):
+def test_queue_sessions_count_returns_total(client, team_with_users, queue):
     sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
     for s in sessions:
         ChatMessageFactory.create(chat=s.chat)
     ExperimentSessionFactory.create()  # different team — must not appear
-    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
     assert response.status_code == 200
     data = response.json()
-    expected_ids = {str(s.external_id) for s in sessions}
-    assert set(str(i) for i in data["ids"]) == expected_ids
+    assert "ids" not in data
     assert data["total"] == 3
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_json_requires_login(team_with_users, queue):
+def test_queue_sessions_count_requires_login(team_with_users, queue):
     c = Client()  # unauthenticated
-    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
     response = c.get(url)
     assert response.status_code in (302, 403)
 
@@ -1043,14 +1042,15 @@ def test_queue_sessions_table_excludes_sessions_without_messages(client, team_wi
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_json_excludes_sessions_without_messages(client, team_with_users, queue):
+def test_queue_sessions_count_excludes_sessions_without_messages(client, team_with_users, queue):
     session_with_messages = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=session_with_messages.chat)
     ExperimentSessionFactory.create(team=team_with_users)  # no messages
 
-    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
     data = client.get(url).json()
-    assert set(data["ids"]) == {str(session_with_messages.external_id)}
+    assert data["total"] == 1
+    assert "ids" not in data
 
 
 @pytest.mark.django_db()
@@ -1068,15 +1068,16 @@ def test_queue_sessions_table_excludes_evaluation_sessions(client, team_with_use
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_json_excludes_evaluation_sessions(client, team_with_users, queue):
+def test_queue_sessions_count_excludes_evaluation_sessions(client, team_with_users, queue):
     normal_session = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=normal_session.chat)
     eval_session = ExperimentSessionFactory.create(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
     ChatMessageFactory.create(chat=eval_session.chat)
 
-    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
     data = client.get(url).json()
-    assert set(data["ids"]) == {str(normal_session.external_id)}
+    assert data["total"] == 1
+    assert "ids" not in data
 
 
 # ===== AddSessionsToQueue GET + POST =====
@@ -1089,7 +1090,7 @@ def test_add_sessions_get_renders_filter_context(client, team_with_users, queue)
     assert response.status_code == 200
     assert "df_filter_columns" in response.context
     assert "df_filter_data_source_url" in response.context
-    assert "sessions_json_url" in response.context
+    assert "sessions_count_url" in response.context
 
 
 @pytest.mark.django_db()
@@ -1223,19 +1224,18 @@ def test_add_sessions_sample_empty_results(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_json_returns_ids_and_total(client, team_with_users, queue):
+def test_queue_sessions_count_returns_only_total(client, team_with_users, queue):
     sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
     for s in sessions:
         ChatMessageFactory.create(chat=s.chat)
 
-    url = reverse("human_annotations:queue_sessions_json", args=[team_with_users.slug, queue.pk])
+    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
     response = client.get(url)
     assert response.status_code == 200
     data = response.json()
-    assert "ids" in data
+    assert "ids" not in data
     assert "total" in data
     assert data["total"] == 3
-    assert len(data["ids"]) == 3
 
 
 # ===== Annotation Reviewer Role =====

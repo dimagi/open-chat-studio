@@ -515,13 +515,14 @@
         this.selectedLabel = selected ? selected.label : '';
       },
 
-      async fetchSavedFilters() {
-        if (this.savedFilters) return this.savedFilters;
+      async fetchSavedFilters({ force = false } = {}) {
+        if (!force && this.savedFilters) return this.savedFilters;
         try {
           const url = '{% url "filters:list_filter_set" request.team.slug df_table_type %}';
           const res = await fetch(url, { credentials: 'same-origin' });
           const data = await res.json();
-          this.savedFilters = data.results || [];
+          const results = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+          this.savedFilters = results;
           return this.savedFilters;
         } catch (error) {
           console.error('Failed to load filter sets:', error);
@@ -533,7 +534,8 @@
       async loadStarredFilters() {
         try {
           const savedFilters = await this.fetchSavedFilters();
-          this.starredFilters = savedFilters.filter(fs => fs.is_starred);
+          this.starredFilters = (Array.isArray(savedFilters) ? savedFilters : [])
+            .filter(fs => fs && fs.is_starred);
         } catch (error) {
           console.error('Failed to load starred filters:', error);
           this.starredFilters = [];
@@ -633,8 +635,10 @@
       },
 
       async reloadSavedFilters() {
-        this.savedFilters = null; // Clear cache to force refresh
-        await this.fetchSavedFilters();
+        // Force a refresh without nulling savedFilters first, so Alpine's
+        // reactive effects on already-rendered rows never see an undefined
+        // iteration item between the clear and the refetch.
+        await this.fetchSavedFilters({ force: true });
         await this.loadStarredFilters();
       },
 
