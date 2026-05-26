@@ -330,7 +330,6 @@ class TestDatasetFormEvaluationMode:
                 "name": dataset.name,
                 "mode": "clone",
                 "session_ids": str(session.external_id),
-                "filtered_session_ids": "",
             },
         )
         assert form.is_valid(), form.errors
@@ -357,7 +356,6 @@ class TestDatasetFormEvaluationMode:
                 "evaluation_mode": "session",
                 "mode": "clone",
                 "session_ids": "",
-                "filtered_session_ids": "",
             },
         )
         assert form.is_valid(), form.errors
@@ -375,7 +373,6 @@ class TestDatasetFormEvaluationMode:
                 "evaluation_mode": "message",
                 "mode": "clone",
                 "session_ids": "",
-                "filtered_session_ids": "",
             },
         )
         assert not form.is_valid()
@@ -394,7 +391,6 @@ class TestDatasetFormEvaluationMode:
                 "name": dataset.name,
                 "mode": "clone",
                 "session_ids": str(session.external_id),
-                "filtered_session_ids": "",
             },
         )
         assert form.is_valid(), form.errors
