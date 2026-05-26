@@ -13,6 +13,7 @@ from apps.channels.channels_v2.stages.core import (
     ConsentCheckStage,
     ConsentFlowStage,
     MessageTypeValidationStage,
+    ParticipantResolverStage,
     ParticipantValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
@@ -120,6 +121,7 @@ class ChannelBase(ABC):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
+                ParticipantResolverStage(),
                 SessionResolutionStage(),
                 ConsentCheckStage(),
                 SessionActivationStage(),

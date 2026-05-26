@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from functools import cached_property
 from typing import TYPE_CHECKING
 
 from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
-from apps.experiments.models import ParticipantData
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
@@ -21,7 +19,7 @@ if TYPE_CHECKING:
     from apps.channels.models import ExperimentChannel
     from apps.chat.bots import PipelineBot
     from apps.chat.models import ChatMessage
-    from apps.experiments.models import Experiment, ExperimentSession
+    from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
     from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio
     from apps.service_providers.tracing import TracingService
@@ -55,6 +53,8 @@ class MessageProcessingContext:
 
     # --- State (populated during processing) --------------------------------
     experiment_session: ExperimentSession | None = None
+    participant: Participant | None = None
+    participant_data: ParticipantData | None = None
     participant_identifier: str | None = None
     participant_allowed: bool = False
 
@@ -108,28 +108,6 @@ class MessageProcessingContext:
     @property
     def last_activity_at(self):
         return self.experiment_session.last_activity_at if self.experiment_session else None
-
-    @cached_property
-    def participant_data(self):
-        """ParticipantData for the current participant, fetched lazily.
-
-        Returns None when there is no participant identifier or the row does
-        not exist. Stages that need to distinguish "row absent" from "consent
-        not given" (e.g. ConsentCheckStage in strict mode) should check for
-        None first.
-
-        ``cached_property`` stores the value on ``self.__dict__`` after the
-        first access; stages or tests can also assign directly
-        (``ctx.participant_data = value``) to seed the cache.
-        """
-        if not self.participant_identifier:
-            return None
-        try:
-            return ParticipantData.objects.for_experiment(self.experiment).get(
-                participant__identifier=self.participant_identifier,
-            )
-        except ParticipantData.DoesNotExist:
-            return None
 
 
 # ---------------------------------------------------------------------------
