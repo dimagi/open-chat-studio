@@ -1,8 +1,11 @@
+from unittest.mock import patch
+
 import pytest
 from django.test import Client
 from django.urls import reverse
 
 from apps.evaluations.models import EvaluationDataset, EvaluationMode
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -98,3 +101,31 @@ def test_post_without_message_scope_defaults_to_all(client_with_user, team_with_
     # No sessions selected, server redirects back with an error — that's fine, we're only
     # asserting the view doesn't crash on an empty message_scope value.
     assert response.status_code == 302
+
+
+@pytest.mark.django_db()
+def test_post_reads_filter_params_from_post_body(client_with_user, team_with_users, message_dataset):
+    """Regression: the view used FilterParams.from_request (GET) so POSTed filter params
+    were silently dropped. The clone task must receive the actual filter query."""
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    url = _add_sessions_url(team_with_users, message_dataset)
+    with patch("apps.evaluations.dataset_clone.create_dataset_from_session_messages_task.delay") as mock_delay:
+        mock_delay.return_value.id = "test-task-id"
+        response = client_with_user.post(
+            url,
+            {
+                "mode": "selected",
+                "session_ids": str(session.external_id),
+                "message_scope": "filtered",
+                "filter_0_column": "tags",
+                "filter_0_operator": "any of",
+                "filter_0_value": '["+1"]',
+            },
+        )
+    assert response.status_code == 302
+    mock_delay.assert_called_once()
+    # 5th positional arg is the filter_query string passed to the Celery task.
+    filter_query = mock_delay.call_args.args[4]
+    assert filter_query, "filter_query should be populated from POST body, not empty"
+    assert "filter_0_column=tags" in filter_query
+    assert "filter_0_operator=any" in filter_query
