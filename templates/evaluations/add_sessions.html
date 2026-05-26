@@ -179,11 +179,14 @@
     const _baseSelector = window.annotationQueueSessionSelector;
     window.annotationQueueSessionSelector = function(options) {
       const base = _baseSelector(options);
-      const baseInit = base.init.bind(base);
+      const baseInit = base.init;
       return Object.assign(base, {
         messageScope: 'all',
         init() {
-          baseInit();
+          // Run base init with `this` = Alpine proxy so reactive
+          // assignments (e.g., filterParams) trigger setters and
+          // the $watch below fires when filters change.
+          baseInit.call(this);
           this.$watch('hasActiveFilters', (now) => {
             if (!now && this.messageScope !== 'all') {
               this.messageScope = 'all';
