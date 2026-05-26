@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities, ConsentConfig
@@ -11,10 +10,6 @@ from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
-
-if TYPE_CHECKING:
-    from apps.channels.models import ExperimentChannel
-    from apps.experiments.models import Experiment, ExperimentSession
 
 logger = logging.getLogger("ocs.channels")
 
@@ -70,14 +65,6 @@ class CommCareConnectChannel(ChannelBase):
     """
 
     supported_message_types = (MESSAGE_TYPES.TEXT,)
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession | None = None,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
 
     def _get_callbacks(self) -> ChannelCallbacks:
         return ChannelCallbacks()
