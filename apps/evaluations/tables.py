@@ -268,7 +268,7 @@ def _chip_session_url_factory(_, request, record, __):
 class EvaluationSessionsSelectionTable(tables.Table):
     selection = TemplateColumnWithCustomHeader(
         template_name="evaluations/session_checkbox.html",
-        verbose_name="",
+        verbose_name="Select",
         orderable=False,
         attrs={"th": {"class": "selection-col"}, "td": {"class": "selection-col"}},
         extra_context={
@@ -277,6 +277,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
         },
         header_template="evaluations/session_checkbox.html",
         header_context={
+            "help_content": "Select all sessions on this page",
             "js_function": "toggleSelectedSessions()",
             "css_class": "checkbox checkbox-primary session-checkbox",
         },
