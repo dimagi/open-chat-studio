@@ -15,7 +15,7 @@
 <div x-data="annotationQueueSessionSelector({ sessionCountUrl: '{{ sessions_count_url }}' })"
      x-init="init()"
      data-queue-name="{{ dataset.name }}"
-     :class="{ 'hide-selection-col': mode !== 'selected' }">
+     :class="{ 'disable-selection-col': mode !== 'selected' }">
 
   <div class="flex flex-col gap-4">
     <h2 class="text-xl font-bold">{% blocktranslate with name=dataset.name %}Add Sessions to "{{ name }}"{% endblocktranslate %}</h2>
@@ -65,14 +65,14 @@
                 class="join-item btn btn-sm"
                 :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
                 @click="setMode('all_matching')">
-          {% translate "All matching" %}
+          {% translate "All matching filters" %}
         </button>
         {% if dataset.evaluation_mode != 'session' %}
         <button type="button"
                 class="join-item btn btn-sm"
                 :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
                 @click="setMode('sample')">
-          {% translate "Sample" %} <span x-text="samplePercent"></span>%
+          {% translate "Sample" %}
         </button>
         {% endif %}
       </div>
@@ -163,10 +163,10 @@
 </div>
 
 <style>
-  /* Hide the selection (checkbox) column when not in 'selected' mode. */
-  .hide-selection-col #sessions-table table th.selection-col,
-  .hide-selection-col #sessions-table table td.selection-col {
-    display: none;
+  /* Disable (grey out + block clicks) the selection column when not in 'selected' mode. */
+  .disable-selection-col #sessions-table .selection-col {
+    opacity: 0.4;
+    pointer-events: none;
   }
 </style>
 {% endblock app %}

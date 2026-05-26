@@ -16,8 +16,8 @@ def test_table_has_single_selection_column():
 
 
 @pytest.mark.django_db()
-def test_selection_column_header_has_no_label():
-    """The remaining selection column header should be unlabeled (bare checkbox)."""
+def test_selection_column_header_matches_annotation_label():
+    """The selection column header should read 'Select' (matches annotation queue table)."""
     ExperimentSessionFactory.create()
     table = EvaluationSessionsSelectionTable(ExperimentSession.objects.all())
-    assert table.columns["selection"].column.verbose_name == ""
+    assert table.columns["selection"].column.verbose_name == "Select"
