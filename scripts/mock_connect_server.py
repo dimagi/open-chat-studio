@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "flask>=3.1.3",
+#     "httpx>=0.28.1",
+#     "pycryptodome>=3.23.0",
+# ]
+# ///
 """
 Mock CommCare Connect server for local development and testing.
 
