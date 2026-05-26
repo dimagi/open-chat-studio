@@ -96,7 +96,7 @@
 
       <div class="ml-auto flex items-center gap-2">
         <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
-          <span x-text="buttonLabel">{% translate "Add to Dataset" %}</span>
+          {% translate "Add to dataset" %}
         </button>
         <a href="{% url 'evaluations:dataset_edit' team_slug=request.team.slug pk=dataset.pk %}"
            class="btn btn-ghost btn-sm">
