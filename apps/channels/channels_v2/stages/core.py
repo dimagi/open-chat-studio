@@ -5,7 +5,7 @@ import re
 from io import BytesIO
 
 from apps.annotations.models import TagCategories
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
+from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.datamodels import Attachment
@@ -187,6 +187,44 @@ class SessionActivationStage(ProcessingStage):
 
     def process(self, ctx: MessageProcessingContext) -> None:
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)
+
+
+# ---------------------------------------------------------------------------
+# ConsentCheckStage
+# ---------------------------------------------------------------------------
+
+
+class ConsentCheckStage(ProcessingStage):
+    """Platform consent gate (ParticipantData.system_metadata['consent']).
+
+    Distinct from ConsentFlowStage: that one drives the conversational
+    consent state machine (SETUP -> PENDING -> ACTIVE). This one enforces
+    a platform-level consent flag managed outside the chat (e.g. CommCare
+    Connect's auto-consent handshake, or Telegram revoking consent when
+    the bot is blocked).
+
+    When the gate blocks, the stage raises EarlyAbort to halt the pipeline
+    silently -- no user-facing message is sent and no terminal stages run.
+    Reporting an error would be wrong here: the participant has either
+    withdrawn consent or the channel can no longer reach them.
+
+    Configured via ChannelCapabilities.consent_config. When unset, the
+    stage is skipped entirely.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.experiment_session is not None and ctx.capabilities.consent_config is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        config = ctx.capabilities.consent_config
+        participant_data = ctx.participant_data  # cached_property; None if no row
+        if participant_data is None:
+            if config.strict:
+                raise EarlyAbort()
+            return
+
+        if not participant_data.system_metadata.get("consent", config.default_consent):
+            raise EarlyAbort()
 
 
 # ---------------------------------------------------------------------------
