@@ -220,11 +220,11 @@ class ConsentCheckStage(ProcessingStage):
         participant_data = ctx.participant_data  # cached_property; None if no row
         if participant_data is None:
             if config.strict:
-                raise EarlyAbort(reason="No ParticipantData row (strict consent gate)")
+                raise EarlyAbort()
             return
 
         if not participant_data.system_metadata.get("consent", config.default_consent):
-            raise EarlyAbort(reason="Participant consent flag is not set")
+            raise EarlyAbort()
 
 
 # ---------------------------------------------------------------------------
