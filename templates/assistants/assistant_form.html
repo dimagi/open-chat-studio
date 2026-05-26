@@ -90,7 +90,8 @@
         llm_provider_model_options: [],
         init() {
           this.$watch('llmProvider', () => {
-            this.llm_provider_model_options = llmModelOptions[this.llmProvider].models;
+            const opts = llmModelOptions[this.llmProvider];
+            this.llm_provider_model_options = opts ? (opts.models || []) : [];
           })
         }
       }));

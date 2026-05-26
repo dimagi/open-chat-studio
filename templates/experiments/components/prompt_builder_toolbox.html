@@ -55,6 +55,9 @@
                             <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.providerModelId"></option>
                         </template>
                     </select>
+                    <p class="text-error text-sm mt-1" x-show="$store.promptBuilder.missingProvider" x-cloak>
+                        The selected LLM provider is no longer available. Please choose another provider.
+                    </p>
                 </div>
 
             </div>
