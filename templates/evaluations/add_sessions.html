@@ -59,13 +59,13 @@
                 class="join-item btn btn-sm"
                 :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
                 @click="setMode('selected')">
-          {% translate "Selected" %} (<span x-text="selectedSessionIds.size"></span>)
+          {% translate "Selected" %}
         </button>
         <button type="button"
                 class="join-item btn btn-sm"
                 :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
                 @click="setMode('all_matching')">
-          {% translate "All matching" %} (<span x-text="totalCount"></span>)
+          {% translate "All matching" %}
         </button>
         {% if dataset.evaluation_mode != 'session' %}
         <button type="button"
@@ -96,7 +96,7 @@
 
       <div class="ml-auto flex items-center gap-2">
         <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
-          {% translate "Add to dataset" %}
+          <span x-text="datasetButtonLabel">{% translate "Add to dataset" %}</span>
         </button>
         <a href="{% url 'evaluations:dataset_edit' team_slug=request.team.slug pk=dataset.pk %}"
            class="btn btn-ghost btn-sm">
@@ -192,6 +192,17 @@
               this.messageScope = 'all';
             }
           });
+        },
+        get datasetButtonLabel() {
+          let n;
+          if (this.mode === 'selected') {
+            n = this.selectedSessionIds.size;
+          } else if (this.mode === 'all_matching') {
+            n = this.totalCount;
+          } else {
+            n = this.estimatedSampleCount;
+          }
+          return `Add ${n} to dataset`;
         },
       });
     };
