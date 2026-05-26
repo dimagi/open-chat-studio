@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.capabilities import ConsentConfig
+from apps.channels.channels_v2.capabilities import PlatformConsentConfig
 from apps.channels.channels_v2.exceptions import EarlyAbort
 from apps.channels.channels_v2.stages.core import ConsentCheckStage
 from apps.channels.models import ChannelPlatform
@@ -20,7 +20,7 @@ class TestConsentCheckStageShouldRun:
     def test_skips_when_no_session(self):
         ctx = make_context(
             experiment_session=None,
-            capabilities=make_capabilities(consent_config=ConsentConfig()),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig()),
         )
         assert self.stage.should_run(ctx) is False
 
@@ -34,7 +34,7 @@ class TestConsentCheckStageShouldRun:
     def test_runs_when_session_and_config_present(self):
         ctx = make_context(
             experiment_session=MagicMock(),
-            capabilities=make_capabilities(consent_config=ConsentConfig()),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig()),
         )
         assert self.stage.should_run(ctx) is True
 
@@ -63,7 +63,7 @@ class TestConsentCheckStageProcess:
             experiment=experiment,
             experiment_session=MagicMock(),
             participant_identifier=participant.identifier,
-            capabilities=make_capabilities(consent_config=ConsentConfig(strict=True, default_consent=False)),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig(strict=True, default_consent=False)),
         )
 
         self.stage.process(ctx)  # does not raise
@@ -76,7 +76,7 @@ class TestConsentCheckStageProcess:
             experiment_session=MagicMock(),
             participant_identifier=participant.identifier,
             capabilities=make_capabilities(
-                consent_config=ConsentConfig(strict=False, default_consent=True),
+                consent_config=PlatformConsentConfig(strict=False, default_consent=True),
             ),
         )
 
@@ -88,7 +88,7 @@ class TestConsentCheckStageProcess:
             experiment=experiment,
             experiment_session=MagicMock(),
             participant_identifier="ghost",
-            capabilities=make_capabilities(consent_config=ConsentConfig(strict=True, default_consent=False)),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig(strict=True, default_consent=False)),
         )
 
         with pytest.raises(EarlyAbort):
@@ -99,7 +99,7 @@ class TestConsentCheckStageProcess:
             experiment=experiment,
             experiment_session=MagicMock(),
             participant_identifier="ghost",
-            capabilities=make_capabilities(consent_config=ConsentConfig(strict=False, default_consent=True)),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig(strict=False, default_consent=True)),
         )
 
         self.stage.process(ctx)  # does not raise
@@ -113,7 +113,7 @@ class TestConsentCheckStageProcess:
             experiment=experiment,
             experiment_session=MagicMock(),
             participant_identifier=participant.identifier,
-            capabilities=make_capabilities(consent_config=ConsentConfig(default_consent=True)),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig(default_consent=True)),
         )
         self.stage.process(lenient_ctx)  # does not raise
 
@@ -121,7 +121,7 @@ class TestConsentCheckStageProcess:
             experiment=experiment,
             experiment_session=MagicMock(),
             participant_identifier=participant.identifier,
-            capabilities=make_capabilities(consent_config=ConsentConfig(default_consent=False)),
+            capabilities=make_capabilities(consent_config=PlatformConsentConfig(default_consent=False)),
         )
         with pytest.raises(EarlyAbort):
             self.stage.process(strict_ctx)

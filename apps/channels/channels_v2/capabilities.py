@@ -13,12 +13,17 @@ def _default_can_send_file(_file: File) -> bool:
 
 
 @dataclass(frozen=True)
-class ConsentConfig:
+class PlatformConsentConfig:
     """Platform consent gate read by ConsentCheckStage.
 
-    Only channels whose platform maintains a ParticipantData consent flag
-    (currently CommCare Connect and Telegram) configure this. When unset
-    (``ChannelCapabilities.consent_config is None``) the stage is skipped.
+    Distinct from the conversational consent flow (``ConsentFlowStage``):
+    this enforces a platform-level consent flag stored in
+    ``ParticipantData.system_metadata`` (e.g. CommCare Connect's auto-consent
+    handshake, or Telegram revoking consent when the bot is blocked).
+
+    Only channels whose platform maintains such a flag configure this. When
+    unset (``ChannelCapabilities.consent_config is None``) the stage is
+    skipped.
 
     ``strict=True``: abort when no ParticipantData row exists.
     ``default_consent``: value used when the row exists but has no
@@ -48,4 +53,4 @@ class ChannelCapabilities:
     can_send_file: Callable[[File], bool] = _default_can_send_file
     # When set, ConsentCheckStage runs immediately after SessionResolutionStage
     # and raises EarlyAbort if the participant has not consented.
-    consent_config: ConsentConfig | None = None
+    consent_config: PlatformConsentConfig | None = None
