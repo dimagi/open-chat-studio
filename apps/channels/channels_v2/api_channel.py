@@ -88,7 +88,7 @@ class ApiChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
-                SessionResolutionStage(),
+                SessionResolutionStage(participant_id_filter=self._get_participant_id_filter()),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),

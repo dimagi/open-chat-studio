@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from io import BytesIO
+from typing import TYPE_CHECKING
+
+from django.db.models import Q, QuerySet
 
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.exceptions import EarlyExitResponse
@@ -16,7 +20,7 @@ from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -25,6 +29,9 @@ from apps.ocs_notifications.notifications import (
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
+
+if TYPE_CHECKING:
+    from apps.channels.datamodels import BaseMessage
 
 logger = logging.getLogger("ocs.channels")
 
@@ -62,7 +69,15 @@ class SessionResolutionStage(ProcessingStage):
     Also handles the /reset command (Issue 7).
     For Web/Slack channels the session is pre-set on the context, so this
     stage becomes a no-op (Issue 4).
+
+    ``participant_id_filter`` is an optional build-time callable injected by
+    the channel (via ``ChannelBase._get_participant_id_filter``). It lets
+    channels like WhatsApp match participants on more than one identifier
+    (BSUID OR legacy phone) without coupling the stage to the callbacks.
     """
+
+    def __init__(self, participant_id_filter: Callable[[str, BaseMessage | None], Q] | None = None) -> None:
+        self._participant_id_filter_fn = participant_id_filter
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return True
@@ -72,11 +87,11 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Try to load an existing active session (Issue 13: select_related)
+        # Try to load an existing active session
         ctx.experiment_session = (
             ExperimentSession.objects.filter(
+                participant__in=self._participant_qs(ctx),
                 experiment=ctx.experiment.get_working_version(),
-                participant__identifier=str(ctx.participant_identifier),
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .select_related("participant", "chat", "experiment_channel")
@@ -111,8 +126,8 @@ class SessionResolutionStage(ProcessingStage):
             # channels that don't pre-set sessions, e.g. API/Telegram)
             existing = (
                 ExperimentSession.objects.filter(
+                    participant__in=self._participant_qs(ctx),
                     experiment=ctx.experiment.get_working_version(),
-                    participant__identifier=str(ctx.participant_identifier),
                 )
                 .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
                 .first()
@@ -124,6 +139,14 @@ class SessionResolutionStage(ProcessingStage):
         ctx.trace_service.set_session(ctx.experiment_session)
         raise EarlyExitResponse("Conversation reset")
 
+    def _participant_qs(self, ctx: MessageProcessingContext) -> QuerySet[Participant]:
+        """Return a Participant queryset matching the current user for use as a subquery."""
+        return Participant.objects.filter(
+            self.participant_id_filter(ctx),
+            team=ctx.experiment.team,
+            platform=ctx.experiment_channel.platform,
+        )
+
     def _create_session(self, ctx: MessageProcessingContext):
         """Delegates to the existing _start_experiment_session helper."""
         return _start_experiment_session(
@@ -132,7 +155,13 @@ class SessionResolutionStage(ProcessingStage):
             participant_identifier=ctx.participant_identifier,
             participant_user=ctx.channel_context.get("participant_user"),
             session_status=SessionStatus.SETUP,
+            participant_id_filter=self.participant_id_filter(ctx),
         )
+
+    def participant_id_filter(self, ctx: MessageProcessingContext) -> Q:
+        if self._participant_id_filter_fn is not None:
+            return self._participant_id_filter_fn(ctx.participant_identifier, ctx.message)
+        return Q(identifier=str(ctx.participant_identifier))
 
 
 # ---------------------------------------------------------------------------

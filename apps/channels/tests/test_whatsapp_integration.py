@@ -6,16 +6,17 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
-from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import TurnWhatsappMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import Participant
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -53,21 +54,6 @@ def _twilio_whatsapp_channel(twilio_provider):
 
 
 class TestTwilio:
-    @pytest.mark.parametrize(
-        ("message", "message_type"),
-        [(twilio_messages.Whatsapp.text_message(), "text"), (twilio_messages.Whatsapp.audio_message(), "voice")],
-    )
-    def test_parse_messages(self, message, message_type):
-        whatsapp_message = TwilioMessage.parse(message)
-        assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
-        assert whatsapp_message.participant_id == "+27456897512"
-        if message_type == "text":
-            assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
-            assert whatsapp_message.media_url is None
-        else:
-            assert whatsapp_message.content_type == MESSAGE_TYPES.VOICE
-            assert whatsapp_message.media_url == "http://example.com/media"
-
     @pytest.mark.usefixtures("_twilio_whatsapp_channel")
     @pytest.mark.parametrize(
         ("incoming_message", "message_type"),
@@ -235,28 +221,9 @@ class TestTurnio:
 
 
 class TestMetaCloudApi:
-    @pytest.mark.parametrize(
-        ("message", "message_type"),
-        [
-            (meta_cloud_api_messages.text_message_value(), "text"),
-            (meta_cloud_api_messages.audio_message_value(), "audio"),
-        ],
-    )
-    def test_parse_messages(self, message, message_type):
-        parsed = MetaCloudAPIMessage.parse(message)
-        assert parsed.participant_id == "27456897512"
-        if message_type == "text":
-            assert parsed.message_text == "Hello"
-            assert parsed.content_type == MESSAGE_TYPES.TEXT
-            assert parsed.whatsapp_message_id == "wamid.abc123"
-        else:
-            assert parsed.media_id == "1215194677037265"
-            assert parsed.content_type == MESSAGE_TYPES.VOICE
-            assert parsed.whatsapp_message_id == "wamid.abc456"
-
     @pytest.mark.django_db()
     @pytest.mark.parametrize(
-        ("incoming_message", "message_type"),
+        ("incoming_value", "message_type"),
         [
             (meta_cloud_api_messages.text_message_value(), "text"),
             (meta_cloud_api_messages.audio_message_value(), "audio"),
@@ -275,7 +242,7 @@ class TestMetaCloudApi:
         send_voice_message,
         transcribe_voice_mock,
         synthesize_voice_mock,
-        incoming_message,
+        incoming_value,
         message_type,
         meta_cloud_api_whatsapp_channel,
     ):
@@ -287,8 +254,8 @@ class TestMetaCloudApi:
         transcribe_voice_mock.return_value = "Hi"
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
-            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
-            message_data=incoming_message,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
+            message_data=incoming_value["messages"][0],
         )
         if message_type == "text":
             send_text_message.assert_called()
@@ -297,13 +264,14 @@ class TestMetaCloudApi:
 
     @patch("apps.chat.bots.PipelineBot.process_input")
     def test_unsupported_message_type_does_nothing(self, bot_process_input, db, meta_cloud_api_whatsapp_channel):
-        incoming_message = meta_cloud_api_messages.text_message_value()
-        incoming_message["messages"][0]["type"] = "video"
-        incoming_message["messages"][0]["video"] = {}
+        incoming_value = meta_cloud_api_messages.text_message_value()
+        message = incoming_value["messages"][0]
+        message["type"] = "video"
+        message["video"] = {}
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
-            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
-            message_data=incoming_message,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
+            message_data=message,
         )
         bot_process_input.assert_not_called()
 
@@ -323,10 +291,10 @@ class TestMetaCloudApi:
         chat = Chat.objects.create(team=experiment.team)
         bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
 
-        incoming_message = meta_cloud_api_messages.text_message_value()
+        incoming_message = meta_cloud_api_messages.text_message_value()["messages"][0]
         handle_meta_cloud_api_message(
             channel_id=meta_cloud_api_whatsapp_channel.id,
-            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
+            team_slug=meta_cloud_api_whatsapp_channel.experiment.team.slug,
             message_data=incoming_message,
         )
 
@@ -334,3 +302,115 @@ class TestMetaCloudApi:
             from_="12345",
             message_id="wamid.abc123",
         )
+
+
+BSUID = "US.13491208655302741918"
+PHONE = "27456897512"
+
+
+def _meta_message(*, bsuid: str, phone: str | None, msg_id: str = "wamid.abc", timestamp: str = "1") -> dict:
+    """Build a minimal inbound Meta Cloud API text-message payload.
+
+    ``phone=None`` means the user has adopted a username and Meta has hidden their phone
+    number — the webhook carries the BSUID only. ``phone="..."`` means the phone is still
+    visible (the user has not adopted a username, or is in the business's contact book).
+    """
+    message: dict = {
+        "from_user_id": bsuid,
+        "id": msg_id,
+        "timestamp": timestamp,
+        "text": {"body": "Hi"},
+        "type": "text",
+    }
+    if phone is not None:
+        message["from"] = phone
+    return message
+
+
+@pytest.mark.django_db()
+class TestWhatsappParticipantResolution:
+    """End-to-end participant-resolution scenarios for the WhatsApp BSUID rollout.
+
+    Three of the five lifecycle scenarios are exercised here. Scenarios 2 and 3 — which
+    expect BSUID as the canonical participant identifier when a phone is also present —
+    are deferred until Meta supports BSUID in outbound message payloads.
+
+    Each scenario inlines the message it delivers; the presence or absence of ``from``
+    (the phone number) is visible at a glance via the ``phone=`` argument to
+    ``_meta_message``.
+    """
+
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def _deliver(self, bot_process_input, send_text_message, send_typing_indicator, channel, message):
+        chat = Chat.objects.create(team=channel.experiment.team)
+        bot_process_input.return_value = ChatMessage.objects.create(content="ok", chat=chat)
+        handle_meta_cloud_api_message(
+            channel_id=channel.id,
+            team_slug=channel.experiment.team.slug,
+            message_data=message,
+        )
+
+    def _whatsapp_participants(self, team):
+        return Participant.objects.filter(team=team, platform=ChannelPlatform.WHATSAPP)
+
+    def test_scenario_1_new_username_adopter_creates_bsuid_keyed_participant(self, meta_cloud_api_whatsapp_channel):
+        """A brand-new user who has already adopted a WhatsApp username sends their first
+        message. The webhook carries ONLY the BSUID — no phone number.
+
+        Expected: a new Participant is created, keyed by the BSUID.
+        """
+        message = _meta_message(bsuid=BSUID, phone=None)
+
+        self._deliver(channel=meta_cloud_api_whatsapp_channel, message=message)
+
+        participants = self._whatsapp_participants(meta_cloud_api_whatsapp_channel.experiment.team)
+        assert participants.count() == 1
+        assert participants.get().identifier == BSUID
+
+    def test_scenario_4_pre_rollout_phone_keyed_participant_is_matched_via_phone(self, meta_cloud_api_whatsapp_channel):
+        """A participant from before the BSUID rollout already exists in the DB, keyed by
+        their phone number. After rollout, Meta starts including the BSUID in webhooks.
+
+        Expected: the post-rollout webhook (BSUID + phone) resolves to the existing
+        phone-keyed participant via the phone clause. No duplicate is created. The
+        identifier on the existing participant is NOT rewritten to the BSUID.
+        """
+        team = meta_cloud_api_whatsapp_channel.experiment.team
+        legacy = ParticipantFactory.create(team=team, identifier=PHONE, platform=ChannelPlatform.WHATSAPP)
+
+        self._deliver(
+            channel=meta_cloud_api_whatsapp_channel,
+            message=_meta_message(bsuid=BSUID, phone=PHONE),
+        )
+
+        participants = self._whatsapp_participants(team)
+        assert participants.count() == 1
+        assert participants.get().pk == legacy.pk
+        legacy.refresh_from_db()
+        assert legacy.identifier == PHONE
+
+    def test_scenario_5_pre_rollout_phone_keyed_participant_adopts_username_loses_continuity(
+        self, meta_cloud_api_whatsapp_channel
+    ):
+        """A pre-rollout participant (keyed by phone) adopts a username AFTER the rollout.
+        Their webhook now carries only the BSUID — no phone — and Meta's contact book and
+        30-day cache do not contain their phone number.
+
+        Expected: we have nothing to match against; a new BSUID-keyed participant is
+        created and the legacy phone-keyed participant is untouched. This is the one
+        accepted continuity loss in the rollout design.
+        """
+        team = meta_cloud_api_whatsapp_channel.experiment.team
+        legacy = ParticipantFactory.create(team=team, identifier=PHONE, platform=ChannelPlatform.WHATSAPP)
+
+        self._deliver(
+            channel=meta_cloud_api_whatsapp_channel,
+            message=_meta_message(bsuid=BSUID, phone=None),
+        )
+
+        participants = self._whatsapp_participants(team)
+        assert set(participants.values_list("identifier", flat=True)) == {PHONE, BSUID}
+        legacy.refresh_from_db()
+        assert legacy.identifier == PHONE

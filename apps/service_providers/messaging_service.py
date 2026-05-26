@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
-from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage, looks_like_bsuid
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
@@ -31,6 +31,16 @@ from apps.service_providers.file_limits import can_send_on_whatsapp
 from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
+
+
+def _recipient_kwarg(recipient: str) -> dict:
+    """Build the recipient half of a Meta Cloud API send payload.
+
+    Routes BSUIDs to the new `recipient` field and phone numbers to the existing `to` field.
+    """
+    if looks_like_bsuid(recipient):
+        return {"recipient": recipient}
+    return {"to": recipient}
 
 
 class MessagingService(pydantic.BaseModel):
@@ -458,7 +468,7 @@ class MetaCloudAPIService(MessagingService):
             data = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
-                "to": to,
+                **_recipient_kwarg(to),
                 "type": "template",
                 "template": {
                     "name": self.TEMPLATE_NAME,
@@ -502,7 +512,8 @@ class MetaCloudAPIService(MessagingService):
         for chunk in chunks:
             data = {
                 "messaging_product": "whatsapp",
-                "to": to,
+                "recipient_type": "individual",
+                **_recipient_kwarg(to),
                 "type": "text",
                 "text": {"body": chunk},
             }
@@ -528,7 +539,8 @@ class MetaCloudAPIService(MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "to": to,
+            "recipient_type": "individual",
+            **_recipient_kwarg(to),
             "type": "audio",
             "audio": {"id": media_id},
         }
@@ -597,7 +609,8 @@ class MetaCloudAPIService(MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "to": to,
+            "recipient_type": "individual",
+            **_recipient_kwarg(to),
             "type": media_type,
             media_type: {"id": media_id},
         }

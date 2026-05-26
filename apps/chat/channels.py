@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import emoji
 import httpx
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -1465,6 +1466,44 @@ class CommCareConnectChannel(ChannelBase):
         return self.participant_data.get_encryption_key_bytes()
 
 
+def _get_or_create_participant(
+    team,
+    normalized_identifier: str,
+    platform,
+    participant_user: CustomUser | None,
+    participant_id_filter: Q,
+) -> Participant:
+    """Lookup or create a participant, handling complex (disjunctive) identity filters.
+
+    When participant_id_filter is a simple equality (the common case), delegates the
+    whole lookup-or-create to get_or_create. When it's a disjunction (e.g. BSUID OR
+    legacy phone), probes first so we can create with only the canonical identifier.
+    """
+    is_simple_filter = len(participant_id_filter.children) == 1
+    if not is_simple_filter:
+        existing = (
+            Participant.objects.filter(participant_id_filter, team=team, platform=platform)
+            .order_by("created_at")
+            .first()
+        )
+        if existing is not None:
+            if participant_user and existing.user is None:
+                existing.user = participant_user
+                existing.save()
+            return existing
+
+    participant, created = Participant.objects.get_or_create(
+        team=team,
+        identifier=normalized_identifier,
+        platform=platform,
+        defaults={"user": participant_user},
+    )
+    if not created and participant_user and participant.user is None:
+        participant.user = participant_user
+        participant.save()
+    return participant
+
+
 def _start_experiment_session(
     working_experiment: Experiment,
     experiment_channel: ExperimentChannel,
@@ -1474,6 +1513,7 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
     metadata: dict | None = None,
+    participant_id_filter: Q | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1488,16 +1528,18 @@ def _start_experiment_session(
         # This should technically never happen, since we disable the input for logged in users
         raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
+    normalized_identifier = experiment_channel.platform_enum.normalize_identifier(participant_identifier)
+    if participant_id_filter is None:
+        participant_id_filter = Q(identifier=normalized_identifier)
+
     with transaction.atomic():
-        participant, created = Participant.objects.get_or_create(
+        participant = _get_or_create_participant(
             team=team,
-            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
+            normalized_identifier=normalized_identifier,
             platform=experiment_channel.platform,
-            defaults={"user": participant_user},
+            participant_user=participant_user,
+            participant_id_filter=participant_id_filter,
         )
-        if not created and participant_user and participant.user is None:
-            participant.user = participant_user
-            participant.save()
 
         chat = Chat.objects.create(
             team=team,
@@ -1518,7 +1560,6 @@ def _start_experiment_session(
             },
         )
 
-        # Record the participant's timezone
         if timezone:
             participant.update_memory(data={"timezone": timezone}, experiment=working_experiment)
 

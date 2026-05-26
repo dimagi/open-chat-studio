@@ -32,10 +32,19 @@ def _audio_message(message: dict):
 class Whatsapp:
     to = "whatsapp:+14155238886"
     from_ = "whatsapp:+27456897512"
+    bsuid = "US.13491208655302741918"
+    external_user_id = f"whatsapp:{bsuid}"
 
     @staticmethod
     def text_message():
-        return _text_message(to=Whatsapp.to, from_=Whatsapp.from_)
+        """Post-rollout Twilio payload: From has the phone, ExternalUserId has the BSUID.
+
+        Twilio guarantees ExternalUserId on every WhatsApp webhook from June 2026 onwards.
+        See https://www.twilio.com/en-us/changelog/whatsapp-usernames--new-business-scoped-user-id--bsuid--field-re
+        """
+        msg = _text_message(to=Whatsapp.to, from_=Whatsapp.from_)
+        msg["ExternalUserId"] = Whatsapp.external_user_id
+        return msg
 
     @staticmethod
     def image_message():

@@ -1,9 +1,10 @@
 import base64
 import logging
+import re
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import phonenumbers
 from mailparser_reply import EmailReplyParser
@@ -14,9 +15,29 @@ from apps.chat.channels import MESSAGE_TYPES
 from apps.documents.readers import Document
 from apps.files.models import File
 
+if TYPE_CHECKING:
+    from apps.channels.meta_webhook import MetaCloudAPIWebhookMessage
+
 logger = logging.getLogger("ocs.channels")
 
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
+
+
+_BSUID_RE = re.compile(r"^[A-Z]{2}(?:\.ENT)?\.[A-Za-z0-9]{1,128}$")
+
+
+def looks_like_bsuid(value: str) -> bool:
+    """Return True if `value` matches the Meta business-scoped user ID format.
+
+    Per Meta's spec, a BSUID is an ISO 3166 alpha-2 country code (two uppercase letters)
+    followed by a period and up to 128 alphanumeric characters
+    (e.g. US.13491208655302741918). Parent BSUIDs (which work across business portfolios)
+    insert an ``ENT.`` between the country code and the identifier
+    (e.g. US.ENT.11815799212886844830).
+
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+    """
+    return bool(_BSUID_RE.match(value))
 
 
 class MediaCache(BaseModel):
@@ -132,6 +153,11 @@ class TwilioMessage(BaseMessage):
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
+    phone_number: str | None = Field(default=None)
+    """The user's phone number (E.164) when included in the WhatsApp webhook (Twilio `From`
+    field). `None` for username-adopters whose phone is not exposed, and for non-WhatsApp
+    platforms (Facebook Messenger). Used alongside `participant_id` (BSUID) to match
+    legacy phone-keyed participants."""
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -152,19 +178,43 @@ class TwilioMessage(BaseMessage):
         prefix_to_remove = f"{prefix}:"
         platform = prefix_channel_map[prefix]
         to = message_data["To"].removeprefix(prefix_to_remove)
+        from_value = message_data["From"].removeprefix(prefix_to_remove)
+        phone_number = None
+
         if platform == ChannelPlatform.WHATSAPP:
             # Parse the number to E164 format, since this is the format of numbers in the DB
             # Normally they are already in this format, but this is just an extra layer of security
             number_obj = phonenumbers.parse(to)
             to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+
+            # ExternalUserId (BSUID) is the stable identifier on WhatsApp — Twilio guarantees
+            # it on every post-rollout webhook. Strip the `whatsapp:` prefix; missing field
+            # means a malformed payload, so the KeyError surfaces.
+            participant_id = message_data["ExternalUserId"].removeprefix(prefix_to_remove)
+            # `From` carries the phone only when the user has not adopted a username; otherwise
+            # it mirrors the BSUID. Normalize to E.164 for matching against legacy phone-keyed
+            # participants stored in the DB.
+            if not looks_like_bsuid(from_value):
+                phone_number = phonenumbers.format_number(
+                    phonenumbers.parse(from_value), phonenumbers.PhoneNumberFormat.E164
+                )
+
+            # Sending BSUIDs are not yet supported, so we use the phone number for now. Once this is supported,
+            # remove this line
+            participant_id = phone_number
+        else:
+            # Facebook Messenger: no BSUID concept; use the sender id as before.
+            participant_id = from_value
+
         return TwilioMessage(
-            participant_id=message_data["From"].removeprefix(prefix_to_remove),
+            participant_id=participant_id,
             to=to,
             message_text=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),
             content_type_unparsed=content_type,
             platform=platform,
+            phone_number=phone_number,
         )
 
 
@@ -218,22 +268,35 @@ class MetaCloudAPIMessage(TurnWhatsappMessage):
     """
 
     whatsapp_message_id: str | None = Field(default=None)
+    phone_number: str | None = Field(default=None)
+    """The user's phone number when included in the webhook (Meta `from` field).
+    `None` for username-adopters whose phone is not exposed. Used alongside
+    `participant_id` (BSUID) to match legacy phone-keyed participants."""
 
     @staticmethod
-    def parse(message_data: dict) -> "MetaCloudAPIMessage":
-        message = message_data["messages"][0]
-        message_type = message["type"]
+    def parse(message_data: "MetaCloudAPIWebhookMessage | dict") -> "MetaCloudAPIMessage":
+        message_type = message_data["type"]
         body = ""
         if message_type == "text":
-            body = message["text"]["body"]
+            body = message_data["text"]["body"]
 
+        # BSUID (`from_user_id`) is the stable identifier — it's present on every post-rollout
+        # webhook regardless of whether the user adopted a username. A missing field means a
+        # malformed payload, so we let the KeyError surface.
+        from_value = message_data.get("from")
+        # Sending BSUIDs are not yet supported, so we use the phone number (from_value) for now. Once this is supported,
+        # remove this line
+        participant_id = from_value or message_data["from_user_id"]
+
+        phone_number = from_value if from_value and not looks_like_bsuid(from_value) else None
         return MetaCloudAPIMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
+            participant_id=participant_id,
             message_text=body,
             content_type=message_type,
-            media_id=message.get(message_type, {}).get("id", None),
+            media_id=message_data.get(message_type, {}).get("id", None),
             content_type_unparsed=message_type,
-            whatsapp_message_id=message.get("id"),
+            whatsapp_message_id=message_data.get("id"),
+            phone_number=phone_number,
         )
 
 

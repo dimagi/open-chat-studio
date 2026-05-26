@@ -4,6 +4,8 @@ import logging
 from io import BytesIO
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
@@ -151,6 +153,15 @@ class WhatsappChannel(ChannelBase):
 
     def _get_callbacks(self) -> WhatsappCallbacks:
         return WhatsappCallbacks(service=self.messaging_service, from_number=self._from_identifier)
+
+    def _get_participant_id_filter(self):
+        def _filter(participant_id: str, message) -> Q:
+            phone = getattr(message, "phone_number", None) if message else None
+            if phone:
+                return Q(identifier=participant_id) | Q(identifier=phone)
+            return Q(identifier=str(participant_id))
+
+        return _filter
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
