@@ -49,19 +49,21 @@ class TestConsentCheckStageProcess:
     def _make_participant_data(self, experiment, *, consent=None):
         participant = ParticipantFactory.create(team=experiment.team, platform=ChannelPlatform.COMMCARE_CONNECT)
         metadata = {} if consent is None else {"consent": consent}
-        ParticipantData.objects.create(
+        pd = ParticipantData.objects.create(
             team=experiment.team,
             participant=participant,
             experiment=experiment,
             system_metadata=metadata,
         )
-        return participant
+        return participant, pd
 
     def test_passes_when_consent_true(self, experiment):
-        participant = self._make_participant_data(experiment, consent=True)
+        participant, pd = self._make_participant_data(experiment, consent=True)
         ctx = make_context(
             experiment=experiment,
             experiment_session=MagicMock(),
+            participant=participant,
+            participant_data=pd,
             participant_identifier=participant.identifier,
             capabilities=make_capabilities(consent_config=PlatformConsentConfig(strict=True, default_consent=False)),
         )
@@ -70,10 +72,12 @@ class TestConsentCheckStageProcess:
 
     def test_aborts_when_consent_false(self, experiment):
         """Both strict and lenient configs must block an explicit consent=False."""
-        participant = self._make_participant_data(experiment, consent=False)
+        participant, pd = self._make_participant_data(experiment, consent=False)
         ctx = make_context(
             experiment=experiment,
             experiment_session=MagicMock(),
+            participant=participant,
+            participant_data=pd,
             participant_identifier=participant.identifier,
             capabilities=make_capabilities(
                 consent_config=PlatformConsentConfig(strict=False, default_consent=True),
@@ -87,7 +91,7 @@ class TestConsentCheckStageProcess:
         ctx = make_context(
             experiment=experiment,
             experiment_session=MagicMock(),
-            participant_identifier="ghost",
+            participant_data=None,
             capabilities=make_capabilities(consent_config=PlatformConsentConfig(strict=True, default_consent=False)),
         )
 
@@ -98,7 +102,7 @@ class TestConsentCheckStageProcess:
         ctx = make_context(
             experiment=experiment,
             experiment_session=MagicMock(),
-            participant_identifier="ghost",
+            participant_data=None,
             capabilities=make_capabilities(consent_config=PlatformConsentConfig(strict=False, default_consent=True)),
         )
 
@@ -107,11 +111,13 @@ class TestConsentCheckStageProcess:
     def test_default_consent_governs_missing_key(self, experiment):
         """When the ParticipantData row exists but has no 'consent' key,
         default_consent decides the outcome."""
-        participant = self._make_participant_data(experiment, consent=None)
+        participant, pd = self._make_participant_data(experiment, consent=None)
 
         lenient_ctx = make_context(
             experiment=experiment,
             experiment_session=MagicMock(),
+            participant=participant,
+            participant_data=pd,
             participant_identifier=participant.identifier,
             capabilities=make_capabilities(consent_config=PlatformConsentConfig(default_consent=True)),
         )
@@ -120,6 +126,8 @@ class TestConsentCheckStageProcess:
         strict_ctx = make_context(
             experiment=experiment,
             experiment_session=MagicMock(),
+            participant=participant,
+            participant_data=pd,
             participant_identifier=participant.identifier,
             capabilities=make_capabilities(consent_config=PlatformConsentConfig(default_consent=False)),
         )

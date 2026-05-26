@@ -16,7 +16,13 @@ from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import (
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    SessionStatus,
+    VoiceResponseBehaviours,
+)
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -52,6 +58,43 @@ class ParticipantValidationStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
+# ParticipantResolverStage
+# ---------------------------------------------------------------------------
+
+
+class ParticipantResolverStage(ProcessingStage):
+    """Resolves (or creates) the Participant record for the validated identifier.
+
+    Runs after ParticipantValidationStage (which sets ctx.participant_identifier).
+    Always sets ctx.participant; new participants are created here so that
+    SessionResolutionStage can use the FK directly without a separate creation step.
+
+    If a participant_user is present in ctx.channel_context (e.g. web channels),
+    it is associated with the participant on first contact or backfilled if missing.
+    """
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        normalized = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+        participant_user = ctx.channel_context.get("participant_user")
+        ctx.participant, created = Participant.objects.get_or_create(
+            team=ctx.experiment.team,
+            identifier=normalized,
+            platform=ctx.experiment_channel.platform,
+            defaults={"user": participant_user},
+        )
+        if not created and participant_user and ctx.participant.user is None:
+            ctx.participant.user = participant_user
+            ctx.participant.save()
+
+        try:
+            ctx.participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
+                participant=ctx.participant
+            )
+        except ParticipantData.DoesNotExist:
+            ctx.participant_data = None
+
+
+# ---------------------------------------------------------------------------
 # SessionResolutionStage
 # ---------------------------------------------------------------------------
 
@@ -72,17 +115,20 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Try to load an existing active session (Issue 13: select_related)
-        ctx.experiment_session = (
-            ExperimentSession.objects.filter(
-                experiment=ctx.experiment.get_working_version(),
-                participant__identifier=str(ctx.participant_identifier),
+        # Load the existing active session using the participant FK when
+        # available. If ctx.participant is None the participant is new and
+        # no session can exist yet, so skip the query.
+        if ctx.participant is not None:
+            ctx.experiment_session = (
+                ExperimentSession.objects.filter(
+                    experiment=ctx.experiment.get_working_version(),
+                    participant=ctx.participant,
+                )
+                .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+                .select_related("participant", "chat", "experiment_channel")
+                .order_by("-created_at")
+                .first()
             )
-            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
-            .select_related("participant", "chat", "experiment_channel")
-            .order_by("-created_at")
-            .first()
-        )
 
         # Check for /reset after loading the session so that _handle_reset
         # has access to ctx.experiment_session and can properly end it.
@@ -106,19 +152,6 @@ class SessionResolutionStage(ProcessingStage):
     def _handle_reset(self, ctx: MessageProcessingContext) -> None:
         if ctx.experiment_session:
             ctx.experiment_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
-        else:
-            # Load and end the existing session if one exists (common path for
-            # channels that don't pre-set sessions, e.g. API/Telegram)
-            existing = (
-                ExperimentSession.objects.filter(
-                    experiment=ctx.experiment.get_working_version(),
-                    participant__identifier=str(ctx.participant_identifier),
-                )
-                .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
-                .first()
-            )
-            if existing:
-                existing.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
 
         ctx.experiment_session = self._create_session(ctx)
         ctx.trace_service.set_session(ctx.experiment_session)
