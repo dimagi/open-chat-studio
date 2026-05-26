@@ -45,12 +45,10 @@ class CommCareConnectSender(ChannelSender):
             raise ChannelException(f"channel_id is missing for participant {recipient}")
 
         if not participant_data.encryption_key:
-            # The key is provisioned during the CommCare Connect consent
-            # handshake (api.views.channels.get_key). If it is missing here,
-            # the participant should never have been reachable via this
-            # channel -- we cannot fabricate one because CommCare Connect
-            # has no way to learn the new key.
-            raise ChannelException(f"Encryption key is missing for participant {recipient}")
+            # Generate a key on the fly when one is missing. The mobile app
+            # always calls `get_key` before attempting to decrypt, so it will
+            # pick up whatever key we use to encrypt this message. See PR #1326.
+            participant_data.generate_encryption_key()
 
         CommCareConnectClient().send_message_to_user(
             channel_id=channel_id,

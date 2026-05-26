@@ -87,10 +87,10 @@ class TestCommCareConnectSender:
             encryption_key=encryption_key,
         )
 
-    def test_send_text_raises_when_encryption_key_missing(self, experiment):
-        """The key is provisioned during the consent handshake; if it is
-        missing at send time something is wrong upstream -- we must not
-        silently fabricate one."""
+    def test_send_text_generates_missing_encryption_key(self, experiment):
+        """When the encryption key is missing, the sender generates one and
+        proceeds. The mobile app always calls ``get_key`` before decrypting,
+        so it will read whatever key we used to encrypt the message."""
         participant, participant_data, channel_id, _ = _make_participant_data(experiment, consent=True)
         participant_data.encryption_key = ""
         participant_data.save()
@@ -98,10 +98,16 @@ class TestCommCareConnectSender:
         sender = self._make_sender(experiment, participant_data=participant_data)
 
         with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ClientMock:
-            with pytest.raises(ChannelException, match="Encryption key is missing"):
-                sender.send_text("Hello", recipient=participant.identifier)
+            sender.send_text("Hello", recipient=participant.identifier)
 
-        ClientMock.return_value.send_message_to_user.assert_not_called()
+        participant_data.refresh_from_db()
+        assert participant_data.encryption_key
+        client_instance = ClientMock.return_value
+        client_instance.send_message_to_user.assert_called_once_with(
+            channel_id=channel_id,
+            message="Hello",
+            encryption_key=participant_data.get_encryption_key_bytes(),
+        )
 
     def test_send_text_raises_when_no_participant_data(self, experiment):
         sender = self._make_sender(experiment, participant_data=None)
