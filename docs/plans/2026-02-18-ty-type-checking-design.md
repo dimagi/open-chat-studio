@@ -1,3 +1,7 @@
+---
+status: stable
+---
+
 # Incremental ty Type Checking Adoption
 
 **Date:** 2026-02-18
