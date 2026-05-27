@@ -267,6 +267,7 @@ class ChannelBase(ABC):
 
         mini_pipeline = MessageProcessingPipeline(
             core_stages=[
+                ParticipantResolverStage(),
                 ConsentCheckStage(),
                 ResponseFormattingStage(),
             ],
