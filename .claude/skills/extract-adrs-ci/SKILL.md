@@ -31,7 +31,7 @@ Read the source doc's YAML frontmatter and assess its nature:
 ## Phase 2 — Candidate decisions (no human loop)
 
 1. Read the source doc in full.
-2. Identify the genuine architectural decisions — choices where multiple options existed, that have lasting consequences, and that are worth citing later. Apply the "avoid the trivial" rule: skip mechanical or easily-reversed minutiae.
+2. Identify the genuine architectural decisions — choices where multiple options existed, that have lasting consequences, and that are worth citing later. Apply two filters: **(a) avoid the trivial** — skip mechanical or easily-reversed minutiae; **(b) split-vs-fold** — a candidate is its own ADR only if you'd plausibly supersede or revise it *independently* of the others. A choice that exists only as a forced consequence of a bigger decision (a stub library dictated by the type-checker you picked, a serializer forced by your framework) is NOT its own ADR — fold it into the parent's Decision/Consequences/Alternatives, and use `extends:` to link related-but-separate ADRs. No human will catch over-splitting here, so apply this deliberately.
 3. You decide the final list yourself (no confirmation step). For each decision, record a one-line justification for WHY it qualifies as a decision and which source section it came from. **This reasoning goes into the PR body** so the human reviewer can audit your curation.
 
 ## Phase 3 — Draft ADRs

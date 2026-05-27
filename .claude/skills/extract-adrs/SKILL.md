@@ -33,6 +33,7 @@ Drive a guided conversation that converts a stable design or spec document into 
    - Was a real choice (multiple plausible options existed).
    - Has consequences that constrain future work.
    - Would be useful to cite from code or PRs later.
+   - **Would plausibly be superseded or revised independently of the others** (the split-vs-fold test). A choice that exists only as a forced consequence of a bigger decision — a stub library dictated by the type-checker you picked, a serializer forced by your framework — is NOT its own ADR. Fold it into the parent decision's Decision/Consequences/Alternatives. Relatedness alone is not a reason to split; the `extends:` link captures relationships.
 3. Present a numbered list to the user. Each entry must include:
    - Short title (5–10 words, kebab-case ready).
    - One-line summary of the decision.
