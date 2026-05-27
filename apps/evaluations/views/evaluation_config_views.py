@@ -7,6 +7,7 @@ from io import StringIO
 from typing import Any
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -21,6 +22,7 @@ from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
+from apps.evaluations.tagging import undo_run_tags
 from apps.evaluations.tasks import upload_evaluation_run_results_task
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
@@ -611,3 +613,21 @@ def generate_evaluation_results_column_suggestions(result_columns, evaluation_ru
         suggestions[column] = suggested_evaluator_id
 
     return suggestions
+
+
+@login_and_team_required
+@require_POST
+@permission_required("evaluations.change_evaluationrun")
+def undo_evaluation_run_tags(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
+    """Remove all tags applied by this run and restore the previous run's tags."""
+    evaluation_run = get_object_or_404(
+        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+    )
+    undo_run_tags(evaluation_run)
+    messages.success(request, "Tags have been reset to the previous run's state.")
+    return HttpResponseRedirect(
+        reverse(
+            "evaluations:evaluation_results_home",
+            args=[team_slug, evaluation_pk, evaluation_run_pk],
+        )
+    )
