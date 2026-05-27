@@ -1,4 +1,4 @@
-# ADR-0009: Enable ty rules progressively from a baseline of all-ignored
+# ADR-0008: Enable ty rules progressively from a baseline of all-ignored
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
@@ -7,7 +7,7 @@
 
 ## Context
 
-A clean ty run on the codebase reports ~3,332 diagnostics across many rules — including ~2,417 `unresolved-attribute`, ~369 `invalid-argument-type`, and ~109 `invalid-assignment` — even after [ADR-0008](0008-django-types-stubs-for-ty.md) cuts the Django noise. Turning ty on with defaults and blocking CI would either freeze development behind a multi-week cleanup or push every contributor toward blanket suppressions that defeat the point of running a type checker.
+A clean ty run on the codebase reports ~3,332 diagnostics across many rules — including ~2,417 `unresolved-attribute`, ~369 `invalid-argument-type`, and ~109 `invalid-assignment` — even after the `django-types` stubs ([ADR-0007](0007-adopt-ty-as-python-type-checker.md)) cut the Django noise. Turning ty on with defaults and blocking CI would either freeze development behind a multi-week cleanup or push every contributor toward blanket suppressions that defeat the point of running a type checker.
 
 The diagnostic distribution is uneven: many rules report zero or a handful of violations (high-signal, low-effort to fix and lock in) while a few rules account for most of the noise (high-effort, mixed signal). We want regression prevention now — without a multi-week cleanup as a prerequisite — and a path that increases coverage over time without big-bang merges.
 

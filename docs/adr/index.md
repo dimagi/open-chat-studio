@@ -27,5 +27,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0005](0005-validate-inbound-email-attachments-by-content.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Validate inbound email attachments by content sniffing |
 | [0006](0006-combine-email-reply-text-and-attachments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Combine email reply text and attachments into a single message |
 | [0007](0007-adopt-ty-as-python-type-checker.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Adopt ty as the Python type checker |
-| [0008](0008-django-types-stubs-for-ty.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Use django-types stubs to support Django typing under ty |
-| [0009](0009-progressive-ty-rule-enablement.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Enable ty rules progressively from a baseline of all-ignored |
+| [0008](0008-progressive-ty-rule-enablement.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Enable ty rules progressively from a baseline of all-ignored |
