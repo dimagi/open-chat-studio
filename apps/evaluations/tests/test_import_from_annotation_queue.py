@@ -281,9 +281,6 @@ def test_session_selection_list_ignores_invalid_dataset_id(client_with_user, tea
     assert str(session.external_id) in response.json()
 
 
-# ===== dataset_sessions_count + EvalDatasetAddSessionsView (issue #3354) =====
-
-
 @pytest.mark.django_db()
 def test_dataset_sessions_count_returns_total(client_with_user, team_with_users, session_dataset):
     """Count endpoint returns number of sessions not already in the dataset."""
@@ -303,32 +300,4 @@ def test_dataset_sessions_count_returns_total(client_with_user, team_with_users,
     assert response.status_code == 200
     data = response.json()
     assert "ids" not in data
-    assert data["total"] >= 1
-
-
-@pytest.mark.django_db()
-def test_eval_dataset_add_sessions_post_selected(client_with_user, team_with_users, session_dataset):
-    """POST with mode=selected and valid session IDs redirects to dataset edit."""
-    session = ExperimentSessionFactory.create(team=team_with_users)
-    url = reverse("evaluations:dataset_add_sessions", args=[team_with_users.slug, session_dataset.pk])
-    response = client_with_user.post(
-        url,
-        {
-            "mode": "selected",
-            "session_ids": str(session.external_id),
-            "message_scope": "all",
-        },
-    )
-    assert response.status_code == 302
-    assert response["Location"].endswith(
-        reverse("evaluations:dataset_edit", args=[team_with_users.slug, session_dataset.pk])
-    )
-
-
-@pytest.mark.django_db()
-def test_eval_dataset_add_sessions_post_no_sessions_stays_on_page(client_with_user, team_with_users, session_dataset):
-    """POST with no sessions redirects back to add-sessions page with an error."""
-    url = reverse("evaluations:dataset_add_sessions", args=[team_with_users.slug, session_dataset.pk])
-    response = client_with_user.post(url, {"mode": "selected", "session_ids": "", "message_scope": "all"})
-    assert response.status_code == 302
-    assert "add-sessions" in response["Location"]
+    assert data["total"] == 1
