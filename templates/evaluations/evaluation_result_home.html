@@ -43,6 +43,18 @@
             <i class="fa-solid fa-upload"></i>
             Edit Results
           </a>
+          {% if evaluation_run.type != "preview" %}
+            <form method="post"
+                  action="{% url 'evaluations:evaluation_run_undo_tags' request.team.slug evaluation_run.config_id evaluation_run.id %}">
+              {% csrf_token %}
+              <button type="submit"
+                      class="btn btn-outline btn-warning"
+                      onclick="return confirm('This will remove all tags applied by this run and restore the previous run\'s tags. Are you sure?')">
+                <i class="fa-solid fa-rotate-left"></i>
+                Undo Applied Tags
+              </button>
+            </form>
+          {% endif %}
         </div>
       {% endif %}
     </div>
