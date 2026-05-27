@@ -9,7 +9,8 @@ This guide explains how to make user docs changes that are clear, accurate, and 
 ## Before You Make a Change
 
 - Is this a user docs change, or should it go in [developer docs instead](#user-docs-vs-developer-docs)?
-- If you have user-facing code changes, use the AI-assisted docs/changelog automation [(i.e., the changelog process)](../developer_guides/user_docs.md#manual-trigger-in-docs-repo).
+- If you have user-facing code changes, use the AI-assisted docs/changelog automation [(i.e., the changelog process)](../developer_guides/user_docs.md).
+   - Note: If you are developing on a fork, the automated process to create user docs on a PR will fail, so you have to do this [manually](../developer_guides/user_docs.md#manual-option) or ask the Dimagi team to [run the GitHub action.](../developer_guides/user_docs.md#manual-trigger-in-docs-repo)
 - Are you updating an existing page, or should this be a new page?
 - Does the wording match the current product UI?
 - Will renaming or removing a page [break links](#if-you-move-or-rename-a-docs-page) pointing to that page?
