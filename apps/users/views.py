@@ -33,8 +33,9 @@ def profile(request):
         if form.is_valid():
             user = form.save(commit=False)
             user_before_update = CustomUser.objects.get(pk=user.pk)
+            email_changed = user_before_update.email != user.email
             need_to_confirm_email = (
-                user_before_update.email != user.email
+                email_changed
                 and require_email_confirmation()
                 and not user_has_confirmed_email_address(user, user.email)
             )
@@ -47,6 +48,15 @@ def profile(request):
                 # recreate the form to avoid populating the previous email in the returned page
                 form = CustomUserChangeForm(instance=user)
             user.save()
+
+            if email_changed and not need_to_confirm_email:
+                # The email was changed to one the user already owns (e.g. an already-verified
+                # secondary address). Keep allauth's primary EmailAddress in sync with the user's
+                # email so login codes etc. are sent to the right place. See apps/users/signals.py
+                # for the equivalent behavior when a brand-new email is confirmed.
+                email_address = EmailAddress.objects.filter(user=user, email__iexact=user.email).first()
+                if email_address:
+                    email_address.set_as_primary()
 
             user_language = user.language
             if user_language and user_language != translation.get_language():
