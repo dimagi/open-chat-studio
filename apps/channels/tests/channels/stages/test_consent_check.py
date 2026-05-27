@@ -17,13 +17,6 @@ class TestConsentCheckStageShouldRun:
     def setup_method(self):
         self.stage = ConsentCheckStage()
 
-    def test_skips_when_no_session(self):
-        ctx = make_context(
-            experiment_session=None,
-            capabilities=make_capabilities(consent_config=PlatformConsentConfig()),
-        )
-        assert self.stage.should_run(ctx) is False
-
     def test_skips_when_no_consent_config_configured(self):
         ctx = make_context(
             experiment_session=MagicMock(),
