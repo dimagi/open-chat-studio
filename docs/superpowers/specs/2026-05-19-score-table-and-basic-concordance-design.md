@@ -1,3 +1,6 @@
+---
+status: stable
+---
 # Score table and basic concordance — design
 
 > First incremental step toward the [unified assessment system](../../design/unified-assessment.md). Introduces the design's `Score` value layer (lean shape), dual-write from existing `EvaluationResult` and `Annotation` records, a backfill for historical data, and a minimal concordance view that compares one categorical field across the two subsystems.
