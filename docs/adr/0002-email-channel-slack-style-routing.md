@@ -8,13 +8,13 @@
 
 ## Context
 
-An inbound email must be routed to (a) the correct experiment and (b) the correct ongoing conversation if one already exists. The system already has working channels for Slack, Telegram, and WhatsApp; Slack's routing chain (`thread_ts` → `slack_channel_id` → `SLACK_ALL_CHANNELS` default) in `apps/slack/slack_listeners.py:get_experiment_channel()` is a tested precedent. Email surfaces analogous signals: `In-Reply-To` / `References` headers (thread analog), the to-address (channel analog), and a per-team "default" channel for unsolicited mail.
+An inbound email must be routed to (a) the correct experiment and (b) the correct ongoing conversation if one already exists. The system already has working channels for Slack, Telegram, and WhatsApp; Slack's routing chain (`thread_ts` → `slack_channel_id` → `SLACK_ALL_CHANNELS` default) in `apps/slack/slack_listeners.py:get_experiment_channel()` is a tested precedent. Email surfaces analogous signals: `In-Reply-To` / `References` headers (thread analog), the to-address (channel analog), and a global "default" channel for unsolicited mail.
 
 We also need to decide what to do when nothing matches, and how to identify the participant. Sending an automated reply on no-match can trigger bounce loops against another autoresponder. Identity is non-trivial because a single human can write from multiple addresses, but a richer identity model is out of scope for v1.
 
 ## Decision
 
-We will route inbound email using a four-tier priority chain that mirrors Slack: (1) the `In-Reply-To` header is looked up against `ExperimentSession.external_id`; (2) if that misses, each `Message-ID` in the `References` header is scanned in turn; (3) the to-address is matched against `ExperimentChannel.extra_data["email_address"]`, creating a new session; (4) if no channel matches the to-address, a channel with `extra_data["is_default"] == True` for the team handles it. If even the default is absent we silently drop the message — never auto-reply on no-match. The participant identifier is the sender's email `addr_spec`; multi-address resolution is an accepted v1 limitation.
+We will route inbound email using a four-tier priority chain that mirrors Slack: (1) the `In-Reply-To` header is looked up against `ExperimentSession.external_id`; (2) if that misses, each `Message-ID` in the `References` header is scanned in turn; (3) the to-address is matched against `ExperimentChannel.extra_data["email_address"]`, creating a new session; (4) if no channel matches the to-address, a channel with `extra_data["is_default"] == True` handles it — a global fallback checked across all teams, not team-scoped (see `get_email_experiment_channel` in `apps/channels/channels_v2/email_channel.py`). If even the default is absent we silently drop the message — never auto-reply on no-match. The participant identifier is the sender's email `addr_spec`; multi-address resolution is an accepted v1 limitation.
 
 ## Consequences
 

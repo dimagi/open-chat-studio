@@ -11,8 +11,6 @@ Drive a guided conversation that converts a stable design or spec document into 
 
 **Format reference:** the canonical ADR template at `.claude/skills/extract-adrs/templates/adr-template.md` (and its twin at `docs/adr/_template.md`) defines the file structure. Status is an inline HTML `<span>` pill — there is no YAML frontmatter on ADR files. See `docs/adr/0000-record-architecture-decisions.md` for a worked example.
 
-**Spec:** `docs/superpowers/specs/2026-05-26-adr-workflow-design.md` describes the rationale and workflow design.
-
 ## Phase 1 — Gate check
 
 1. Read the source doc's YAML frontmatter (the leading `---` block, if any).
