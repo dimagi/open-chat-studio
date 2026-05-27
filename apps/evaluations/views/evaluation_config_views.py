@@ -623,11 +623,13 @@ def undo_evaluation_run_tags(request, team_slug: str, evaluation_pk: int, evalua
     evaluation_run = get_object_or_404(
         EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
     )
+    run_home_url = reverse(
+        "evaluations:evaluation_results_home",
+        args=[team_slug, evaluation_pk, evaluation_run_pk],
+    )
+    if evaluation_run.status != EvaluationRunStatus.COMPLETED:
+        messages.error(request, "Can only undo tags on a completed run.")
+        return HttpResponseRedirect(run_home_url)
     undo_run_tags(evaluation_run)
     messages.success(request, "Tags have been reset to the previous run's state.")
-    return HttpResponseRedirect(
-        reverse(
-            "evaluations:evaluation_results_home",
-            args=[team_slug, evaluation_pk, evaluation_run_pk],
-        )
-    )
+    return HttpResponseRedirect(run_home_url)
