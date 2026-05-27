@@ -2,6 +2,7 @@ import contextlib
 import logging
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
+from typing import Literal
 
 import openai
 from django.conf import settings
@@ -18,6 +19,7 @@ from apps.service_providers.exceptions import UnableToLinkFileException
 logger = logging.getLogger("ocs.index_manager")
 
 Vector = list[float]
+EmbeddingInputType = Literal["document", "query"]
 
 
 class IndexManager(metaclass=ABCMeta):
@@ -250,12 +252,15 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         self.embedding_model_name = embedding_model_name
 
     @abstractmethod
-    def get_embedding_vector(self, content: str) -> Vector:
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
         """
         Generate an embedding vector for the given text content.
 
         Args:
             content: The text content to generate embeddings for.
+            input_type: "document" when indexing source text, "query" when embedding
+                a retrieval query. Voyage and Google return different embeddings for
+                each; OpenAI ignores it.
 
         Returns:
             Vector: A list of floats representing the embedding vector.
@@ -274,7 +279,16 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
-                    embedding_vector = self.get_embedding_vector(chunk)
+                    if not safe_chunk:
+                        # Voyage rejects empty input; OpenAI and Google return API errors.
+                        # Skipping avoids aborting the whole file over a NUL-only chunk and
+                        # leaving partial embeddings behind for a CollectionFile marked FAILED.
+                        logger.warning(
+                            "Skipping empty chunk after NUL stripping",
+                            extra={"file_id": file.id, "chunk_index": idx, "total_chunks": len(text_chunks)},
+                        )
+                        continue
+                    embedding_vector = self.get_embedding_vector(safe_chunk, input_type="document")
                     embeddings.append(
                         FileChunkEmbedding.objects.create(
                             team_id=file.team_id,
@@ -346,7 +360,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             list[FileChunkEmbedding]: List of FileChunkEmbedding instances matching the query.
         """
 
-        embedding_vector = self.get_embedding_vector(query)
+        embedding_vector = self.get_embedding_vector(query, input_type="query")
         return (
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", embedding_vector))
             .filter(collection_id=index_id)
@@ -360,22 +374,59 @@ class OpenAILocalIndexManager(LocalIndexManager):
     """
     OpenAI-specific implementation of LocalIndexManager.
 
-    This class provides concrete implementations for local embedding operations
-    using OpenAI's embedding models and text processing utilities. It handles
-    text chunking using tiktoken encoding and generates embeddings via OpenAI's API.
+    Supports custom OpenAI-compatible endpoints via `openai_api_base` so local
+    indexing works against gateways like LiteLLM or self-hosted proxies.
     """
 
-    def get_embedding_vector(self, content: str) -> Vector:
+    def __init__(
+        self,
+        api_key: str,
+        embedding_model_name: str,
+        openai_api_base: str | None = None,
+    ):
+        """Build an OpenAI local index manager.
+
+        When `openai_api_base` is set, it is passed as `base_url` to
+        `OpenAIEmbeddings` so local indexing routes through an
+        OpenAI-compatible endpoint (e.g. LiteLLM, a self-hosted gateway).
+        """
+        super().__init__(api_key=api_key, embedding_model_name=embedding_model_name)
+        self._openai_api_base = openai_api_base
+
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
+        """Generate an OpenAI embedding for the given content.
+
+        The document/query branches call `embed_documents` vs `embed_query`.
+        OpenAI's API treats both identically; the routing is applied for
+        interface consistency with Voyage and Google.
+        """
         from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        embeddings = OpenAIEmbeddings(
-            api_key=self._api_key, model=self.embedding_model_name, dimensions=settings.EMBEDDING_VECTOR_SIZE
-        )
-        return embeddings.embed_query(content)
+        kwargs: dict = {
+            "api_key": self._api_key,
+            "model": self.embedding_model_name,
+            "dimensions": settings.EMBEDDING_VECTOR_SIZE,
+        }
+        if self._openai_api_base:
+            kwargs["base_url"] = self._openai_api_base
+        embeddings = OpenAIEmbeddings(**kwargs)
+        if input_type == "document":
+            return embeddings.embed_documents([content])[0]
+        if input_type == "query":
+            return embeddings.embed_query(content)
+        raise ValueError(f"Unknown input_type: {input_type!r}")
 
 
 class GoogleLocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str) -> Vector:
+    """Google Gemini-specific implementation of LocalIndexManager."""
+
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
+        """Generate a Google embedding, routing by `input_type`.
+
+        Document path uses `task_type="RETRIEVAL_DOCUMENT"`; query path uses
+        `task_type="RETRIEVAL_QUERY"`. Both paths pass `output_dimensionality`
+        so the result fits the fixed-size `HalfVectorField` column.
+        """
         from langchain_google_genai import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             GoogleGenerativeAIEmbeddings,
         )
@@ -383,11 +434,33 @@ class GoogleLocalIndexManager(LocalIndexManager):
         embeddings = GoogleGenerativeAIEmbeddings(
             google_api_key=self._api_key, model=f"models/{self.embedding_model_name}"
         )
-        return embeddings.embed_query(content, output_dimensionality=settings.EMBEDDING_VECTOR_SIZE)
+        if input_type == "document":
+            # task_type is required on embed_documents: langchain-google-genai
+            # does not default it (only embed_query defaults to RETRIEVAL_QUERY).
+            return embeddings.embed_documents(
+                [content],
+                output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+                task_type="RETRIEVAL_DOCUMENT",
+            )[0]
+        if input_type == "query":
+            return embeddings.embed_query(
+                content,
+                output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+                task_type="RETRIEVAL_QUERY",
+            )
+        raise ValueError(f"Unknown input_type: {input_type!r}")
 
 
 class VoyageAILocalIndexManager(LocalIndexManager):
-    def get_embedding_vector(self, content: str) -> Vector:
+    """Voyage-specific implementation of LocalIndexManager."""
+
+    def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
+        """Generate a Voyage embedding, routing by `input_type`.
+
+        The langchain wrapper maps `embed_documents` and `embed_query` to
+        Voyage's `input_type=document` and `input_type=query` API params
+        respectively, which return different vectors for documents vs queries.
+        """
         if not content:
             raise ValueError("Cannot embed empty string")
 
@@ -398,4 +471,8 @@ class VoyageAILocalIndexManager(LocalIndexManager):
             model=self.embedding_model_name,
             output_dimension=settings.EMBEDDING_VECTOR_SIZE,
         )
-        return embeddings.embed_query(content)
+        if input_type == "document":
+            return embeddings.embed_documents([content])[0]
+        if input_type == "query":
+            return embeddings.embed_query(content)
+        raise ValueError(f"Unknown input_type: {input_type!r}")

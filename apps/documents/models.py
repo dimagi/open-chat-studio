@@ -328,7 +328,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             raise IndexConfigurationException("Embedding provider model is missing this collection")
 
         index_manager = self.get_index_manager()
-        return index_manager.get_embedding_vector(query)
+        return index_manager.get_embedding_vector(query, input_type="query")
 
     def add_files_to_index(
         self,

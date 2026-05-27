@@ -236,7 +236,11 @@ class OpenAILlmService(OpenAIGenericService):
             OpenAILocalIndexManager,
         )
 
-        return OpenAILocalIndexManager(api_key=self.openai_api_key, embedding_model_name=embedding_model_name)
+        return OpenAILocalIndexManager(
+            api_key=self.openai_api_key,
+            embedding_model_name=embedding_model_name,
+            openai_api_base=self.openai_api_base,
+        )
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         file_ids_param = NOT_GIVEN if file_ids is None else file_ids
