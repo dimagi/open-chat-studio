@@ -114,20 +114,19 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Load the existing active session using the participant FK when
-        # available. If ctx.participant is None the participant is new and
-        # no session can exist yet, so skip the query.
-        if ctx.participant is not None:
-            ctx.experiment_session = (
-                ExperimentSession.objects.filter(
-                    experiment=ctx.experiment.get_working_version(),
-                    participant=ctx.participant,
-                )
-                .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
-                .select_related("participant", "chat", "experiment_channel")
-                .order_by("-created_at")
-                .first()
+        # ParticipantResolverStage always creates/fetches the participant
+        # before this stage runs, so ctx.participant is guaranteed to be set.
+        assert ctx.participant is not None
+        ctx.experiment_session = (
+            ExperimentSession.objects.filter(
+                experiment=ctx.experiment.get_working_version(),
+                participant=ctx.participant,
             )
+            .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
+            .select_related("participant", "chat", "experiment_channel")
+            .order_by("-created_at")
+            .first()
+        )
 
         # Check for /reset after loading the session so that _handle_reset
         # has access to ctx.experiment_session and can properly end it.
