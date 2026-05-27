@@ -1,0 +1,29 @@
+{% if not experiment.consent_form_id %}
+  <div role="alert" class="alert alert-warning my-4" id="chatbot-consent-missing-banner">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <div>
+      <div class="font-semibold">No consent form configured for this chatbot</div>
+      <div class="text-sm">
+        Participants will not be asked for consent before chatting.
+        <a href="#tab-settings"
+           onclick="document.getElementById('tab-settings').checked = true; showTabContent('settings');"
+           class="link">Open settings</a>
+        to attach a consent form.
+      </div>
+    </div>
+  </div>
+{% elif not experiment.conversational_consent_enabled %}
+  <div role="alert" class="alert alert-info my-4" id="chatbot-consent-disabled-banner">
+    <i class="fa-solid fa-circle-info"></i>
+    <div>
+      <div class="font-semibold">Conversational consent is disabled</div>
+      <div class="text-sm">
+        A consent form is attached but is not shown automatically at the start of conversations on external channels.
+        <a href="#tab-settings"
+           onclick="document.getElementById('tab-settings').checked = true; showTabContent('settings');"
+           class="link">Open settings</a>
+        to enable it.
+      </div>
+    </div>
+  </div>
+{% endif %}
