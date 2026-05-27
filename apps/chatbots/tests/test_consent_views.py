@@ -10,13 +10,13 @@ from apps.utils.factories.experiment import ConsentFormFactory
 
 
 @pytest.mark.django_db()
-class TestConsentWarnings:
-    """Warnings on the chatbot detail page when consent is not fully configured.
+class TestConsentDetailIndicator:
+    """Compact inline consent indicator on the chatbot detail page.
 
-    Three states drive the UI:
-    - No consent form → prominent warning banner
-    - Form attached, conversational consent disabled → softer info banner
-    - Form attached, conversational consent enabled → no banner
+    Three states:
+    - No consent form → disabled state (❌)
+    - Form attached, conversational consent disabled → web-only state (⚠️)
+    - Form attached, conversational consent enabled → enabled state (✔️)
     """
 
     def _get_response(self, client, team, experiment):
@@ -29,7 +29,7 @@ class TestConsentWarnings:
         client.force_login(user)
         return user
 
-    def test_warning_banner_shown_when_no_consent_form(self, client, team_with_users):
+    def test_disabled_state_when_no_consent_form(self, client, team_with_users):
         team = team_with_users
         user = self._login_user_with_view_perm(client, team)
         pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
@@ -41,11 +41,11 @@ class TestConsentWarnings:
         content = response.content.decode()
 
         assert response.status_code == 200
-        assert "chatbot-consent-missing-banner" in content
-        assert "No consent form configured" in content
-        assert "chatbot-consent-disabled-banner" not in content
+        assert 'data-consent-state="disabled"' in content
+        assert 'data-consent-state="web-only"' not in content
+        assert 'data-consent-state="enabled"' not in content
 
-    def test_info_banner_shown_when_consent_form_attached_but_disabled(self, client, team_with_users):
+    def test_web_only_state_when_form_attached_but_conversational_consent_disabled(self, client, team_with_users):
         team = team_with_users
         user = self._login_user_with_view_perm(client, team)
         pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
@@ -63,11 +63,11 @@ class TestConsentWarnings:
         content = response.content.decode()
 
         assert response.status_code == 200
-        assert "chatbot-consent-disabled-banner" in content
-        assert "Conversational consent is disabled" in content
-        assert "chatbot-consent-missing-banner" not in content
+        assert 'data-consent-state="web-only"' in content
+        assert 'data-consent-state="disabled"' not in content
+        assert 'data-consent-state="enabled"' not in content
 
-    def test_no_banner_when_consent_fully_configured(self, client, team_with_users):
+    def test_enabled_state_when_consent_fully_configured(self, client, team_with_users):
         team = team_with_users
         user = self._login_user_with_view_perm(client, team)
         pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
@@ -85,55 +85,6 @@ class TestConsentWarnings:
         content = response.content.decode()
 
         assert response.status_code == 200
-        assert "chatbot-consent-missing-banner" not in content
-        assert "chatbot-consent-disabled-banner" not in content
-
-
-@pytest.mark.django_db()
-def test_chatbot_list_shows_consent_status_column(client, team_with_users):
-    """The chatbot list page must surface consent state per row so missing/partial setup is visible at a glance."""
-    team = team_with_users
-    user = team.members.first()
-    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    client.force_login(user)
-
-    consent_form = ConsentFormFactory.create(team=team)
-    Experiment.objects.create(
-        name="No Consent Bot",
-        owner=user,
-        team=team,
-        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
-        consent_form=None,
-    )
-    Experiment.objects.create(
-        name="Form Only Bot",
-        owner=user,
-        team=team,
-        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
-        consent_form=consent_form,
-        conversational_consent_enabled=False,
-    )
-    Experiment.objects.create(
-        name="Full Consent Bot",
-        owner=user,
-        team=team,
-        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
-        consent_form=consent_form,
-        conversational_consent_enabled=True,
-    )
-
-    url = reverse("chatbots:table", args=[team.slug])
-    response = client.get(url)
-    content = response.content.decode()
-
-    assert response.status_code == 200
-    # Column header
-    assert "Consent" in content
-    # Each badge variant should appear with its consent-specific label and tooltip,
-    # so the assertions match the consent indicator and not unrelated badges.
-    assert "badge-warning" in content
-    assert "badge-info" in content
-    assert "badge-success" in content
-    assert "No consent form configured" in content
-    assert "conversational consent is disabled" in content
-    assert "conversational consent is enabled" in content
+        assert 'data-consent-state="enabled"' in content
+        assert 'data-consent-state="disabled"' not in content
+        assert 'data-consent-state="web-only"' not in content

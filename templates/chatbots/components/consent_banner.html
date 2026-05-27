@@ -1,29 +1,8 @@
+<span class="font-semibold text-sm mr-1">Consent:</span>
 {% if not experiment.consent_form_id %}
-  <div role="alert" class="alert alert-warning my-4" id="chatbot-consent-missing-banner">
-    <i class="fa-solid fa-triangle-exclamation"></i>
-    <div>
-      <div class="font-semibold">No consent form configured for this chatbot</div>
-      <div class="text-sm">
-        Participants will not be asked for consent before chatting.
-        <a href="#tab-settings"
-           onclick="document.getElementById('tab-settings').checked = true; showTabContent('settings');"
-           class="link">Open settings</a>
-        to attach a consent form.
-      </div>
-    </div>
-  </div>
+  <span data-consent-state="disabled" class="text-sm" title="No consent form configured — participants are never asked for consent"><i class="fa-solid fa-xmark text-error"></i> <span class="opacity-60">(disabled)</span></span>
 {% elif not experiment.conversational_consent_enabled %}
-  <div role="alert" class="alert alert-info my-4" id="chatbot-consent-disabled-banner">
-    <i class="fa-solid fa-circle-info"></i>
-    <div>
-      <div class="font-semibold">Conversational consent is disabled</div>
-      <div class="text-sm">
-        A consent form is attached but is not shown automatically at the start of conversations on external channels.
-        <a href="#tab-settings"
-           onclick="document.getElementById('tab-settings').checked = true; showTabContent('settings');"
-           class="link">Open settings</a>
-        to enable it.
-      </div>
-    </div>
-  </div>
+  <span data-consent-state="web-only" class="text-sm" title="Consent form attached but conversational consent is disabled">⚠️ <span class="opacity-60">(web only)</span></span>
+{% else %}
+  <span data-consent-state="enabled" class="text-sm text-success" title="Consent form configured and conversational consent is enabled">✔️</span>
 {% endif %}
