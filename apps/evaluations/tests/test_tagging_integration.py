@@ -629,8 +629,8 @@ class TestUndoRunTags:
         _stamp(prev_run, timedelta(hours=-1))
 
         # Build current run (applied "good")
+        # No _stamp needed: prev_run is at now()-1h, so curr_run's natural created_at is later.
         curr_run = self._make_run(team, config, {"result": {"sentiment": "positive"}}, rule_pos, message)
-        _stamp(curr_run, timedelta(seconds=0))
 
         # Simulate what reverse_stale_tags would have done: remove "bad" from target
         chat_message = message.expected_output_chat_message
@@ -661,6 +661,57 @@ class TestUndoRunTags:
         # Should return early without touching DB
         undo_run_tags(run)
         assert CustomTaggedItem.objects.count() == 0
+
+    def test_delta_run_only_processes_scoped_messages(self, team):
+        """DELTA runs scope to scoped_messages; undo only touches those targets."""
+        config, evaluator, rule_neg, _, message = self._make_setup(team)
+        # Add a second message NOT in the delta scope
+        other_message = EvaluationMessageFactory.create(create_chat_messages=True)
+        config.dataset.messages.add(other_message)
+
+        # Apply the tag to other_message directly (simulating a previous run's effect)
+        # We'll use apply_rules_to_result with a separate run so it has AppliedTag rows
+        setup_run = EvaluationRunFactory.create(
+            team=team,
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.FULL,
+        )
+        other_result = EvaluationResultFactory.create(
+            team=team,
+            evaluator=evaluator,
+            message=other_message,
+            run=setup_run,
+            output={"result": {"sentiment": "negative"}},
+        )
+        apply_rules_to_result(other_result, evaluator, other_message)
+        _stamp(setup_run, timedelta(hours=-2))
+
+        # DELTA run scoped only to `message` (not `other_message`)
+        delta_run = EvaluationRunFactory.create(
+            team=team,
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.DELTA,
+        )
+        delta_result = EvaluationResultFactory.create(
+            team=team,
+            evaluator=evaluator,
+            message=message,
+            run=delta_run,
+            output={"result": {"sentiment": "negative"}},
+        )
+        apply_rules_to_result(delta_result, evaluator, message)
+        delta_run.scoped_messages.add(message)
+        _stamp(delta_run, timedelta(hours=-1))
+
+        other_chat_message = other_message.expected_output_chat_message
+        assert other_chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+
+        undo_run_tags(delta_run)
+
+        # other_message was NOT in the delta scope — its tag must be untouched
+        assert other_chat_message.tags.filter(pk=rule_neg.tag_id).exists()
 
     def test_session_mode_restores_chat_tags(self, team):
         """Session-mode runs tag the Chat object; undo must restore those tags."""
