@@ -74,6 +74,9 @@ nav:
       - 0001 Use AWS SES + django-anymail signal handler for email ingress: adr/0001-use-anymail-webhook-for-email-ingress.md
       - 0002 Slack-style routing priority chain for email channel: adr/0002-email-channel-slack-style-routing.md
       - 0003 Email thread continuity via ExperimentSession.external_id: adr/0003-email-thread-continuity-via-external-id.md
+      - 0004 Persist inbound email attachments in the webhook handler: adr/0004-persist-inbound-email-attachments-in-handler.md
+      - 0005 Validate inbound email attachments by content sniffing: adr/0005-validate-inbound-email-attachments-by-content.md
+      - 0006 Combine email reply text and attachments into a single message: adr/0006-combine-email-reply-text-and-attachments.md
   - Developer Guides:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md

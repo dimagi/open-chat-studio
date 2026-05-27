@@ -23,3 +23,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0001](0001-use-anymail-webhook-for-email-ingress.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Use AWS SES + django-anymail signal handler for email ingress |
 | [0002](0002-email-channel-slack-style-routing.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Slack-style routing priority chain for email channel |
 | [0003](0003-email-thread-continuity-via-external-id.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Email thread continuity via ExperimentSession.external_id |
+| [0004](0004-persist-inbound-email-attachments-in-handler.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Persist inbound email attachments in the webhook handler |
+| [0005](0005-validate-inbound-email-attachments-by-content.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Validate inbound email attachments by content sniffing |
+| [0006](0006-combine-email-reply-text-and-attachments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Combine email reply text and attachments into a single message |
