@@ -38,9 +38,11 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
+from apps.utils.langchain import build_fake_llm_service
 
 
 @pytest.fixture()
@@ -424,6 +426,24 @@ class TestExperimentSession:
         # Verify that the database changes were rolled back
         final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
         assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
+
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    def test_ad_hoc_message_links_ai_message_to_trace(
+        self, mock_get_llm_service, from_experiment_session, experiment_session
+    ):
+        """The Trace created during ad_hoc_bot_message should reference the AI ChatMessage it produced."""
+        mock_get_llm_service.return_value = build_fake_llm_service(responses=["Bot reply"])
+        LlmProviderFactory.create(team=experiment_session.experiment.team)
+        from_experiment_session.return_value = Mock()
+
+        experiment_session.ad_hoc_bot_message("Tell the user we're testing", TraceInfo(name="test"))
+
+        ai_message = ChatMessage.objects.get(chat=experiment_session.chat, message_type=ChatMessageType.AI)
+        assert ai_message.content == "Bot reply"
+
+        trace = Trace.objects.get(session=experiment_session)
+        assert trace.output_message_id == ai_message.id
 
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):

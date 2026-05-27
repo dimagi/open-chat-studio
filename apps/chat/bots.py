@@ -385,7 +385,9 @@ class EventBot:
             span.set_outputs({"response": message})
 
             if self.history_manager:
-                self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
+                ai_message = self.history_manager.save_message_to_history(message, type_=ChatMessageType.AI)
+                if ai_message is not None:
+                    self.trace_service.set_output_message_id(ai_message.id)
         return message
 
     @property
