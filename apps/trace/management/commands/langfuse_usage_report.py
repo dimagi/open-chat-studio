@@ -89,7 +89,9 @@ class Command(BaseCommand):
         for tp in sorted(providers, key=lambda p: (p.team.slug, p.id)):
             experiments = list(tp.experiment_set.values_list("id", "name", "is_archived")) or [(None, "", None)]
             for eid, ename, archived in experiments:
-                u = usage.get(eid, {"count": 0, "last": None})
+                # eid is None only for the "no experiments" placeholder; never attribute
+                # orphan (null-experiment) traces in usage[None] to such a provider row.
+                u = usage.get(eid, {"count": 0, "last": None}) if eid is not None else {"count": 0, "last": None}
                 rows.append(
                     {
                         "team_slug": tp.team.slug,
@@ -126,45 +128,63 @@ class Command(BaseCommand):
         self.stdout.write(buffer.getvalue(), ending="")
 
     def _print_report(self, host, days, providers, rows, usage):
+        """Render the grouped, human-readable report (team -> provider -> experiment)."""
         out = self.stdout
-        style = self.style
-
-        out.write(style.MIGRATE_HEADING(f"\nLangfuse usage report — host: {host}/  (recent window: {days}d)\n"))
-
+        out.write(self.style.MIGRATE_HEADING(f"\nLangfuse usage report — host: {host}/  (recent window: {days}d)\n"))
         if not providers:
-            out.write(style.WARNING("No Langfuse trace providers configured with this host.\n"))
+            out.write(self.style.WARNING("No Langfuse trace providers configured with this host.\n"))
 
-        # Group rows by team -> provider for a tidy report.
-        by_team = defaultdict(lambda: defaultdict(list))
+        grouped = self._group_by_team(rows)
+        for (slug, tname), provider_rows in grouped.items():
+            out.write(self.style.HTTP_INFO(f"\n[{slug}] {tname}"))
+            for (pid, pname), exp_rows in provider_rows.items():
+                self._print_provider_block(pid, pname, exp_rows, days)
+
+        self._print_summary(providers, rows, usage, len(grouped))
+
+    @staticmethod
+    def _group_by_team(rows):
+        """Group flat rows into {(team_slug, team_name): {(provider_id, provider_name): [rows]}}.
+
+        Rows arrive pre-sorted by (team slug, provider id), and defaultdict preserves insertion
+        order, so the grouped output keeps that ordering.
+        """
+        grouped = defaultdict(lambda: defaultdict(list))
         for row in rows:
-            by_team[(row["team_slug"], row["team_name"])][(row["provider_id"], row["provider_name"])].append(row)
+            grouped[(row["team_slug"], row["team_name"])][(row["provider_id"], row["provider_name"])].append(row)
+        return grouped
 
-        for (slug, tname), providers_rows in sorted(by_team.items()):
-            out.write(style.HTTP_INFO(f"\n[{slug}] {tname}"))
-            for (pid, pname), exp_rows in providers_rows.items():
-                has_experiments = exp_rows[0]["experiment_id"] is not None
-                n = len(exp_rows) if has_experiments else 0
-                out.write(f'  provider #{pid} "{pname}" — {n} experiment(s)')
-                if not has_experiments:
-                    out.write(style.WARNING("    (no experiments reference this provider)"))
-                    continue
-                for r in exp_rows:
-                    archived_tag = " [archived]" if r["archived"] else ""
-                    last = r["last_trace"] or "—"
-                    out.write(
-                        f'    exp #{r["experiment_id"]} "{r["experiment_name"]}"{archived_tag}'
-                        f" — {r['recent_trace_count']} traces / {days}d (last: {last})"
-                    )
+    def _print_provider_block(self, pid, pname, exp_rows, days):
+        """Print one provider header and its per-experiment usage lines."""
+        out = self.stdout
+        has_experiments = exp_rows[0]["experiment_id"] is not None
+        count = len(exp_rows) if has_experiments else 0
+        out.write(f'  provider #{pid} "{pname}" — {count} experiment(s)')
+        if not has_experiments:
+            out.write(self.style.WARNING("    (no experiments reference this provider)"))
+            return
+        for r in exp_rows:
+            archived_tag = " [archived]" if r["archived"] else ""
+            last = r["last_trace"] or "—"
+            out.write(
+                f'    exp #{r["experiment_id"]} "{r["experiment_name"]}"{archived_tag}'
+                f" — {r['recent_trace_count']} traces / {days}d (last: {last})"
+            )
 
+    def _print_summary(self, providers, rows, usage, team_count):
+        """Print totals plus a warning for recent traces not linked to a matched provider's experiment."""
+        out = self.stdout
         total_recent = sum(r["recent_trace_count"] for r in rows)
         # Recent traces whose experiment is not (or no longer) linked to a matched provider.
         linked_exp_ids = {r["experiment_id"] for r in rows if r["experiment_id"] is not None}
         orphan_count = sum(u["count"] for eid, u in usage.items() if eid not in linked_exp_ids)
 
-        out.write(style.MIGRATE_HEADING("\nSummary"))
+        out.write(self.style.MIGRATE_HEADING("\nSummary"))
         out.write(f"  Configured providers : {len(providers)}")
-        out.write(f"  Teams referencing    : {len(by_team)}")
+        out.write(f"  Teams referencing    : {team_count}")
         out.write(f"  Recent traces (linked experiments) : {total_recent}")
         if orphan_count:
-            out.write(style.WARNING(f"  Recent traces on this host w/o a linked provider experiment : {orphan_count}"))
+            out.write(
+                self.style.WARNING(f"  Recent traces on this host w/o a linked provider experiment : {orphan_count}")
+            )
         out.write("")
