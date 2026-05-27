@@ -1,3 +1,7 @@
+---
+status: stable
+---
+
 # Email channel allowed-domains setting
 
 ## Goal

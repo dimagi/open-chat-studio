@@ -1,3 +1,7 @@
+---
+status: stable
+---
+
 # Auto-populate Eval Datasets — Design
 
 GitHub issue: [dimagi/open-chat-studio#3044](https://github.com/dimagi/open-chat-studio/issues/3044).

@@ -1,3 +1,7 @@
+---
+status: stable
+---
+
 # JSON Collection Document Loader — Design
 
 GitHub issue: [dimagi/open-chat-studio#3176](https://github.com/dimagi/open-chat-studio/issues/3176)
