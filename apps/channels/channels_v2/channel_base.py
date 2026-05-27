@@ -122,8 +122,8 @@ class ChannelBase(ABC):
             core_stages=[
                 ParticipantValidationStage(),
                 ParticipantResolverStage(),
-                SessionResolutionStage(),
                 ConsentCheckStage(),
+                SessionResolutionStage(),
                 SessionActivationStage(),
                 AttachmentHydrationStage(),
                 MessageTypeValidationStage(),

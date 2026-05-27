@@ -244,7 +244,7 @@ class ConsentCheckStage(ProcessingStage):
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.experiment_session is not None and ctx.capabilities.consent_config is not None
+        return ctx.capabilities.consent_config is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
         config = ctx.capabilities.consent_config
