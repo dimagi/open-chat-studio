@@ -824,6 +824,8 @@ class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequired
     paginator_class = LazyPaginator
 
     def get_queryset(self):
+        # 404 if the dataset isn't in this team (the helper below is team-scoped but
+        # wouldn't otherwise reject an unknown/foreign dataset id).
         get_object_or_404(EvaluationDataset, id=self.kwargs["pk"], team=self.request.team)
         qs = _get_dataset_available_sessions(self.request, self.kwargs["pk"])
         msg_count_sq = (
