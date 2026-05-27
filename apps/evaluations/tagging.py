@@ -229,6 +229,10 @@ def undo_run_tags(run: EvaluationRun) -> None:
 
     Note: AppliedTag audit rows are never deleted — they remain as history.
     Only CustomTaggedItem (live tag state) is mutated.
+
+    Note: not wrapped in transaction.atomic(). If the bulk_create fails after
+    the delete, the undo will be partial; re-running undo or the next full run
+    will reconcile.
     """
     if run.type == EvaluationRunType.PREVIEW:
         return
