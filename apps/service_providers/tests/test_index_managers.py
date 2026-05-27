@@ -9,12 +9,14 @@ from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.llm_service.index_managers import (
+    GoogleLocalIndexManager,
     LocalIndexManager,
     OpenAILocalIndexManager,
     OpenAIRemoteIndexManager,
     RemoteIndexManager,
     VoyageAILocalIndexManager,
 )
+from apps.service_providers.llm_service.main import OpenAILlmService
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 
@@ -39,7 +41,7 @@ class LocalIndexManagerMock(LocalIndexManager):
     def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
         return ["test", "content"]
 
-    def get_embedding_vector(self, text):  # ty: ignore[invalid-method-override]
+    def get_embedding_vector(self, text, *, input_type):  # ty: ignore[invalid-method-override]
         """Mock method to return a fixed embedding vector"""
         return [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
@@ -102,6 +104,71 @@ class TestLocalIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+
+    def test_add_files_calls_get_embedding_vector_with_document_input_type(self, local_index_instance, index_manager):
+        file = FileFactory.create()
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with (
+            mock.patch.object(file, "read_content", return_value="test content"),
+            mock.patch.object(
+                index_manager,
+                "get_embedding_vector",
+                wraps=index_manager.get_embedding_vector,
+            ) as spy,
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        assert spy.call_count == 2
+        for call in spy.call_args_list:
+            assert call.kwargs == {"input_type": "document"} or call.args[1:] == ("document",)
+
+    def test_add_files_skips_chunks_that_are_empty_after_nul_stripping(self, local_index_instance, index_manager):
+        """A chunk made up only of NUL bytes becomes "" after sanitization. Skip it so the
+        embedder is never called with an empty string (Voyage raises; OpenAI/Google reject
+        via the API) and no partial chunks are persisted for a file that then fails."""
+        file = FileFactory.create()
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with (
+            mock.patch.object(file, "read_content", return_value="irrelevant"),
+            mock.patch.object(index_manager, "chunk_file", return_value=["test", "\x00\x00", "content"]),
+            mock.patch.object(
+                index_manager,
+                "get_embedding_vector",
+                wraps=index_manager.get_embedding_vector,
+            ) as spy,
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.COMPLETED
+
+        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance).order_by(
+            "chunk_number"
+        )
+        assert embeddings.count() == 2
+        assert list(embeddings.values_list("text", flat=True)) == ["test", "content"]
+
+        assert spy.call_count == 2
+        embedded_texts = [call.args[0] for call in spy.call_args_list]
+        assert "" not in embedded_texts
+
+    def test_query_calls_get_embedding_vector_with_query_input_type(self, local_index_instance, index_manager):
+        with mock.patch.object(
+            index_manager,
+            "get_embedding_vector",
+            wraps=index_manager.get_embedding_vector,
+        ) as spy:
+            index_manager.query(index_id=local_index_instance.id, query="a question")
+
+        assert spy.call_count == 1
+        call = spy.call_args_list[0]
+        assert call.kwargs == {"input_type": "query"} or call.args[1:] == ("query",)
 
     def test_delete_embeddings(self, local_index_instance):
         file = FileFactory.create()
@@ -345,25 +412,156 @@ class TestOpenAILocalIndexManager:
         response = index_manager.chunk_file(file, chunk_size=2, chunk_overlap=0)
         assert response == ["This is", "test", "c", "on", "te", "nt", "."]
 
+    def test_get_embedding_vector_document_calls_embed_documents(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = [expected_vector]
+            result = index_manager.get_embedding_vector("some text", input_type="document")
+
+        mock_cls.return_value.embed_documents.assert_called_once_with(["some text"])
+        mock_cls.return_value.embed_query.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_query_calls_embed_query(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text", input_type="query")
+
+        mock_cls.return_value.embed_query.assert_called_once_with("some text")
+        mock_cls.return_value.embed_documents.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_passes_base_url_when_provided(self):
+        manager = OpenAILocalIndexManager(
+            api_key="api-123",
+            embedding_model_name="embedding-model",
+            openai_api_base="https://proxy.example.com/v1",
+        )
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = [0.0] * settings.EMBEDDING_VECTOR_SIZE
+            manager.get_embedding_vector("text", input_type="query")
+
+        mock_cls.assert_called_once_with(
+            api_key="api-123",
+            model="embedding-model",
+            dimensions=settings.EMBEDDING_VECTOR_SIZE,
+            base_url="https://proxy.example.com/v1",
+        )
+
+    def test_get_embedding_vector_omits_base_url_when_unset(self, index_manager):
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = [0.0] * settings.EMBEDDING_VECTOR_SIZE
+            index_manager.get_embedding_vector("text", input_type="query")
+
+        mock_cls.assert_called_once_with(
+            api_key="api-123",
+            model="embedding-model",
+            dimensions=settings.EMBEDDING_VECTOR_SIZE,
+        )
+
+    def test_get_embedding_vector_raises_on_unknown_input_type(self, index_manager):
+        with mock.patch("langchain_openai.OpenAIEmbeddings"):
+            with pytest.raises(ValueError, match="Unknown input_type"):
+                index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
+
+
+class TestGoogleLocalIndexManager:
+    @pytest.fixture()
+    def index_manager(self):
+        return GoogleLocalIndexManager(api_key="test-api-key", embedding_model_name="text-embedding-004")
+
+    def test_get_embedding_vector_document_calls_embed_documents_with_dimensionality(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = [expected_vector]
+            result = index_manager.get_embedding_vector("some text", input_type="document")
+
+        mock_cls.assert_called_once_with(
+            google_api_key="test-api-key",
+            model="models/text-embedding-004",
+        )
+        mock_cls.return_value.embed_documents.assert_called_once_with(
+            ["some text"],
+            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+            task_type="RETRIEVAL_DOCUMENT",
+        )
+        mock_cls.return_value.embed_query.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_query_calls_embed_query_with_dimensionality(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text", input_type="query")
+
+        mock_cls.return_value.embed_query.assert_called_once_with(
+            "some text",
+            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+            task_type="RETRIEVAL_QUERY",
+        )
+        mock_cls.return_value.embed_documents.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_raises_on_unknown_input_type(self, index_manager):
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings"):
+            with pytest.raises(ValueError, match="Unknown input_type"):
+                index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
+
 
 class TestVoyageAILocalIndexManager:
     @pytest.fixture()
     def index_manager(self):
         return VoyageAILocalIndexManager(api_key="test-api-key", embedding_model_name="voyage-4-large")
 
-    def test_get_embedding_vector(self, index_manager):
+    def test_get_embedding_vector_document_calls_embed_documents(self, index_manager):
         expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
         with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
-            mock_embeddings_cls.return_value.embed_query.return_value = expected_vector
-            result = index_manager.get_embedding_vector("some text")
+            mock_embeddings_cls.return_value.embed_documents.return_value = [expected_vector]
+            result = index_manager.get_embedding_vector("some text", input_type="document")
 
         mock_embeddings_cls.assert_called_once_with(
             voyage_api_key="test-api-key",
             model="voyage-4-large",
             output_dimension=settings.EMBEDDING_VECTOR_SIZE,
         )
+        mock_embeddings_cls.return_value.embed_documents.assert_called_once_with(["some text"])
+        mock_embeddings_cls.return_value.embed_query.assert_not_called()
+        assert result == expected_vector
+
+    def test_get_embedding_vector_query_calls_embed_query(self, index_manager):
+        expected_vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
+            mock_embeddings_cls.return_value.embed_query.return_value = expected_vector
+            result = index_manager.get_embedding_vector("some text", input_type="query")
+
+        mock_embeddings_cls.return_value.embed_query.assert_called_once_with("some text")
+        mock_embeddings_cls.return_value.embed_documents.assert_not_called()
         assert result == expected_vector
 
     def test_get_embedding_vector_raises_for_empty_content(self, index_manager):
         with pytest.raises(ValueError, match="Cannot embed empty string"):
-            index_manager.get_embedding_vector("")
+            index_manager.get_embedding_vector("", input_type="document")
+
+    def test_get_embedding_vector_raises_on_unknown_input_type(self, index_manager):
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings"):
+            with pytest.raises(ValueError, match="Unknown input_type"):
+                index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
+
+
+class TestOpenAILlmServiceLocalIndexManager:
+    def test_get_local_index_manager_threads_openai_api_base(self):
+        service = OpenAILlmService(
+            openai_api_key="api-123",
+            openai_api_base="https://proxy.example.com/v1",
+        )
+        manager = service.get_local_index_manager(embedding_model_name="text-embedding-3-small")
+
+        assert isinstance(manager, OpenAILocalIndexManager)
+        assert manager._openai_api_base == "https://proxy.example.com/v1"
+
+    def test_get_local_index_manager_no_base_url(self):
+        service = OpenAILlmService(openai_api_key="api-123")
+        manager = service.get_local_index_manager(embedding_model_name="text-embedding-3-small")
+
+        assert manager._openai_api_base is None

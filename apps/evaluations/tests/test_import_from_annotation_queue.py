@@ -279,3 +279,25 @@ def test_session_selection_list_ignores_invalid_dataset_id(client_with_user, tea
 
     assert response.status_code == 200
     assert str(session.external_id) in response.json()
+
+
+@pytest.mark.django_db()
+def test_dataset_sessions_count_returns_total(client_with_user, team_with_users, session_dataset):
+    """Count endpoint returns number of sessions not already in the dataset."""
+    ExperimentSessionFactory.create(team=team_with_users)  # available
+    excluded = ExperimentSessionFactory.create(team=team_with_users)
+    msg = EvaluationMessage.objects.create(
+        input={},
+        output={},
+        history=[],
+        session=excluded,
+        metadata={"session_id": str(excluded.external_id)},
+    )
+    session_dataset.messages.add(msg)
+
+    url = reverse("evaluations:dataset_sessions_count", args=[team_with_users.slug, session_dataset.pk])
+    response = client_with_user.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    assert "ids" not in data
+    assert data["total"] == 1

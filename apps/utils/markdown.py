@@ -67,7 +67,10 @@ def _update_href(el):
     if not href or href.split(":", 1)[0] not in ("file", "assistant_file"):
         return el
 
-    prefix, team_slug, owner_id, file_id = href.split(":")
+    parts = href.split(":")
+    if len(parts) != 4:
+        return el
+    prefix, team_slug, owner_id, file_id = parts
     url_name = {
         "file": "experiments:download_file",
         "assistant_file": "assistants:download_file",

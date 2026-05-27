@@ -571,11 +571,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         required=False,
     )
 
-    filtered_session_ids = forms.CharField(
-        widget=forms.HiddenInput(attrs={"x-ref": "filteredSessionIds"}),
-        required=False,
-    )
-
     evaluation_mode = forms.ChoiceField(
         choices=[(EvaluationMode.MESSAGE, "Message level"), (EvaluationMode.SESSION, "Session level")],
         initial=EvaluationMode.MESSAGE,
@@ -595,77 +590,55 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         self.team = team
 
     def _clean_clone(self):
-        """Validates session IDs for clone mode. Returns (session_ids, filtered_session_ids)."""
+        """Validate selected session IDs for clone mode and return them as a set."""
         session_ids_str = self.data.get("session_ids", "")
         session_ids = {sid for sid in session_ids_str.split(",") if sid}
 
-        filtered_session_ids_str = self.data.get("filtered_session_ids", "")
-        filtered_session_ids = {sid for sid in filtered_session_ids_str.split(",") if sid}
-
         # Session-mode datasets are allowed to start empty (they may be auto-populated
         # later). Message-mode datasets still need at least one session to clone from.
-        if not session_ids and not filtered_session_ids:
+        if not session_ids:
             if self.cleaned_data.get("evaluation_mode") != EvaluationMode.SESSION:
                 raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
-            return session_ids, filtered_session_ids
+            return session_ids
 
-        intersection = session_ids & filtered_session_ids
-        if intersection:
-            raise forms.ValidationError(
-                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
-                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
-            )
-
-        all_session_ids = session_ids.union(filtered_session_ids)
-        existing_sessions = ExperimentSession.objects.filter(
-            team=self.team, external_id__in=all_session_ids
-        ).values_list("external_id", flat=True)
-
-        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
+        existing_sessions = ExperimentSession.objects.filter(team=self.team, external_id__in=session_ids).values_list(
+            "external_id", flat=True
+        )
+        missing_sessions = session_ids - set(str(sid) for sid in existing_sessions)
         if missing_sessions:
             raise forms.ValidationError(
                 "The following sessions do not exist or you don't have permission to access them: "
                 f"{', '.join(sorted(missing_sessions))}"
             )
-
-        return session_ids, filtered_session_ids
+        return session_ids
 
     def _save_session_messages_clone(self, dataset):
         """Dispatch async task to clone messages from sessions."""
         session_ids = self.cleaned_data.get("session_ids", [])
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
-
-        if not session_ids and not filtered_session_ids:
+        if not session_ids:
             return
 
         task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
             list(session_ids),
-            list(filtered_session_ids),
-            self.filter_params.to_query() if self.filter_params else None,
+            [],  # filtered_session_ids: legacy create form has no per-row filtered selection
+            None,  # filter_query: legacy create form has no per-row filtered selection
             self.timezone,
         )
-
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
     def _save_sessions_clone(self, dataset):
         """Dispatch async task to create session-mode messages."""
-        # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
         session_ids = self.cleaned_data.get("session_ids", set())
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
-        all_session_ids = list(session_ids | filtered_session_ids)
-
-        if not all_session_ids:
+        if not session_ids:
             return
-
         task = create_dataset_from_sessions_task.delay(
             dataset.id,
             self.team.id,
-            all_session_ids,
+            list(session_ids),
         )
-
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
@@ -741,12 +714,9 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             )
 
         if mode == "clone":
-            session_ids, filtered_session_ids = self._clean_clone()
-            cleaned_data["session_ids"] = session_ids
-            cleaned_data["filtered_session_ids"] = filtered_session_ids
+            cleaned_data["session_ids"] = self._clean_clone()
         elif mode == "annotation_queue":
             cleaned_data["session_ids"] = self._clean_annotation_queue()
-            cleaned_data["filtered_session_ids"] = set()
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -1026,12 +996,8 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
-
         if mode == "clone":
-            session_ids, filtered_session_ids = self._clean_clone()
-            cleaned_data["session_ids"] = session_ids
-            cleaned_data["filtered_session_ids"] = filtered_session_ids
-
+            cleaned_data["session_ids"] = self._clean_clone()
         return cleaned_data
 
     def save(self, commit=True):
