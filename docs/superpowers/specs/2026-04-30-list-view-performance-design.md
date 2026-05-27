@@ -1,6 +1,10 @@
+---
+status: stable
+---
+
 # List View Performance — Approach 1
 
-**Status:** Draft
+**Status:** Stable
 **Date:** 2026-04-30
 **Owner:** Simon Kelly
 

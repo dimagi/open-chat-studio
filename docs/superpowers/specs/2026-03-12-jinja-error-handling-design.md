@@ -1,3 +1,7 @@
+---
+status: stable
+---
+
 # Jinja Error Handling for Pipeline Nodes
 
 ## Problem
