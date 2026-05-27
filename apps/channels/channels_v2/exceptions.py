@@ -8,3 +8,14 @@ class EarlyExitResponse(Exception):
     def __init__(self, response: str):
         self.response = response
         super().__init__(response)
+
+
+class EarlyAbort(Exception):
+    """Raised by a core stage to halt the pipeline silently.
+
+    Unlike EarlyExitResponse, no user-facing message is sent and no
+    terminal stages run. This is for situations where processing must
+    stop but reporting anything back to the user (or attempting to)
+    would be wrong -- e.g. the participant has revoked platform-level
+    consent, or the channel can no longer reach them.
+    """
