@@ -14,14 +14,20 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
 from apps.annotations.models import CustomTaggedItem
-from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType
+from apps.evaluations.models import (
+    AppliedTag,
+    ConditionType,
+    EvaluationMode,
+    EvaluationRun,
+    EvaluationRunStatus,
+    EvaluationRunType,
+)
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
     from apps.evaluations.models import (
         EvaluationMessage,
         EvaluationResult,
-        EvaluationRun,
         Evaluator,
         EvaluatorTagRule,
     )
@@ -206,3 +212,84 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
         filter_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
 
     CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q).delete()
+
+
+def undo_run_tags(run: EvaluationRun) -> None:
+    """Undo the tag changes applied by this run.
+
+    For each message in this run's scope:
+    - removes every managed tag the current run applied to the target
+      (tags found in the run's AppliedTag audit records)
+    - re-applies every managed tag the previous completed run applied
+      to the same target
+
+    PREVIEW runs are skipped entirely.
+    If there is no previous run, the current run's tags are removed with
+    nothing put back.
+
+    Note: AppliedTag audit rows are never deleted — they remain as history.
+    Only CustomTaggedItem (live tag state) is mutated.
+    """
+    if run.type == EvaluationRunType.PREVIEW:
+        return
+
+    evaluators = list(run.config.evaluators.prefetch_related("tag_rules").all())
+    possible_tags = _get_possible_tags(evaluators)
+    if not possible_tags:
+        return
+
+    # All evaluators in a config share the dataset's evaluation_mode.
+    # Use the first as a representative to carry mode into resolve_target.
+    representative_evaluator = evaluators[0]
+
+    previous_run = (
+        EvaluationRun.objects.filter(
+            config=run.config,
+            status=EvaluationRunStatus.COMPLETED,
+            type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+            created_at__lt=run.created_at,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    current_applied = _build_applied_by_message(run)
+    previous_applied = _build_applied_by_message(previous_run) if previous_run else defaultdict(set)
+
+    content_type = None
+    remove_by_target: defaultdict[int, set[int]] = defaultdict(set)
+    add_by_target: defaultdict[int, set[int]] = defaultdict(set)
+
+    messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
+    for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
+        target = resolve_target(representative_evaluator, message)
+        if target is None:
+            continue
+        if content_type is None:
+            content_type = ContentType.objects.get_for_model(type(target))
+        remove_by_target[target.pk] |= current_applied[message.pk] & possible_tags
+        add_by_target[target.pk] |= previous_applied[message.pk] & possible_tags
+
+    if content_type is None:
+        return
+
+    if remove_by_target:
+        remove_q = Q()
+        for target_pk, tag_ids in remove_by_target.items():
+            remove_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
+        CustomTaggedItem.objects.filter(content_type=content_type).filter(remove_q).delete()
+
+    if add_by_target:
+        CustomTaggedItem.objects.bulk_create(
+            [
+                CustomTaggedItem(
+                    content_type=content_type,
+                    object_id=target_pk,
+                    tag_id=tag_id,
+                    team=run.team,
+                )
+                for target_pk, tag_ids in add_by_target.items()
+                for tag_id in tag_ids
+            ],
+            ignore_conflicts=True,
+        )
