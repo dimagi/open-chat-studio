@@ -72,9 +72,11 @@ For each approved candidate **one at a time** (not batched):
    - `rejected` (rare — captures a decision considered and turned down).
    - `draft` (still under discussion; unusual for extraction).
 
-5. Show the user the drafted ADR. Ask if they want edits before moving to the next candidate.
+5. **Verify behavioral claims against the code** (for `accepted` ADRs). Every statement that asserts how the system *actually behaves* — data model, scoping (e.g. team-scoped vs global), defaults, control flow, named functions/modules/settings — must be checked against the implementation. Use Grep/Read to find the code and confirm each claim. The code is ground truth: where the source doc contradicts the implementation, correct the draft to match the code and flag the correction when you show the user. Cite the verifying symbol (e.g. `get_email_experiment_channel` in `apps/channels/channels_v2/email_channel.py`) in the ADR so future readers can re-verify. Skip this step for `proposed`/`draft` ADRs — there is nothing implemented to check yet.
 
-6. Do **not** write the file to disk yet — keep all drafts in conversation until Phase 5.
+6. Show the user the drafted ADR, noting any code-vs-doc corrections from step 5. Ask if they want edits before moving to the next candidate.
+
+7. Do **not** write the file to disk yet — keep all drafts in conversation until Phase 5.
 
 ## Phase 4 — Cross-references
 

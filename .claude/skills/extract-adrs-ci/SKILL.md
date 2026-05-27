@@ -44,6 +44,8 @@ Read `.claude/skills/extract-adrs/templates/adr-template.md` and draft each ADR 
 - `<p class="adr-meta">Author: Open Chat Studio · Created: {today YYYY-MM-DD}</p>`
 - `## Context`, `## Decision` (lead with "We will…"), `## Consequences`, `## Alternatives considered`.
 
+**Verify every behavioral claim against the code (mandatory for `accepted` ADRs).** Before finalising each ADR, locate the implementation for every assertion about how the system behaves — data model, scoping (team-scoped vs global), defaults, control flow, named functions/modules/settings — using Grep/Read. The code is ground truth: where the source doc contradicts the implementation, write what the code actually does and record the correction in the PR body. Cite the verifying symbol (file + function) in the ADR. If a load-bearing claim cannot be located or confirmed in the code, do NOT assert it — soften the ADR to what you can verify, or, if the whole decision hinges on the unverifiable claim, mark the tracking-issue task `blocked: unverifiable against code` and skip that ADR. Skip verification for `proposed` ADRs (nothing is implemented yet).
+
 ## Phase 4 — Cross-references
 
 Infer `Extends:` relationships between the ADRs you drafted (when one builds on another's decision). Add the `<p class="adr-meta">Extends: <a href="NNNN-...">ADR-NNNN</a></p>` line below the meta line. Note the inferred graph in the PR body. No confirmation step.
