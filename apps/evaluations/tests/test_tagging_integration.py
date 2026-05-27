@@ -1,10 +1,12 @@
 """DB integration tests for eval-driven tagging."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
@@ -12,12 +14,16 @@ from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
     EvaluationMode,
+    EvaluationRun,
+    EvaluationRunStatus,
     EvaluationRunType,
     EvaluatorTagRule,
 )
-from apps.evaluations.tagging import apply_rules_to_result
+from apps.evaluations.tagging import apply_rules_to_result, undo_run_tags
 from apps.evaluations.tasks import _maybe_apply_tag_rules
 from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationDatasetFactory,
     EvaluationMessageFactory,
     EvaluationResultFactory,
     EvaluationRunFactory,
@@ -501,3 +507,170 @@ class TestEvaluatorTagRuleFormset:
             },
         )
         assert not formset.is_valid()
+
+
+# ---- undo_run_tags ---------------------------------------------------------
+
+
+def _stamp(run, delta):
+    """Force-set created_at on a run to now() + delta via QuerySet.update() (bypasses auto_now_add)."""
+    EvaluationRun.objects.filter(pk=run.pk).update(created_at=timezone.now() + delta)
+    run.refresh_from_db()
+
+
+class TestUndoRunTags:
+    # ---- helper ------------------------------------------------------------
+
+    def _make_setup(self, team, mode=EvaluationMode.MESSAGE):
+        """Return (config, evaluator, rule_neg, rule_pos, message) all on the same team.
+
+        Both rules target the same `sentiment` field but with opposite values so
+        tests can verify tag switches cleanly.
+        """
+        evaluator = EvaluatorFactory.create(team=team, evaluation_mode=mode)
+        rule_neg = EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=evaluator,
+            field_name="sentiment",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "negative"},
+            tag__name="bad",
+        )
+        rule_pos = EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=evaluator,
+            field_name="sentiment",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "positive"},
+            tag__name="good",
+        )
+        if mode == EvaluationMode.MESSAGE:
+            message = EvaluationMessageFactory.create(create_chat_messages=True)
+        else:
+            session = ExperimentSessionFactory.create(team=team)
+            message = EvaluationMessageFactory.create(session=session)
+
+        dataset = EvaluationDatasetFactory.create(team=team, messages=[message])
+        config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
+        return config, evaluator, rule_neg, rule_pos, message
+
+    def _make_run(self, team, config, output, rule_that_fires, message):
+        """Create a COMPLETED FULL run, apply the tag rule, return the run."""
+        run = EvaluationRunFactory.create(
+            team=team,
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.FULL,
+        )
+        result = EvaluationResultFactory.create(
+            team=team,
+            evaluator=rule_that_fires.evaluator,
+            message=message,
+            run=run,
+            output=output,
+        )
+        apply_rules_to_result(result, rule_that_fires.evaluator, message)
+        return run
+
+    # ---- tests -------------------------------------------------------------
+
+    def test_preview_run_is_no_op(self, team):
+        """PREVIEW runs must never be touched by undo."""
+        config, evaluator, rule_neg, _, message = self._make_setup(team)
+        run = EvaluationRunFactory.create(
+            team=team,
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.PREVIEW,
+        )
+        result = EvaluationResultFactory.create(
+            team=team,
+            evaluator=evaluator,
+            message=message,
+            run=run,
+            output={"result": {"sentiment": "negative"}},
+        )
+        apply_rules_to_result(result, evaluator, message)
+
+        chat_message = message.expected_output_chat_message
+        assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+
+        undo_run_tags(run)
+
+        # Still has the tag; PREVIEW was a no-op
+        assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+
+    def test_no_previous_run_removes_current_tags(self, team):
+        """With no prior run, undo simply strips the current run's applied tags."""
+        config, evaluator, rule_neg, _, message = self._make_setup(team)
+        run = self._make_run(team, config, {"result": {"sentiment": "negative"}}, rule_neg, message)
+
+        chat_message = message.expected_output_chat_message
+        assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+
+        undo_run_tags(run)
+
+        assert not chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+        # AppliedTag audit records are NOT deleted
+        assert AppliedTag.objects.filter(evaluation_result__run=run).exists()
+
+    def test_restores_previous_run_tags_and_removes_current(self, team):
+        """
+        Simulate two successive runs where the tag switches:
+          prev run  -> "bad" (negative) applied
+          curr run  -> "good" (positive) applied; reverse_stale_tags would have removed "bad"
+
+        After undo: "bad" is back, "good" is gone.
+        """
+        config, evaluator, rule_neg, rule_pos, message = self._make_setup(team)
+
+        # Build previous run (applied "bad")
+        prev_run = self._make_run(team, config, {"result": {"sentiment": "negative"}}, rule_neg, message)
+        _stamp(prev_run, timedelta(hours=-1))
+
+        # Build current run (applied "good")
+        curr_run = self._make_run(team, config, {"result": {"sentiment": "positive"}}, rule_pos, message)
+        _stamp(curr_run, timedelta(seconds=0))
+
+        # Simulate what reverse_stale_tags would have done: remove "bad" from target
+        chat_message = message.expected_output_chat_message
+        CustomTaggedItem.objects.filter(object_id=chat_message.pk, tag_id=rule_neg.tag_id).delete()
+
+        # Precondition: only "good" is currently on the message
+        assert chat_message.tags.filter(pk=rule_pos.tag_id).exists()
+        assert not chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+
+        undo_run_tags(curr_run)
+
+        # After undo: "bad" restored, "good" removed
+        assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+        assert not chat_message.tags.filter(pk=rule_pos.tag_id).exists()
+
+    def test_no_tag_rules_is_no_op(self, team):
+        """Configs with evaluators that have no tag rules do nothing."""
+        evaluator = EvaluatorFactory.create(team=team)  # no EvaluatorTagRules created
+        message = EvaluationMessageFactory.create(create_chat_messages=True)
+        dataset = EvaluationDatasetFactory.create(team=team, messages=[message])
+        config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(
+            team=team,
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.FULL,
+        )
+        # Should return early without touching DB
+        undo_run_tags(run)
+        assert CustomTaggedItem.objects.count() == 0
+
+    def test_session_mode_restores_chat_tags(self, team):
+        """Session-mode runs tag the Chat object; undo must restore those tags."""
+        config, evaluator, rule_neg, _, message = self._make_setup(team, mode=EvaluationMode.SESSION)
+        run = self._make_run(team, config, {"result": {"sentiment": "negative"}}, rule_neg, message)
+
+        chat = message.session.chat
+        assert chat.tags.filter(pk=rule_neg.tag_id).exists()
+
+        undo_run_tags(run)
+
+        # No previous run -> stripped
+        assert not chat.tags.filter(pk=rule_neg.tag_id).exists()
