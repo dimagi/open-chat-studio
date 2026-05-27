@@ -123,6 +123,11 @@ urlpatterns = [
         name="parse_evaluation_results_csv_columns",
     ),
     path(
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/undo_tags",
+        evaluation_config_views.undo_evaluation_run_tags,
+        name="evaluation_run_undo_tags",
+    ),
+    path(
         "dataset/<int:pk>/download/",
         dataset_views.download_dataset_csv,
         name="dataset_download",
