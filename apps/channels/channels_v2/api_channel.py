@@ -10,8 +10,10 @@ from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.channels_v2.stages.core import (
     BotInteractionStage,
     ChatMessageCreationStage,
+    ConsentCheckStage,
     ConsentFlowStage,
     MessageTypeValidationStage,
+    ParticipantResolverStage,
     ParticipantValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
@@ -88,6 +90,8 @@ class ApiChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
+                ParticipantResolverStage(),
+                ConsentCheckStage(),
                 SessionResolutionStage(),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),

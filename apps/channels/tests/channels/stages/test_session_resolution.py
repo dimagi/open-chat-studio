@@ -2,12 +2,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
-from apps.channels.channels_v2.stages.core import SessionResolutionStage
+from apps.channels.channels_v2.capabilities import ChannelCapabilities, PlatformConsentConfig
+from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
+from apps.channels.channels_v2.stages.core import ConsentCheckStage, SessionResolutionStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples.base_messages import text_message
+from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 
@@ -181,3 +184,46 @@ class TestSessionResolutionStage:
             self.stage(ctx)
 
         assert ctx.experiment_session is not None
+
+    def test_reset_respects_platform_consent(self):
+        """Regression: a participant with revoked platform consent must NOT receive
+        a 'Conversation reset' reply.
+        """
+        experiment = ExperimentFactory()
+        experiment_channel = ExperimentChannelFactory(experiment=experiment, team=experiment.team)
+        participant = ParticipantFactory(
+            team=experiment.team, identifier="revoked_user", platform=experiment_channel.platform
+        )
+        participant_data = ParticipantData.objects.create(
+            team=experiment.team,
+            participant=participant,
+            experiment=experiment,
+            system_metadata={"consent": False},
+        )
+
+        capabilities = ChannelCapabilities(
+            supports_voice_replies=False,
+            supports_files=False,
+            supports_conversational_consent=True,
+            supported_message_types=(MESSAGE_TYPES.TEXT,),
+            consent_config=PlatformConsentConfig(strict=False, default_consent=True),
+        )
+
+        reset_msg = text_message(participant_id="revoked_user", message_text="/reset")
+        ctx = make_context(
+            experiment=experiment,
+            experiment_channel=experiment_channel,
+            experiment_session=None,
+            participant=participant,
+            participant_data=participant_data,
+            participant_allowed=True,
+            participant_identifier="revoked_user",
+            message=reset_msg,
+            capabilities=capabilities,
+        )
+
+        # ConsentCheckStage runs first in the real pipeline and aborts silently
+        with pytest.raises(EarlyAbort):
+            ConsentCheckStage()(ctx)
+
+        # SessionResolutionStage (and therefore /reset handling) is never reached
