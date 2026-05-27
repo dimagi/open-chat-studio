@@ -44,7 +44,8 @@
             Edit Results
           </a>
           {% if evaluation_run.type != "preview" %}
-            <form method="post"
+            <form style="display: contents;"
+                  method="post"
                   action="{% url 'evaluations:evaluation_run_undo_tags' request.team.slug evaluation_run.config_id evaluation_run.id %}">
               {% csrf_token %}
               <button type="submit"
