@@ -1,14 +1,14 @@
-# ADR-0011: Minimal read-side concordance view backed by Score
+# ADR-0014: Minimal read-side concordance view backed by Score
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Open Chat Studio · Created: 2026-05-28</p>
 
-<p class="adr-meta">Extends: <a href="0009-score-value-layer-in-apps-assessments.md">ADR-0009</a></p>
+<p class="adr-meta">Extends: <a href="0012-score-value-layer-in-apps-assessments.md">ADR-0012</a></p>
 
 ## Context
 
-The dogfood pilot for "basic concordance" wanted to compare an LLM judge's per-session answer against a human reviewer's authoritative answer for one shared categorical field. With `Score` ([ADR-0009](0009-score-value-layer-in-apps-assessments.md)) populated by both subsystems ([ADR-0010](0010-dual-write-scores-from-evaluations-and-annotations.md)), the question becomes: what read surface ships first? The full unified-assessment design proposes persisted concordance configurations, multi-source consensus aggregation, kappa/MAE/confusion-matrix statistics, and trend charts — none of which the dogfood pilot needs. We wanted the smallest read-side view that proves the value layer works end-to-end without locking in decisions about persisted concordance configs or aggregation semantics.
+The dogfood pilot for "basic concordance" wanted to compare an LLM judge's per-session answer against a human reviewer's authoritative answer for one shared categorical field. With `Score` ([ADR-0012](0012-score-value-layer-in-apps-assessments.md)) populated by both subsystems ([ADR-0013](0013-dual-write-scores-from-evaluations-and-annotations.md)), the question becomes: what read surface ships first? The full unified-assessment design proposes persisted concordance configurations, multi-source consensus aggregation, kappa/MAE/confusion-matrix statistics, and trend charts — none of which the dogfood pilot needs. We wanted the smallest read-side view that proves the value layer works end-to-end without locking in decisions about persisted concordance configs or aggregation semantics.
 
 ## Decision
 

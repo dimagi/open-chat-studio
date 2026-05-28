@@ -1,4 +1,4 @@
-# ADR-0009: Lean Score value layer in apps/assessments
+# ADR-0012: Lean Score value layer in apps/assessments
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
@@ -23,7 +23,7 @@ We will introduce a new Django app `apps.assessments` containing a single model,
 
 ## Consequences
 
-- **Positive:** Both subsystems can dual-write into a single queryable surface (see [ADR-0010](0010-dual-write-scores-from-evaluations-and-annotations.md)). Future consumers (concordance view per [ADR-0011](0011-minimal-read-side-concordance-view.md), inter-rater reliability, cross-source aggregation) read one model.
+- **Positive:** Both subsystems can dual-write into a single queryable surface (see [ADR-0013](0013-dual-write-scores-from-evaluations-and-annotations.md)). Future consumers (concordance view per [ADR-0014](0014-minimal-read-side-concordance-view.md), inter-rater reliability, cross-source aggregation) read one model.
 - **Positive:** GenericForeignKey from day one means adding `Trace` or `EvaluationMessage` as targets is purely additive — no migration of existing rows.
 - **Positive:** Terminal column names mean the eventual `EvaluationResult` / `Annotation` model renames are a model rename, not a Score schema migration.
 - **Positive:** Partial unique constraints make re-runs and re-submissions safe at the database layer, not by writer convention alone.

@@ -79,9 +79,9 @@ nav:
       - 0006 Combine email reply text and attachments into a single message: adr/0006-combine-email-reply-text-and-attachments.md
       - 0007 Adopt ty as the Python type checker: adr/0007-adopt-ty-as-python-type-checker.md
       - 0008 Enable ty rules progressively from a baseline of all-ignored: adr/0008-progressive-ty-rule-enablement.md
-      - 0009 Lean Score value layer in apps/assessments: adr/0009-score-value-layer-in-apps-assessments.md
-      - 0010 Dual-write Scores from evaluations and annotations: adr/0010-dual-write-scores-from-evaluations-and-annotations.md
-      - 0011 Minimal read-side concordance view backed by Score: adr/0011-minimal-read-side-concordance-view.md
+      - 0012 Lean Score value layer in apps/assessments: adr/0012-score-value-layer-in-apps-assessments.md
+      - 0013 Dual-write Scores from evaluations and annotations: adr/0013-dual-write-scores-from-evaluations-and-annotations.md
+      - 0014 Minimal read-side concordance view backed by Score: adr/0014-minimal-read-side-concordance-view.md
   - Developer Guides:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md
