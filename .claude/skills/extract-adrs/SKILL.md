@@ -33,6 +33,7 @@ Drive a guided conversation that converts a stable design or spec document into 
    - Was a real choice (multiple plausible options existed).
    - Has consequences that constrain future work.
    - Would be useful to cite from code or PRs later.
+   - **Would plausibly be superseded or revised independently of the others** (the split-vs-fold test). A choice that exists only as a forced consequence of a bigger decision — a stub library dictated by the type-checker you picked, a serializer forced by your framework — is NOT its own ADR. Fold it into the parent decision's Decision/Consequences/Alternatives. Relatedness alone is not a reason to split; the `extends:` link captures relationships.
 3. Present a numbered list to the user. Each entry must include:
    - Short title (5–10 words, kebab-case ready).
    - One-line summary of the decision.
@@ -66,13 +67,15 @@ For each approved candidate **one at a time** (not batched):
    - `## Consequences` — bullets, good and bad.
    - `## Alternatives considered` — bullets, one line each, name + rejection reason.
 
+   **Content discipline.** ADRs are immutable once accepted, so anything that decays must stay out. Inside the body: **cut** file paths, `file.py:lineno` references, private helper names (`_foo`, internal underscore-prefixed methods), code-walk paraphrases of the implementation, exact log strings, and dated migration filenames. **Keep** identifiers the decision creates as public contracts: model + field names, DB constraint / index names, enum values, waffle flag IDs, URL routes and query-parameter surfaces, and ORM lookup paths when the join *is* the decision (e.g. "filter through `run.config`, not `evaluator`"). Deciding heuristic: "If I rename this tomorrow, do I need a migration or just a refactor?" Migration → keep. Refactor → cut.
+
 4. Use `AskUserQuestion` to confirm the ADR `status`:
    - `accepted` (default for extraction from shipped work).
    - `proposed` (decision is recorded but not yet implemented).
    - `rejected` (rare — captures a decision considered and turned down).
    - `draft` (still under discussion; unusual for extraction).
 
-5. **Verify behavioral claims against the code** (for `accepted` ADRs). Every statement that asserts how the system *actually behaves* — data model, scoping (e.g. team-scoped vs global), defaults, control flow, named functions/modules/settings — must be checked against the implementation. Use Grep/Read to find the code and confirm each claim. The code is ground truth: where the source doc contradicts the implementation, correct the draft to match the code and flag the correction when you show the user. Cite the verifying symbol (e.g. `get_email_experiment_channel` in `apps/channels/channels_v2/email_channel.py`) in the ADR so future readers can re-verify. Skip this step for `proposed`/`draft` ADRs — there is nothing implemented to check yet.
+5. **Verify behavioral claims against the code** (for `accepted` ADRs). Every statement that asserts how the system *actually behaves* — data model, scoping (e.g. team-scoped vs global), defaults, control flow, named functions/modules/settings — must be checked against the implementation. Use Grep/Read to find the code and confirm each claim. The code is ground truth: where the source doc contradicts the implementation, correct the draft to match the code and flag the correction when you show the user. Show the verifying symbol (file + function) to the user when you walk through the draft so they can spot-check where you looked, and record it in the corrections summary if you flag a code-vs-doc fix. Do NOT pin file paths or `:lineno` refs into the ADR body — the ADR is immutable and those references rot on the next refactor (see Content discipline above). Skip this step for `proposed`/`draft` ADRs — there is nothing implemented to check yet.
 
 6. Show the user the drafted ADR, noting any code-vs-doc corrections from step 5. Ask if they want edits before moving to the next candidate.
 

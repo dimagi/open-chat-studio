@@ -28,3 +28,9 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0006](0006-combine-email-reply-text-and-attachments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Combine email reply text and attachments into a single message |
 | [0007](0007-adopt-ty-as-python-type-checker.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Adopt ty as the Python type checker |
 | [0008](0008-progressive-ty-rule-enablement.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Enable ty rules progressively from a baseline of all-ignored |
+| [0009](0009-context-based-stateless-message-processing-pipeline.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Context-based stateless message processing pipeline |
+| [0010](0010-exception-based-early-exit-with-guaranteed-terminal-stages.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Exception-based early exit with guaranteed terminal stages |
+| [0011](0011-silent-pipeline-halt-via-earlyabort.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Silent pipeline halt via EarlyAbort |
+| [0012](0012-score-value-layer-in-apps-assessments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Lean Score value layer in apps/assessments |
+| [0013](0013-dual-write-scores-from-evaluations-and-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Dual-write Scores from evaluations and annotations |
+| [0014](0014-minimal-read-side-concordance-view.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Minimal read-side concordance view backed by Score |
