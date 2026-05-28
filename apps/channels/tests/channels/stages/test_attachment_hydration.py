@@ -5,6 +5,7 @@ import pytest
 from apps.channels.channels_v2.stages.core import AttachmentHydrationStage, WhatsappAttachmentHydrationStage
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.tests.channels.conftest import make_context
+from apps.chat.models import ChatAttachment
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 
@@ -61,6 +62,28 @@ class TestAttachmentHydrationStage:
             assert att.type == "ocs_attachments"
             # download_link must reference the real session, not 0
             assert str(session.id) in att.download_link
+
+    @pytest.mark.django_db()
+    def test_links_files_to_chat_via_chat_attachment(self):
+        """Hydrated files must be linked to the session's Chat via ChatAttachment
+        so the experiments:download_file view's join succeeds when an LLM provider
+        fetches the download_link."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        file_a = FileFactory(team=experiment.team, name="a.pdf", content_type="application/pdf")
+        file_b = FileFactory(team=experiment.team, name="b.csv", content_type="text/csv")
+
+        msg = BaseMessage(
+            participant_id="u1",
+            message_text="hi",
+            attachment_file_ids=[file_a.id, file_b.id],
+        )
+        ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
+
+        self.stage.process(ctx)
+
+        chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
+        assert set(chat_attachment.files.values_list("id", flat=True)) == {file_a.id, file_b.id}
 
 
 class TestWhatsappAttachmentHydrationStage:
@@ -124,3 +147,28 @@ class TestWhatsappAttachmentHydrationStage:
         assert len(msg.attachments) == 1
         assert msg.attachments[0].type == "ocs_attachments"
         assert str(session.id) in msg.attachments[0].download_link
+
+    @pytest.mark.django_db()
+    def test_process_creates_chat_attachment_link(self):
+        """The persisted File must be linked to the session's Chat via ChatAttachment
+        so the experiments:download_file view's join succeeds when an LLM provider
+        fetches the download_link."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+
+        msg = MagicMock()
+        msg.attachment_mime_type = "image"
+        msg.attachments = []
+        msg.message_text = ""
+
+        ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_image.return_value = (
+            b"\x89PNG\r\n\x1a\n",
+            "image/png",
+        )
+
+        self.stage.process(ctx)
+
+        chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
+        file_id = msg.attachments[0].file_id
+        assert chat_attachment.files.filter(id=file_id).exists()

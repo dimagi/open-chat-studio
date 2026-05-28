@@ -13,7 +13,7 @@ from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
-from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -675,13 +675,31 @@ class AttachmentHydrationStage(ProcessingStage):
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        files = File.objects.filter(
-            id__in=ctx.message.attachment_file_ids,
-            team_id=ctx.experiment.team_id,
+        files = self._get_files(ctx)
+        if not files:
+            return
+        # Link the files to the session's Chat so the experiments:download_file
+        # view's join (File → ChatAttachment → Chat → ExperimentSession) resolves
+        # when an LLM provider fetches the download_link (or a user clicks it).
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(
+            chat=ctx.experiment_session.chat,
+            tool_type="ocs_attachments",
         )
+        chat_attachment.files.add(*files)
         ctx.message.attachments = [
             Attachment.from_file(f, type="ocs_attachments", session_id=ctx.experiment_session.id) for f in files
         ]
+
+    def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
+        """Return the Files to hydrate. Default impl resolves pre-persisted Files
+        by ``ctx.message.attachment_file_ids``. Subclasses can override to acquire
+        files differently (e.g. download from a remote channel)."""
+        return list(
+            File.objects.filter(
+                id__in=ctx.message.attachment_file_ids,
+                team_id=ctx.experiment.team_id,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -692,12 +710,13 @@ class AttachmentHydrationStage(ProcessingStage):
 class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
     """Download, persist, and hydrate inbound WhatsApp image attachments.
 
-    should_run detects image messages via attachment_mime_type. process()
+    should_run detects image messages via attachment_mime_type. _get_files()
     downloads media via the messaging service, validates size and content
-    type, persists the bytes as a MESSAGE_MEDIA File, then populates
-    ctx.message.attachments. On any skip or error the file is not persisted;
-    size/type rejections also append a bracketed note to message_text so the
-    LLM can explain to the user why the image was dropped.
+    type, and persists the bytes as a MESSAGE_MEDIA File. The base class then
+    handles ChatAttachment linkage and Attachment construction. On any skip
+    or error no file is returned; size/type rejections also append a bracketed
+    note to message_text so the LLM can explain to the user why the image was
+    dropped.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -708,17 +727,17 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
         mime = ctx.message.attachment_mime_type
         return mime == "image" or bool(mime and mime.startswith("image/"))
 
-    def process(self, ctx: MessageProcessingContext) -> None:
+    def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
         messaging_service = ctx.experiment_channel.messaging_provider.get_messaging_service()
 
         try:
             image = messaging_service.get_inbound_image(ctx.message)
         except Exception:
             logger.exception("Failed to download WhatsApp inbound media")
-            return
+            return []
 
         if image is None:
-            return
+            return []
 
         raw_bytes, content_type = image
         size = len(raw_bytes)
@@ -729,13 +748,13 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
             ctx.message.message_text = self._append_skip_note(
                 ctx.message.message_text, f"exceeds {limit_mb} MB image limit", size
             )
-            return
+            return []
 
         if content_type not in WHATSAPP_ALLOWED_IMAGE_TYPES:
             ctx.message.message_text = self._append_skip_note(
                 ctx.message.message_text, f"image type '{content_type}' not supported", size
             )
-            return
+            return []
 
         try:
             file = File.create(
@@ -747,11 +766,9 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
             )
         except Exception:
             logger.exception("Failed to persist WhatsApp inbound image")
-            return
+            return []
 
-        ctx.message.attachments = [
-            Attachment.from_file(file, type="ocs_attachments", session_id=ctx.experiment_session.id)
-        ]
+        return [file]
 
     @staticmethod
     def _append_skip_note(message_text: str, reason: str, size: int) -> str:
