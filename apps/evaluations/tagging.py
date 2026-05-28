@@ -7,18 +7,21 @@ at the bottom is called from the evaluation task.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
 
 from apps.annotations.models import CustomTaggedItem
-from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode
+from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
     from apps.evaluations.models import (
         EvaluationMessage,
         EvaluationResult,
+        EvaluationRun,
         Evaluator,
         EvaluatorTagRule,
     )
@@ -134,3 +137,72 @@ def apply_rules_to_result(
             for rule in matched_rules
         ]
     )
+
+
+def _get_possible_tags(evaluators: list[Evaluator]) -> frozenset[int]:
+    return frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
+
+
+def _build_applied_by_message(run: EvaluationRun) -> defaultdict[int, set[int]]:
+    """Batch all AppliedTag lookups for this run to avoid an O(N) query per message."""
+    applied: defaultdict[int, set[int]] = defaultdict(set)
+    for row in AppliedTag.objects.filter(evaluation_result__run=run).values("evaluation_result__message_id", "tag_id"):
+        applied[row["evaluation_result__message_id"]].add(row["tag_id"])
+    return applied
+
+
+def _compute_stale_by_target(
+    run: EvaluationRun,
+    possible_tags: frozenset[int],
+    applied_by_message: defaultdict[int, set[int]],
+    representative_evaluator: Evaluator,
+) -> tuple[defaultdict[int, set[int]], ContentType | None]:
+    content_type = None
+    stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
+    messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
+    for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
+        target = resolve_target(representative_evaluator, message)
+        if target is None:
+            continue
+        if content_type is None:
+            content_type = ContentType.objects.get_for_model(type(target))
+        stale_tags = possible_tags - applied_by_message[message.pk]
+        if stale_tags:
+            stale_by_target[target.pk] |= stale_tags
+    return stale_by_target, content_type
+
+
+def reverse_stale_tags(run: EvaluationRun) -> None:
+    """Remove stale eval-driven tags after a run completes.
+
+    For each message evaluated in the run, any tag managed by the run's evaluators
+    but not applied in this run is removed from the resolved target object.
+    PREVIEW runs are skipped entirely.
+
+    Note: not wrapped in transaction.atomic(). A failure mid-loop may leave some
+    stale tags in place; a subsequent rerun will complete the cleanup.
+    """
+    if run.type == EvaluationRunType.PREVIEW:
+        return
+
+    evaluators = list(run.config.evaluators.prefetch_related("tag_rules").all())
+    possible_tags = _get_possible_tags(evaluators)
+    if not possible_tags:
+        return
+
+    # All evaluators in a config share the dataset's evaluation_mode (enforced by
+    # form validation). Use the first as a representative to carry mode into resolve_target.
+    representative_evaluator = evaluators[0]
+    applied_by_message = _build_applied_by_message(run)
+    stale_by_target, content_type = _compute_stale_by_target(
+        run, possible_tags, applied_by_message, representative_evaluator
+    )
+
+    if not stale_by_target or content_type is None:
+        return
+
+    filter_q = Q()
+    for target_pk, tag_ids in stale_by_target.items():
+        filter_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
+
+    CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q).delete()
