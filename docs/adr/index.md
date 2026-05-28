@@ -34,3 +34,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0012](0012-score-value-layer-in-apps-assessments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Lean Score value layer in apps/assessments |
 | [0013](0013-dual-write-scores-from-evaluations-and-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Dual-write Scores from evaluations and annotations |
 | [0014](0014-minimal-read-side-concordance-view.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Minimal read-side concordance view backed by Score |
+| [0015](0015-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
