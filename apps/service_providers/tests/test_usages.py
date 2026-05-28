@@ -308,6 +308,44 @@ def test_search_trace_provider(team_with_users):
 
 
 @pytest.mark.django_db()
+def test_search_langfuse_by_public_key(team_with_users):
+    """Langfuse exposes ``public_key`` as a non-secret identifier; it should still be searchable."""
+    trace = TraceProviderFactory(
+        team=team_with_users,
+        type=TraceProviderType.langfuse,
+        config={"public_key": "pk-lf-public-123", "secret_key": "trace-secret", "host": "https://example.com"},
+    )
+    matches = search_providers_by_api_key(ServiceProvider.tracing, "pk-lf-public-123", match="exact")
+    assert trace in matches
+
+
+@pytest.mark.django_db()
+def test_search_aws_voice_by_access_key_id(team_with_users):
+    voice = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.aws,
+        config={
+            "aws_access_key_id": "AKIA-PUBLIC-ID",
+            "aws_secret_access_key": "voice-secret",
+            "aws_region": "us-east-1",
+        },
+    )
+    matches = search_providers_by_api_key(ServiceProvider.voice, "AKIA-PUBLIC-ID", match="exact")
+    assert voice in matches
+
+
+@pytest.mark.django_db()
+def test_search_twilio_by_account_sid(team_with_users):
+    msg = MessagingProviderFactory(
+        team=team_with_users,
+        type=MessagingProviderType.twilio,
+        config={"auth_token": "twilio-secret", "account_sid": "AC-public-sid"},
+    )
+    matches = search_providers_by_api_key(ServiceProvider.messaging, "AC-public-sid", match="exact")
+    assert msg in matches
+
+
+@pytest.mark.django_db()
 def test_search_invalid_match_mode_raises(anthropic_provider):
     with pytest.raises(ValueError, match="unknown match mode"):
         search_providers_by_api_key(ServiceProvider.llm, "key", match="fuzzy")  # type: ignore[arg-type]

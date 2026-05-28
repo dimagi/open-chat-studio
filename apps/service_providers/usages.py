@@ -268,16 +268,21 @@ def search_providers_by_api_key(
 
     matches = []
     for provider in queryset.iterator():
-        secret_fields = _secret_field_names(provider)
-        if not secret_fields:
+        fields = _searchable_field_names(provider)
+        if not fields:
             continue
-        if any(_value_matches(provider.config.get(f, ""), key, match) for f in secret_fields):
+        if any(_value_matches(provider.config.get(f, ""), key, match) for f in fields):
             matches.append(provider)
     return matches
 
 
-def _secret_field_names(provider) -> Iterable[str]:
-    """The set of config keys that hold credentials for ``provider``'s subtype."""
+def _searchable_field_names(provider) -> Iterable[str]:
+    """Config keys that can be matched against a supplied key for ``provider``'s subtype.
+
+    Includes the obfuscated secret fields plus any non-secret public identifiers
+    that the form opts into via ``additional_searchable_fields`` (e.g. Langfuse's
+    ``public_key`` or AWS' ``aws_access_key_id``).
+    """
     try:
         type_enum = provider.type_enum
     except (KeyError, ValueError):
@@ -291,7 +296,9 @@ def _secret_field_names(provider) -> Iterable[str]:
     form_cls = getattr(type_enum, "form_cls", None)
     if form_cls is None:
         return ()
-    return getattr(form_cls, "obfuscate_fields", ()) or ()
+    obfuscated = getattr(form_cls, "obfuscate_fields", ()) or ()
+    public = getattr(form_cls, "additional_searchable_fields", ()) or ()
+    return [*obfuscated, *public]
 
 
 def _value_matches(stored: object, target: str, match: MatchMode) -> bool:

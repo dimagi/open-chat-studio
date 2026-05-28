@@ -1,3 +1,7 @@
+---
+status: stable
+---
+
 # Authoritative annotation flag for multi-reviewer queues
 
 Issue: [dimagi/open-chat-studio#3342](https://github.com/dimagi/open-chat-studio/issues/3342)

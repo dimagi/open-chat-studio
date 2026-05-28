@@ -1,0 +1,8 @@
+<span class="font-semibold text-sm mr-1">Consent:</span>
+{% if not experiment.consent_form_id %}
+  <span data-consent-state="disabled" class="text-sm text-error" title="No consent form configured — participants are never asked for consent"><i class="fa-solid fa-circle-xmark"></i> <span class="opacity-60">(disabled)</span></span>
+{% elif not experiment.conversational_consent_enabled %}
+  <span data-consent-state="web-only" class="text-sm text-warning" title="Consent form attached but conversational consent is disabled"><i class="fa-solid fa-circle-exclamation"></i> <span class="opacity-60">(web only)</span></span>
+{% else %}
+  <span data-consent-state="enabled" class="text-sm text-success" title="Consent form configured and conversational consent is enabled"><i class="fa-solid fa-circle-check"></i></span>
+{% endif %}

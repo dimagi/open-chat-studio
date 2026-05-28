@@ -10,8 +10,10 @@ from apps.channels.channels_v2.stages.core import (
     AttachmentHydrationStage,
     BotInteractionStage,
     ChatMessageCreationStage,
+    ConsentCheckStage,
     ConsentFlowStage,
     MessageTypeValidationStage,
+    ParticipantResolverStage,
     ParticipantValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
@@ -119,6 +121,8 @@ class ChannelBase(ABC):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
+                ParticipantResolverStage(),
+                ConsentCheckStage(),
                 SessionResolutionStage(),
                 SessionActivationStage(),
                 AttachmentHydrationStage(),
@@ -263,6 +267,8 @@ class ChannelBase(ABC):
 
         mini_pipeline = MessageProcessingPipeline(
             core_stages=[
+                ParticipantResolverStage(),
+                ConsentCheckStage(),
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
