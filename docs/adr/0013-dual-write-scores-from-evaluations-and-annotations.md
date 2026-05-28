@@ -1,0 +1,41 @@
+# ADR-0013: Dual-write Scores from evaluations and annotations
+
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
+
+<p class="adr-meta">Author: Open Chat Studio · Created: 2026-05-28</p>
+
+<p class="adr-meta">Extends: <a href="0012-score-value-layer-in-apps-assessments.md">ADR-0012</a></p>
+
+## Context
+
+[ADR-0012](0012-score-value-layer-in-apps-assessments.md) introduced `Score` as the shared value layer, but the model only earns its keep if both producing subsystems populate it reliably as live writes happen. Two write paths exist (automated evaluation and human review) and they have different lifecycles: `EvaluationResult` rows are created from a Celery worker (`apps/evaluations/tasks.py`), while `Annotation` rows are created inside Django request/response cycles via `Annotation.save`. Writers must be idempotent (re-running an evaluator or re-submitting an annotation should leave a clean set of Scores), must not couple persistence to side effects (so `.save()` itself stays callable from arbitrary code paths), and must not roll back a successful parent write because a Score write happened to fail. There is also a separate historical concern: existing `EvaluationResult` and submitted `Annotation` rows pre-date `Score` and must be backfilled before the read-side view ([ADR-0014](0014-minimal-read-side-concordance-view.md)) becomes useful.
+
+## Decision
+
+We will populate `Score` via two single-responsibility helpers in `apps/assessments/score_writers.py`, invoked at the right point in each subsystem's existing lifecycle, plus a project-standard `IdempotentCommand` for historical backfill:
+
+- **Automated path.** A dedicated writer in `apps.assessments` is called from the Celery evaluator task immediately after each `EvaluationResult` is created, wrapped in a `try/except` that logs and swallows so a writer failure cannot break the evaluator run. The writer is *not* invoked from `EvaluationResult.save`, keeping persistence free of cross-app side effects. Error payloads, missing sessions, and non-dict result payloads are skipped as no-ops.
+- **Human path.** The corresponding annotation writer is called from `Annotation.save` on every submitted save (initial submission *and* subsequent edits while still `SUBMITTED`), so concordance never reads stale data after a reviewer revises their answer. The call sits *after* the wrapping `transaction.atomic()` block and is itself wrapped in a `try/except` that logs and swallows — a writer failure must not roll back the annotation save or break the reviewer UX.
+- **Idempotency is delete-then-bulk-create per artefact.** Each writer deletes the existing `Score` rows scoped to the artefact (filter on `automated_result` or `review`) then bulk-creates fresh ones inside `transaction.atomic()`. Combined with the partial unique constraints from [ADR-0012](0012-score-value-layer-in-apps-assessments.md), this means re-runs, re-submissions, and backfill top-ups are safe overwrites.
+- **`Score.target` is `item.session` only.** Annotations on message-only items are skipped — `ChatMessage` is excluded as a Score target in the unified design, and writing it would create data we'd have to migrate later.
+- **Scores are written for every submitted annotation, regardless of `is_authoritative`.** Non-authoritative annotations represent real reviewer judgments and are preserved for future inter-rater-reliability work. The authoritative filter happens at read time, not write time (see [ADR-0014](0014-minimal-read-side-concordance-view.md)).
+- **Type dispatch.** Python `bool` → `BOOLEAN` stored as 0/1 in `value_numeric`; numeric scalars → `NUMERIC` in `value_numeric`; strings → `CATEGORICAL` in `value_string`. A schema declaration of `type: choice` forces `CATEGORICAL` regardless of Python type, so numeric-looking choice values like `"0"` / `"1"` aren't misclassified. `None` and non-scalar containers are skipped with a warning log.
+- **Historical backfill is a project-standard `IdempotentCommand`.** A `backfill_initial_scores` management command iterates existing `EvaluationResult` and `Annotation` rows, pre-filtering to those that already have a session target so we don't iterate work the writers would discard. Per-row commits (rather than wrapping the whole pass in a single transaction) keep failures local. Operators run `python manage.py backfill_initial_scores` manually after the schema migration deploys; a follow-up `RunDataMigration(..., force=True)` migration handles the top-up of rows created between the manual run and follow-up deploy (per `docs/developer_guides/custom_migrations.md`).
+
+## Consequences
+
+- **Positive:** Idempotency at the writer level plus partial unique constraints at the DB level means re-runs, re-submissions, and backfill top-ups all converge on the same clean state. The same two writer functions serve both live dual-write and backfill — one code path, one test surface.
+- **Positive:** Hooking on `Annotation.save` for every submitted save (not just `is_new`) keeps Scores in lockstep with reviewer edits — a reviewer revising their authoritative answer doesn't leave a stale judgment in the concordance view.
+- **Positive:** Wrapping each writer call in `try/except` and running outside the parent transaction means an isolated `Score` write failure logs an exception but does not corrupt the evaluator run or fail the annotation submission. Concordance accepts eventual consistency in exchange for resilience.
+- **Negative:** A swallowed writer failure produces a silent inconsistency — the parent `EvaluationResult` or `Annotation` exists but its Scores don't. Operators must monitor the `logger.exception("Failed to write Score rows…")` log line and re-run the backfill command to repair gaps. There is no automatic retry.
+- **Negative:** Re-running `Annotation.save` on every submitted edit (even no-op saves) issues a `DELETE` + `bulk_create` against `Score`. For the dogfood scale this is negligible; if annotation edits become hot, we'd need to short-circuit when `data` hasn't changed.
+- **Negative:** The cross-app import from `apps.human_annotations.models` to `apps.assessments.score_writers` is module-level. The original design anticipated a circular-import risk that would require the project's local-import exception (`AGENTS.md`); in practice no cycle materialised because `apps.assessments` only references `human_annotations.Annotation` via a string-form FK. Re-introducing such a cycle in future would force a local import inside `save`.
+- **Negative:** Backfilling via a manual `manage.py` invocation (not an auto-run migration) adds a deploy-time step. The two-phase pattern accepts this in exchange for not blocking deploys on long-running backfills.
+
+## Alternatives considered
+
+- **Write Scores inside `EvaluationResult.save` / `Annotation.save`:** rejected for the eval side — it would couple persistence to a side-effect any caller could trigger, including admin-shell creates and tests that don't want background writes. Accepted for the annotation side because `Annotation.save` already does post-save bookkeeping (item review counts, queue aggregate recomputes), and adding one more "decompose into Scores" call is consistent with the existing shape.
+- **Hook on `is_new and SUBMITTED` only:** rejected — reviewers can revise an annotation in-place while it remains `SUBMITTED`, and concordance would silently serve stale judgments until the next backfill.
+- **Use Django signals (`post_save`):** rejected — signals make the side effect harder to trace from the call site and bypass the explicit `try/except` boundary; we prefer the imperative call.
+- **Run the writer inside the parent `transaction.atomic()`:** rejected — a Score writer failure would roll back the `EvaluationResult` / `Annotation` write itself, trading data inconsistency for a much worse failure mode (lost reviewer work).
+- **Auto-run the backfill as a Django data migration in the same PR as the schema migration:** rejected — the dataset is large enough that a synchronous data migration could time out the deploy. The two-phase pattern (manual run, then `RunDataMigration(force=True)` top-up) is the project standard for this size of backfill.
