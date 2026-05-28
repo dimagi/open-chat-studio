@@ -39,6 +39,15 @@ def _normalize_content_type(content_type: str | None) -> str:
     return (content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
 
 
+def _is_voice_mime(mime: str | None) -> bool:
+    """True when the attachment is a voice/audio message — those are routed via
+    get_message_audio, not the generic inbound-media path."""
+    if not mime:
+        return False
+    normalized = mime.split(";", 1)[0].strip().lower()
+    return normalized in ("audio", "voice") or normalized.startswith("audio/") or normalized == "video/mp4"
+
+
 class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
     _supported_platforms: ClassVar[list]
@@ -86,13 +95,13 @@ class MessagingService(pydantic.BaseModel):
         """
         raise NotImplementedError
 
-    def get_inbound_image(self, message) -> tuple[bytes, str] | None:
-        """Return (raw_bytes, content_type) for an inbound image, or None if
-        the message has no image attachment.
+    def get_inbound_media(self, message) -> tuple[bytes, str] | None:
+        """Return (raw_bytes, content_type) for an inbound media attachment
+        (image, document, etc.), or None if the message has no attachment.
 
         Subclasses override this to apply provider-specific detection (the
-        shape of "this message has an image" differs between providers) and
-        fetch the bytes. Default: no image.
+        shape of "this message has media" differs between providers) and
+        fetch the bytes. Default: no media.
         """
         return None
 
@@ -237,9 +246,9 @@ class TwilioService(MessagingService):
         response.raise_for_status()
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
-    def get_inbound_image(self, message: TwilioMessage) -> tuple[bytes, str] | None:
+    def get_inbound_media(self, message: TwilioMessage) -> tuple[bytes, str] | None:
         mime = message.attachment_mime_type
-        if not mime or not mime.startswith("image/") or not message.media_url:
+        if not mime or not message.media_url or _is_voice_mime(mime):
             return None
         return self.download_message_media(message)
 
@@ -350,8 +359,9 @@ class TurnIOService(MessagingService):
         response.raise_for_status()
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
-    def get_inbound_image(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
-        if message.attachment_mime_type != "image" or not (message.media_url or message.media_id):
+    def get_inbound_media(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
+        mime = message.attachment_mime_type
+        if not mime or _is_voice_mime(mime) or not (message.media_url or message.media_id):
             return None
         return self.download_message_media(message)
 
@@ -684,8 +694,9 @@ class MetaCloudAPIService(MessagingService):
         response.raise_for_status()
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
-    def get_inbound_image(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
-        if message.attachment_mime_type != "image" or not (message.media_url or message.media_id):
+    def get_inbound_media(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
+        mime = message.attachment_mime_type
+        if not mime or _is_voice_mime(mime) or not (message.media_url or message.media_id):
             return None
         return self.download_message_media(message)
 

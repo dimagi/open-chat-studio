@@ -130,6 +130,7 @@ class TwilioMessage(BaseMessage):
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
+    attachment_filename: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -139,9 +140,12 @@ class TwilioMessage(BaseMessage):
             return MESSAGE_TYPES.TEXT
         if value and value in ["audio/ogg", "video/mp4"]:
             return MESSAGE_TYPES.VOICE
-        if value and value.startswith("image/"):
-            # Treat as a text message with an attachment; the caption becomes the message text.
-            # Raw MIME type is preserved in attachment_mime_type for the persistence helper.
+        if value and value.startswith("audio/"):
+            return MESSAGE_TYPES.VOICE
+        if value and "/" in value:
+            # Any other non-empty MIME type (image/*, application/*, text/*, ...) is treated as a
+            # text message with an attachment. The caption (Body) becomes message_text and the
+            # raw MIME type is preserved in attachment_mime_type for the persistence helper.
             return MESSAGE_TYPES.TEXT
         return MESSAGE_TYPES.OTHER
 
@@ -189,6 +193,7 @@ class WhatsAppMessage(BaseMessage):
     media_id: str | None = Field(default=None)
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
+    attachment_filename: str | None = Field(default=None)
     whatsapp_message_id: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
@@ -196,9 +201,9 @@ class WhatsAppMessage(BaseMessage):
     def determine_content_type(cls, value):
         if value == "audio":
             return MESSAGE_TYPES.VOICE
-        if value == "image":
+        if value in ("image", "document"):
             # Treat as a text message with an attachment; the caption becomes the message text.
-            # Raw type string is preserved in attachment_mime_type for the persistence helper.
+            # The actual MIME type is preserved in attachment_mime_type for the persistence helper.
             return MESSAGE_TYPES.TEXT
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
@@ -210,17 +215,23 @@ class WhatsAppMessage(BaseMessage):
         body = ""
         if message_type == "text":
             body = message["text"]["body"]
-        elif message_type == "image":
-            body = message.get("image", {}).get("caption", "")
+        elif message_type in ("image", "document"):
+            body = message.get(message_type, {}).get("caption", "")
 
         media_payload = message.get(message_type, {})
+        # For documents the provider gives us a real MIME type; for images we keep the
+        # literal "image" marker (Twilio still uses image/* — the hydration stage handles both).
+        attachment_mime_type: str | None = message_type
+        if message_type == "document":
+            attachment_mime_type = media_payload.get("mime_type") or "application/octet-stream"
         return cls(
             participant_id=message_data["contacts"][0]["wa_id"],
             message_text=body,
             content_type=message_type,
             media_id=media_payload.get("id"),
             media_url=media_payload.get("url"),
-            attachment_mime_type=message_type,
+            attachment_mime_type=attachment_mime_type,
+            attachment_filename=media_payload.get("filename") if message_type == "document" else None,
             whatsapp_message_id=message.get("id"),
         )
 
