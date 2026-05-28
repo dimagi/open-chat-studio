@@ -82,6 +82,9 @@ nav:
       - 0009 Context-based stateless message processing pipeline: adr/0009-context-based-stateless-message-processing-pipeline.md
       - 0010 Exception-based early exit with guaranteed terminal stages: adr/0010-exception-based-early-exit-with-guaranteed-terminal-stages.md
       - 0011 Silent pipeline halt via EarlyAbort: adr/0011-silent-pipeline-halt-via-earlyabort.md
+      - 0012 Lean Score value layer in apps/assessments: adr/0012-score-value-layer-in-apps-assessments.md
+      - 0013 Dual-write Scores from evaluations and annotations: adr/0013-dual-write-scores-from-evaluations-and-annotations.md
+      - 0014 Minimal read-side concordance view backed by Score: adr/0014-minimal-read-side-concordance-view.md
   - Developer Guides:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md
