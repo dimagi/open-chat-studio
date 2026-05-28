@@ -3,7 +3,7 @@ import io
 
 import pytest
 from django.urls import reverse
-from waffle.models import Flag
+from waffle.testutils import override_flag
 
 from apps.assessments.score_writers import write_scores_from_evaluation_result
 from apps.evaluations.models import EvaluationResult
@@ -19,20 +19,15 @@ from apps.utils.factories.human_annotations import AnnotationItemFactory, Annota
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
-def _enable_flag(name):
-    flag, _ = Flag.objects.get_or_create(name=name)
-    flag.everyone = True
-    flag.save()
-    flag.flush()
-    return flag
-
-
 @pytest.fixture()
 def concordance_flags():
     """Enable all three feature flags required by the concordance views."""
-    _enable_flag("flag_assessments_concordance")
-    _enable_flag("flag_evaluations")
-    _enable_flag("flag_human_annotations")
+    with (
+        override_flag("flag_assessments_concordance", active=True),
+        override_flag("flag_evaluations", active=True),
+        override_flag("flag_human_annotations", active=True),
+    ):
+        yield
 
 
 def _make_concordance_data(team):
