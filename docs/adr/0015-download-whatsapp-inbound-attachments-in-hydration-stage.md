@@ -2,7 +2,7 @@
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
-<p class="adr-meta">Author: Chris Smit · Created: 2026-05-28</p>
+<p class="adr-meta">Author: Open Chat Studio · Created: 2026-05-28</p>
 
 <p class="adr-meta">Extends: <a href="0004-persist-inbound-email-attachments-in-handler.md">ADR-0004</a></p>
 
