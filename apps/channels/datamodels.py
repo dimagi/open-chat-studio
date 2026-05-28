@@ -187,6 +187,7 @@ class WhatsAppMessage(BaseMessage):
 
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
+    media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
     whatsapp_message_id: str | None = Field(default=None)
 
@@ -212,11 +213,13 @@ class WhatsAppMessage(BaseMessage):
         elif message_type == "image":
             body = message.get("image", {}).get("caption", "")
 
+        media_payload = message.get(message_type, {})
         return cls(
             participant_id=message_data["contacts"][0]["wa_id"],
             message_text=body,
             content_type=message_type,
-            media_id=message.get(message_type, {}).get("id", None),
+            media_id=media_payload.get("id"),
+            media_url=media_payload.get("url"),
             attachment_mime_type=message_type,
             whatsapp_message_id=message.get("id"),
         )

@@ -32,6 +32,12 @@ from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
 
+MEDIA_DOWNLOAD_TIMEOUT = 30
+
+
+def _normalize_content_type(content_type: str | None) -> str:
+    return (content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+
 
 class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
@@ -224,10 +230,12 @@ class TwilioService(MessagingService):
 
     def download_message_media(self, message: TwilioMessage) -> tuple[bytes, str]:
         """Fetch raw bytes and content type for any inbound Twilio media (image, audio, etc.)."""
+        if not message.media_url:
+            raise ValueError("Cannot download Twilio media: message.media_url is empty")
         auth = (self.account_sid, self.auth_token)
-        response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
+        response = httpx.get(message.media_url, auth=auth, follow_redirects=True, timeout=MEDIA_DOWNLOAD_TIMEOUT)
         response.raise_for_status()
-        return response.content, response.headers["Content-Type"]
+        return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
     def get_inbound_image(self, message: TwilioMessage) -> tuple[bytes, str] | None:
         mime = message.attachment_mime_type
@@ -323,13 +331,27 @@ class TurnIOService(MessagingService):
         )
 
     def download_message_media(self, message: WhatsAppMessage) -> tuple[bytes, str]:
-        """Fetch raw bytes and content type for any inbound Turn.io media (image, audio, etc.)."""
-        response = self.client.media.get_media(message.media_id)
+        """Fetch raw bytes and content type for any inbound Turn.io media (image, audio, etc.).
+
+        Prefers ``message.media_url`` (direct download) when present; otherwise
+        falls back to resolving via the Turn SDK's media_id endpoint.
+        """
+        if message.media_url:
+            response = httpx.get(
+                message.media_url,
+                headers={"Authorization": f"Bearer {self.auth_token}"},
+                follow_redirects=True,
+                timeout=MEDIA_DOWNLOAD_TIMEOUT,
+            )
+        elif message.media_id:
+            response = self.client.media.get_media(message.media_id)
+        else:
+            raise ValueError("Cannot download Turn.io media: both media_url and media_id are empty")
         response.raise_for_status()
-        return response.content, response.headers["Content-Type"]
+        return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
     def get_inbound_image(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
-        if message.attachment_mime_type != "image" or not message.media_id:
+        if message.attachment_mime_type != "image" or not (message.media_url or message.media_id):
             return None
         return self.download_message_media(message)
 
@@ -642,8 +664,17 @@ class MetaCloudAPIService(MessagingService):
         response.raise_for_status()
 
     def download_message_media(self, message: WhatsAppMessage) -> tuple[bytes, str]:
-        """Resolve the media URL and fetch raw bytes + content type for any inbound Meta media."""
-        media_url = self._get_media_url(message.media_id)
+        """Fetch raw bytes + content type for any inbound Meta media.
+
+        Prefers ``message.media_url`` (direct download); otherwise resolves the
+        URL from media_id via the Meta Media API and fetches that.
+        """
+        if message.media_url:
+            media_url = message.media_url
+        elif message.media_id:
+            media_url = self._get_media_url(message.media_id)
+        else:
+            raise ValueError("Cannot download Meta media: both media_url and media_id are empty")
         response = httpx.get(
             media_url,
             headers=self._headers,
@@ -651,10 +682,10 @@ class MetaCloudAPIService(MessagingService):
             timeout=self.META_API_TIMEOUT,
         )
         response.raise_for_status()
-        return response.content, response.headers["Content-Type"]
+        return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
     def get_inbound_image(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
-        if message.attachment_mime_type != "image" or not message.media_id:
+        if message.attachment_mime_type != "image" or not (message.media_url or message.media_id):
             return None
         return self.download_message_media(message)
 

@@ -129,6 +129,7 @@ def image_message(caption="Look at this!"):
                 "type": "image",
                 "image": {
                     "id": "turn-image-media-id-789",
+                    "url": "https://media.turn.io/turn-image-media-id-789",
                     "mime_type": "image/jpeg",
                     "sha256": "ghi789",
                     "caption": caption,

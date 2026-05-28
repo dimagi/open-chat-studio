@@ -83,6 +83,7 @@ def image_message_value(phone_number_id="12345", caption="Check this out"):
                 "type": "image",
                 "image": {
                     "id": "image-media-id-456",
+                    "url": "https://cdn.meta.example.com/image-media-id-456",
                     "mime_type": "image/jpeg",
                     "sha256": "def456",
                     "caption": caption,
