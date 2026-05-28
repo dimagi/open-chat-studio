@@ -53,12 +53,12 @@ def get_usage_data(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team__name")
+        .values("team_id", "team__name")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
         )
-        .order_by("-run_count")
+        .order_by("-run_count", "team__name")
     )
     for data in usage_data:
         yield data["team__name"], data["run_count"], data["total_tokens"]

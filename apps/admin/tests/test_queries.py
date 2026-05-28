@@ -352,6 +352,27 @@ class TestGetUsageData:
         rows = list(get_usage_data(start, end))
         assert rows == [("T", 1, 0)]
 
+    def test_does_not_merge_teams_sharing_a_display_name(self, date_range):
+        # Team.name has no uniqueness constraint, so grouping by name alone would
+        # incorrectly combine separate teams. Each team must aggregate independently.
+        start, end = date_range
+        team_one = TeamFactory.create(name="Duplicate")
+        team_two = TeamFactory.create(name="Duplicate")
+        session_one = ExperimentSessionFactory.create(team=team_one, experiment__team=team_one)
+        session_two = ExperimentSessionFactory.create(team=team_two, experiment__team=team_two)
+
+        self._make_trace(session=session_one, tokens=10)
+        self._make_trace(session=session_two, tokens=20)
+        self._make_trace(session=session_two, tokens=30)
+
+        rows = list(get_usage_data(start, end))
+        assert len(rows) == 2
+        token_totals = sorted(row[2] for row in rows)
+        run_counts = sorted(row[1] for row in rows)
+        assert token_totals == [10, 50]
+        assert run_counts == [1, 2]
+        assert all(row[0] == "Duplicate" for row in rows)
+
     def test_filters_by_date_range(self, date_range):
         start, end = date_range
         team = TeamFactory.create(name="T")
