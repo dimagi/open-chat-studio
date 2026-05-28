@@ -66,7 +66,14 @@ class ChatbotTable(tables.Table):
 
     class Meta:
         model = Experiment
-        fields = ("name", "participant_count", "session_count", "interaction_count", "last_activity", "trends")
+        fields = (
+            "name",
+            "participant_count",
+            "session_count",
+            "interaction_count",
+            "last_activity",
+            "trends",
+        )
         row_attrs = {
             **settings.DJANGO_TABLES2_ROW_ATTRS,
             "data-redirect-url": _chatbot_url_factory,

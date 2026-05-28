@@ -6,6 +6,12 @@
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
 {% endblock page_head %}
 
+{% block title_bar_end %}
+  <a href="{% url 'evaluations:dataset_download' request.team.slug object.id %}" class="btn btn-primary btn-sm">
+    <i class="fa-solid fa-download"></i> {% translate "Export CSV" %}
+  </a>
+{% endblock title_bar_end %}
+
 {% block form %}
   {{ form.non_field_errors }}
   {% render_form_fields form "name" %}

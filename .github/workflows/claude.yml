@@ -201,7 +201,7 @@ jobs:
             7. Add a comment to the issue summarizing what you did
 
             If all tasks are complete or blocked, comment on the issue explaining the status.
-          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(uv run --no-project zensical build:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git rm:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(ls:*),Bash(grep:*),Bash(sort:*),Bash(tail:*),Grep,Glob,Read,Write,Edit"'
 
   # ── Event-driven: respond to @claude mentions, issue label ──
   claude:

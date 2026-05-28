@@ -348,7 +348,11 @@ class ChannelBase(ABC):
         elif platform == "slack":
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
-            channel_cls = CommCareConnectChannel
+            from apps.channels.channels_v2.connect_channel import (  # noqa: PLC0415
+                CommCareConnectChannel as NewCommCareConnectChannel,
+            )
+
+            channel_cls = NewCommCareConnectChannel
         elif platform == "email":
             from apps.channels.channels_v2.email_channel import EmailChannel  # noqa: PLC0415
 
@@ -1427,6 +1431,7 @@ class SlackChannel(ChannelBase):
         )
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.connect_channel.CommCareConnectChannel
 class CommCareConnectChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]

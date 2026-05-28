@@ -2,6 +2,7 @@
 {% if updated %}
   <div id="chatbot-name" hx-swap-oob="innerHTML">{{ experiment.name }}</div>
   <div id="chatbot-description" hx-swap-oob="innerHTML">{{ experiment.description }}</div>
+  <div id="consent-banner" hx-swap-oob="innerHTML">{% include "chatbots/components/consent_banner.html" %}</div>
 {% endif %}
 <div id="settings-wrapper">
   <div class="flex justify-end mb-6">

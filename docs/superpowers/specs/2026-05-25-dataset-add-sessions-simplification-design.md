@@ -1,8 +1,12 @@
+---
+status: stable
+---
+
 # Dataset "Add Sessions" Page Simplification
 
 **Date:** 2026-05-25
 **Related PR:** #3354 (introduced the page being simplified)
-**Status:** Draft
+**Status:** Stable
 
 ## Problem
 
