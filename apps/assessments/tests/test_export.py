@@ -2,10 +2,9 @@ import csv
 import io
 
 import pytest
-from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
+from waffle.models import Flag
 
-from apps.assessments.models import Score
 from apps.assessments.score_writers import write_scores_from_evaluation_result
 from apps.evaluations.models import EvaluationResult
 from apps.human_annotations.models import Annotation, AnnotationStatus
@@ -18,6 +17,22 @@ from apps.utils.factories.evaluations import (
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+
+
+def _enable_flag(name):
+    flag, _ = Flag.objects.get_or_create(name=name)
+    flag.everyone = True
+    flag.save()
+    flag.flush()
+    return flag
+
+
+@pytest.fixture()
+def concordance_flags():
+    """Enable all three feature flags required by the concordance views."""
+    _enable_flag("flag_assessments_concordance")
+    _enable_flag("flag_evaluations")
+    _enable_flag("flag_human_annotations")
 
 
 def _make_concordance_data(team):
@@ -53,7 +68,7 @@ def _make_concordance_data(team):
 
 
 @pytest.mark.django_db()
-def test_export_concordance_csv(client, flag_assessments_concordance, flag_evaluations, flag_human_annotations):
+def test_export_concordance_csv(client, concordance_flags):
     team = TeamWithUsersFactory.create()
     user = team.members.first()
     client.force_login(user)
@@ -77,7 +92,7 @@ def test_export_concordance_csv(client, flag_assessments_concordance, flag_evalu
 
 
 @pytest.mark.django_db()
-def test_export_concordance_csv_missing_params(client, flag_assessments_concordance, flag_evaluations, flag_human_annotations):
+def test_export_concordance_csv_missing_params(client, concordance_flags):
     team = TeamWithUsersFactory.create()
     user = team.members.first()
     client.force_login(user)
