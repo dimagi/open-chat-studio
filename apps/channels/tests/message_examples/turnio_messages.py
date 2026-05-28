@@ -139,6 +139,28 @@ def image_message(caption="Look at this!"):
     }
 
 
+def document_message(caption="Here's the report", filename="report.pdf", mime_type="application/pdf"):
+    return {
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "ABCDdocXYZ",
+                "timestamp": "1706709716",
+                "type": "document",
+                "document": {
+                    "id": "turn-document-media-id-789",
+                    "url": "https://media.turn.io/turn-document-media-id-789",
+                    "mime_type": mime_type,
+                    "filename": filename,
+                    "sha256": "docghi789",
+                    "caption": caption,
+                },
+            }
+        ],
+    }
+
+
 def voice_message():
     return {
         "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],

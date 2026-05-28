@@ -125,6 +125,26 @@ class TestWhatsappAttachmentHydrationStage:
         ctx = make_context(message=self._image_message("image/png"), experiment_session=MagicMock())
         assert self.stage.should_run(ctx) is True
 
+    @pytest.mark.parametrize(
+        "mime",
+        [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+            "text/csv",
+        ],
+    )
+    def test_runs_for_document_mime_types(self, mime):
+        """Any non-empty, non-voice MIME triggers the stage so documents are hydrated."""
+        ctx = make_context(message=self._image_message(mime), experiment_session=MagicMock())
+        assert self.stage.should_run(ctx) is True
+
+    @pytest.mark.parametrize("mime", ["audio", "voice", "audio/ogg", "audio/mpeg"])
+    def test_skips_voice_audio_messages(self, mime):
+        """Voice/audio is routed via get_message_audio, never hydrated as a media attachment."""
+        ctx = make_context(message=self._image_message(mime), experiment_session=MagicMock())
+        assert self.stage.should_run(ctx) is False
+
     @pytest.mark.django_db()
     def test_process_populates_attachments(self):
         """process() downloads the image via the messaging service, persists it,
@@ -138,7 +158,7 @@ class TestWhatsappAttachmentHydrationStage:
         msg.message_text = ""
 
         ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
-        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_image.return_value = (
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_media.return_value = (
             b"\x89PNG\r\n\x1a\n",
             "image/png",
         )
@@ -163,7 +183,7 @@ class TestWhatsappAttachmentHydrationStage:
         msg.message_text = ""
 
         ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
-        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_image.return_value = (
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_media.return_value = (
             b"\x89PNG\r\n\x1a\n",
             "image/png",
         )
@@ -189,7 +209,7 @@ class TestWhatsappAttachmentHydrationStage:
         msg.message_text = ""
 
         ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
-        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_image.return_value = (
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_media.return_value = (
             b"\x89PNG\r\n\x1a\n",
             "image/png",
         )
@@ -199,3 +219,59 @@ class TestWhatsappAttachmentHydrationStage:
 
         response = client.get(reverse("experiments:download_file", args=[experiment.team.slug, session.id, file_id]))
         assert response.status_code == 200
+
+    @pytest.mark.django_db()
+    def test_process_persists_document_with_provider_filename(self):
+        """Documents must keep the provider-supplied filename rather than a generic 'image' fallback."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+
+        msg = MagicMock()
+        msg.attachment_mime_type = "application/pdf"
+        msg.attachment_filename = "invoice.pdf"
+        msg.attachments = []
+        msg.message_text = ""
+
+        ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_media.return_value = (
+            b"%PDF-1.4 fake",
+            "application/pdf",
+        )
+
+        self.stage.process(ctx)
+
+        from apps.files.models import File  # noqa: PLC0415
+
+        assert len(msg.attachments) == 1
+        file_id = msg.attachments[0].file_id
+        file_obj = File.objects.get(id=file_id)
+        assert file_obj.name == "invoice.pdf"
+        assert file_obj.content_type == "application/pdf"
+
+    @pytest.mark.django_db()
+    def test_process_falls_back_to_family_when_filename_missing(self):
+        """When the provider doesn't send a filename (image messages), a family-based name is used.
+        File.create appends an extension inferred from the content type if the name has none."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+
+        msg = MagicMock()
+        msg.attachment_mime_type = "image"
+        msg.attachment_filename = None
+        msg.attachments = []
+        msg.message_text = ""
+
+        ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_media.return_value = (
+            b"\x89PNG\r\n\x1a\n",
+            "image/png",
+        )
+
+        self.stage.process(ctx)
+
+        from apps.files.models import File  # noqa: PLC0415
+
+        file_obj = File.objects.get(id=msg.attachments[0].file_id)
+        # File.create appends a content-type-derived extension when none is provided.
+        assert file_obj.name.startswith("image")
+        assert file_obj.content_type == "image/png"

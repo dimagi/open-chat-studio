@@ -29,6 +29,12 @@ def _audio_message(message: dict):
     return message
 
 
+def _document_message(message: dict, mime_type: str = "application/pdf"):
+    message["MediaContentType0"] = mime_type
+    message["MediaUrl0"] = "http://example.com/media"
+    return message
+
+
 class Whatsapp:
     to = "whatsapp:+14155238886"
     from_ = "whatsapp:+27456897512"
@@ -44,6 +50,10 @@ class Whatsapp:
     @staticmethod
     def audio_message():
         return _audio_message(Whatsapp.text_message())
+
+    @staticmethod
+    def document_message(mime_type: str = "application/pdf"):
+        return _document_message(Whatsapp.text_message(), mime_type=mime_type)
 
 
 class Messenger:
