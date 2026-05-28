@@ -141,6 +141,10 @@ class TwilioMessage(BaseMessage):
             return MESSAGE_TYPES.TEXT
         if value and value in ["audio/ogg", "video/mp4"]:
             return MESSAGE_TYPES.VOICE
+        if value and value.startswith("image/"):
+            # Treat as a text message with an attachment; the caption becomes the message text.
+            # Raw MIME type is preserved in content_type_unparsed for the persistence helper.
+            return MESSAGE_TYPES.TEXT
         return MESSAGE_TYPES.OTHER
 
     @staticmethod
@@ -180,10 +184,13 @@ class SureAdhereMessage(BaseMessage):
         )
 
 
-class TurnWhatsappMessage(BaseMessage):
+class WhatsAppMessage(BaseMessage):
+    """Base class for WhatsApp messages (Turn.io and Meta Cloud API)."""
+
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
     content_type_unparsed: str | None = Field(default=None)
+    whatsapp_message_id: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -193,41 +200,15 @@ class TurnWhatsappMessage(BaseMessage):
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
 
-    @staticmethod
-    def parse(message_data: dict):
+    @classmethod
+    def parse(cls, message_data: dict) -> "WhatsAppMessage":
         message = message_data["messages"][0]
         message_type = message["type"]
         body = ""
         if message_type == "text":
             body = message["text"]["body"]
 
-        return TurnWhatsappMessage(
-            participant_id=message_data["contacts"][0]["wa_id"],
-            message_text=body,
-            content_type=message_type,
-            media_id=message.get(message_type, {}).get("id", None),
-            content_type_unparsed=message_type,
-        )
-
-
-class MetaCloudAPIMessage(TurnWhatsappMessage):
-    """Message from the Meta Cloud API (WhatsApp Business).
-
-    Extends TurnWhatsappMessage with the WhatsApp message ID, which is required
-    for features like typing indicators.
-    """
-
-    whatsapp_message_id: str | None = Field(default=None)
-
-    @staticmethod
-    def parse(message_data: dict) -> "MetaCloudAPIMessage":
-        message = message_data["messages"][0]
-        message_type = message["type"]
-        body = ""
-        if message_type == "text":
-            body = message["text"]["body"]
-
-        return MetaCloudAPIMessage(
+        return cls(
             participant_id=message_data["contacts"][0]["wa_id"],
             message_text=body,
             content_type=message_type,

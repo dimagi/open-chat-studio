@@ -98,12 +98,12 @@ class WhatsappCallbacks(ChannelCallbacks):
 
     def on_submit_input_to_llm(self, recipient: str) -> None:
         # noqa: PLC0415 - circular: datamodels imports chat.channels
-        from apps.channels.datamodels import MetaCloudAPIMessage  # noqa: PLC0415
+        from apps.channels.datamodels import WhatsAppMessage  # noqa: PLC0415
 
         if self._ctx is None:
             return
         message = self._ctx.message
-        if not isinstance(message, MetaCloudAPIMessage) or not message.whatsapp_message_id:
+        if not isinstance(message, WhatsAppMessage) or not message.whatsapp_message_id:
             return
         try:
             self._service.send_typing_indicator(

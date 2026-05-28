@@ -148,7 +148,7 @@ class TestTurnio:
         ],
     )
     def test_parse_text_message(self, message, message_type):
-        message = TurnWhatsappMessage.parse(message)
+        message = WhatsAppMessage.parse(message)
         assert message.participant_id == "27456897512"
         if message_type == "text":
             assert message.message_text == "Hi there!"
@@ -243,7 +243,7 @@ class TestMetaCloudApi:
         ],
     )
     def test_parse_messages(self, message, message_type):
-        parsed = MetaCloudAPIMessage.parse(message)
+        parsed = WhatsAppMessage.parse(message)
         assert parsed.participant_id == "27456897512"
         if message_type == "text":
             assert parsed.message_text == "Hello"

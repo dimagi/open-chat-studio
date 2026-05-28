@@ -8,7 +8,7 @@ import pytest
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage
+from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
@@ -134,7 +134,7 @@ class TestTurnWhatsappMessageParsing:
 
     def test_audio_message_type_maps_to_voice(self):
         """WhatsApp sends 'audio' as the message type, which should map to MESSAGE_TYPES.VOICE."""
-        message = TurnWhatsappMessage.parse(turnio_messages.audio_message())
+        message = WhatsAppMessage.parse(turnio_messages.audio_message())
         assert message.content_type == MESSAGE_TYPES.VOICE
         assert message.media_id == "1215194677037265"
 
@@ -155,7 +155,7 @@ class TestTurnWhatsappMessageParsing:
                 }
             ],
         }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = WhatsAppMessage.parse(message_data)
         assert message.content_type == MESSAGE_TYPES.VOICE
 
     def test_text_message_type_maps_to_text(self):
@@ -171,7 +171,7 @@ class TestTurnWhatsappMessageParsing:
                 }
             ],
         }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = WhatsAppMessage.parse(message_data)
         assert message.content_type == MESSAGE_TYPES.TEXT
 
 
@@ -205,7 +205,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, audio_download_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
@@ -252,7 +252,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, non_audio_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
@@ -277,7 +277,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, error_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
@@ -297,7 +297,7 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [error_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
