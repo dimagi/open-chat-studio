@@ -109,7 +109,7 @@ class DeleteAutoPopulationRule(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 @permission_required("evaluations.change_evaluationdataset")
 @require_POST
 def toggle_auto_population_rule(request, team_slug: str, pk: int):
-    rule = get_object_or_404(DatasetAutoPopulationRule, id=pk, team__slug=team_slug)
+    rule = get_object_or_404(DatasetAutoPopulationRule, id=pk, team=request.team)
     rule.is_enabled = not rule.is_enabled
     if rule.is_enabled:
         rule.consecutive_failure_count = 0
