@@ -22,6 +22,17 @@
     ]
   },
   "enableAllProjectMcpServers": false,
+  "extraKnownMarketplaces": {
+    "dimagi-claude-workflows": {
+      "source": {
+        "source": "github",
+        "repo": "dimagi/dimagi-claude-workflows"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "dev-utils@dimagi-claude-workflows": true
+  },
   "env": {
     "MAX_THINKING_TOKENS": "32000"
   },

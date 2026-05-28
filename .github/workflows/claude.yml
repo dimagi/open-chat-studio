@@ -201,7 +201,7 @@ jobs:
             7. Add a comment to the issue summarizing what you did
 
             If all tasks are complete or blocked, comment on the issue explaining the status.
-          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(uv run --no-project zensical build:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git rm:*),Bash(gh pr create:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(ls:*),Bash(grep:*),Bash(sort:*),Bash(tail:*),Grep,Glob,Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(uv run --no-project zensical build:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git rm:*),Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(ls:*),Bash(grep:*),Bash(sort:*),Bash(tail:*),Grep,Glob,Read,Write,Edit"'
 
   # ── Event-driven: respond to @claude mentions, issue label ──
   claude:
@@ -282,4 +282,4 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           branch_prefix: "claude/"
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git branch:*),Bash(gh pr create:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Read,Write,Edit"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(git branch:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Read,Write,Edit"
