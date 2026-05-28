@@ -10,14 +10,14 @@ Open Chat Studio has two independent subsystems that produce per-session judgmen
 
 ## Decision
 
-We will introduce a new Django app `apps.assessments` containing a single model, `Score` (`apps/assessments/models.py:10`), as the shared typed-value layer:
+We will introduce a new Django app `apps.assessments` containing a single model, `Score`, as the shared typed-value layer:
 
 - **Scope is one row per (target, field, source).** A `Score` carries a `name`, a `data_type` enum (`NUMERIC` | `CATEGORICAL` | `BOOLEAN`) and split-column storage (`value_numeric` `DecimalField(20,6)` and `value_string` `TextField`). A `CheckConstraint` named `score_value_present` requires at least one of the two value columns to be populated.
 - **Target is a `GenericForeignKey` from day one.** `target_content_type` + `target_object_id` form the polymorphic target, even though only `ExperimentSession` is exercised in v1. Adding `Trace` or `EvaluationMessage` later is non-breaking.
 - **Source provenance is preserved by typed FKs plus a `source` enum.** `automated_result` (FK to `evaluations.EvaluationResult`) and `review` (FK to `human_annotations.Annotation`) are mutually-exclusive nullable FKs that record which artefact produced this Score; `source` is a `TextChoices` enum (`LLM_JUDGE`, `PROGRAMMATIC`, `HUMAN_REVIEW`, plus reserved `USER_FEEDBACK` and `SYSTEM` values with no producer in v1).
 - **Idempotency is enforced by partial unique constraints, not application logic.** `score_unique_per_automated_result_field` covers `(automated_result, name)` where `automated_result IS NOT NULL`; `score_unique_per_review_field` covers `(review, name)` where `review IS NOT NULL`. This matches the unified design's "artefact-level idempotency" and lets the writers safely delete-and-recreate.
 - **`team` is denormalised via `BaseTeamModel`.** Set at write time from the parent `EvaluationResult.team` / `Annotation.team` so queries scope by team without an extra join.
-- **Booleans land in `value_numeric` as 0/1, not in `value_string`.** The `data_type=BOOLEAN` marker preserves the original intent for rendering while letting future aggregation treat booleans as numeric without a special case (`apps/assessments/score_writers.py:44`).
+- **Booleans land in `value_numeric` as 0/1, not in `value_string`.** The `data_type=BOOLEAN` marker preserves the original intent for rendering while letting future aggregation treat booleans as numeric without a special case.
 - **Field names align with the unified design's terminal vocabulary.** `automated_result` and `review` (not `evaluation_result` / `annotation`) are chosen now so that when `EvaluationResult → AutomatedResult` and `Annotation → Review` renames happen, only the FK targets change.
 - **Deferred everything.** No `Assessment` umbrella, `AssessmentSchema`, `AssessmentRun`, `RoutingRule`, `participant` FK, `score_config`, or `comment` field. Each is a nullable addition when its motivating use case arrives.
 
