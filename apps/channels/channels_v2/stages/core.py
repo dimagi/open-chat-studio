@@ -707,14 +707,20 @@ class AttachmentHydrationStage(ProcessingStage):
 
 
 class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
-    """Download, persist, and hydrate inbound WhatsApp image attachments.
+    """Download, persist, and hydrate inbound WhatsApp media attachments
+    (images, documents, and other non-voice media).
 
-    should_run detects image messages via attachment_mime_type. _get_files()
-    downloads the media via the messaging service and persists the bytes as
-    a MESSAGE_MEDIA File. The base class then handles ChatAttachment linkage
-    and Attachment construction. Size and content-type policing is the
-    upstream provider's responsibility — Meta already caps what reaches us.
+    should_run detects attachment-bearing messages via attachment_mime_type.
+    _get_files() downloads the media via the messaging service and persists
+    the bytes as a MESSAGE_MEDIA File. The base class then handles
+    ChatAttachment linkage and Attachment construction. Size and
+    content-type policing is the upstream provider's responsibility —
+    Meta already caps what reaches us.
     """
+
+    # Excluded MIME markers — voice/audio is handled via the audio transcription path,
+    # never persisted as an inbound media attachment.
+    _VOICE_MIMES = {"audio", "voice"}
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         if not ctx.experiment_session or not ctx.message:
@@ -722,32 +728,45 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
         if ctx.message.attachments:
             return False
         mime = ctx.message.attachment_mime_type
-        return mime == "image" or bool(mime and mime.startswith("image/"))
+        if not mime:
+            return False
+        return not (mime in self._VOICE_MIMES or mime.startswith("audio/"))
 
     def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
         messaging_service = ctx.experiment_channel.messaging_provider.get_messaging_service()
 
         try:
-            image = messaging_service.get_inbound_image(ctx.message)
+            media = messaging_service.get_inbound_media(ctx.message)
         except Exception:
             logger.exception("Failed to download WhatsApp inbound media")
             return []
 
-        if image is None:
+        if media is None:
             return []
 
-        raw_bytes, content_type = image
+        raw_bytes, content_type = media
+        filename = self._resolve_filename(ctx, content_type)
 
         try:
             file = File.create(
-                filename="image",
+                filename=filename,
                 file_obj=BytesIO(raw_bytes),
                 team_id=ctx.experiment.team_id,
                 purpose=FilePurpose.MESSAGE_MEDIA,
                 content_type=content_type,
             )
         except Exception:
-            logger.exception("Failed to persist WhatsApp inbound image")
+            logger.exception("Failed to persist WhatsApp inbound media")
             return []
 
         return [file]
+
+    @staticmethod
+    def _resolve_filename(ctx: MessageProcessingContext, content_type: str) -> str:
+        """Prefer the provider-supplied filename (documents). Fall back to a
+        family-based name when the provider doesn't send one (e.g. images)."""
+        provided = getattr(ctx.message, "attachment_filename", None)
+        if provided:
+            return provided
+        family = content_type.split("/", 1)[0] if "/" in content_type else "attachment"
+        return family or "attachment"
