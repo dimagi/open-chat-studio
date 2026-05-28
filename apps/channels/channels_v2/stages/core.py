@@ -28,7 +28,6 @@ from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
 )
-from apps.service_providers.file_limits import MB, WHATSAPP_ALLOWED_IMAGE_TYPES, WHATSAPP_INBOUND_MAX_BYTES
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -711,12 +710,10 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
     """Download, persist, and hydrate inbound WhatsApp image attachments.
 
     should_run detects image messages via attachment_mime_type. _get_files()
-    downloads media via the messaging service, validates size and content
-    type, and persists the bytes as a MESSAGE_MEDIA File. The base class then
-    handles ChatAttachment linkage and Attachment construction. On any skip
-    or error no file is returned; size/type rejections also append a bracketed
-    note to message_text so the LLM can explain to the user why the image was
-    dropped.
+    downloads the media via the messaging service and persists the bytes as
+    a MESSAGE_MEDIA File. The base class then handles ChatAttachment linkage
+    and Attachment construction. Size and content-type policing is the
+    upstream provider's responsibility — Meta already caps what reaches us.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -740,21 +737,6 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
             return []
 
         raw_bytes, content_type = image
-        size = len(raw_bytes)
-        content_type = content_type.split(";", 1)[0].strip().lower()
-
-        if size > WHATSAPP_INBOUND_MAX_BYTES:
-            limit_mb = WHATSAPP_INBOUND_MAX_BYTES // MB
-            ctx.message.message_text = self._append_skip_note(
-                ctx.message.message_text, f"exceeds {limit_mb} MB image limit", size
-            )
-            return []
-
-        if content_type not in WHATSAPP_ALLOWED_IMAGE_TYPES:
-            ctx.message.message_text = self._append_skip_note(
-                ctx.message.message_text, f"image type '{content_type}' not supported", size
-            )
-            return []
 
         try:
             file = File.create(
@@ -769,9 +751,3 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
             return []
 
         return [file]
-
-    @staticmethod
-    def _append_skip_note(message_text: str, reason: str, size: int) -> str:
-        size_mb = size / MB
-        note = f"\n\n[Image ({size_mb:.1f} MB) skipped — {reason}]"
-        return (message_text or "").rstrip() + note

@@ -84,10 +84,6 @@ FILE_SENDABILITY_CHECKERS: dict[str, Callable[[str, int], SendabilityResult]] = 
 
 EMAIL_MAX_ATTACHMENT_BYTES = 20 * MB
 
-# WhatsApp inbound image limits (Meta-documented: 5 MB, JPEG/PNG/WEBP only)
-WHATSAPP_INBOUND_MAX_BYTES = 5 * MB
-WHATSAPP_ALLOWED_IMAGE_TYPES: frozenset[str] = frozenset({"image/jpeg", "image/png", "image/webp"})
-
 EMAIL_BLOCKED_EXTENSIONS: frozenset[str] = frozenset(
     {
         "exe",
