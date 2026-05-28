@@ -28,3 +28,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0006](0006-combine-email-reply-text-and-attachments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Combine email reply text and attachments into a single message |
 | [0007](0007-adopt-ty-as-python-type-checker.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Adopt ty as the Python type checker |
 | [0008](0008-progressive-ty-rule-enablement.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Enable ty rules progressively from a baseline of all-ignored |
+| [0009](0009-context-based-stateless-message-processing-pipeline.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Context-based stateless message processing pipeline |
+| [0010](0010-exception-based-early-exit-with-guaranteed-terminal-stages.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Exception-based early exit with guaranteed terminal stages |
+| [0011](0011-silent-pipeline-halt-via-earlyabort.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Silent pipeline halt via EarlyAbort |

@@ -79,6 +79,9 @@ nav:
       - 0006 Combine email reply text and attachments into a single message: adr/0006-combine-email-reply-text-and-attachments.md
       - 0007 Adopt ty as the Python type checker: adr/0007-adopt-ty-as-python-type-checker.md
       - 0008 Enable ty rules progressively from a baseline of all-ignored: adr/0008-progressive-ty-rule-enablement.md
+      - 0009 Context-based stateless message processing pipeline: adr/0009-context-based-stateless-message-processing-pipeline.md
+      - 0010 Exception-based early exit with guaranteed terminal stages: adr/0010-exception-based-early-exit-with-guaranteed-terminal-stages.md
+      - 0011 Silent pipeline halt via EarlyAbort: adr/0011-silent-pipeline-halt-via-earlyabort.md
   - Developer Guides:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md
