@@ -118,6 +118,26 @@ def audio_message():
     }
 
 
+def image_message(caption="Look at this!"):
+    return {
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "ABCDimgXYZ",
+                "timestamp": "1706709716",
+                "type": "image",
+                "image": {
+                    "id": "turn-image-media-id-789",
+                    "mime_type": "image/jpeg",
+                    "sha256": "ghi789",
+                    "caption": caption,
+                },
+            }
+        ],
+    }
+
+
 def voice_message():
     return {
         "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],

@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import logging
-from io import BytesIO
 from typing import TYPE_CHECKING
 
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.channels_v2.stages.core import WhatsappAttachmentHydrationStage
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProviderType
 
 if TYPE_CHECKING:
+    from io import BytesIO
+
     from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
@@ -120,6 +122,8 @@ class WhatsappChannel(ChannelBase):
     Capabilities (voice, multimedia, supported message types) are determined
     at runtime from the messaging service, since they vary by provider.
     """
+
+    attachment_hydration_stage_class = WhatsappAttachmentHydrationStage
 
     def __init__(
         self,

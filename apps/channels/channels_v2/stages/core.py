@@ -28,6 +28,7 @@ from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
 )
+from apps.service_providers.file_limits import MB, WHATSAPP_ALLOWED_IMAGE_TYPES, WHATSAPP_INBOUND_MAX_BYTES
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -681,3 +682,79 @@ class AttachmentHydrationStage(ProcessingStage):
         ctx.message.attachments = [
             Attachment.from_file(f, type="ocs_attachments", session_id=ctx.experiment_session.id) for f in files
         ]
+
+
+# ---------------------------------------------------------------------------
+# WhatsappAttachmentHydrationStage
+# ---------------------------------------------------------------------------
+
+
+class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
+    """Download, persist, and hydrate inbound WhatsApp image attachments.
+
+    should_run detects image messages via attachment_mime_type. process()
+    downloads media via the messaging service, validates size and content
+    type, persists the bytes as a MESSAGE_MEDIA File, then populates
+    ctx.message.attachments. On any skip or error the file is not persisted;
+    size/type rejections also append a bracketed note to message_text so the
+    LLM can explain to the user why the image was dropped.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        if not ctx.experiment_session or not ctx.message:
+            return False
+        if ctx.message.attachments:
+            return False
+        mime = ctx.message.attachment_mime_type
+        return mime == "image" or bool(mime and mime.startswith("image/"))
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        messaging_service = ctx.experiment_channel.messaging_provider.get_messaging_service()
+
+        try:
+            image = messaging_service.get_inbound_image(ctx.message)
+        except Exception:
+            logger.exception("Failed to download WhatsApp inbound media")
+            return
+
+        if image is None:
+            return
+
+        raw_bytes, content_type = image
+        size = len(raw_bytes)
+        content_type = content_type.split(";", 1)[0].strip().lower()
+
+        if size > WHATSAPP_INBOUND_MAX_BYTES:
+            limit_mb = WHATSAPP_INBOUND_MAX_BYTES // MB
+            ctx.message.message_text = self._append_skip_note(
+                ctx.message.message_text, f"exceeds {limit_mb} MB image limit", size
+            )
+            return
+
+        if content_type not in WHATSAPP_ALLOWED_IMAGE_TYPES:
+            ctx.message.message_text = self._append_skip_note(
+                ctx.message.message_text, f"image type '{content_type}' not supported", size
+            )
+            return
+
+        try:
+            file = File.create(
+                filename="image",
+                file_obj=BytesIO(raw_bytes),
+                team_id=ctx.experiment.team_id,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+                content_type=content_type,
+            )
+        except Exception:
+            logger.exception("Failed to persist WhatsApp inbound image")
+            return
+
+        ctx.message.attachments = [
+            Attachment.from_file(file, type="ocs_attachments", session_id=ctx.experiment_session.id)
+        ]
+
+    @staticmethod
+    def _append_skip_note(message_text: str, reason: str, size: int) -> str:
+        size_mb = size / MB
+        note = f"\n\n[Image ({size_mb:.1f} MB) skipped — {reason}]"
+        return (message_text or "").rstrip() + note

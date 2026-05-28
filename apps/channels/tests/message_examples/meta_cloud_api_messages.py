@@ -65,3 +65,36 @@ def audio_message_value(phone_number_id="12345"):
 
 def audio_message(phone_number_id="12345"):
     return _wrap_in_webhook_payload(audio_message_value(phone_number_id), phone_number_id)
+
+
+def image_message_value(phone_number_id="12345", caption="Check this out"):
+    return {
+        "messaging_product": "whatsapp",
+        "metadata": {
+            "display_phone_number": "+15551234567",
+            "phone_number_id": phone_number_id,
+        },
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.img001",
+                "timestamp": "1706709716",
+                "type": "image",
+                "image": {
+                    "id": "image-media-id-456",
+                    "mime_type": "image/jpeg",
+                    "sha256": "def456",
+                    "caption": caption,
+                },
+            }
+        ],
+    }
+
+
+def image_message_value_no_caption(phone_number_id="12345"):
+    return image_message_value(phone_number_id, caption="")
+
+
+def image_message(phone_number_id="12345", caption="Check this out"):
+    return _wrap_in_webhook_payload(image_message_value(phone_number_id, caption=caption), phone_number_id)

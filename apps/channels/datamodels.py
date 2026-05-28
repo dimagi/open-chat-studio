@@ -102,7 +102,6 @@ class BaseMessage(BaseModel):
 
 class TelegramMessage(BaseMessage):
     media_id: str | None = None
-    content_type_unparsed: str | None = Field(default=None)
     message_id: int
 
     @field_validator("content_type", mode="before")
@@ -119,7 +118,6 @@ class TelegramMessage(BaseMessage):
             content_type=update_obj.message.content_type,
             media_id=update_obj.message.voice.file_id if update_obj.message.content_type == "voice" else None,
             message_id=update_obj.message.message_id,
-            content_type_unparsed=update_obj.message.content_type,
         )
 
 
@@ -131,7 +129,7 @@ class TwilioMessage(BaseMessage):
     to: str
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
-    content_type_unparsed: str | None = Field(default=None)
+    attachment_mime_type: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -143,7 +141,7 @@ class TwilioMessage(BaseMessage):
             return MESSAGE_TYPES.VOICE
         if value and value.startswith("image/"):
             # Treat as a text message with an attachment; the caption becomes the message text.
-            # Raw MIME type is preserved in content_type_unparsed for the persistence helper.
+            # Raw MIME type is preserved in attachment_mime_type for the persistence helper.
             return MESSAGE_TYPES.TEXT
         return MESSAGE_TYPES.OTHER
 
@@ -167,7 +165,7 @@ class TwilioMessage(BaseMessage):
             message_text=message_data["Body"],
             content_type=content_type,
             media_url=message_data.get("MediaUrl0"),
-            content_type_unparsed=content_type,
+            attachment_mime_type=content_type,
             platform=platform,
         )
 
@@ -189,7 +187,7 @@ class WhatsAppMessage(BaseMessage):
 
     to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
-    content_type_unparsed: str | None = Field(default=None)
+    attachment_mime_type: str | None = Field(default=None)
     whatsapp_message_id: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
@@ -197,6 +195,10 @@ class WhatsAppMessage(BaseMessage):
     def determine_content_type(cls, value):
         if value == "audio":
             return MESSAGE_TYPES.VOICE
+        if value == "image":
+            # Treat as a text message with an attachment; the caption becomes the message text.
+            # Raw type string is preserved in attachment_mime_type for the persistence helper.
+            return MESSAGE_TYPES.TEXT
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
 
@@ -207,13 +209,15 @@ class WhatsAppMessage(BaseMessage):
         body = ""
         if message_type == "text":
             body = message["text"]["body"]
+        elif message_type == "image":
+            body = message.get("image", {}).get("caption", "")
 
         return cls(
             participant_id=message_data["contacts"][0]["wa_id"],
             message_text=body,
             content_type=message_type,
             media_id=message.get(message_type, {}).get("id", None),
-            content_type_unparsed=message_type,
+            attachment_mime_type=message_type,
             whatsapp_message_id=message.get("id"),
         )
 
@@ -225,7 +229,6 @@ class FacebookMessage(BaseMessage):
 
     page_id: str
     media_url: str | None = None
-    content_type_unparsed: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -253,7 +256,6 @@ class FacebookMessage(BaseMessage):
             message_text=message_data["message"].get("text", ""),
             media_url=media_url,
             content_type=content_type,
-            content_type_unparsed=content_type,
         )
 
 

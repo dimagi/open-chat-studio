@@ -210,7 +210,7 @@ class TestMetaCloudAPIServiceAudio:
             message_text="",
             content_type="voice",
             media_id="123",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
         with patch("apps.service_providers.messaging_service.audio.convert_audio") as mock_convert:
@@ -257,7 +257,7 @@ class TestMetaCloudAPIServiceAudio:
             message_text="",
             content_type="voice",
             media_id="456",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
         with pytest.raises(AudioConversionError):
@@ -282,7 +282,7 @@ class TestMetaCloudAPIServiceAudio:
             message_text="",
             content_type="voice",
             media_id="789",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
         with pytest.raises(AudioConversionError):
@@ -302,7 +302,7 @@ class TestMetaCloudAPIServiceAudio:
             message_text="",
             content_type="voice",
             media_id="bad_id",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
         with pytest.raises(AudioConversionError, match="Unable to resolve media URL"):

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
-from apps.channels.datamodels import MediaCache, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import MediaCache, TwilioMessage, WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
@@ -67,9 +67,28 @@ class MessagingService(pydantic.BaseModel):
         when the service window is expired. Should not be called directly from channel code."""
         raise NotImplementedError
 
-    def get_message_audio(self, message: TwilioMessage | TurnWhatsappMessage):
+    def get_message_audio(self, message: TwilioMessage | WhatsAppMessage):
         """Should return a BytesIO object in .wav format"""
         raise NotImplementedError
+
+    def download_message_media(self, message) -> tuple[bytes, str]:
+        """Return (raw_bytes, content_type) for an inbound media message.
+
+        Fetches the media referenced by *message* (image, audio, video, etc.)
+        without any format conversion. Callers are responsible for validating
+        the content type and size before persisting.
+        """
+        raise NotImplementedError
+
+    def get_inbound_image(self, message) -> tuple[bytes, str] | None:
+        """Return (raw_bytes, content_type) for an inbound image, or None if
+        the message has no image attachment.
+
+        Subclasses override this to apply provider-specific detection (the
+        shape of "this message has an image" differs between providers) and
+        fetch the bytes. Default: no image.
+        """
+        return None
 
     def resolve_number(self, number: str) -> str | None:
         """Returns `number` if the number is verified to belong to the account, otherwise return `None`"""
@@ -203,16 +222,26 @@ class TwilioService(MessagingService):
         public_url = self._upload_audio_file(synthetic_voice)
         self.client.messages.create(from_=from_, to=to, media_url=[public_url])
 
-    def get_message_audio(self, message: TwilioMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
+    def download_message_media(self, message: TwilioMessage) -> tuple[bytes, str]:
+        """Fetch raw bytes and content type for any inbound Twilio media (image, audio, etc.)."""
         auth = (self.account_sid, self.auth_token)
         response = httpx.get(message.media_url, auth=auth, follow_redirects=True)
+        response.raise_for_status()
+        return response.content, response.headers["Content-Type"]
+
+    def get_inbound_image(self, message: TwilioMessage) -> tuple[bytes, str] | None:
+        mime = message.attachment_mime_type
+        if not mime or not mime.startswith("image/") or not message.media_url:
+            return None
+        return self.download_message_media(message)
+
+    def get_message_audio(self, message: TwilioMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         try:
-            response.raise_for_status()
+            raw_bytes, content_type = self.download_message_media(message)
         except httpx.HTTPStatusError as e:
             raise AudioConversionError("Unable to fetch message media") from e
 
-        data = BytesIO(response.content)
-        content_type = response.headers["Content-Type"]
+        data = BytesIO(raw_bytes)
         message.cached_media_data = MediaCache(content_type=content_type, data=data)
 
         # Example header: {'Content-Type': 'audio/ogg'}
@@ -293,16 +322,24 @@ class TurnIOService(MessagingService):
             whatsapp_id=to, file=audio_file, content_type="audio/ogg", media_type="audio", caption=None
         )
 
-    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
+    def download_message_media(self, message: WhatsAppMessage) -> tuple[bytes, str]:
+        """Fetch raw bytes and content type for any inbound Turn.io media (image, audio, etc.)."""
         response = self.client.media.get_media(message.media_id)
+        response.raise_for_status()
+        return response.content, response.headers["Content-Type"]
 
+    def get_inbound_image(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
+        if message.attachment_mime_type != "image" or not message.media_id:
+            return None
+        return self.download_message_media(message)
+
+    def get_message_audio(self, message: WhatsAppMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         try:
-            response.raise_for_status()
+            raw_bytes, content_type = self.download_message_media(message)
         except requests.HTTPError as e:
             raise AudioConversionError("Unable to fetch message media") from e
 
-        data = BytesIO(response.content)
-        content_type = response.headers["Content-Type"]
+        data = BytesIO(raw_bytes)
         message.cached_media_data = MediaCache(content_type=content_type, data=data)
 
         # Example header: {'Content-Type': 'audio/ogg'}
@@ -604,7 +641,8 @@ class MetaCloudAPIService(MessagingService):
         response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
         response.raise_for_status()
 
-    def get_message_audio(self, message: TurnWhatsappMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
+    def download_message_media(self, message: WhatsAppMessage) -> tuple[bytes, str]:
+        """Resolve the media URL and fetch raw bytes + content type for any inbound Meta media."""
         media_url = self._get_media_url(message.media_id)
         response = httpx.get(
             media_url,
@@ -612,13 +650,21 @@ class MetaCloudAPIService(MessagingService):
             follow_redirects=True,
             timeout=self.META_API_TIMEOUT,
         )
+        response.raise_for_status()
+        return response.content, response.headers["Content-Type"]
+
+    def get_inbound_image(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
+        if message.attachment_mime_type != "image" or not message.media_id:
+            return None
+        return self.download_message_media(message)
+
+    def get_message_audio(self, message: WhatsAppMessage) -> BytesIO:  # ty: ignore[invalid-method-override]
         try:
-            response.raise_for_status()
+            raw_bytes, content_type = self.download_message_media(message)
         except httpx.HTTPStatusError as e:
             raise AudioConversionError("Unable to fetch message media") from e
 
-        data = BytesIO(response.content)
-        content_type = response.headers["Content-Type"]
+        data = BytesIO(raw_bytes)
         message.cached_media_data = MediaCache(content_type=content_type, data=data)
 
         family, sub_type = content_type.split("/", 1)
