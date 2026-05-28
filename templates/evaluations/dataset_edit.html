@@ -125,6 +125,9 @@
           {% endif %}
         </ul>
       </div>
+      <a href="{% url 'evaluations:dataset_download' request.team.slug object.id %}" class="btn btn-secondary btn-sm">
+        <i class="fa-solid fa-download"></i> {% translate "Export CSV" %}
+      </a>
     </div>
 
     {% if object.evaluation_mode != 'session' %}
