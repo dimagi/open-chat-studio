@@ -134,7 +134,7 @@ class AddFileToProvider(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
         provider = ServiceProvider[self.kwargs["provider_type"]]
-        provider = get_object_or_404(provider.model, team__slug=self.request.team.slug, pk=self.kwargs["pk"])
+        provider = get_object_or_404(provider.model, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         provider.add_files([file])
         return file
