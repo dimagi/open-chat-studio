@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from django.urls import reverse
 
 from apps.channels.channels_v2.stages.core import AttachmentHydrationStage, WhatsappAttachmentHydrationStage
 from apps.channels.datamodels import Attachment, BaseMessage
@@ -172,3 +173,29 @@ class TestWhatsappAttachmentHydrationStage:
         chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
         file_id = msg.attachments[0].file_id
         assert chat_attachment.files.filter(id=file_id).exists()
+
+    @pytest.mark.django_db()
+    def test_hydrated_file_is_reachable_via_download_file_view(self, client):
+        """End-to-end: after hydration, the experiments:download_file view should
+        return the file (200), proving the File → ChatAttachment → Chat →
+        ExperimentSession join resolves. Without the ChatAttachment linkage the
+        view 404s."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+
+        msg = MagicMock()
+        msg.attachment_mime_type = "image"
+        msg.attachments = []
+        msg.message_text = ""
+
+        ctx = make_context(message=msg, experiment=experiment, experiment_session=session)
+        ctx.experiment_channel.messaging_provider.get_messaging_service.return_value.get_inbound_image.return_value = (
+            b"\x89PNG\r\n\x1a\n",
+            "image/png",
+        )
+
+        self.stage.process(ctx)
+        file_id = msg.attachments[0].file_id
+
+        response = client.get(reverse("experiments:download_file", args=[experiment.team.slug, session.id, file_id]))
+        assert response.status_code == 200

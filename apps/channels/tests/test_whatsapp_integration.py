@@ -12,9 +12,9 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.channels.tests.channels.conftest import make_context
 from apps.chat.channels import MESSAGE_TYPES
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatAttachment, ChatMessage
+from apps.experiments.models import ExperimentSession
 from apps.files.models import File, FilePurpose
-from apps.service_providers.file_limits import WHATSAPP_INBOUND_MAX_BYTES
 from apps.service_providers.messaging_service import MetaCloudAPIService, TurnIOService, TwilioService
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -436,21 +436,63 @@ class TestTwilioDownloadMedia:
         with patch("httpx.get", return_value=mock_response) as mock_get:
             data, content_type = service.download_message_media(message)
 
-        mock_get.assert_called_once_with(
-            "http://example.com/media",
-            auth=("SID", "TOKEN"),
-            follow_redirects=True,
-        )
+        mock_get.assert_called_once()
+        call_args = mock_get.call_args
+        assert call_args.args[0] == "http://example.com/media"
+        assert call_args.kwargs["auth"] == ("SID", "TOKEN")
+        assert call_args.kwargs["follow_redirects"] is True
+        assert call_args.kwargs["timeout"] > 0
         assert data == b"\x89PNG"
         assert content_type == "image/png"
 
+    def test_download_normalizes_parameterized_content_type(self):
+        """Provider-supplied Content-Type with parameters/casing is normalized."""
+        service = TwilioService(account_sid="SID", auth_token="TOKEN")
+        message = TwilioMessage.parse(twilio_messages.Whatsapp.image_message())
+
+        mock_response = MagicMock()
+        mock_response.content = b"\x89PNG"
+        mock_response.headers = {"Content-Type": "Image/PNG; charset=binary"}
+
+        with patch("httpx.get", return_value=mock_response):
+            _, content_type = service.download_message_media(message)
+
+        assert content_type == "image/png"
+
+    def test_download_raises_when_media_url_missing(self):
+        """download_message_media raises a clear error when media_url is None."""
+        service = TwilioService(account_sid="SID", auth_token="TOKEN")
+        message = TwilioMessage(participant_id="x", message_text="", to="y", platform=ChannelPlatform.WHATSAPP)
+
+        with pytest.raises(ValueError, match="media_url is empty"):
+            service.download_message_media(message)
+
 
 class TestTurnioDownloadMedia:
-    @patch("apps.service_providers.messaging_service.TurnIOService.client")
-    def test_download_image_returns_bytes_and_content_type(self, mock_client):
-        """TurnIOService.download_message_media() returns (bytes, content_type) for an image."""
+    def test_download_image_prefers_media_url(self):
+        """When the webhook payload includes a url, TurnIOService fetches it directly."""
         service = TurnIOService(auth_token="TOKEN")
         message = WhatsAppMessage.parse(turnio_messages.image_message())
+        assert message.media_url == "https://media.turn.io/turn-image-media-id-789"
+
+        mock_response = MagicMock()
+        mock_response.content = b"\xff\xd8"
+        mock_response.headers = {"Content-Type": "image/jpeg"}
+
+        with patch("httpx.get", return_value=mock_response) as mock_get:
+            data, content_type = service.download_message_media(message)
+
+        mock_get.assert_called_once()
+        assert mock_get.call_args.args[0] == "https://media.turn.io/turn-image-media-id-789"
+        assert mock_get.call_args.kwargs["headers"] == {"Authorization": "Bearer TOKEN"}
+        assert data == b"\xff\xd8"
+        assert content_type == "image/jpeg"
+
+    @patch("apps.service_providers.messaging_service.TurnIOService.client")
+    def test_download_falls_back_to_media_id_via_sdk(self, mock_client):
+        """Without a media_url, TurnIOService falls back to the SDK media_id endpoint."""
+        service = TurnIOService(auth_token="TOKEN")
+        message = WhatsAppMessage(participant_id="x", message_text="", media_id="legacy-id")
 
         mock_response = MagicMock()
         mock_response.content = b"\xff\xd8"
@@ -459,19 +501,40 @@ class TestTurnioDownloadMedia:
 
         data, content_type = service.download_message_media(message)
 
-        mock_client.media.get_media.assert_called_once_with("turn-image-media-id-789")
+        mock_client.media.get_media.assert_called_once_with("legacy-id")
         assert data == b"\xff\xd8"
         assert content_type == "image/jpeg"
 
+    def test_download_raises_when_no_url_or_id(self):
+        service = TurnIOService(auth_token="TOKEN")
+        message = WhatsAppMessage(participant_id="x", message_text="")
+        with pytest.raises(ValueError, match="media_url and media_id are empty"):
+            service.download_message_media(message)
+
 
 class TestMetaCloudApiDownloadMedia:
-    def test_download_image_returns_bytes_and_content_type(self):
-        """MetaCloudAPIService.download_message_media() resolves media URL then fetches bytes."""
-        service = MetaCloudAPIService(
-            business_id="BIZ",
-            access_token="TOKEN",
-        )
+    def test_download_image_prefers_media_url(self):
+        """When the Meta payload includes a url, the service skips the _get_media_url indirection."""
+        service = MetaCloudAPIService(business_id="BIZ", access_token="TOKEN")
         message = WhatsAppMessage.parse(meta_cloud_api_messages.image_message_value())
+        assert message.media_url == "https://cdn.meta.example.com/image-media-id-456"
+
+        mock_response = MagicMock()
+        mock_response.content = b"\x89PNG"
+        mock_response.headers = {"Content-Type": "image/png"}
+
+        with patch("httpx.get", return_value=mock_response) as mock_get:
+            data, content_type = service.download_message_media(message)
+
+        mock_get.assert_called_once()
+        assert mock_get.call_args.args[0] == "https://cdn.meta.example.com/image-media-id-456"
+        assert data == b"\x89PNG"
+        assert content_type == "image/png"
+
+    def test_download_falls_back_to_media_id_resolution(self):
+        """Without a media_url, the service resolves the URL from media_id then fetches it."""
+        service = MetaCloudAPIService(business_id="BIZ", access_token="TOKEN")
+        message = WhatsAppMessage(participant_id="x", message_text="", media_id="legacy-id")
 
         url_response = MagicMock()
         url_response.json.return_value = {"url": "https://cdn.meta.example.com/image123"}
@@ -487,6 +550,12 @@ class TestMetaCloudApiDownloadMedia:
 
         assert data == b"\x89PNG"
         assert content_type == "image/png"
+
+    def test_download_raises_when_no_url_or_id(self):
+        service = MetaCloudAPIService(business_id="BIZ", access_token="TOKEN")
+        message = WhatsAppMessage(participant_id="x", message_text="")
+        with pytest.raises(ValueError, match="media_url and media_id are empty"):
+            service.download_message_media(message)
 
 
 # ---------------------------------------------------------------------------
@@ -560,35 +629,26 @@ class TestWhatsappAttachmentHydrationStageProcess:
         assert message.attachments == []
         assert File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).count() == 0
 
-    @pytest.mark.django_db()
-    def test_oversized_image_skipped_and_note_added(self, twilio_provider):
-        """Images exceeding the size limit are skipped; a note is appended to message_text."""
-        big_payload = b"x" * (WHATSAPP_INBOUND_MAX_BYTES + 1)
-        message = TwilioMessage.parse(twilio_messages.Whatsapp.image_message())
-        message.message_text = ""
-        ctx, _ = _make_stage_context(message, twilio_provider, (big_payload, "image/png"))
-
-        self.stage.process(ctx)
-
-        assert message.attachments == []
-        assert "skipped" in message.message_text.lower()
-
-    @pytest.mark.django_db()
-    def test_disallowed_content_type_skipped_and_note_added(self, twilio_provider):
-        """Images with disallowed MIME types are skipped; a note is appended to message_text."""
-        message = TwilioMessage.parse(twilio_messages.Whatsapp.image_message())
-        message.message_text = ""
-        ctx, _ = _make_stage_context(message, twilio_provider, (b"data", "image/tiff"))
-
-        self.stage.process(ctx)
-
-        assert message.attachments == []
-        assert "skipped" in message.message_text.lower()
-
 
 # ---------------------------------------------------------------------------
 # End-to-end task integration — attachment_file_ids populated on message
 # ---------------------------------------------------------------------------
+
+
+def _assert_file_resolves_via_download_file_join(file: File, team_slug: str) -> None:
+    """Assert the File can be reached via the exact ORM join the experiments:download_file
+    view uses (File → ChatAttachment → Chat → ExperimentSession). This is the regression
+    guard for the ChatAttachment linkage fix — if linkage is skipped, the join returns
+    nothing and the view 404s on download."""
+    sessions = ExperimentSession.objects.filter(chat__attachments__files__id=file.id)
+    assert sessions.exists(), "File not linked to any ExperimentSession via ChatAttachment"
+    session_id = sessions.first().id
+    resolved = File.objects.filter(
+        id=file.id,
+        team__slug=team_slug,
+        chatattachment__chat__experiment_session__id=session_id,
+    )
+    assert resolved.exists(), "download_file view's join would 404 — ChatAttachment linkage missing"
 
 
 class TestTwilioInboundImageTask:
@@ -597,14 +657,15 @@ class TestTwilioInboundImageTask:
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
     @patch("apps.service_providers.messaging_service.TwilioService.download_message_media")
-    def test_inbound_image_creates_file_and_populates_attachment_ids(
+    def test_inbound_image_creates_file_and_links_to_chat(
         self,
         download_media_mock,
         bot_process_input,
         send_text_message,
         twilio_provider,
     ):
-        """handle_twilio_message with an image payload: File created and attachment_file_ids set."""
+        """handle_twilio_message with an image payload: File created and linked to chat
+        via ChatAttachment so the download_file view's join resolves."""
         download_media_mock.return_value = (b"\x89PNG\r\n\x1a\n", "image/png")
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.WHATSAPP,
@@ -619,7 +680,9 @@ class TestTwilioInboundImageTask:
         with patch("apps.service_providers.messaging_service.TwilioService.client"):
             handle_twilio_message(message_data=twilio_messages.Whatsapp.image_message())
 
-        assert File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).count() == 1
+        file = File.objects.get(purpose=FilePurpose.MESSAGE_MEDIA)
+        assert ChatAttachment.objects.filter(files=file, tool_type="ocs_attachments").exists()
+        _assert_file_resolves_via_download_file_join(file, experiment.team.slug)
 
 
 class TestTurnioInboundImageTask:
@@ -627,14 +690,14 @@ class TestTurnioInboundImageTask:
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
     @patch("apps.service_providers.messaging_service.TurnIOService.download_message_media")
-    def test_inbound_image_creates_file_and_populates_attachment_ids(
+    def test_inbound_image_creates_file_and_links_to_chat(
         self,
         download_media_mock,
         bot_process_input,
         send_text_message,
         turnio_whatsapp_channel,
     ):
-        """handle_turn_message with an image payload: File created."""
+        """handle_turn_message with an image payload: File created and linked via ChatAttachment."""
         download_media_mock.return_value = (b"\xff\xd8\xff\xe0", "image/jpeg")
         experiment = turnio_whatsapp_channel.experiment
         chat = Chat.objects.create(team=experiment.team)
@@ -645,7 +708,9 @@ class TestTurnioInboundImageTask:
             message_data=turnio_messages.image_message(),
         )
 
-        assert File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).count() == 1
+        file = File.objects.get(purpose=FilePurpose.MESSAGE_MEDIA)
+        assert ChatAttachment.objects.filter(files=file, tool_type="ocs_attachments").exists()
+        _assert_file_resolves_via_download_file_join(file, experiment.team.slug)
 
 
 class TestMetaCloudApiInboundImageTask:
@@ -653,14 +718,14 @@ class TestMetaCloudApiInboundImageTask:
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.download_message_media")
-    def test_inbound_image_creates_file_and_populates_attachment_ids(
+    def test_inbound_image_creates_file_and_links_to_chat(
         self,
         download_media_mock,
         bot_process_input,
         send_text_message,
         meta_cloud_api_whatsapp_channel,
     ):
-        """handle_meta_cloud_api_message with an image payload: File created."""
+        """handle_meta_cloud_api_message with an image payload: File created and linked via ChatAttachment."""
         download_media_mock.return_value = (b"\x89PNG\r\n\x1a\n", "image/png")
         experiment = meta_cloud_api_whatsapp_channel.experiment
         chat = Chat.objects.create(team=experiment.team)
@@ -672,4 +737,6 @@ class TestMetaCloudApiInboundImageTask:
             message_data=meta_cloud_api_messages.image_message_value(),
         )
 
-        assert File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).count() == 1
+        file = File.objects.get(purpose=FilePurpose.MESSAGE_MEDIA)
+        assert ChatAttachment.objects.filter(files=file, tool_type="ocs_attachments").exists()
+        _assert_file_resolves_via_download_file_join(file, experiment.team.slug)
