@@ -237,6 +237,7 @@ def obfuscate_value(value):
 
 class AWSVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["aws_secret_access_key"]
+    additional_searchable_fields = ["aws_access_key_id"]
 
     aws_access_key_id = forms.CharField(label=_("Access Key ID"))
     aws_secret_access_key = forms.CharField(label=_("Secret Access Key"))
@@ -252,6 +253,7 @@ class AzureVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["auth_token"]
+    additional_searchable_fields = ["account_sid"]
 
     account_sid = forms.CharField(label=_("Account SID"))
     auth_token = forms.CharField(label=_("Auth Token"))
@@ -265,6 +267,7 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["client_secret"]
+    additional_searchable_fields = ["client_id"]
 
     client_id = forms.CharField(
         label=_("Client ID"), help_text=_("Azure AD B2C Application ID used for authentication.")
@@ -289,6 +292,7 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["access_token", "app_secret", "verify_token"]
+    additional_searchable_fields = ["business_id"]
 
     business_id = forms.CharField(label=_("WhatsApp Business Account ID"))
     access_token = forms.CharField(label=_("System User Access Token"))
@@ -321,6 +325,7 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["api_key"]
+    additional_searchable_fields = ["username"]
 
     username = forms.CharField(label=_("Username"))
     api_key = forms.CharField(label=_("API Key"))
@@ -328,6 +333,7 @@ class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class BasicAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["password"]
+    additional_searchable_fields = ["username"]
 
     username = forms.CharField(label=_("Username"))
     password = forms.CharField(label=_("Password"))
@@ -359,6 +365,7 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
 
 class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["secret_key"]
+    additional_searchable_fields = ["public_key"]
 
     secret_key = forms.CharField(label=_("Secret Key"))
     public_key = forms.CharField(label=_("Public Key"))
