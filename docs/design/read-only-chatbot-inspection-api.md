@@ -662,6 +662,20 @@ of PRs. (The earlier public-ID prerequisite track and #3465 are dropped per
    sites is by design. Covers providers, collections/files, source material, consent/surveys,
    assistants, custom actions, messaging providers, event-referenced pipelines, and scheduled
    messages. (Batch-loading is the N+1 guard; inlining copies from the in-memory map, not the DB.)
+
+   **Team-scope every batch-load (multi-tenancy guard).** The ids come from node `params` JSON and
+   must not be trusted — every load is scoped to `request.team` so a stray/crafted cross-team id
+   resolves to nothing rather than leaking another team's resource (see `docs/agents/multi_tenancy.md`).
+   Scoping differs by model, in three categories:
+   - **Direct `team` FK** (`BaseTeamModel`): `LlmProvider`, `LlmProviderModel`*, `VoiceProvider`,
+     `MessagingProvider`, `AuthProvider`, `EmbeddingProviderModel`*, `SourceMaterial`, `ConsentForm`,
+     `Survey`, `Collection`, `File`, `OpenAiAssistant`, `CustomAction`, `Pipeline` → filter on `team`.
+     (* `LlmProviderModel`/`EmbeddingProviderModel` allow global rows with null team — include
+     `Q(team=request.team) | Q(team__isnull=True)`.)
+   - **Scoped via experiment** (not team-scoped directly): `StaticTrigger`, `TimeoutTrigger`,
+     `EventAction`, `ScheduledMessage`, `ExperimentChannel` → constrain to the chatbot being
+     inspected, not loaded by bare id.
+   - **Global, no scoping** : `SyntheticVoice` (`BaseModel`, not team-scoped) — safe to load by id.
 8. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
 9. OpenAPI schema regeneration + verification; docs page describing payload shape and the
    secrets-exclusion policy.
@@ -674,6 +688,8 @@ of PRs. (The earlier public-ID prerequisite track and #3465 are dropped per
 - **Node coverage:** a pipeline exercising each node type verifies the signal-registry split.
 - **Completeness guard (D7):** a test enumerating every `OptionsSource` value and `Widget` fails when
   a new, unclassified signal appears — preventing silent omission of a new resource reference.
+- **Cross-team leak:** craft a node whose `params` references another team's resource id; assert the
+  collector's team-scoping resolves it to absent (not embedded) rather than leaking it.
 - **Secret-leak:** for each provider, assert `config` (and every other excluded key) appears
   nowhere in the response JSON (`assertNotIn` against the serialized payload).
 - **Acceptance #1–#5** (from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)):
