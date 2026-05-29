@@ -48,6 +48,14 @@ def _is_voice_mime(mime: str | None) -> bool:
     return normalized in ("audio", "voice") or normalized.startswith("audio/") or normalized == "video/mp4"
 
 
+def _has_downloadable_attachment(message) -> bool:
+    """True when the message references a non-voice attachment we can fetch."""
+    mime = message.attachment_mime_type
+    if not mime or _is_voice_mime(mime):
+        return False
+    return bool(getattr(message, "media_url", None) or getattr(message, "media_id", None))
+
+
 class MessagingService(pydantic.BaseModel):
     _type: ClassVar[str]
     _supported_platforms: ClassVar[list]
@@ -360,8 +368,7 @@ class TurnIOService(MessagingService):
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
     def get_inbound_media(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
-        mime = message.attachment_mime_type
-        if not mime or _is_voice_mime(mime) or not (message.media_url or message.media_id):
+        if not _has_downloadable_attachment(message):
             return None
         return self.download_message_media(message)
 
@@ -695,8 +702,7 @@ class MetaCloudAPIService(MessagingService):
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
     def get_inbound_media(self, message: WhatsAppMessage) -> tuple[bytes, str] | None:
-        mime = message.attachment_mime_type
-        if not mime or _is_voice_mime(mime) or not (message.media_url or message.media_id):
+        if not _has_downloadable_attachment(message):
             return None
         return self.download_message_media(message)
 
