@@ -17,6 +17,12 @@ When a decision is reversed, change this ADR's status to SUPERSEDED and add a
 
 When this ADR builds on a prior one, add an "Extends: [ADR-NNNN](NNNN-prior-title.md)"
 line under the pill.
+
+Keep it dense — an ADR records the decision, not the implementation. One idea per
+sentence; state each fact once (cross-reference rather than repeat); no editorializing
+or self-praise; Consequences/Alternatives bullets are one sentence each. A single-
+decision ADR rarely needs more than ~400 words. Final pass: cut any sentence that
+wouldn't change what a future engineer does.
 -->
 
 ## Context
@@ -25,7 +31,7 @@ line under the pill.
 
 ## Decision
 
-<One paragraph stating what we decided, in plain language. Lead with the verb: "We will...".>
+<Lead with the verb: "We will...". One paragraph for a simple decision, or bullets when it has several parts. Plain language.>
 
 ## Consequences
 
