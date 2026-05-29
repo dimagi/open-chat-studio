@@ -26,7 +26,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
-from apps.service_providers.exceptions import AudioConversionError, ServiceProviderConfigError
+from apps.service_providers.exceptions import MessageMediaError, ServiceProviderConfigError
 from apps.service_providers.file_limits import can_send_on_whatsapp
 from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -265,7 +265,7 @@ class TwilioService(MessagingService):
         try:
             raw_bytes, content_type = self.download_message_media(message)
         except httpx.HTTPStatusError as e:
-            raise AudioConversionError("Unable to fetch message media") from e
+            raise MessageMediaError("Unable to fetch message media") from e
 
         data = BytesIO(raw_bytes)
         message.cached_media_data = MediaCache(content_type=content_type, data=data)
@@ -273,7 +273,7 @@ class TwilioService(MessagingService):
         # Example header: {'Content-Type': 'audio/ogg'}
         family, sub_type = content_type.split("/", 1)
         if family != "audio":
-            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+            raise MessageMediaError(f"Unexpected content-type for audio: {content_type}")
         return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
     def _get_account_numbers(self) -> list[str]:
@@ -377,7 +377,7 @@ class TurnIOService(MessagingService):
         try:
             raw_bytes, content_type = self.download_message_media(message)
         except requests.HTTPError as e:
-            raise AudioConversionError("Unable to fetch message media") from e
+            raise MessageMediaError("Unable to fetch message media") from e
 
         data = BytesIO(raw_bytes)
         message.cached_media_data = MediaCache(content_type=content_type, data=data)
@@ -385,7 +385,7 @@ class TurnIOService(MessagingService):
         # Example header: {'Content-Type': 'audio/ogg'}
         family, sub_type = content_type.split("/", 1)
         if family != "audio":
-            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+            raise MessageMediaError(f"Unexpected content-type for audio: {content_type}")
 
         return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
@@ -711,14 +711,14 @@ class MetaCloudAPIService(MessagingService):
         try:
             raw_bytes, content_type = self.download_message_media(message)
         except httpx.HTTPStatusError as e:
-            raise AudioConversionError("Unable to fetch message media") from e
+            raise MessageMediaError("Unable to fetch message media") from e
 
         data = BytesIO(raw_bytes)
         message.cached_media_data = MediaCache(content_type=content_type, data=data)
 
         family, sub_type = content_type.split("/", 1)
         if family != "audio":
-            raise AudioConversionError(f"Unexpected content-type for audio: {content_type}")
+            raise MessageMediaError(f"Unexpected content-type for audio: {content_type}")
 
         return audio.convert_audio(data, target_format="wav", source_format=sub_type)
 
@@ -728,7 +728,7 @@ class MetaCloudAPIService(MessagingService):
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise AudioConversionError("Unable to resolve media URL") from e
+            raise MessageMediaError("Unable to resolve media URL") from e
         return response.json()["url"]
 
 

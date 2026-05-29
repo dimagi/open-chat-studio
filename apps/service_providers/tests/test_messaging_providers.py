@@ -13,7 +13,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
-from apps.service_providers.exceptions import AudioConversionError
+from apps.service_providers.exceptions import MessageMediaError
 from apps.service_providers.messaging_service import MetaCloudAPIService, TwilioService
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -238,7 +238,7 @@ class TestMetaCloudAPIServiceAudio:
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_non_audio(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if the downloaded content is not audio."""
+        """Should raise MessageMediaError if the downloaded content is not audio."""
         media_url_response = httpx.Response(
             200,
             json={"url": "https://example.com/media"},
@@ -260,12 +260,12 @@ class TestMetaCloudAPIServiceAudio:
             attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError):
+        with pytest.raises(MessageMediaError):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_http_error(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if the media download fails."""
+        """Should raise MessageMediaError if the media download fails."""
         media_url_response = httpx.Response(
             200,
             json={"url": "https://example.com/media"},
@@ -285,12 +285,12 @@ class TestMetaCloudAPIServiceAudio:
             attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError):
+        with pytest.raises(MessageMediaError):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_media_url_http_error(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if resolving the media URL fails."""
+        """Should raise MessageMediaError if resolving the media URL fails."""
         error_response = httpx.Response(
             404,
             request=httpx.Request("GET", "https://graph.facebook.com/v25.0/bad_id"),
@@ -305,7 +305,7 @@ class TestMetaCloudAPIServiceAudio:
             attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError, match="Unable to resolve media URL"):
+        with pytest.raises(MessageMediaError, match="Unable to resolve media URL"):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.post")
