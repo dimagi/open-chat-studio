@@ -37,7 +37,8 @@ Four decisions shape the work:
 
 The endpoint itself — `GET /api/v2/chatbots/{id}/inspect/` — returns a **denormalized,
 read-only projection**: a digested pipeline graph, per-node detail, an experiment-level events
-block, and flat resource lookup tables keyed by public ID, with all credentials excluded.
+block, and an inline, denormalized tree — each node and event embeds the resources it references
+(each carrying its `public_id`), with all credentials excluded.
 
 ## Context
 
@@ -98,8 +99,8 @@ These endpoints are read-only for now, but the long-term plan is to add write ca
 APIs. API changes are expensive once in use, so this is the moment to get naming, versioning, and
 identifier stability right. The key risk in shipping reads first is that **the read shape
 constrains the write shape** — clients assume they can PATCH whatever they GET. The design guards
-against this (see [D5](#d5--inspect-is-a-denormalized-read-only-projection-on-a-distinct-url) and
-[D4](#d4--stable-public-ids-uuid-for-every-resource-v2-exposes)).
+against this (see [D5](#d5-inspect-is-a-denormalized-read-only-projection-on-a-distinct-url) and
+[D4](#d4-stable-public-ids-uuid-for-every-resource-v2-exposes)).
 
 ## Goals and non-goals
 
@@ -132,9 +133,9 @@ assertions. They are the acceptance tests for the payload.
 |---|---|---|
 | 1 | Bot exists + is the working/published version we expect | `name`, `external_id`/`public_id`, `version_number` |
 | 2 | Pipeline has a router node whose routing keywords match the cohort's schedule | digested graph + per-node detail incl. router `keywords`/`route_key` |
-| 3 | An LLM node points at the expected collection (RAG), and the collection has the expected files | node detail + `collections[id].file_ids` → flat `files` table |
-| 4 | A 24-hr inactivity `TimeoutTrigger` exists and its action is the completion handler | **experiment-level `events` block** (see [D9](#d9--experiment-level-events-block)) |
-| 5 | A "Session Completion" custom action exists and is **wired to fire** | custom action detail + `attached_to[]` (see [D10](#d10--attached_to-wiring-back-references)) |
+| 3 | An LLM node points at the expected collection (RAG), and the collection has the expected files | node's embedded `collection.files[]` |
+| 4 | A 24-hr inactivity `TimeoutTrigger` exists and its action is the completion handler | **experiment-level `events` block** (see [D9](#d9-experiment-level-events-block)) |
+| 5 | A "Session Completion" custom action exists and is **wired to fire** | custom action embedded under the node/event that fires it (see [D10](#d10-wiring-is-implicit-in-nesting)) |
 
 Assertion #4 is the one a naive node-only walk would miss: triggers hang off the experiment, not
 the pipeline graph.
@@ -240,19 +241,34 @@ read shapes for a chatbot (minimal canonical + rich inspect).
 re-importable artifact, which this is not. Putting the rich shape on the canonical GET — rejected
 per the read-constrains-write risk above.
 
-### D6 — Flat resource lookup tables keyed by public ID
+### D6 — Inline nested resource tree (denormalized)
 
-**Decision.** Resources are flattened into top-level lookup tables (`resources.llm_providers`,
-`resources.collections`, `resources.files`, …), keyed by `public_id`. Nodes and events carry only
-references into these tables; clients dereference.
+**Decision.** Each node and event embeds the resources it references **inline**, under named keys
+(e.g. a node carries `llm_provider`, `collection` objects directly; a `collection` carries its
+`files[]`). The response is a self-contained tree read top-to-bottom with no pointer-chasing. Every
+embedded resource still carries its `public_id` as `id`, so a consumer that wants to deduplicate can
+build its own map keyed by `id`.
 
-**Context.** The same resource (e.g. one `LlmProvider`) is frequently referenced by many nodes.
+**Context.** The primary consumer is an LLM-agent verifier reasoning over the JSON. Locality —
+having a node's resources right there beside it — matters more for that consumer than wire-size
+minimisation. A resource referenced by many nodes is duplicated, but the same resource is byte-for-
+byte identical at every site (same `public_id`), so duplication is recoverable, not lossy.
 
-**Consequences.** Deterministic deduplication, predictable payload size, and easy diffing for an
-agent comparing two bots. Cost: clients must dereference rather than read inline.
+**Consequences.** Single-pass readability; a node is self-describing. Wiring is implicit in
+containment (see [D10](#d10-wiring-is-implicit-in-nesting)). Cost: a shared resource is repeated at
+each reference site, so payload size is non-deterministic and grows with fan-out — this amplifies the
+size concern noted in [resolved Q9](#11-resolved-questions) (full payload in v1, no `?include=`
+filter). Diffing two bots is harder than with a normalised table. The collector must still batch-load
+each resource type once to avoid N+1, then inline copies (see [implementation](#track-c-the-inspect-endpoint-depends-on-a-and-b)).
 
-**Alternatives considered.** Nesting resources inline under each node — rejected for duplication and
-non-deterministic size; harder to diff.
+**Alternatives considered.**
+
+- **Flat lookup tables keyed by `public_id`** (nodes carry references, clients dereference) —
+  deterministic dedup, predictable size, easy diffing, but the consumer must resolve every reference
+  and the payload is less readable in isolation. Rejected in favour of consumer locality.
+- **JSON:API compound document** (`{data, included}` with typed relationships) — standardised and
+  deduped, but verbose envelope and `{type, id}` linkage boilerplate for what is a read-only
+  projection, and the consumer still resolves `included[]`. Rejected.
 
 ### D7 — Data-driven node walker via `options_source`
 
@@ -260,7 +276,8 @@ non-deterministic size; harder to diff.
 each node's pydantic class from the registry (`apps/pipelines/nodes/__init__.py`), iterates its
 model fields, and uses `json_schema_extra.options_source` (e.g. `OptionsSource.collection`,
 `OptionsSource.llm_provider_model`) as the canonical signal that a field is a resource reference.
-Fields with an `options_source` go into `references`; the rest go verbatim into `params`.
+Fields with an `options_source` are resolved to their resource and **embedded inline** under a named
+key (per [D6](#d6-inline-nested-resource-tree-denormalized)); the rest go verbatim into `params`.
 
 **Context.** Node types are added over time; a hand-maintained mapping goes stale silently.
 
@@ -300,30 +317,34 @@ inactivity timeout that is assertion #4 and the single most important thing the 
 verifier checks.
 
 **Consequences.** Assertion #4 becomes reachable. `EventLog` entries are excluded (operational
-telemetry, not config). `EventAction.params` reference other resources, normalized into the resource
-tables: `pipeline_start` → `resources.pipelines` with the referenced pipeline's digested graph
-([resolved Q2](#11-resolved-questions)); `schedule_trigger` → `resources.scheduled_messages` with
-the scheduling cadence ([resolved Q3](#11-resolved-questions)). Disabled triggers are included but
-flagged via `is_active`, so a verifier can assert a trigger *isn't* armed.
+telemetry, not config). `EventAction.params` reference other resources, embedded inline on the action
+(per [D6](#d6-inline-nested-resource-tree-denormalized)): `pipeline_start` embeds the referenced
+pipeline with its digested graph ([resolved Q2](#11-resolved-questions)); `schedule_trigger` embeds
+the `ScheduledMessage` cadence ([resolved Q3](#11-resolved-questions)). Disabled triggers are
+included but flagged via `is_active`, so a verifier can assert a trigger *isn't* armed.
 
 **Alternatives considered.** Treating triggers as node resources — rejected: they are not nodes and
 do not live in the graph.
 
-### D10 — `attached_to[]` wiring back-references
+### D10 — Wiring is implicit in nesting
 
-**Decision.** Resources whose *wiring* matters as much as their existence (custom actions,
-synthetic voices, source material, collections, assistants) carry an `attached_to[]` field listing
-where they are referenced — e.g. `{ "kind": "node", "flow_id": "llm-3" }`. Computed by a single
-in-memory reverse-index pass after the node + event walks; no extra DB queries.
+**Decision.** With inline nesting ([D6](#d6-inline-nested-resource-tree-denormalized)), a resource's
+*wiring* is shown by **where it is embedded**: a custom action nested under a node is wired to that
+node; one nested under an event action is wired to that event. No separate `attached_to[]`
+back-reference field is emitted — containment is the back-reference.
 
 **Context.** Assertion #5 wants to verify a custom action is *wired to fire*, not merely that it
-exists.
+exists. Under a flat table this needed an explicit reverse-index; under an inline tree the position
+already carries that information.
 
-**Consequences.** Verifier-style consumers can assert wiring cheaply. Cost: one reverse-index pass
-over the already-loaded payload.
+**Consequences.** Assertion #5 is satisfied directly by structure — the verifier finds the custom
+action under the node/event that fires it. No reverse-index pass is needed. Cost: to answer "is this
+resource wired *anywhere*?" the consumer scans the tree rather than reading one back-reference list;
+acceptable, since the tree is the document it already walks.
 
-**Alternatives considered.** Only listing resources by existence — rejected: leaves assertion #5
-partially unmet.
+**Alternatives considered.** Keeping an explicit `attached_to[]` field alongside inline nesting —
+rejected as redundant: it restates what containment already encodes. A flat table with a reverse
+index — rejected with [D6](#d6-inline-nested-resource-tree-denormalized).
 
 ## Endpoint shape
 
@@ -356,7 +377,9 @@ No new mechanism. Reuses what the chatbot ViewSet already has:
 
 ## Response shape
 
-Nodes and events carry only `public_id` references; resources are flat top-level tables.
+Inline nested tree ([D6](#d6-inline-nested-resource-tree-denormalized)). Each node and event embeds
+the resources it references; every embedded resource carries its `public_id` as `id` so a consumer
+can dedup client-side if it wants. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
 
 ```jsonc
 {
@@ -378,19 +401,20 @@ Nodes and events carry only `public_id` references; resources are flat top-level
       "participant_allowlist": [],
       "tools": ["delete-reminder", "..."]
     },
-    "references": {                       // FK pointers from the chatbot itself (public IDs)
-      "pipeline_id": "<pub>",
-      "source_material_id": "<pub>",
-      "consent_form_id": "<pub>",
-      "pre_survey_id": null,
-      "post_survey_id": "<pub>",
-      "synthetic_voice_id": "<pub>",
-      "voice_provider_id": "<pub>",
-      "trace_provider_id": null,
-      "safety_layer_ids": []
-    },
+
+    // chatbot-level resources embedded inline (null if unset)
+    "source_material": { "id": "<pub>", "topic": "Returns policy", "material": "# Returns\n…" },
+    "consent_form":    { "id": "<pub>", "name": "Default", "consent_text": "…", "capture_identifier": true },
+    "pre_survey":      null,
+    "post_survey":     { "id": "<pub>", "name": "CSAT", "url": "https://…" },
+    "synthetic_voice": { "id": "<pub>", "name": "Rachel", "language": "English",
+                         "voice_provider": { "id": "<pub>", "type": "elevenlabs", "name": "ElevenLabs Prod" } },
+    "trace_provider":  null,
+    "safety_layers":   [],
+
     "channels": [                         // ExperimentChannel — secrets stripped (resolved Q8)
-      {"platform": "telegram", "name": "Support TG", "messaging_provider_id": "<pub>"}
+      { "platform": "telegram", "name": "Support TG",
+        "messaging_provider": { "id": "<pub>", "type": "telegram", "name": "Support TG bot" } }
     ]
   },
 
@@ -422,14 +446,23 @@ Nodes and events carry only `public_id` references; resources are flat top-level
         "history_type": "global",
         "tools": []
       },
-      "references": {                     // fields with an options_source (public IDs)
-        "llm_provider_id": "<pub>",
-        "llm_provider_model_id": "<pub>",
-        "source_material_id": "<pub>",
-        "collection_id": "<pub>",
-        "collection_index_ids": ["<pub>"],
-        "custom_action_ids": ["<pub>", "<pub>"]
-      }
+      // fields with an options_source resolved + embedded inline (D7); null if unset
+      "llm_provider":       { "id": "<pub>", "type": "openai", "name": "Prod OpenAI" },
+      "llm_provider_model": { "id": "<pub>", "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false },
+      "source_material":    { "id": "<pub>", "topic": "Returns policy", "material": "# Returns\n…" },
+      "collection": {
+        "id": "<pub>", "name": "Policy docs", "is_index": false,
+        "embedding_provider_model": { "id": "<pub>", "type": "openai", "model_name": "text-embedding-3-small" },
+        "files": [                        // collection files embedded → assertion #3
+          { "id": "<pub>", "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection" }
+        ]
+      },
+      "collection_indexes": [],
+      "custom_actions": [                 // wired-to-this-node by containment → assertion #5 (D10)
+        { "id": "<pub>", "name": "Session Completion", "server_url": "https://…",
+          "allowed_operations": ["complete_session"],
+          "api_schema": { "paths": ["/complete_session"] } }   // path/operation digest only (resolved Q7)
+      ]
     }
     // … one entry per node
   ],
@@ -440,9 +473,11 @@ Nodes and events carry only `public_id` references; resources are flat top-level
         "id": "<pub>",
         "type": "conversation_end",       // StaticTriggerType
         "is_active": true,
-        "action": { "id": "<pub>", "action_type": "pipeline_start", "params": { "pipeline_id": "<pub>" } }
-        // pipeline_start → the referenced pipeline is added to resources.pipelines (resolved Q2)
-        // schedule_trigger → params reference resources.scheduled_messages (resolved Q3)
+        "action": {
+          "id": "<pub>", "action_type": "pipeline_start",
+          // pipeline_start embeds the referenced pipeline inline (resolved Q2)
+          "pipeline": { "id": "<pub>", "name": "Completion flow", "graph": { "nodes": [], "edges": [] } }
+        }
       }
     ],
     "timeout_triggers": [
@@ -452,36 +487,24 @@ Nodes and events carry only `public_id` references; resources are flat top-level
         "total_num_triggers": 1,
         "trigger_from_first_message": false,
         "is_active": true,
-        "action": { "id": "<pub>", "action_type": "send_message_to_bot", "params": { "message": "Are you still there?" } }
+        "action": {
+          "id": "<pub>", "action_type": "send_message_to_bot",
+          "params": { "message": "Are you still there?" }
+          // schedule_trigger actions instead embed: "scheduled_message": { … cadence … } (resolved Q3)
+        }
       }
     ]
-  },
-
-  "resources": {                          // flat tables, keyed by public_id
-    "llm_providers":        { "<pub>": {"id": "<pub>", "type": "openai", "name": "Prod OpenAI"} },
-    "llm_provider_models":  { "<pub>": {"id": "<pub>", "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false} },
-    "voice_providers":      { "<pub>": {"id": "<pub>", "type": "elevenlabs", "name": "ElevenLabs Prod"} },
-    "messaging_providers":  { "<pub>": {"id": "<pub>", "type": "telegram", "name": "Support TG bot"} },
-    "synthetic_voices":     { "<pub>": {"id": "<pub>", "name": "Rachel", "language": "English", "voice_provider_id": "<pub>"} },
-    "source_material":      { "<pub>": {"id": "<pub>", "topic": "Returns policy", "material": "# Returns\n…"} },
-    "consent_forms":        { "<pub>": {"id": "<pub>", "name": "Default", "consent_text": "…", "capture_identifier": true} },
-    "surveys":              { "<pub>": {"id": "<pub>", "name": "CSAT", "url": "https://…"} },
-    "collections":          { "<pub>": {"id": "<pub>", "name": "Policy docs", "is_index": false, "file_ids": ["<pub>", "<pub>"]} },
-    "embedding_provider_models": { "<pub>": {"id": "<pub>", "type": "openai", "model_name": "text-embedding-3-small"} },
-    "files":                { "<pub>": {"id": "<pub>", "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection"} },
-    "assistants":           { },          // OpenAiAssistant entries when AssistantNode is used
-    "custom_actions":       { "<pub>": {"id": "<pub>", "name": "Session Completion", "server_url": "https://…", "allowed_operations": ["complete_session"], "attached_to": [{"kind": "node", "flow_id": "llm-3"}]} },
-    "pipelines":            { "<pub>": {"id": "<pub>", "name": "Completion flow", "graph": { "nodes": [], "edges": [] }} },  // event-referenced pipelines (resolved Q2)
-    "scheduled_messages":   { "<pub>": {"id": "<pub>", "name": "Reminder", "frequency": 1, "time_period": "days", "repetitions": 3} },  // schedule_trigger cadence (resolved Q3)
-    "safety_layers":        { },
-    "tags":                 { }
   }
 }
 ```
 
+A resource referenced from more than one site (e.g. one `LlmProvider` used by several nodes) appears
+inline at each site, byte-for-byte identical and sharing the same `id`. Consumers that need to
+deduplicate index by `id`.
+
 ## Node type → reference field mapping
 
-The walker is data-driven ([D7](#d7--data-driven-node-walker-via-options_source)); this table is
+The walker is data-driven ([D7](#d7-data-driven-node-walker-via-options_source)); this table is
 illustrative, not hand-maintained in code. Derived from `apps/pipelines/nodes/nodes.py` and
 `apps/pipelines/nodes/mixins.py`.
 
@@ -497,7 +520,7 @@ illustrative, not hand-maintained in code. Derived from `apps/pipelines/nodes/no
 
 ## Resource schemas — secrets-exclusion audit
 
-Per [D8](#d8--secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists). Explicit
+Per [D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists). Explicit
 `fields = [...]` per resource; the column below records the deliberate exclusions.
 
 | Resource | Model location | Excluded (sensitive) |
@@ -560,20 +583,23 @@ nullability). Factories add `public_id = factory.Faker("uuid4")`.
 9. Inspect serializers in a new module (e.g. `apps/api/serializers_inspect.py`): top-level
    `ChatbotInspectSerializer` + per-resource `ModelSerializer`s with explicit `fields`.
 10. Pipeline node walker (e.g. `apps/pipelines/inspect.py`): walk `pipeline.node_set.all()`, look up
-    each pydantic class via the registry, split fields by `options_source` into `params` vs
-    `references`; return `(nodes_payload, resource_refs: dict[ResourceKey, set[id]])`.
+    each pydantic class via the registry, classify fields by `options_source`. Non-reference fields →
+    `params`; for each reference field record `(field_name, resource_type, id)` and accumulate
+    `resource_refs: dict[ResourceKey, set[id]]` so the collector can pre-load in batch.
 11. Events serializer (e.g. `apps/events/api_serializers.py`): `StaticTrigger` + `TimeoutTrigger`
-    with nested `EventAction`; feed event-referenced resources (`pipeline_start` → pipelines,
-    `schedule_trigger` → scheduled messages) into `resource_refs`. Channels are collected from
-    `experiment.channels` into the same ref set.
-12. Resource collector: batch-load each resource type (`Model.objects.filter(id__in=…)` with
-    `select_related`/`prefetch_related` — **one query per type, no N+1**), serialize through the
-    secret-safe serializers, key by `public_id`. Covers providers, collections/files, source
-    material, consent/surveys, assistants, custom actions, messaging providers, event-referenced
-    pipelines, and scheduled messages.
-13. `attached_to[]` reverse-index pass over the in-memory node/event payloads (no extra queries).
-14. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
-15. OpenAPI schema regeneration + verification; docs page describing payload shape and the
+    with nested `EventAction`; record event-referenced resources (`pipeline_start` → pipeline,
+    `schedule_trigger` → scheduled message) the same way. Channels are read from `experiment.channels`
+    and their `messaging_provider` added to `resource_refs`.
+12. Resource collector + inliner: batch-load each resource type once
+    (`Model.objects.filter(id__in=…)` with `select_related`/`prefetch_related` — **one query per
+    type, no N+1**, regardless of how many sites reference it), serialize through the secret-safe
+    serializers into an `id`-keyed map, then **inline** the serialized object at each reference site
+    under its named key ([D6](#d6-inline-nested-resource-tree-denormalized)). Duplication across
+    sites is by design. Covers providers, collections/files, source material, consent/surveys,
+    assistants, custom actions, messaging providers, event-referenced pipelines, and scheduled
+    messages. (Batch-loading is the N+1 guard; inlining copies from the in-memory map, not the DB.)
+13. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
+14. OpenAPI schema regeneration + verification; docs page describing payload shape and the
     secrets-exclusion policy.
 
 ### Test plan
@@ -585,8 +611,10 @@ nullability). Factories add `public_id = factory.Faker("uuid4")`.
 - **Secret-leak:** for each provider, assert `config` (and every other excluded key) appears
   nowhere in the response JSON (`assertNotIn` against the serialized payload).
 - **Acceptance #1–#5** (from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)):
-  identity; router keywords; collection → files inventory; 24-hr `TimeoutTrigger` + its action in
-  the `events` block; custom action with `attached_to`.
+  identity; router keywords; node's embedded `collection.files[]` inventory; 24-hr `TimeoutTrigger` +
+  its embedded action in the `events` block; custom action embedded under the node/event that fires it.
+- **Inline shape:** a resource referenced by two nodes appears (identically) under both; assert the
+  duplicated objects share the same `id`.
 
 ## 11. Resolved questions
 
@@ -595,12 +623,13 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
 1. **Permission granularity** → **reuse the existing `view` permission.** No dedicated
    `inspect_chatbot` perm; a `read_only` key with `view` access can inspect. A least-privilege
    inspect-only perm can be added later if a concrete need appears.
-2. **`EventAction.params` for `pipeline_start`** → **reference + serialize the graph.** Emit the
-   `public_id` reference *and* add the referenced pipeline (with its digested graph) to a top-level
-   `resources.pipelines` table, so a verifier can inspect trigger-launched flows.
-3. **`schedule_trigger` / `ScheduledMessage`** → **include the cadence.** Surface the schedule config
-   in `resources.scheduled_messages`. This expands the public-ID prerequisite: `ScheduledMessage`
-   must gain a `public_id` (it was explicitly deferred in #3465 — that scope now grows).
+2. **`EventAction.params` for `pipeline_start`** → **embed the referenced pipeline.** The
+   `pipeline_start` action embeds the referenced pipeline (with its digested graph) inline, so a
+   verifier can inspect trigger-launched flows without a second request.
+3. **`schedule_trigger` / `ScheduledMessage`** → **include the cadence.** The `schedule_trigger`
+   action embeds the `ScheduledMessage` cadence inline. This expands the public-ID prerequisite:
+   `ScheduledMessage` must gain a `public_id` (it was explicitly deferred in #3465 — that scope now
+   grows).
 4. **`OpenAiAssistant.instructions`** → **expose as-is.** Prompt text the verifier may want to
    assert; accepted residual risk that a team could embed a secret in a prompt.
 5. **`OpenAiAssistant.assistant_id`** → **expose.** Opaque OpenAI-side ID, not a credential.
@@ -609,7 +638,7 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
 7. **`CustomAction.api_schema`** → **path/operation digest.** Strip to operation IDs, paths, and
    summaries; never expose the raw schema (it can embed `securitySchemes` with key examples).
 8. **Channels** → **include, secrets stripped.** Surface `ExperimentChannel` under
-   `chatbot.channels[]` with `messaging_providers` in the resources table; strip tokens from
+   `chatbot.channels[]`, each embedding its `messaging_provider` inline; strip tokens from
    `extra_data`. This also expands the public-ID prerequisite: `ExperimentChannel` must gain a
    `public_id` (not in #3465's original list).
 9. **Response size** → **ship the full payload in v1.** No `?include=` selective-expansion filter
