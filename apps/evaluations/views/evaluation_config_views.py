@@ -631,5 +631,12 @@ def undo_evaluation_run_tags(request, team_slug: str, evaluation_pk: int, evalua
         messages.error(request, "Can only undo tags on a completed run.")
         return HttpResponseRedirect(run_home_url)
     undo_run_tags(evaluation_run)
-    messages.success(request, "Tags have been reset to the previous run's state.")
+    logger.info(
+        "User %s undid applied tags on evaluation_run %s (config %s, team %s).",
+        request.user.id,
+        evaluation_run.id,
+        evaluation_pk,
+        team_slug,
+    )
+    messages.success(request, "Undo applied. Tags restored from prior run history where available.")
     return HttpResponseRedirect(run_home_url)
