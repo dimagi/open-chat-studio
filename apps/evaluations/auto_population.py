@@ -77,9 +77,8 @@ def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> li
     eval_messages = make_session_evaluation_messages(session_external_ids, team=rule.team)
     if not eval_messages:
         return []
-    created = EvaluationMessage.objects.bulk_create(eval_messages)
-    rule.dataset.messages.add(*created)
-    return list(created)
+    created, _ = rule.dataset.add_messages(eval_messages)
+    return created
 
 
 def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:

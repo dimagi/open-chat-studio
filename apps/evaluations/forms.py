@@ -934,8 +934,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             for pair in message_pairs
         ]
 
-        created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
-        dataset.messages.set(created_messages)
+        dataset.add_messages(evaluation_messages)
 
     def _save_csv(self, dataset):
         """Dispatch async task to create messages from CSV."""
