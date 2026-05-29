@@ -6,8 +6,9 @@ status: active
 
 > Single canonical design document for the read-only chatbot-inspection API
 > tracked in [#3452](https://github.com/dimagi/open-chat-studio/issues/3452),
-> with consumer acceptance criteria from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)
-> and the public-ID prerequisite tracked separately in [#3465](https://github.com/dimagi/open-chat-studio/issues/3465).
+> with consumer acceptance criteria from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458).
+> (A public-ID migration, [#3465](https://github.com/dimagi/open-chat-studio/issues/3465), was
+> originally a prerequisite but has been dropped — see [D4](#d4-no-new-public-ids-reuse-existing-identifiers).)
 > The nine questions in [§11](#11-resolved-questions) are now **resolved** (2026-05-29). The
 > document is held at `status: active` pending a design review; flip to `stable` once reviewed to
 > unlock ADR extraction.
@@ -32,13 +33,14 @@ Four decisions shape the work:
    surface and all new endpoints land.
 3. **Finish the `experiment` → `chatbot` rename in v2.** The codebase is already mid-rename
    and inconsistent; v2 is the clean break.
-4. **Stable public IDs (UUID) for every resource v2 exposes**, landing *before* the inspect
-   endpoint so external consumers never dereference numeric DB primary keys.
+4. **No new public IDs.** Inline nesting (below) removed the need to dereference resources by a
+   stable key, so we don't add `public_id` to resource models — the chatbot keeps its existing UUID,
+   nested resources carry their numeric DB id. This drops the #3465 prerequisite entirely.
 
 The endpoint itself — `GET /api/v2/chatbots/{id}/inspect/` — returns a **denormalized,
 read-only projection**: a digested pipeline graph, per-node detail, an experiment-level events
-block, and an inline, denormalized tree — each node and event embeds the resources it references
-(each carrying its `public_id`), with all credentials excluded.
+block, and an inline, denormalized tree where each node and event embeds the resources it references
+(provider + model pairs grouped under a concept key), with all credentials excluded.
 
 ## Context
 
@@ -99,8 +101,10 @@ These endpoints are read-only for now, but the long-term plan is to add write ca
 APIs. API changes are expensive once in use, so this is the moment to get naming, versioning, and
 identifier stability right. The key risk in shipping reads first is that **the read shape
 constrains the write shape** — clients assume they can PATCH whatever they GET. The design guards
-against this (see [D5](#d5-inspect-is-a-denormalized-read-only-projection-on-a-distinct-url) and
-[D4](#d4-stable-public-ids-uuid-for-every-resource-v2-exposes)).
+against this primarily via [D5](#d5-inspect-is-a-denormalized-read-only-projection-on-a-distinct-url)
+(a separate `/inspect/` URL signalling "projection, not representation"); see also
+[D4](#d4-no-new-public-ids-reuse-existing-identifiers) on why stable external IDs are deferred to
+when a write API actually exists.
 
 ## Goals and non-goals
 
@@ -113,8 +117,7 @@ against this (see [D5](#d5-inspect-is-a-denormalized-read-only-projection-on-a-d
   actions).
 - Satisfy assertions #1–#5 from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458) as
   acceptance criteria.
-- Establish v2 naming, URL-path versioning, and stable public IDs so the future write API is not
-  boxed in.
+- Establish v2 naming and URL-path versioning so the future write API is not boxed in.
 
 **Non-goals.**
 
@@ -190,7 +193,9 @@ and trivially testable from curl. Cost: two routers, two schemas, two docs pages
 **Decision.** v2 uses `chatbot` everywhere: `/api/v2/chatbots/`, operation IDs `chatbot_list` /
 `chatbot_retrieve` / `chatbot_inspect`, OpenAPI tag `"Chatbots"`, and serializer field renames
 (`experiment` → `chatbot`, `experiment_id` → `chatbot_id`). Sessions nest under the chatbot:
-`/api/v2/chatbots/{id}/sessions/`. v1 keeps `experiment` naming, frozen.
+`/api/v2/chatbots/{id}/sessions/`. v1 keeps `experiment` naming, frozen. v2 also fixes other
+misleading field names while it can — notably a `Collection`'s embedding provider, stored internally
+as `llm_provider`, is surfaced as `embedding` in the payload (see [D6](#d6-inline-nested-resource-tree-denormalized)).
 
 **Context.** The rename is already half-done and inconsistent across the API surface; v2 is a clean
 break that finishes it without disturbing existing callers.
@@ -202,26 +207,34 @@ only. v1 and v2 payloads diverge in field names, which is the intended cost of a
 **Alternatives considered.** Rename in place (no v2) — rejected because it breaks every existing
 caller. Leave the inconsistency — rejected because API names ossify once consumed.
 
-### D4 — Stable public IDs (UUID) for every resource v2 exposes
+### D4 — No new public IDs; reuse existing identifiers
 
-**Decision.** Every resource model the v2 API surfaces gets a stable opaque `public_id`
-(`UUIDField`), landing **before** the inspect endpoint. v2 emits `public_id` for all nested
-resource references; numeric DB primary keys never cross the API boundary. Tracked and scoped
-separately in [#3465](https://github.com/dimagi/open-chat-studio/issues/3465).
+**Decision.** Do **not** add `public_id` fields to the resource models the v2 API exposes. The
+chatbot keeps its existing `Experiment.public_id` (UUID, already the lookup field); embedded
+resources carry their numeric DB primary key as `id`. This eliminates the public-ID prerequisite —
+[#3465](https://github.com/dimagi/open-chat-studio/issues/3465) is no longer needed for this design.
 
-**Context.** Numeric IDs are unstable across environments (staging vs. prod), leak DB internals,
-and lock the API in once external consumers dereference them. `Experiment`, `Participant`, and
-`ExperimentSession` already have public/external IDs; this extends the established pattern.
+**Context.** The original plan added a `public_id` UUID to ~21 models so that nested *references*
+could be dereferenced by a stable, environment-portable key. The switch to an inline nested tree
+([D6](#d6-inline-nested-resource-tree-denormalized)) removed that need entirely — the consumer never
+addresses a resource by ID for reads; the resource is embedded right where it's used. What remained
+was speculative write-API forward-compat and a mild "don't leak sequential PKs" concern — not enough
+to justify a 21-model migration as a hard blocker on the endpoint.
 
-**Consequences.** Response payloads are portable across environments and forward-compatible with
-the eventual write API (writes will accept the same public IDs reads emit). Cost: a 19-model
-migration (additive, three-step nullable → backfill → non-null), a `PublicIdMixin`, and a fresh
-UUID assigned per version in `create_new_version`. No existing endpoint changes shape — the work is
-purely preparatory.
+**Consequences.** Inspect ships without waiting on a large migration; no `PublicIdMixin`, no
+backfills, no per-version UUID reset in `create_new_version`. Cost: the read payload exposes numeric
+DB primary keys for nested resources (an information-leak the team judged acceptable for a
+team-scoped, read-only, authenticated endpoint), and numeric IDs are not portable across
+environments. If/when a write API is specced, it can introduce stable external IDs **scoped to the
+specific resources it accepts as references** — a targeted addition driven by real need rather than
+a speculative sweep. The chatbot's own identifier stays the existing UUID, so the top-level handle is
+already stable.
 
-**Alternatives considered.** Deterministic hashed/slug IDs — more moving parts than a UUID for no
-gain here. Numeric IDs in v2 then migrate later — rejected as burning external integrators on IDs
-we'd have to deprecate. Human-readable slugs — separate debate, out of scope.
+**Alternatives considered.** Add `public_id` to all v2-exposed models up front (the original D4) —
+rejected: the inline tree removed the dereferencing rationale, leaving only speculative
+forward-compat (YAGNI). Scope public IDs to write-addressable resources only — rejected: still a
+sizable migration for a write API that has no spec yet, and it creates a mix of id types. Defer the
+decision — folded into this one: the decision *is* to defer, and to revisit when a write API exists.
 
 ### D5 — `/inspect/` is a denormalized read-only projection on a distinct URL
 
@@ -244,22 +257,29 @@ per the read-constrains-write risk above.
 ### D6 — Inline nested resource tree (denormalized)
 
 **Decision.** Each node and event embeds the resources it references **inline**, under named keys
-(e.g. a node carries `llm_provider`, `collection` objects directly; a `collection` carries its
-`files[]`). The response is a self-contained tree read top-to-bottom with no pointer-chasing. Every
-embedded resource still carries its `public_id` as `id`, so a consumer that wants to deduplicate can
-build its own map keyed by `id`.
+(e.g. a node carries `collection` objects directly; a `collection` carries its `files[]`). The
+response is a self-contained tree read top-to-bottom with no pointer-chasing. Each embedded resource
+carries its numeric DB id as `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)),
+so a consumer that wants to deduplicate can build its own map keyed by `id`.
+
+A **provider + model pair is grouped under a single concept key**: a node carries `llm = { provider,
+model }` rather than sibling `llm_provider` / `llm_provider_model`, and the same grouping applies to
+voice (`voice = { provider, voice }`) and a collection's embedding (`embedding = { provider, model }`).
+Provider and model are independent catalog rows (joined by `type`, not a FK), so they stay as
+distinct sub-objects — grouped for readability, not merged into one (which would imply an ownership
+that doesn't exist and diverge from the likely write shape of two separate references).
 
 **Context.** The primary consumer is an LLM-agent verifier reasoning over the JSON. Locality —
 having a node's resources right there beside it — matters more for that consumer than wire-size
 minimisation. A resource referenced by many nodes is duplicated, but the same resource is byte-for-
-byte identical at every site (same `public_id`), so duplication is recoverable, not lossy.
+byte identical at every site (same `id`), so duplication is recoverable, not lossy.
 
 **Consequences.** Single-pass readability; a node is self-describing. Wiring is implicit in
 containment (see [D10](#d10-wiring-is-implicit-in-nesting)). Cost: a shared resource is repeated at
 each reference site, so payload size is non-deterministic and grows with fan-out — this amplifies the
 size concern noted in [resolved Q9](#11-resolved-questions) (full payload in v1, no `?include=`
 filter). Diffing two bots is harder than with a normalised table. The collector must still batch-load
-each resource type once to avoid N+1, then inline copies (see [implementation](#track-c-the-inspect-endpoint-depends-on-a-and-b)).
+each resource type once to avoid N+1, then inline copies (see [implementation](#track-b-the-inspect-endpoint-depends-on-track-a)).
 
 **Alternatives considered.**
 
@@ -378,13 +398,14 @@ No new mechanism. Reuses what the chatbot ViewSet already has:
 ## Response shape
 
 Inline nested tree ([D6](#d6-inline-nested-resource-tree-denormalized)). Each node and event embeds
-the resources it references; every embedded resource carries its `public_id` as `id` so a consumer
-can dedup client-side if it wants. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
+the resources it references. The chatbot's own `id` is its existing UUID; embedded resources carry
+their numeric DB `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)).
+Provider + model pairs are grouped under a concept key. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
 
 ```jsonc
 {
   "chatbot": {
-    "id": "<public_id>",
+    "id": "5a3c…",                        // Experiment.public_id (existing UUID)
     "name": "Customer Support Bot",
     "description": "…",
     "version_number": 0,
@@ -402,24 +423,26 @@ can dedup client-side if it wants. Credentials are excluded ([D8](#d8-secrets-ex
       "tools": ["delete-reminder", "..."]
     },
 
-    // chatbot-level resources embedded inline (null if unset)
-    "source_material": { "id": "<pub>", "topic": "Returns policy", "material": "# Returns\n…" },
-    "consent_form":    { "id": "<pub>", "name": "Default", "consent_text": "…", "capture_identifier": true },
+    // chatbot-level resources embedded inline (numeric db id; null if unset)
+    "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
+    "consent_form":    { "id": 3, "name": "Default", "consent_text": "…", "capture_identifier": true },
     "pre_survey":      null,
-    "post_survey":     { "id": "<pub>", "name": "CSAT", "url": "https://…" },
-    "synthetic_voice": { "id": "<pub>", "name": "Rachel", "language": "English",
-                         "voice_provider": { "id": "<pub>", "type": "elevenlabs", "name": "ElevenLabs Prod" } },
+    "post_survey":     { "id": 9, "name": "CSAT", "url": "https://…" },
+    "voice": {                            // provider + voice grouped (D6)
+      "provider": { "id": 4, "type": "elevenlabs", "name": "ElevenLabs Prod" },
+      "voice":    { "id": 12, "name": "Rachel", "language": "English" }
+    },
     "trace_provider":  null,
     "safety_layers":   [],
 
     "channels": [                         // ExperimentChannel — secrets stripped (resolved Q8)
       { "platform": "telegram", "name": "Support TG",
-        "messaging_provider": { "id": "<pub>", "type": "telegram", "name": "Support TG bot" } }
+        "messaging_provider": { "id": 6, "type": "telegram", "name": "Support TG bot" } }
     ]
   },
 
   "pipeline": {
-    "id": "<pub>",
+    "id": 42,
     "name": "Support flow v3",
     "version_number": 0,
     "graph": {                            // digested — positions stripped, edges kept
@@ -447,19 +470,24 @@ can dedup client-side if it wants. Credentials are excluded ([D8](#d8-secrets-ex
         "tools": []
       },
       // fields with an options_source resolved + embedded inline (D7); null if unset
-      "llm_provider":       { "id": "<pub>", "type": "openai", "name": "Prod OpenAI" },
-      "llm_provider_model": { "id": "<pub>", "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false },
-      "source_material":    { "id": "<pub>", "topic": "Returns policy", "material": "# Returns\n…" },
+      "llm": {                            // provider + model grouped (D6)
+        "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
+        "model":    { "id": 18, "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false }
+      },
+      "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
       "collection": {
-        "id": "<pub>", "name": "Policy docs", "is_index": false,
-        "embedding_provider_model": { "id": "<pub>", "type": "openai", "model_name": "text-embedding-3-small" },
+        "id": 21, "name": "Policy docs", "is_index": false,
+        "embedding": {                    // a collection's embedding provider+model (D6); field renamed from llm_provider in v2 (D3)
+          "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
+          "model":    { "id": 7, "type": "openai", "model_name": "text-embedding-3-small" }
+        },
         "files": [                        // collection files embedded → assertion #3
-          { "id": "<pub>", "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection" }
+          { "id": 101, "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection" }
         ]
       },
       "collection_indexes": [],
       "custom_actions": [                 // wired-to-this-node by containment → assertion #5 (D10)
-        { "id": "<pub>", "name": "Session Completion", "server_url": "https://…",
+        { "id": 12, "name": "Session Completion", "server_url": "https://…",
           "allowed_operations": ["complete_session"],
           "api_schema": { "paths": ["/complete_session"] } }   // path/operation digest only (resolved Q7)
       ]
@@ -470,25 +498,25 @@ can dedup client-side if it wants. Credentials are excluded ([D8](#d8-secrets-ex
   "events": {                             // experiment-level — D9
     "static_triggers": [
       {
-        "id": "<pub>",
+        "id": 11,
         "type": "conversation_end",       // StaticTriggerType
         "is_active": true,
         "action": {
-          "id": "<pub>", "action_type": "pipeline_start",
+          "id": 47, "action_type": "pipeline_start",
           // pipeline_start embeds the referenced pipeline inline (resolved Q2)
-          "pipeline": { "id": "<pub>", "name": "Completion flow", "graph": { "nodes": [], "edges": [] } }
+          "pipeline": { "id": 99, "name": "Completion flow", "graph": { "nodes": [], "edges": [] } }
         }
       }
     ],
     "timeout_triggers": [
       {
-        "id": "<pub>",
+        "id": 22,
         "delay_seconds": 86400,           // 24h inactivity → assertion #4
         "total_num_triggers": 1,
         "trigger_from_first_message": false,
         "is_active": true,
         "action": {
-          "id": "<pub>", "action_type": "send_message_to_bot",
+          "id": 48, "action_type": "send_message_to_bot",
           "params": { "message": "Are you still there?" }
           // schedule_trigger actions instead embed: "scheduled_message": { … cadence … } (resolved Q3)
         }
@@ -499,14 +527,16 @@ can dedup client-side if it wants. Credentials are excluded ([D8](#d8-secrets-ex
 ```
 
 A resource referenced from more than one site (e.g. one `LlmProvider` used by several nodes) appears
-inline at each site, byte-for-byte identical and sharing the same `id`. Consumers that need to
-deduplicate index by `id`.
+inline at each site, byte-for-byte identical and sharing the same numeric `id`. Consumers that need
+to deduplicate index by `id`.
 
 ## Node type → reference field mapping
 
 The walker is data-driven ([D7](#d7-data-driven-node-walker-via-options_source)); this table is
 illustrative, not hand-maintained in code. Derived from `apps/pipelines/nodes/nodes.py` and
-`apps/pipelines/nodes/mixins.py`.
+`apps/pipelines/nodes/mixins.py`. These are the *source* fields the walker reads; in the payload a
+`llm_provider_id` + `llm_provider_model_id` pair renders grouped under `llm = { provider, model }`
+([D6](#d6-inline-nested-resource-tree-denormalized)).
 
 | Node class | Reference fields |
 |---|---|
@@ -550,57 +580,44 @@ The audit lives in code as a resource-type → serializer registry, never `__all
 
 ## Implementation plan
 
-Ordered so each step ships independently and stays reviewable. Three logical tracks, each its own
-set of PRs.
+Ordered so each step ships independently and stays reviewable. Two logical tracks, each its own set
+of PRs. (The earlier public-ID prerequisite track and #3465 are dropped per
+[D4](#d4-no-new-public-ids-reuse-existing-identifiers).)
 
-### Track A — Public IDs (prerequisite, [#3465](https://github.com/dimagi/open-chat-studio/issues/3465))
+### Track A — v2 routing + frozen v1
 
-1. `PublicIdMixin` in `apps/utils/models.py` + centralised fresh-UUID assignment in
-   `VersionsMixin.create_new_version` (assign a new `public_id` when present).
-2. Apply to `service_providers` models (7, unversioned) + backfill migration.
-3. Apply to versioned models (`SourceMaterial`, `Survey`, `ConsentForm`, `Collection`, `File`,
-   `OpenAiAssistant`, `Pipeline`) + backfill migrations.
-4. Apply to `CustomAction`, `events.*` (`StaticTrigger`, `TimeoutTrigger`, `EventAction`),
-   `SyntheticVoice`.
-5. **Scope added by resolved Q3/Q8:** `ScheduledMessage` (surfaced by `schedule_trigger` actions)
-   and `ExperimentChannel` (surfaced under `chatbot.channels[]`) now also need a `public_id`.
-   Neither is in #3465's original list — that ticket's scope must be expanded to cover them.
-
-Each migration is three-step (nullable `UUIDField` → chunked `RunPython` backfill → drop
-nullability). Factories add `public_id = factory.Faker("uuid4")`.
-
-### Track B — v2 routing + frozen v1
-
-6. Enable `URLPathVersioning`; `ALLOWED_VERSIONS = ["v1", "v2"]`. Restructure `apps/api/urls.py`
+1. Enable `URLPathVersioning`; `ALLOWED_VERSIONS = ["v1", "v2"]`. Restructure `apps/api/urls.py`
    under `path("api/<str:version>/", …)`. Wire existing routes under `/api/v1/` and keep
    `/api/experiments/…` as a permanent alias.
-7. v2 chatbot + session ViewSets: rename surface (`chatbots`, `chatbot_id`, `chatbot_*` operation
+2. v2 chatbot + session ViewSets: rename surface (`chatbots`, `chatbot_id`, `chatbot_*` operation
    IDs, `"Chatbots"` tag), nest sessions under chatbots. Per-version OpenAPI schemas + Swagger UIs.
 
-### Track C — the `/inspect/` endpoint (depends on A and B)
+### Track B — the `/inspect/` endpoint (depends on Track A)
 
-8. Add the `inspect` action to the v2 chatbot ViewSet (`extend_schema(operation_id="chatbot_inspect")`).
-9. Inspect serializers in a new module (e.g. `apps/api/serializers_inspect.py`): top-level
-   `ChatbotInspectSerializer` + per-resource `ModelSerializer`s with explicit `fields`.
-10. Pipeline node walker (e.g. `apps/pipelines/inspect.py`): walk `pipeline.node_set.all()`, look up
-    each pydantic class via the registry, classify fields by `options_source`. Non-reference fields →
-    `params`; for each reference field record `(field_name, resource_type, id)` and accumulate
-    `resource_refs: dict[ResourceKey, set[id]]` so the collector can pre-load in batch.
-11. Events serializer (e.g. `apps/events/api_serializers.py`): `StaticTrigger` + `TimeoutTrigger`
-    with nested `EventAction`; record event-referenced resources (`pipeline_start` → pipeline,
-    `schedule_trigger` → scheduled message) the same way. Channels are read from `experiment.channels`
-    and their `messaging_provider` added to `resource_refs`.
-12. Resource collector + inliner: batch-load each resource type once
-    (`Model.objects.filter(id__in=…)` with `select_related`/`prefetch_related` — **one query per
-    type, no N+1**, regardless of how many sites reference it), serialize through the secret-safe
-    serializers into an `id`-keyed map, then **inline** the serialized object at each reference site
-    under its named key ([D6](#d6-inline-nested-resource-tree-denormalized)). Duplication across
-    sites is by design. Covers providers, collections/files, source material, consent/surveys,
-    assistants, custom actions, messaging providers, event-referenced pipelines, and scheduled
-    messages. (Batch-loading is the N+1 guard; inlining copies from the in-memory map, not the DB.)
-13. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
-14. OpenAPI schema regeneration + verification; docs page describing payload shape and the
-    secrets-exclusion policy.
+3. Add the `inspect` action to the v2 chatbot ViewSet (`extend_schema(operation_id="chatbot_inspect")`).
+4. Inspect serializers in a new module (e.g. `apps/api/serializers_inspect.py`): top-level
+   `ChatbotInspectSerializer` + per-resource `ModelSerializer`s with explicit `fields`. Provider +
+   model pairs render under a grouped concept key (`llm`, `voice`, `embedding`) per
+   [D6](#d6-inline-nested-resource-tree-denormalized).
+5. Pipeline node walker (e.g. `apps/pipelines/inspect.py`): walk `pipeline.node_set.all()`, look up
+   each pydantic class via the registry, classify fields by `options_source`. Non-reference fields →
+   `params`; for each reference field record `(field_name, resource_type, id)` and accumulate
+   `resource_refs: dict[ResourceKey, set[id]]` so the collector can pre-load in batch.
+6. Events serializer (e.g. `apps/events/api_serializers.py`): `StaticTrigger` + `TimeoutTrigger`
+   with nested `EventAction`; record event-referenced resources (`pipeline_start` → pipeline,
+   `schedule_trigger` → scheduled message) the same way. Channels are read from `experiment.channels`
+   and their `messaging_provider` added to `resource_refs`.
+7. Resource collector + inliner: batch-load each resource type once
+   (`Model.objects.filter(id__in=…)` with `select_related`/`prefetch_related` — **one query per
+   type, no N+1**, regardless of how many sites reference it), serialize through the secret-safe
+   serializers into an `id`-keyed map, then **inline** the serialized object at each reference site
+   under its named key ([D6](#d6-inline-nested-resource-tree-denormalized)). Duplication across
+   sites is by design. Covers providers, collections/files, source material, consent/surveys,
+   assistants, custom actions, messaging providers, event-referenced pipelines, and scheduled
+   messages. (Batch-loading is the N+1 guard; inlining copies from the in-memory map, not the DB.)
+8. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
+9. OpenAPI schema regeneration + verification; docs page describing payload shape and the
+   secrets-exclusion policy.
 
 ### Test plan
 
@@ -627,9 +644,7 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
    `pipeline_start` action embeds the referenced pipeline (with its digested graph) inline, so a
    verifier can inspect trigger-launched flows without a second request.
 3. **`schedule_trigger` / `ScheduledMessage`** → **include the cadence.** The `schedule_trigger`
-   action embeds the `ScheduledMessage` cadence inline. This expands the public-ID prerequisite:
-   `ScheduledMessage` must gain a `public_id` (it was explicitly deferred in #3465 — that scope now
-   grows).
+   action embeds the `ScheduledMessage` cadence inline.
 4. **`OpenAiAssistant.instructions`** → **expose as-is.** Prompt text the verifier may want to
    assert; accepted residual risk that a team could embed a secret in a prompt.
 5. **`OpenAiAssistant.assistant_id`** → **expose.** Opaque OpenAI-side ID, not a credential.
@@ -639,17 +654,16 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
    summaries; never expose the raw schema (it can embed `securitySchemes` with key examples).
 8. **Channels** → **include, secrets stripped.** Surface `ExperimentChannel` under
    `chatbot.channels[]`, each embedding its `messaging_provider` inline; strip tokens from
-   `extra_data`. This also expands the public-ID prerequisite: `ExperimentChannel` must gain a
-   `public_id` (not in #3465's original list).
+   `extra_data`.
 9. **Response size** → **ship the full payload in v1.** No `?include=` selective-expansion filter
    for now; revisit only if a real consumer hits size problems.
 
-### Knock-on effects for #3465
+### A later decision: dropping public IDs
 
-Resolutions Q3 and Q8 add two models to the public-ID prerequisite that
-[#3465](https://github.com/dimagi/open-chat-studio/issues/3465) does not currently cover:
-`ScheduledMessage` and `ExperimentChannel`. That ticket's scope (and the Track A migration set)
-must be updated to include them before the inspect endpoint can emit their references.
+Originally these resolutions (Q2, Q3, Q8) added models to a public-ID migration prerequisite
+(#3465). That prerequisite was **dropped entirely** when the public-ID decision was reversed — see
+[D4](#d4-no-new-public-ids-reuse-existing-identifiers). Embedded resources now carry their numeric DB
+`id`, so no model needs a new `public_id` and #3465 is no longer part of this work.
 
 ## Related issues
 
@@ -657,6 +671,6 @@ must be updated to include them before the inspect endpoint can emit their refer
   inspection API (this design).
 - [#3458](https://github.com/dimagi/open-chat-studio/issues/3458) — consumer acceptance criteria
   (the ACE verifier).
-- [#3465](https://github.com/dimagi/open-chat-studio/issues/3465) — public-ID prerequisite
-  (Track A); depends on landing first. **Scope must expand** to add `ScheduledMessage` and
-  `ExperimentChannel` per [resolved Q3/Q8](#knock-on-effects-for-3465).
+- [#3465](https://github.com/dimagi/open-chat-studio/issues/3465) — public-ID migration, **no longer
+  a prerequisite** for this design (see [D4](#d4-no-new-public-ids-reuse-existing-identifiers)). Can
+  be closed or repurposed for a future write API if/when one is specced.
