@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.service_providers.migration_utils import llm_model_migration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -10,5 +8,5 @@ class Migration(migrations.Migration):
 
     operations = [
         # Add gemini-3.5-flash for both `google` and `google_vertex_ai` providers (1M context)
-        llm_model_migration(),
+        # llm_model_migration() moved to 0056_add_claude_opus_4_8
     ]

@@ -15,7 +15,7 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
+from django.core.validators import validate_email
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
@@ -556,7 +556,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         verbose_name="Pipeline",
     )
-    temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
     prompt_text = models.TextField(blank=True, default="")
     input_formatter = models.TextField(
@@ -617,7 +616,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     echo_transcript = models.BooleanField(
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
@@ -644,7 +642,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default="",
     )
     debug_mode_enabled = models.BooleanField(default=False)
-    citations_enabled = models.BooleanField(default=True)
     create_version_task_id = models.CharField(max_length=128, blank=True)
     file_uploads_enabled = models.BooleanField(
         default=False,

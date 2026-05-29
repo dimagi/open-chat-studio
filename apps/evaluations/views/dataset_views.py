@@ -359,7 +359,7 @@ class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 def add_message_to_dataset(request, team_slug: str, dataset_id: int):
     """Add a new message pair to an existing dataset and return updated table."""
     try:
-        dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team__slug=team_slug)
+        dataset = get_object_or_404(EvaluationDataset, id=dataset_id, team=request.team)
 
         # Clear any previous error states when manually adding a message
         if dataset.is_failed or dataset.error_message:
@@ -395,7 +395,7 @@ def add_message_to_dataset(request, team_slug: str, dataset_id: int):
 @login_and_team_required
 def edit_message_modal(request, team_slug, message_id):
     """Serve the edit modal content with message data"""
-    message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
+    message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team=request.team)
 
     # Prepare form data
     form_data = {
@@ -424,7 +424,7 @@ def edit_message_modal(request, team_slug, message_id):
 @require_POST
 def update_message(request, team_slug, message_id):
     """Handle form submission to update message"""
-    message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
+    message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team=request.team)
     form_data = _get_message_form_data(request)
     errors, data = _get_message_data_and_errors(form_data)
 
@@ -524,7 +524,7 @@ def _get_message_form_data(request) -> dict:
 @require_http_methods(["DELETE"])
 def delete_message(request, team_slug, message_id):
     """Delete a message from the dataset"""
-    message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team__slug=team_slug)
+    message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team=request.team)
     message.delete()
     return HttpResponse("", status=200)
 
@@ -587,7 +587,7 @@ def parse_csv_columns(request, team_slug: str):
 @login_and_team_required
 def download_dataset_csv(request, team_slug: str, pk: int):
     """Download dataset as CSV with expanded context and metadata columns."""
-    dataset = get_object_or_404(EvaluationDataset, id=pk, team__slug=team_slug)
+    dataset = get_object_or_404(EvaluationDataset, id=pk, team=request.team)
 
     messages = dataset.messages.order_by("id").all()
     if not messages:
@@ -656,7 +656,7 @@ def download_dataset_csv(request, team_slug: str, pk: int):
 @require_POST
 def upload_dataset_csv(request, team_slug: str, pk: int):
     """Upload CSV to update an existing dataset"""
-    dataset = get_object_or_404(EvaluationDataset, id=pk, team__slug=team_slug)
+    dataset = get_object_or_404(EvaluationDataset, id=pk, team=request.team)
 
     try:
         csv_file = request.FILES.get("csv_file")
@@ -696,9 +696,9 @@ class AddMessageToDatasetView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
 
     def post(self, request, team_slug: str, session_id: str):
         message_id = request.POST["message_id"]
-        dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team__slug=team_slug)
+        dataset = get_object_or_404(EvaluationDataset, id=request.POST["dataset"], team=request.team)
 
-        if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team__slug=team_slug).exists():
+        if not ChatMessage.objects.filter(id=message_id, chat__experiment_session__team=request.team).exists():
             messages.error(request, "Invalid message selected.")
             return HttpResponse(status=400)
 

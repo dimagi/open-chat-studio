@@ -296,7 +296,7 @@ class BaseChannelDialogView(View):
         return get_object_or_404(
             Experiment.objects.select_related("team"),
             id=self.kwargs["experiment_id"],
-            team__slug=self.kwargs["team_slug"],
+            team=self.request.team,
         )
 
     def get_form_kwargs(self):
@@ -360,7 +360,7 @@ class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, Upda
             ExperimentChannel,
             id=self.kwargs["channel_id"],
             experiment__id=self.kwargs["experiment_id"],
-            team__slug=self.kwargs["team_slug"],
+            team=self.request.team,
         )
 
     def get_context_data(self, **kwargs):
@@ -414,7 +414,7 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
         ExperimentChannel.objects.select_related("experiment"),
         id=channel_id,
         experiment__id=experiment_id,
-        team__slug=team_slug,
+        team=request.team,
     )
     channel.soft_delete()
     channels, available_platforms = get_channels_context(channel.experiment)
