@@ -96,7 +96,6 @@ class BaseMessage(BaseModel):
     """File IDs for attachments persisted by the channel's inbound handler.
     Hydrated into `attachments` by AttachmentHydrationStage once a session
     exists. Channels that don't pre-persist files leave this empty."""
-    attachment_filename: str | None = Field(default=None)
 
     cached_media_data: MediaCache | None = Field(default=None, exclude=True)
 
@@ -127,33 +126,34 @@ class TwilioMessage(BaseMessage):
     A wrapper class for user messages coming from the twilio
     """
 
+    # Twilio delivers one inbound webhook per attachment — an attachment is really a message
+    # whose caption (Body) is the text, so each attached file arrives as its own TwilioMessage.
     to: str
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
+    attachment_filename: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
         if not value:
             return MESSAGE_TYPES.TEXT
-        if value == "voice":
-            return MESSAGE_TYPES.VOICE
-        if value in ("text", "image", "document"):
-            # image/document inbound messages flow as TEXT so they pass MessageTypeValidationStage;
-            # the caption (Body) is the message text and the raw MIME lives in attachment_mime_type.
-            return MESSAGE_TYPES.TEXT
-        return MESSAGE_TYPES.OTHER
+        match value:
+            case "audio" | "voice":
+                return MESSAGE_TYPES.VOICE
+            case "text" | "image" | "document":
+                # image/document inbound messages flow as TEXT so they pass MessageTypeValidationStage;
+                # the caption (Body) is the message text and the raw MIME lives in attachment_mime_type.
+                return MESSAGE_TYPES.TEXT
+            case _:
+                return MESSAGE_TYPES.OTHER
 
     @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":
         prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
         prefix = message_data["From"].split(":")[0]
-        # Twilio's MessageType is the semantic category (text/audio/image/document). Normalize
-        # "audio" to "voice" so downstream code sees the same marker as WhatsApp messages.
         message_type = message_data.get("MessageType", "text")
-        if message_type == "audio":
-            message_type = "voice"
 
         prefix_to_remove = f"{prefix}:"
         platform = prefix_channel_map[prefix]
@@ -193,19 +193,21 @@ class WhatsAppMessage(BaseMessage):
     media_id: str | None = Field(default=None)
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
+    attachment_filename: str | None = Field(default=None)
     whatsapp_message_id: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
     def determine_content_type(cls, value):
-        if value == "audio":
-            return MESSAGE_TYPES.VOICE
-        if value in ("image", "document"):
-            # Treat as a text message with an attachment; the caption becomes the message text.
-            # The actual MIME type is preserved in attachment_mime_type for the persistence helper.
-            return MESSAGE_TYPES.TEXT
-        if MESSAGE_TYPES.is_member(value):
-            return MESSAGE_TYPES(value)
+        match value:
+            case "audio":
+                return MESSAGE_TYPES.VOICE
+            case "image" | "document":
+                # Treat as a text message with an attachment; the caption becomes the message text.
+                # The actual MIME type is preserved in attachment_mime_type for the persistence helper.
+                return MESSAGE_TYPES.TEXT
+            case _ if MESSAGE_TYPES.is_member(value):
+                return MESSAGE_TYPES(value)
 
     @classmethod
     def parse(cls, message_data: dict) -> "WhatsAppMessage":
