@@ -63,7 +63,7 @@ For each approved candidate **one at a time** (not batched):
    - `<p class="adr-meta">Author: {user name} · Created: {today's date as YYYY-MM-DD}</p>` meta line.
    - Optional `Extends: [ADR-NNNN](NNNN-prior-title.md)` line (filled in during Phase 4).
    - `## Context` — paraphrase the source doc's framing of why this decision was needed. Keep tight: one or two paragraphs.
-   - `## Decision` — one paragraph, lead with "We will…".
+   - `## Decision` — a short "We will…" lead-in; one paragraph for a simple decision, or bullets when it has several parts.
    - `## Consequences` — bullets, good and bad.
    - `## Alternatives considered` — bullets, one line each, name + rejection reason.
 

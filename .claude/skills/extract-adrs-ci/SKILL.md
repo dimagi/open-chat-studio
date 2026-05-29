@@ -42,7 +42,7 @@ Read `.claude/skills/extract-adrs/templates/adr-template.md` and draft each ADR 
 - `# ADR-NNNN: Short title`
 - `<span class="adr-status adr-status-accepted">ACCEPTED</span>` — default status `accepted` (extraction is of shipped/settled work). Use `proposed` only if the source explicitly says the decision is not yet implemented.
 - `<p class="adr-meta">Author: Open Chat Studio · Created: {today YYYY-MM-DD}</p>`
-- `## Context`, `## Decision` (lead with "We will…"), `## Consequences`, `## Alternatives considered`.
+- `## Context`, `## Decision` (a short "We will…" lead-in — one paragraph for a simple decision, bullets when multi-part), `## Consequences`, `## Alternatives considered`.
 
 **Content discipline.** ADRs are immutable once accepted, so anything that decays must stay out. Inside the body: **cut** file paths, `file.py:lineno` references, private helper names (`_foo`, internal underscore-prefixed methods), code-walk paraphrases of the implementation, exact log strings, and dated migration filenames. **Keep** identifiers the decision creates as public contracts: model + field names, DB constraint / index names, enum values, waffle flag IDs, URL routes and query-parameter surfaces, and ORM lookup paths when the join *is* the decision (e.g. "filter through `run.config`, not `evaluator`"). Deciding heuristic: "If I rename this tomorrow, do I need a migration or just a refactor?" Migration → keep. Refactor → cut. No human edits the draft between you and the PR, so apply this deliberately.
 

@@ -31,7 +31,7 @@ wouldn't change what a future engineer does.
 
 ## Decision
 
-<One paragraph stating what we decided, in plain language. Lead with the verb: "We will...".>
+<Lead with the verb: "We will...". One paragraph for a simple decision, or bullets when it has several parts. Plain language.>
 
 ## Consequences
 
