@@ -125,7 +125,6 @@ def get_prompt_builder_history(request, team_slug: str):
             "sourceMaterialID": history_data.get("sourceMaterialID", -1),
             "temperature": history_data.get("temperature", 0.7),
             "prompt": history_data.get("prompt", ""),
-            "inputFormatter": history_data.get("inputFormatter", ""),
             "provider": history_data.get("provider"),
             "providerModelId": history_data.get("providerModelId"),
             "messages": history_data.get("messages", []),
