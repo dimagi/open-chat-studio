@@ -429,14 +429,6 @@ class Command(BaseCommand):
             new_exp.owner = ctx.user
 
             # Remap FK relationships - error if mapping not found
-            if experiment.source_material_id:
-                if experiment.source_material_id not in ctx.source_materials:
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references source_material_id="
-                        f"{experiment.source_material_id} not found in source team."
-                    )
-                new_exp.source_material = ctx.source_materials[experiment.source_material_id]
-
             if experiment.consent_form_id:
                 if experiment.consent_form_id not in ctx.consent_forms:
                     raise CommandError(

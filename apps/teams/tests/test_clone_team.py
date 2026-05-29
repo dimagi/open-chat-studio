@@ -46,7 +46,7 @@ def source_team(django_db_blocker):
         trace_provider = TraceProviderFactory.create(team=team)
 
         # Content
-        source_material = SourceMaterialFactory.create(team=team)
+        SourceMaterialFactory.create(team=team)
         consent_form = ConsentFormFactory.create(team=team)
         survey = SurveyFactory.create(team=team)
 
@@ -58,7 +58,6 @@ def source_team(django_db_blocker):
             team=team,
             owner=owner,
             name="Test Experiment",
-            source_material=source_material,
             consent_form=consent_form,
             pre_survey=survey,
             voice_provider=voice_provider,
@@ -228,11 +227,6 @@ def test_clone_team_clones_experiments_with_remapped_fks(source_team):
     assert target_exp.name == source_exp.name
 
     # Verify FKs remapped to new team's objects
-    if source_exp.source_material:
-        assert target_exp.source_material is not None
-        assert target_exp.source_material.team == target
-        assert target_exp.source_material.id != source_exp.source_material.id
-
     if source_exp.consent_form:
         assert target_exp.consent_form is not None
         assert target_exp.consent_form.team == target
