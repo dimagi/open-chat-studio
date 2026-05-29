@@ -4,9 +4,11 @@
 
 <p class="adr-meta">Author: Open Chat Studio · Created: 2026-05-28</p>
 
+<p class="adr-meta">Related: <a href="0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md">ADR-0015</a></p>
+
 ## Context
 
-Open Chat Studio has two independent subsystems that produce per-session judgments: automated evaluation (`apps.evaluations`, writing `EvaluationResult.output` as opaque JSON) and human review (`apps.human_annotations`, writing `Annotation.data` as opaque JSON). The dogfood pilot for "basic concordance" needed a way to compare one shared categorical field — an LLM judge's answer versus the human authoritative answer — without an ad-hoc JSON-versus-JSON join, and without committing to the full unified assessment design (`docs/design/unified-assessment.md`) before its larger pieces (`Assessment`, `AssessmentSchema`, `AssessmentRun`, routing rules) have been ratified. The constraint shaping this ADR was therefore: introduce only the value-storage layer that the unified design defines, in its terminal column names, with enough flexibility that future targets and source types are additive rather than schema-breaking.
+Open Chat Studio has two independent subsystems that produce per-session judgments: automated evaluation (`apps.evaluations`, writing `EvaluationResult.output` as opaque JSON) and human review (`apps.human_annotations` per [ADR-0015](0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md), writing `Annotation.data` as opaque JSON). The dogfood pilot for "basic concordance" needed a way to compare one shared categorical field — an LLM judge's answer versus the human authoritative answer — without an ad-hoc JSON-versus-JSON join, and without committing to the full unified assessment design (`docs/design/unified-assessment.md`) before its larger pieces (`Assessment`, `AssessmentSchema`, `AssessmentRun`, routing rules) have been ratified. The constraint shaping this ADR was therefore: introduce only the value-storage layer that the unified design defines, in its terminal column names, with enough flexibility that future targets and source types are additive rather than schema-breaking.
 
 ## Decision
 
