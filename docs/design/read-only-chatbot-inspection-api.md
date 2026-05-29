@@ -8,8 +8,9 @@ status: active
 > tracked in [#3452](https://github.com/dimagi/open-chat-studio/issues/3452),
 > with consumer acceptance criteria from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)
 > and the public-ID prerequisite tracked separately in [#3465](https://github.com/dimagi/open-chat-studio/issues/3465).
-> While this document has `status: active`, ADR extraction is gated off — the open
-> questions in [§11](#11-open-questions) are still moving. Flip to `stable` before extracting.
+> The nine questions in [§11](#11-resolved-questions) are now **resolved** (2026-05-29). The
+> document is held at `status: active` pending a design review; flip to `stable` once reviewed to
+> unlock ADR extraction.
 
 ## TL;DR
 
@@ -299,9 +300,11 @@ inactivity timeout that is assertion #4 and the single most important thing the 
 verifier checks.
 
 **Consequences.** Assertion #4 becomes reachable. `EventLog` entries are excluded (operational
-telemetry, not config). `EventAction.params` for `pipeline_start`/`schedule_trigger` reference other
-resources, normalized into the resource tables (see open questions). Disabled triggers are included
-but flagged via `is_active`, so a verifier can assert a trigger *isn't* armed.
+telemetry, not config). `EventAction.params` reference other resources, normalized into the resource
+tables: `pipeline_start` → `resources.pipelines` with the referenced pipeline's digested graph
+([resolved Q2](#11-resolved-questions)); `schedule_trigger` → `resources.scheduled_messages` with
+the scheduling cadence ([resolved Q3](#11-resolved-questions)). Disabled triggers are included but
+flagged via `is_active`, so a verifier can assert a trigger *isn't* armed.
 
 **Alternatives considered.** Treating triggers as node resources — rejected: they are not nodes and
 do not live in the graph.
@@ -348,8 +351,8 @@ No new mechanism. Reuses what the chatbot ViewSet already has:
 | Read-only key safety | `UserAPIKey.read_only` + `ReadOnlyAPIKeyPermission` | `apps/api/permissions.py:101` |
 | OAuth scope | `TokenHasOAuthResourceScope`, scope `chatbots` | `apps/api/views/experiments.py` |
 
-A dedicated `inspect_chatbot` model permission (vs. reusing the existing `view` perm) is an open
-question — see [§11](#11-open-questions).
+**Resolved:** reuse the existing `view` permission — no dedicated `inspect_chatbot` perm. A
+`read_only` key with `view` access can inspect. See [resolved Q1](#11-resolved-questions).
 
 ## Response shape
 
@@ -385,7 +388,10 @@ Nodes and events carry only `public_id` references; resources are flat top-level
       "voice_provider_id": "<pub>",
       "trace_provider_id": null,
       "safety_layer_ids": []
-    }
+    },
+    "channels": [                         // ExperimentChannel — secrets stripped (resolved Q8)
+      {"platform": "telegram", "name": "Support TG", "messaging_provider_id": "<pub>"}
+    ]
   },
 
   "pipeline": {
@@ -435,6 +441,8 @@ Nodes and events carry only `public_id` references; resources are flat top-level
         "type": "conversation_end",       // StaticTriggerType
         "is_active": true,
         "action": { "id": "<pub>", "action_type": "pipeline_start", "params": { "pipeline_id": "<pub>" } }
+        // pipeline_start → the referenced pipeline is added to resources.pipelines (resolved Q2)
+        // schedule_trigger → params reference resources.scheduled_messages (resolved Q3)
       }
     ],
     "timeout_triggers": [
@@ -453,6 +461,7 @@ Nodes and events carry only `public_id` references; resources are flat top-level
     "llm_providers":        { "<pub>": {"id": "<pub>", "type": "openai", "name": "Prod OpenAI"} },
     "llm_provider_models":  { "<pub>": {"id": "<pub>", "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false} },
     "voice_providers":      { "<pub>": {"id": "<pub>", "type": "elevenlabs", "name": "ElevenLabs Prod"} },
+    "messaging_providers":  { "<pub>": {"id": "<pub>", "type": "telegram", "name": "Support TG bot"} },
     "synthetic_voices":     { "<pub>": {"id": "<pub>", "name": "Rachel", "language": "English", "voice_provider_id": "<pub>"} },
     "source_material":      { "<pub>": {"id": "<pub>", "topic": "Returns policy", "material": "# Returns\n…"} },
     "consent_forms":        { "<pub>": {"id": "<pub>", "name": "Default", "consent_text": "…", "capture_identifier": true} },
@@ -462,6 +471,8 @@ Nodes and events carry only `public_id` references; resources are flat top-level
     "files":                { "<pub>": {"id": "<pub>", "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection"} },
     "assistants":           { },          // OpenAiAssistant entries when AssistantNode is used
     "custom_actions":       { "<pub>": {"id": "<pub>", "name": "Session Completion", "server_url": "https://…", "allowed_operations": ["complete_session"], "attached_to": [{"kind": "node", "flow_id": "llm-3"}]} },
+    "pipelines":            { "<pub>": {"id": "<pub>", "name": "Completion flow", "graph": { "nodes": [], "edges": [] }} },  // event-referenced pipelines (resolved Q2)
+    "scheduled_messages":   { "<pub>": {"id": "<pub>", "name": "Reminder", "frequency": 1, "time_period": "days", "repetitions": 3} },  // schedule_trigger cadence (resolved Q3)
     "safety_layers":        { },
     "tags":                 { }
   }
@@ -495,9 +506,9 @@ Per [D8](#d8--secrets-exclusion-via-per-resource-serializers-with-explicit-field
 | `LlmProviderModel`, `EmbeddingProviderModel` | same | — |
 | `SyntheticVoice` | `apps/experiments/models.py` | file payload (ID only) |
 | `SourceMaterial`, `ConsentForm`, `Survey` | `apps/experiments/models.py` | — |
-| `Collection` | `apps/documents/models.py` | `openai_vector_store_id` (treat as sensitive — open question) |
+| `Collection` | `apps/documents/models.py` | — (`openai_vector_store_id` **exposed** — opaque pointer, not a credential; see [resolved Q6](#11-resolved-questions)) |
 | `File` | `apps/files/models.py` | **`file` URL** — signed storage URL; never expose |
-| `OpenAiAssistant` | `apps/assistants/models.py` | `assistant_id` (OpenAI-side ID — open question) |
+| `OpenAiAssistant` | `apps/assistants/models.py` | — (`instructions` and `assistant_id` **exposed**; see [resolved Q4/Q5](#11-resolved-questions)) |
 | `CustomAction` | `apps/custom_actions/models.py` | **full `api_schema`** — reduce to path/operation digest (OpenAPI docs can embed `securitySchemes` with key examples) |
 
 The audit lives in code as a resource-type → serializer registry, never `__all__`.
@@ -528,34 +539,41 @@ set of PRs.
    `OpenAiAssistant`, `Pipeline`) + backfill migrations.
 4. Apply to `CustomAction`, `events.*` (`StaticTrigger`, `TimeoutTrigger`, `EventAction`),
    `SyntheticVoice`.
+5. **Scope added by resolved Q3/Q8:** `ScheduledMessage` (surfaced by `schedule_trigger` actions)
+   and `ExperimentChannel` (surfaced under `chatbot.channels[]`) now also need a `public_id`.
+   Neither is in #3465's original list — that ticket's scope must be expanded to cover them.
 
 Each migration is three-step (nullable `UUIDField` → chunked `RunPython` backfill → drop
 nullability). Factories add `public_id = factory.Faker("uuid4")`.
 
 ### Track B — v2 routing + frozen v1
 
-5. Enable `URLPathVersioning`; `ALLOWED_VERSIONS = ["v1", "v2"]`. Restructure `apps/api/urls.py`
+6. Enable `URLPathVersioning`; `ALLOWED_VERSIONS = ["v1", "v2"]`. Restructure `apps/api/urls.py`
    under `path("api/<str:version>/", …)`. Wire existing routes under `/api/v1/` and keep
    `/api/experiments/…` as a permanent alias.
-6. v2 chatbot + session ViewSets: rename surface (`chatbots`, `chatbot_id`, `chatbot_*` operation
+7. v2 chatbot + session ViewSets: rename surface (`chatbots`, `chatbot_id`, `chatbot_*` operation
    IDs, `"Chatbots"` tag), nest sessions under chatbots. Per-version OpenAPI schemas + Swagger UIs.
 
 ### Track C — the `/inspect/` endpoint (depends on A and B)
 
-7. Add the `inspect` action to the v2 chatbot ViewSet (`extend_schema(operation_id="chatbot_inspect")`).
-8. Inspect serializers in a new module (e.g. `apps/api/serializers_inspect.py`): top-level
+8. Add the `inspect` action to the v2 chatbot ViewSet (`extend_schema(operation_id="chatbot_inspect")`).
+9. Inspect serializers in a new module (e.g. `apps/api/serializers_inspect.py`): top-level
    `ChatbotInspectSerializer` + per-resource `ModelSerializer`s with explicit `fields`.
-9. Pipeline node walker (e.g. `apps/pipelines/inspect.py`): walk `pipeline.node_set.all()`, look up
-   each pydantic class via the registry, split fields by `options_source` into `params` vs
-   `references`; return `(nodes_payload, resource_refs: dict[ResourceKey, set[id]])`.
-10. Events serializer (e.g. `apps/events/api_serializers.py`): `StaticTrigger` + `TimeoutTrigger`
-    with nested `EventAction`; feed event-referenced resources into `resource_refs`.
-11. Resource collector: batch-load each resource type (`Model.objects.filter(id__in=…)` with
+10. Pipeline node walker (e.g. `apps/pipelines/inspect.py`): walk `pipeline.node_set.all()`, look up
+    each pydantic class via the registry, split fields by `options_source` into `params` vs
+    `references`; return `(nodes_payload, resource_refs: dict[ResourceKey, set[id]])`.
+11. Events serializer (e.g. `apps/events/api_serializers.py`): `StaticTrigger` + `TimeoutTrigger`
+    with nested `EventAction`; feed event-referenced resources (`pipeline_start` → pipelines,
+    `schedule_trigger` → scheduled messages) into `resource_refs`. Channels are collected from
+    `experiment.channels` into the same ref set.
+12. Resource collector: batch-load each resource type (`Model.objects.filter(id__in=…)` with
     `select_related`/`prefetch_related` — **one query per type, no N+1**), serialize through the
-    secret-safe serializers, key by `public_id`.
-12. `attached_to[]` reverse-index pass over the in-memory node/event payloads (no extra queries).
-13. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
-14. OpenAPI schema regeneration + verification; docs page describing payload shape and the
+    secret-safe serializers, key by `public_id`. Covers providers, collections/files, source
+    material, consent/surveys, assistants, custom actions, messaging providers, event-referenced
+    pipelines, and scheduled messages.
+13. `attached_to[]` reverse-index pass over the in-memory node/event payloads (no extra queries).
+14. Tests (`apps/api/tests/test_chatbots_inspect.py`) — see below.
+15. OpenAPI schema regeneration + verification; docs page describing payload shape and the
     secrets-exclusion policy.
 
 ### Test plan
@@ -570,29 +588,39 @@ nullability). Factories add `public_id = factory.Faker("uuid4")`.
   identity; router keywords; collection → files inventory; 24-hr `TimeoutTrigger` + its action in
   the `events` block; custom action with `attached_to`.
 
-## 11. Open questions
+## 11. Resolved questions
 
-1. **Permission granularity.** A dedicated `inspect_chatbot` model permission (least-privilege agent
-   tokens) vs. reusing the existing `view` permission. Lean: reuse `view` unless least-privilege is
-   a stated requirement.
-2. **`EventAction.params` for `pipeline_start`.** The referenced pipeline may not be the chatbot's
-   primary pipeline. Emit a reference + add it to a top-level `pipelines{}` table (and serialize its
-   graph too), or reference-only? Lean: reference + resource-table entry, matching the flat-table
-   convention.
-3. **`ScheduledMessage` triggers** (`schedule_trigger` action). Include the scheduling cadence in
-   resources, or out of scope? Lean: include — verifiers may assert cadence. ([#3465](https://github.com/dimagi/open-chat-studio/issues/3465)
-   leaves `ScheduledMessage` public-ID out of scope until this is decided.)
-4. **`OpenAiAssistant.instructions`** — full prompt text; usually not sensitive but could embed
-   keys in some teams' configs. Expose as-is or sanitize? Lean: expose.
-5. **`OpenAiAssistant.assistant_id`** (OpenAI-side ID) — opaque ID, not a credential. Expose? Lean:
-   expose, flagged for review.
-6. **`Collection.openai_vector_store_id`** — credential or opaque ID? Decides exposure.
-7. **`CustomAction.api_schema`** — path/operation digest (recommended) vs. full schema vs. nothing.
-8. **Channels.** Surface `ExperimentChannel` entries (platform, name, `extra_data` minus
-   credentials) under `chatbot.channels[]` with `messaging_providers` in resources? Lean: include
-   with secrets stripped — a deployment audit wants to know how the bot is exposed.
-9. **Response size.** Large bots produce heavy payloads. A `?include=` selective-expansion filter is
-   out of scope for v1 of the endpoint; revisit if size becomes a problem.
+All resolved 2026-05-29. Recorded here so the rationale survives into ADR extraction.
+
+1. **Permission granularity** → **reuse the existing `view` permission.** No dedicated
+   `inspect_chatbot` perm; a `read_only` key with `view` access can inspect. A least-privilege
+   inspect-only perm can be added later if a concrete need appears.
+2. **`EventAction.params` for `pipeline_start`** → **reference + serialize the graph.** Emit the
+   `public_id` reference *and* add the referenced pipeline (with its digested graph) to a top-level
+   `resources.pipelines` table, so a verifier can inspect trigger-launched flows.
+3. **`schedule_trigger` / `ScheduledMessage`** → **include the cadence.** Surface the schedule config
+   in `resources.scheduled_messages`. This expands the public-ID prerequisite: `ScheduledMessage`
+   must gain a `public_id` (it was explicitly deferred in #3465 — that scope now grows).
+4. **`OpenAiAssistant.instructions`** → **expose as-is.** Prompt text the verifier may want to
+   assert; accepted residual risk that a team could embed a secret in a prompt.
+5. **`OpenAiAssistant.assistant_id`** → **expose.** Opaque OpenAI-side ID, not a credential.
+6. **`Collection.openai_vector_store_id`** → **expose.** Treated as an opaque pointer rather than a
+   credential. (Note: this went *against* the initial lean to exclude — recorded deliberately.)
+7. **`CustomAction.api_schema`** → **path/operation digest.** Strip to operation IDs, paths, and
+   summaries; never expose the raw schema (it can embed `securitySchemes` with key examples).
+8. **Channels** → **include, secrets stripped.** Surface `ExperimentChannel` under
+   `chatbot.channels[]` with `messaging_providers` in the resources table; strip tokens from
+   `extra_data`. This also expands the public-ID prerequisite: `ExperimentChannel` must gain a
+   `public_id` (not in #3465's original list).
+9. **Response size** → **ship the full payload in v1.** No `?include=` selective-expansion filter
+   for now; revisit only if a real consumer hits size problems.
+
+### Knock-on effects for #3465
+
+Resolutions Q3 and Q8 add two models to the public-ID prerequisite that
+[#3465](https://github.com/dimagi/open-chat-studio/issues/3465) does not currently cover:
+`ScheduledMessage` and `ExperimentChannel`. That ticket's scope (and the Track A migration set)
+must be updated to include them before the inspect endpoint can emit their references.
 
 ## Related issues
 
@@ -601,4 +629,5 @@ nullability). Factories add `public_id = factory.Faker("uuid4")`.
 - [#3458](https://github.com/dimagi/open-chat-studio/issues/3458) — consumer acceptance criteria
   (the ACE verifier).
 - [#3465](https://github.com/dimagi/open-chat-studio/issues/3465) — public-ID prerequisite
-  (Track A); depends on landing first.
+  (Track A); depends on landing first. **Scope must expand** to add `ScheduledMessage` and
+  `ExperimentChannel` per [resolved Q3/Q8](#knock-on-effects-for-3465).
