@@ -17,7 +17,7 @@ We also need to handle the no-match case and identify the participant. Auto-repl
 We will route inbound email using a four-tier priority chain mirroring Slack:
 
 1. `In-Reply-To` is looked up against `ExperimentSession.external_id`.
-2. On a miss, each `Message-ID` in the `References` header is scanned in turn. RFC 2822 guarantees the root `Message-ID` appears in `References`, so replies to interior messages still resolve.
+2. On a miss, each `Message-ID` in the `References` header is scanned in turn. Per RFC 2822 threading the root `Message-ID` is typically present in `References` (best-effort, not guaranteed), so replies to interior messages usually still resolve.
 3. The to-address is matched against `ExperimentChannel.extra_data["email_address"]`, creating a new session.
 4. Otherwise a channel with `extra_data["is_default"] == True` handles it — a global fallback checked across all teams, not team-scoped.
 
