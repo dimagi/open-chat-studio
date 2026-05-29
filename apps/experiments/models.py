@@ -181,11 +181,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    @transaction.atomic()
-    def archive(self):
-        super().archive()
-        self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
-
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
@@ -559,13 +554,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     prompt_text = models.TextField(blank=True, default="")
 
-    source_material = models.ForeignKey(
-        SourceMaterial,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="If provided, the source material will be given to every bot in the chain.",
-    )
     seed_message = models.TextField(
         blank=True,
         default="",
@@ -904,7 +892,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
-            self._copy_attr_to_new_version("source_material", new_version)
             self._copy_attr_to_new_version("consent_form", new_version)
             self._copy_attr_to_new_version("pre_survey", new_version)
             self._copy_attr_to_new_version("post_survey", new_version)

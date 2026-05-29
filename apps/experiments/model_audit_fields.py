@@ -2,7 +2,6 @@ EXPERIMENT_FIELDS = [
     "owner",
     "name",
     "prompt_text",
-    "source_material",
     "seed_message",
     "pre_survey",
     "post_survey",
