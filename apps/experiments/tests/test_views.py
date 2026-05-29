@@ -42,7 +42,6 @@ def test_create_experiment_creates_first_version(client, team_with_users):
     post_data = {
         "name": "some name",
         "type": "llm",
-        "prompt_text": "You are a helpful assistant.",
         "consent_form": consent_form.id,
         "temperature": 0.7,
         "llm_provider": LlmProviderFactory.create(team=team_with_users).id,
@@ -376,7 +375,7 @@ class TestPublicSessions:
         verify_user.return_value = HttpResponse()
         prompt = "This is data: {participant_data}"
         experiment = ExperimentFactory.create(
-            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier, prompt_text=prompt
+            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier
         )
         post_data = {
             "identifier": "someone@gmail.com",

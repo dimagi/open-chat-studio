@@ -557,7 +557,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         verbose_name="Pipeline",
     )
 
-    prompt_text = models.TextField(blank=True, default="")
     input_formatter = models.TextField(
         blank=True,
         default="",
@@ -1681,8 +1680,7 @@ class ExperimentSession(BaseTeamModel):
             router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
             prompts = llm_prompts + router_prompts
             return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
-        else:
-            return "{participant_data}" in self.experiment.prompt_text
+        return False
 
     def as_experiment_chip(self) -> Chip:
         """Returns a link to the (legacy) experiment session page"""
