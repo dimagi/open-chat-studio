@@ -44,6 +44,18 @@ _Avoid_: "ExperimentChannel" outside of code.
 A single conversation between a Participant and a Chatbot Version, conducted via a Channel (or via the API entry point, web widget, or an evaluation run). Materialised in code as an `ExperimentSession` row paired 1:1 with a `Chat` row that holds the message log; treat them as one domain concept.
 _Avoid_: "Chat" (overloads with the `Chat` model and a verb), "Conversation" (casual UI phrasing).
 
+### Events and triggers
+
+**Static Trigger**:
+A rule attached to a Chatbot that fires an **Event Action** when a conversation *event* occurs — the conversation ends, a new human/bot message arrives, a participant joins, etc. Versioned alongside the Chatbot.
+
+**Timeout Trigger**:
+A rule attached to a Chatbot that fires an **Event Action** after a period of participant inactivity (a delay in seconds), optionally repeating a fixed number of times. The canonical case is a 24-hour inactivity re-engagement message.
+_Note_: Triggers attach to the **Chatbot**, not to the **Pipeline** graph — they are not Pipeline Nodes.
+
+**Event Action**:
+What a Trigger does when it fires — one of: log, end the conversation, send a message to the bot, start a Pipeline, or schedule a trigger. Carries a freeform `params` payload.
+
 ### People and tenancy
 
 **Participant**:
@@ -59,7 +71,11 @@ The multi-tenancy root scope. Almost every domain resource (Chatbot, Pipeline, C
 ### Integrations
 
 **Service Provider**:
-A Team-scoped record holding credentials and configuration for one external integration. Four kinds: **LLM Provider** (OpenAI, Anthropic, Groq, Gemini, Azure, …), **Messaging Provider** (Twilio, Telegram, Slack credentials, …), **Voice Provider** (TTS/STT services), **Auth Provider** (OAuth/SAML for sign-in). Code shares a `ProviderMixin`.
+A Team-scoped record holding credentials and configuration for one external integration. Kinds: **LLM Provider** (OpenAI, Anthropic, Groq, Gemini, Azure, …), **Messaging Provider** (Twilio, Telegram, Slack credentials, …), **Voice Provider** (TTS/STT services), **Auth Provider** (OAuth/SAML, used by Custom Actions and sign-in), and **Trace Provider** (observability backends). The LLM, Voice, and Messaging kinds share a `ProviderMixin`; Auth and Trace providers do not. The encrypted credential blob lives in a `config` field and is never exposed externally.
+
+**LLM Provider Model**:
+A specific model offering a **Provider** can serve — e.g. `gpt-4o`, `claude-opus-4` — with its own token limit. Distinct from the **LLM Provider**: a Provider is the credentialed account, a Model is a catalogue entry. They are **independent rows joined by provider `type`, not a foreign key**, and a Pipeline Node selects *both* — a Provider and a Model. May be Team-scoped or a global (Team-less) catalogue row. The same Provider/Model split applies to embeddings (an **Embedding Provider Model** paired with a Provider).
+_Avoid_: conflating "Provider" and "Model" — choosing a bot's LLM means choosing both.
 
 **OpenAI Assistant**:
 A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. Pipelines invoke one via an `AssistantNode`.
@@ -111,6 +127,8 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - A **Participant** belongs to one **Team** and one platform; the same human across two platforms is two **Participants**.
 - An **Evaluation Run** generates outputs against one **Chatbot Version**, resolved from its **Evaluation Config** at run time and pinned on the Run. Same machinery as Channel routing — Working vs Published is decided per-Config.
 - A **Pipeline Node** of type `AssistantNode` references one **OpenAI Assistant**; pipelines also reference **Custom Action Operations** to make outbound HTTP calls.
+- **Static Triggers** and **Timeout Triggers** attach to a **Chatbot Version**, not to its **Pipeline** — so reasoning about "what a published bot does" must include both the Pipeline graph and the Chatbot's Triggers.
+- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **OpenAI Assistants**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
 
 ## Example dialogue
 
