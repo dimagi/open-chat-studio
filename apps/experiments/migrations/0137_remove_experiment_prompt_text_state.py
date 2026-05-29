@@ -4,8 +4,9 @@ from django.db import migrations
 class Migration(migrations.Migration):
     """Remove prompt_text from Django state while leaving the DB column intact.
 
-    The column will be dropped in a follow-up migration once this change has been
-    deployed everywhere (rolling-deploy safe: old workers can still SELECT the column).
+    Adds a DB-level default ('') so INSERTs from the new code (which no longer
+    references this column) satisfy the existing NOT NULL constraint.
+    The column is dropped in a follow-up migration once deployed everywhere.
     """
 
     dependencies = [
@@ -13,6 +14,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql=["ALTER TABLE experiments_experiment ALTER COLUMN prompt_text SET DEFAULT '';"],
+            reverse_sql=["ALTER TABLE experiments_experiment ALTER COLUMN prompt_text DROP DEFAULT;"],
+        ),
         migrations.SeparateDatabaseAndState(
             state_operations=[
                 migrations.RemoveField(
