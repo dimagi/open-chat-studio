@@ -220,19 +220,26 @@ def _message_ids_by_latest_prior_run(run: EvaluationRun, message_ids: list[int])
     message in `message_ids`, and return a mapping `{run_id: {message_id, ...}}` grouping
     messages by their shared previous-state run.
 
-    Only runs that are COMPLETED, of the same config, and strictly older than `run` are
-    considered. Postgres `DISTINCT ON (message_id)` does the per-message dedup in the DB.
-    Extracted from `_previous_applied_by_message` so it can be tested in isolation.
+    Only runs that are COMPLETED, of the same config, and that finished strictly before
+    `run` are considered. Completion time (`finished_at`, set in `mark_complete()`) — not
+    creation time — orders candidates, because runs for the same config can overlap (there
+    is no server-side concurrency guard), so the run created later may not be the one whose
+    tag state was finalized later. `-run_id` is a stable tie-breaker that makes the choice
+    deterministic when two runs share a `finished_at`. COMPLETED runs always have a non-null
+    `finished_at`, and undo only operates on a COMPLETED `run` (guarded in the view), so
+    `run.finished_at` is non-null here. Postgres `DISTINCT ON (message_id)` does the
+    per-message dedup in the DB. Extracted from `_previous_applied_by_message` so it can be
+    tested in isolation.
     """
     qs = (
         EvaluationResult.objects.filter(
             run__config=run.config,
             run__status=EvaluationRunStatus.COMPLETED,
             run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            run__created_at__lt=run.created_at,
+            run__finished_at__lt=run.finished_at,
             message_id__in=message_ids,
         )
-        .order_by("message_id", "-run__created_at")
+        .order_by("message_id", "-run__finished_at", "-run_id")
         .distinct("message_id")
         .values_list("message_id", "run_id")
     )

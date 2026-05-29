@@ -512,9 +512,17 @@ class TestEvaluatorTagRuleFormset:
 # ---- undo_run_tags ---------------------------------------------------------
 
 
-def _stamp(run, delta):
-    """Force-set created_at on a run to now() + delta via QuerySet.update() (bypasses auto_now_add)."""
-    EvaluationRun.objects.filter(pk=run.pk).update(created_at=timezone.now() + delta)
+def _stamp(run, delta, finished_delta=None):
+    """Force-set created_at (and finished_at) on a run via QuerySet.update() (bypasses auto_now_add).
+
+    `created_at` is set to now() + `delta`. `finished_at` is set to now() + `finished_delta`,
+    defaulting to `delta` so the two move together unless a test deliberately models an
+    overlapping run that finished at a different time than it was created.
+    """
+    now = timezone.now()
+    if finished_delta is None:
+        finished_delta = delta
+    EvaluationRun.objects.filter(pk=run.pk).update(created_at=now + delta, finished_at=now + finished_delta)
     run.refresh_from_db()
 
 
@@ -561,6 +569,7 @@ class TestUndoRunTags:
             config=config,
             status=EvaluationRunStatus.COMPLETED,
             type=EvaluationRunType.FULL,
+            finished_at=timezone.now(),
         )
         result = EvaluationResultFactory.create(
             team=team,
@@ -849,7 +858,13 @@ class TestMessageIdsByLatestPriorRun:
         return EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator]), evaluator
 
     def _make_run_with_results(self, team, config, evaluator, messages, run_type=EvaluationRunType.FULL):
-        run = EvaluationRunFactory.create(team=team, config=config, status=EvaluationRunStatus.COMPLETED, type=run_type)
+        run = EvaluationRunFactory.create(
+            team=team,
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=run_type,
+            finished_at=timezone.now(),
+        )
         for message in messages:
             EvaluationResultFactory.create(
                 team=team, evaluator=evaluator, message=message, run=run, output={"result": {}}
@@ -858,7 +873,9 @@ class TestMessageIdsByLatestPriorRun:
 
     def test_empty_message_ids_returns_empty(self, team):
         config, _ = self._make_config(team)
-        future_run = EvaluationRunFactory.create(team=team, config=config, status=EvaluationRunStatus.COMPLETED)
+        future_run = EvaluationRunFactory.create(
+            team=team, config=config, status=EvaluationRunStatus.COMPLETED, finished_at=timezone.now()
+        )
         assert _message_ids_by_latest_prior_run(future_run, []) == {}
 
     def test_returns_most_recent_prior_run_per_message(self, team):
@@ -976,3 +993,45 @@ class TestMessageIdsByLatestPriorRun:
 
         result = _message_ids_by_latest_prior_run(curr_run, [m1.pk])
         assert dict(result) == {prior_run.pk: {m1.pk}}
+
+    def test_orders_by_finished_at_not_created_at(self, team):
+        """When runs overlap, the run that *finished* most recently wins, even if it was
+        created earlier. Runs can overlap (no concurrency guard), so completion time — not
+        creation time — reflects which prior tag state is the most recent."""
+        config, evaluator = self._make_config(team)
+        message = EvaluationMessageFactory.create(create_chat_messages=True)
+
+        # long_run: created earliest (-3h) but finished latest (-1h) — it overlapped.
+        long_run = self._make_run_with_results(team, config, evaluator, [message])
+        _stamp(long_run, timedelta(hours=-3), finished_delta=timedelta(hours=-1))
+
+        # short_run: created later (-2h) but finished earlier (-90min).
+        short_run = self._make_run_with_results(team, config, evaluator, [message])
+        _stamp(short_run, timedelta(hours=-2), finished_delta=timedelta(minutes=-90))
+
+        curr_run = self._make_run_with_results(team, config, evaluator, [message])
+
+        # By finished_at, long_run (-1h) is the most recent prior state, not short_run.
+        result = _message_ids_by_latest_prior_run(curr_run, [message.pk])
+        assert dict(result) == {long_run.pk: {message.pk}}
+
+    def test_tie_broken_deterministically_by_run_id(self, team):
+        """Two prior runs finishing at the exact same instant must resolve deterministically:
+        the higher run_id wins (stable tie-breaker for DISTINCT ON)."""
+        config, evaluator = self._make_config(team)
+        message = EvaluationMessageFactory.create(create_chat_messages=True)
+
+        first = self._make_run_with_results(team, config, evaluator, [message])
+        second = self._make_run_with_results(team, config, evaluator, [message])
+        # Force identical created_at AND finished_at on both, so only the run_id tie-breaker
+        # can separate them — otherwise DISTINCT ON picks an arbitrary row.
+        tied = timezone.now() - timedelta(hours=1)
+        EvaluationRun.objects.filter(pk__in=[first.pk, second.pk]).update(created_at=tied, finished_at=tied)
+        first.refresh_from_db()
+        second.refresh_from_db()
+
+        curr_run = self._make_run_with_results(team, config, evaluator, [message])
+
+        winner = max(first.pk, second.pk)
+        result = _message_ids_by_latest_prior_run(curr_run, [message.pk])
+        assert dict(result) == {winner: {message.pk}}
