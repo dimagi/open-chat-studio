@@ -7,6 +7,7 @@ from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.files.models import File, FilePurpose
 
 from ._whatsapp_attachment_helpers import make_stage_context
+from .channels.conftest import make_context
 from .message_examples import meta_cloud_api_messages, turnio_messages, twilio_messages
 
 
@@ -106,3 +107,31 @@ class TestWhatsappAttachmentHydrationStageDocuments:
         file_obj = File.objects.get(id=message.attachments[0].file_id)
         assert file_obj.name == "invoice.pdf"
         assert file_obj.content_type == "application/pdf"
+
+
+class TestWhatsappAttachmentHydrationStageShouldRun:
+    """``should_run`` only fires when the message actually references downloadable media.
+
+    ``WhatsAppMessage.parse`` sets ``attachment_mime_type`` on every parsed message
+    (including text), so the gate must also require ``media_url`` or ``media_id``."""
+
+    def setup_method(self):
+        self.stage = WhatsappAttachmentHydrationStage()
+
+    def test_false_for_meta_text_message(self):
+        message = WhatsAppMessage.parse(meta_cloud_api_messages.text_message_value())
+        ctx = make_context(message=message, experiment_session=object())
+
+        assert self.stage.should_run(ctx) is False
+
+    def test_false_for_turnio_text_message(self):
+        message = WhatsAppMessage.parse(turnio_messages.text_message())
+        ctx = make_context(message=message, experiment_session=object())
+
+        assert self.stage.should_run(ctx) is False
+
+    def test_true_for_meta_image_message(self):
+        message = WhatsAppMessage.parse(meta_cloud_api_messages.image_message_value())
+        ctx = make_context(message=message, experiment_session=object())
+
+        assert self.stage.should_run(ctx) is True

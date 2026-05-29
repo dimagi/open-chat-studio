@@ -710,7 +710,9 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
     """Download, persist, and hydrate inbound WhatsApp media attachments
     (images, documents, and other non-voice media).
 
-    should_run detects attachment-bearing messages via attachment_mime_type.
+    should_run fires only when the message references downloadable media —
+    WhatsAppMessage.parse sets attachment_mime_type on every parsed message
+    (including text), so the mime type alone isn't a reliable gate.
     _get_files() downloads the media via the messaging service and persists
     the bytes as a MESSAGE_MEDIA File. The base class then handles
     ChatAttachment linkage and Attachment construction. Size and
@@ -723,7 +725,9 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
             return False
         if ctx.message.attachments:
             return False
-        return bool(ctx.message.attachment_mime_type)
+        if not ctx.message.attachment_mime_type:
+            return False
+        return bool(getattr(ctx.message, "media_url", None) or getattr(ctx.message, "media_id", None))
 
     def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
         messaging_service = ctx.experiment_channel.messaging_provider.get_messaging_service()
