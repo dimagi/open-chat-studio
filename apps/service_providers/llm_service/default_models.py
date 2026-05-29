@@ -52,6 +52,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
+        Model("claude-opus-4-8", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-opus-4-7", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-opus-4-6", k(200), is_translation_default=True, parameters=ClaudeOpus46Parameters),
         Model("claude-sonnet-4-6", 1000000, is_default=True, parameters=ClaudeSonnet46Parameters),
