@@ -249,7 +249,7 @@ def _message_ids_by_latest_prior_run(run: EvaluationRun, message_ids: list[int])
     return runs_to_message_ids
 
 
-def _previous_applied_by_message(run: EvaluationRun, message_ids: list[int]) -> defaultdict[int, set[int]]:
+def _previous_applied_by_message(run: EvaluationRun, message_ids: list[int]) -> dict[int, set[int]]:
     """For each message_id, return tags applied by the most recent *prior* run that evaluated it.
 
     A DELTA run that did not touch a given message is skipped per-message: the walk continues
@@ -288,7 +288,7 @@ def _compute_undo_target_diffs(
     evaluated_message_ids: list[int],
     possible_tags: frozenset[int],
     representative_evaluator: Evaluator,
-) -> tuple[defaultdict[int, set[int]], defaultdict[int, set[int]], ContentType | None]:
+) -> tuple[dict[int, set[int]], dict[int, set[int]], ContentType | None]:
     """For each evaluated message, compute the (remove, add) managed-tag deltas per target.
 
     `remove` is tags this run's AppliedTag rows applied; `add` is tags the most recent
@@ -312,8 +312,13 @@ def _compute_undo_target_diffs(
             continue
         if content_type is None:
             content_type = ContentType.objects.get_for_model(type(target))
-        remove_by_target[target.pk] |= current_applied[message.pk] & possible_tags
-        add_by_target[target.pk] |= previous_applied[message.pk] & possible_tags
+        # Diff current vs previous so we only touch tags that actually change:
+        # drop tags this run added that the prior run didn't have, and restore
+        # prior tags this run no longer has. Tags common to both are left alone.
+        current_tags = current_applied[message.pk] & possible_tags
+        previous_tags = previous_applied[message.pk] & possible_tags
+        remove_by_target[target.pk] |= current_tags - previous_tags
+        add_by_target[target.pk] |= previous_tags - current_tags
 
     return remove_by_target, add_by_target, content_type
 
@@ -321,8 +326,8 @@ def _compute_undo_target_diffs(
 def _apply_undo_target_diffs(
     team,
     content_type: ContentType,
-    remove_by_target: defaultdict[int, set[int]],
-    add_by_target: defaultdict[int, set[int]],
+    remove_by_target: dict[int, set[int]],
+    add_by_target: dict[int, set[int]],
 ) -> None:
     """Apply the per-target tag mutations atomically: delete removes, then bulk_create adds."""
     with transaction.atomic():

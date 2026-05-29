@@ -620,9 +620,7 @@ def generate_evaluation_results_column_suggestions(result_columns, evaluation_ru
 @permission_required("evaluations.change_evaluationrun")
 def undo_evaluation_run_tags(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Remove all tags applied by this run and restore the previous run's tags."""
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     run_home_url = reverse(
         "evaluations:evaluation_results_home",
         args=[team_slug, evaluation_pk, evaluation_run_pk],
