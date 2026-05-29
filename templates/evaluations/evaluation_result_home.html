@@ -50,12 +50,18 @@
                   action="{% url 'evaluations:evaluation_run_undo_tags' request.team.slug evaluation_run.config_id evaluation_run.id %}">
               {% csrf_token %}
               <button type="button"
+                      id="undo-tags-btn-{{ evaluation_run.id }}"
                       class="btn btn-outline btn-warning"
                       onclick="alertify.confirm().setting({
                         title: 'Confirm',
                         message: 'This will remove all tags applied by this run and restore the previous run\'s tags. Are you sure?',
                         transition: 'fade',
-                        onok: function() { document.getElementById('undo-tags-form-{{ evaluation_run.id }}').submit(); },
+                        onok: function() {
+                          var btn = document.getElementById('undo-tags-btn-{{ evaluation_run.id }}');
+                          btn.disabled = true;
+                          btn.innerHTML = '<span class=\'loading loading-spinner loading-sm\'></span> Undoing...';
+                          document.getElementById('undo-tags-form-{{ evaluation_run.id }}').submit();
+                        },
                       }).show();">
                 <i class="fa-solid fa-rotate-left"></i>
                 Undo Applied Tags
