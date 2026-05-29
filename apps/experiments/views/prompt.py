@@ -24,7 +24,7 @@ PROMPT_DATA_SESSION_KEY = "prompt_data"
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def prompt_builder_load_experiments(request, team_slug: str):
-    experiments = list(Experiment.objects.filter(team=request.team).values("id", "name", "prompt_text"))
+    experiments = list(Experiment.objects.filter(team=request.team).values("id", "name"))
 
     return TemplateResponse(
         request,

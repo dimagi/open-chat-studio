@@ -117,7 +117,6 @@
             },
             body: JSON.stringify({
                 // data to forwarded to the 'create experiment' view
-                'prompt_text': Alpine.store('promptBuilder').currentState.prompt,
                 'source_material': Alpine.store('promptBuilder').currentState.sourceMaterialID,
                 'llm_provider': Alpine.store('promptBuilder').currentState.provider,
                 'llm_provider_model': Alpine.store('promptBuilder').currentState.providerModelId,

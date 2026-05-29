@@ -2,27 +2,7 @@
                                                                                             flex-wrap: nowrap;">
     {% for experiment in experiments %}
         <li>
-            <a @click.stop="setPrompt({{ experiment.id }})">{{ experiment.name }}</a>
+            <span class="py-1 px-2">{{ experiment.name }}</span>
         </li>
     {% endfor %}
 </ul>
-
-{{ experiments|json_script:"experiments_list" }}
-
-<script>
-    function setPrompt(experimentID) {
-        const experiments = JSON.parse(document.getElementById('experiments_list').textContent);
-
-        // Search for the source-material in the global prompts array
-        const foundExperiment = experiments.find(experiments => experiments.id.toString() === experimentID.toString());
-
-        if(foundExperiment){
-            Alpine.store('promptBuilder').currentState.prompt = foundExperiment.prompt_text;
-            Alpine.store('promptBuilder').toggleSidebar('experiments');
-        } else {
-            console.log('Error: no prompt matching id: ', experimentID);
-            console.log(experiments)
-        }
-    }
-
-</script>
