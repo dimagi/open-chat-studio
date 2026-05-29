@@ -96,6 +96,7 @@ class BaseMessage(BaseModel):
     """File IDs for attachments persisted by the channel's inbound handler.
     Hydrated into `attachments` by AttachmentHydrationStage once a session
     exists. Channels that don't pre-persist files leave this empty."""
+    attachment_filename: str | None = Field(default=None)
 
     cached_media_data: MediaCache | None = Field(default=None, exclude=True)
 
@@ -130,7 +131,6 @@ class TwilioMessage(BaseMessage):
     platform: ChannelPlatform
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
-    attachment_filename: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -193,7 +193,6 @@ class WhatsAppMessage(BaseMessage):
     media_id: str | None = Field(default=None)
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
-    attachment_filename: str | None = Field(default=None)
     whatsapp_message_id: str | None = Field(default=None)
 
     @field_validator("content_type", mode="before")
