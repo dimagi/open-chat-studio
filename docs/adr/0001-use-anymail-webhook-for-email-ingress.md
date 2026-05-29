@@ -6,24 +6,29 @@
 
 ## Context
 
-We are adding email as a messaging channel in Open Chat Studio. Inbound email can reach the application by several mechanisms: IMAP polling against a mailbox, provider APIs (Microsoft Graph, Gmail API), webhooks from an Email Service Provider (AWS SES, SendGrid, Mailgun), or a hand-rolled MIME-parsing endpoint. Each option has different operational, security, and code-complexity trade-offs.
+We are adding email as a messaging channel. Inbound email can arrive via IMAP polling, provider APIs (Microsoft Graph, Gmail), ESP webhooks (SES, SendGrid, Mailgun), or a hand-rolled MIME endpoint, each with different operational, security, and complexity trade-offs.
 
-AWS SES is already configured for outbound mail in our production environment, and `django-anymail` is already a dependency that handles SES webhook signature validation, MIME parsing, and provider-specific normalization. Inbound email arriving at SES can be delivered via SNS to an HTTP webhook that anymail receives and translates into an `AnymailInboundMessage`, surfaced through anymail's `inbound` signal. We also need to strip quoted reply text and signatures so the LLM only sees new content.
+AWS SES already handles our outbound mail, and `django-anymail` is already a dependency that validates SES webhook signatures, parses MIME, and normalizes provider payloads into an `AnymailInboundMessage` exposed via its `inbound` signal. We also need to strip quoted reply text and signatures so the LLM sees only new content.
 
 ## Decision
 
-We will receive inbound email via AWS SES → SNS → django-anymail's `inbound` signal handler, parsing each `AnymailInboundMessage` through `mail-parser-reply` to strip quoted text and signatures before routing the message into the standard pipeline. The webhook does not run pipeline work synchronously; the signal handler parses, routes, and enqueues a Celery task so the HTTP response returns quickly to the ESP.
+We will receive inbound email via AWS SES → SNS → django-anymail's `inbound` signal handler.
+
+- Parse each `AnymailInboundMessage` through `mail-parser-reply` to strip quoted text and signatures.
+- Route the cleaned message into the standard pipeline.
+- Enqueue a Celery task rather than run pipeline work synchronously, so the HTTP response returns quickly to the ESP.
 
 ## Consequences
 
-- **Positive:** No mailbox credentials or IMAP polling infrastructure. Webhook signature validation, MIME parsing, and provider normalization are handled by anymail, not by us. Switching ESPs in future requires anymail backend configuration, not new ingress code. The LLM sees clean text via `mail-parser-reply`'s 13-language reply/signature stripping.
-- **Positive:** Same delivery substrate as outbound mail (SES is already set up), so DNS/SPF/DKIM/DMARC configuration is shared between directions.
-- **Negative:** Coupled to django-anymail's signal API and to SES's SNS-webhook delivery model. A degraded webhook (SNS retry storms, signature changes) becomes a production incident.
+- **Positive:** No mailbox credentials or IMAP polling; anymail handles signature validation, MIME parsing, and provider normalization.
+- **Positive:** Switching ESPs requires anymail backend config, not new ingress code.
+- **Positive:** Shares the outbound SES substrate, so DNS/SPF/DKIM/DMARC config is shared across both directions.
+- **Negative:** Coupled to anymail's signal API and SES's SNS-webhook delivery; a degraded webhook becomes a production incident.
 - **Negative:** Adds `mail-parser-reply` as a new dependency.
 
 ## Alternatives considered
 
-- **IMAP polling / "bring your own mailbox":** rejected — operational cost (per-channel credentials, polling latency, mailbox state), and incompatible with the self-service goal.
-- **Microsoft Graph / Gmail API direct integration:** rejected — not ESP-agnostic, requires per-mailbox OAuth and tenant configuration; out of scope for v1.
-- **Custom Django view for inbound webhook:** rejected — would duplicate signature validation and MIME parsing that anymail already provides.
-- **`email_reply_parser` for quote stripping:** rejected — narrower language support and less active maintenance than `mail-parser-reply`.
+- **IMAP polling / bring-your-own-mailbox** → rejected: per-channel credentials, polling latency, mailbox state, and incompatible with the self-service goal.
+- **Microsoft Graph / Gmail API direct integration** → rejected: not ESP-agnostic, needs per-mailbox OAuth, out of scope for v1.
+- **Custom Django view for inbound webhook** → rejected: duplicates signature validation and MIME parsing anymail already provides.
+- **`email_reply_parser` for quote stripping** → rejected: narrower language support and less active maintenance than `mail-parser-reply`.
