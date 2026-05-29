@@ -180,7 +180,7 @@ class TagUI(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "edit_mode": request.GET.get("edit"),
                 "available_tags": [
                     t.name
-                    for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False)
+                    for t in Tag.objects.filter(team=request.team, is_system_tag=False)
                     .exclude(category=TagCategories.RESPONSE_RATING)
                     .all()
                 ],
@@ -197,7 +197,7 @@ class LinkTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         tag_name = request.POST["tag_name"]
         content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
-        tag_exists = Tag.objects.filter(name=tag_name, team__slug=team_slug).exists()
+        tag_exists = Tag.objects.filter(name=tag_name, team=request.team).exists()
 
         if not tag_exists and request.user.has_perm("annotations.add_tag"):
             obj.tags.create(team=request.team, name=tag_name, created_by=request.user)

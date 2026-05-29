@@ -17,7 +17,7 @@ def render_session_details(
     request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
 ):
     session = ExperimentSession.objects.prefetch_related(chat_tagged_items_prefetch()).get(
-        external_id=session_id, team__slug=team_slug
+        external_id=session_id, team=request.team
     )
     experiment = request.experiment
     participant = session.participant
@@ -44,7 +44,7 @@ def render_session_details(
                 (gettext("Ended"), session.ended_at or "-"),
                 (gettext(session_type), experiment.name),
             ],
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             "event_triggers": [
                 {
                     "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),
