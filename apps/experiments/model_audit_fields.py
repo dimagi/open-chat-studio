@@ -1,7 +1,6 @@
 EXPERIMENT_FIELDS = [
     "owner",
     "name",
-    "temperature",
     "prompt_text",
     "input_formatter",
     "source_material",

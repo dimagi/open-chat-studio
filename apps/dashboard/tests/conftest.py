@@ -41,7 +41,6 @@ def experiment(team, user):
         team=team,
         owner=user,
         prompt_text="Test prompt",
-        temperature=0.7,
     )
 
 
@@ -155,7 +154,6 @@ def multiple_experiments(team, user):
             team=team,
             owner=user,
             prompt_text=f"Test prompt {i + 1}",
-            temperature=0.7,
         )
         experiments.append(exp)
 
