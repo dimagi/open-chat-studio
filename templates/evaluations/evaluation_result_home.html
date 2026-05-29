@@ -44,13 +44,19 @@
             Edit Results
           </a>
           {% if evaluation_run.type != "preview" %}
-            <form style="display: contents;"
+            <form id="undo-tags-form-{{ evaluation_run.id }}"
+                  style="display: contents;"
                   method="post"
                   action="{% url 'evaluations:evaluation_run_undo_tags' request.team.slug evaluation_run.config_id evaluation_run.id %}">
               {% csrf_token %}
-              <button type="submit"
+              <button type="button"
                       class="btn btn-outline btn-warning"
-                      onclick="return confirm('This will remove all tags applied by this run and restore the previous run\'s tags. Are you sure?')">
+                      onclick="alertify.confirm().setting({
+                        title: 'Confirm',
+                        message: 'This will remove all tags applied by this run and restore the previous run\'s tags. Are you sure?',
+                        transition: 'fade',
+                        onok: function() { document.getElementById('undo-tags-form-{{ evaluation_run.id }}').submit(); },
+                      }).show();">
                 <i class="fa-solid fa-rotate-left"></i>
                 Undo Applied Tags
               </button>
