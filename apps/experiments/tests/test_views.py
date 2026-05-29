@@ -373,7 +373,6 @@ class TestPublicSessions:
         self, verify_user, capture_identifier, expect_user_verified, client
     ):
         verify_user.return_value = HttpResponse()
-        prompt = "This is data: {participant_data}"
         experiment = ExperimentFactory.create(
             team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier
         )
