@@ -553,12 +553,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
 
     prompt_text = models.TextField(blank=True, default="")
-    input_formatter = models.TextField(
-        blank=True,
-        default="",
-        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
-        "E.g. 'Safe or unsafe? {input}'",
-    )
 
     seed_message = models.TextField(
         blank=True,
