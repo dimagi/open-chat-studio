@@ -255,8 +255,9 @@ class TwilioService(MessagingService):
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
     def get_inbound_media(self, message: TwilioMessage) -> tuple[bytes, str] | None:
-        mime = message.attachment_mime_type
-        if not mime or not message.media_url or _is_voice_mime(mime):
+        # Voice/audio attachments go through get_message_audio for transcription,
+        # never the generic inbound-media path that persists raw bytes.
+        if not _has_downloadable_attachment(message):
             return None
         return self.download_message_media(message)
 

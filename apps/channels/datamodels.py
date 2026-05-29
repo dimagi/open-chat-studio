@@ -136,16 +136,12 @@ class TwilioMessage(BaseMessage):
     @classmethod
     def determine_content_type(cls, value):
         if not value:
-            # Normal test messages doesn't have a content type
             return MESSAGE_TYPES.TEXT
-        if value and value in ["audio/ogg", "video/mp4"]:
+        if value == "voice":
             return MESSAGE_TYPES.VOICE
-        if value and value.startswith("audio/"):
-            return MESSAGE_TYPES.VOICE
-        if value and "/" in value:
-            # Any other non-empty MIME type (image/*, application/*, text/*, ...) is treated as a
-            # text message with an attachment. The caption (Body) becomes message_text and the
-            # raw MIME type is preserved in attachment_mime_type for the persistence helper.
+        if value in ("text", "image", "document"):
+            # image/document inbound messages flow as TEXT so they pass MessageTypeValidationStage;
+            # the caption (Body) is the message text and the raw MIME lives in attachment_mime_type.
             return MESSAGE_TYPES.TEXT
         return MESSAGE_TYPES.OTHER
 
@@ -153,7 +149,11 @@ class TwilioMessage(BaseMessage):
     def parse(message_data: dict) -> "TwilioMessage":
         prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
         prefix = message_data["From"].split(":")[0]
-        content_type = message_data.get("MediaContentType0")
+        # Twilio's MessageType is the semantic category (text/audio/image/document). Normalize
+        # "audio" to "voice" so downstream code sees the same marker as WhatsApp messages.
+        message_type = message_data.get("MessageType", "text")
+        if message_type == "audio":
+            message_type = "voice"
 
         prefix_to_remove = f"{prefix}:"
         platform = prefix_channel_map[prefix]
@@ -167,9 +167,9 @@ class TwilioMessage(BaseMessage):
             participant_id=message_data["From"].removeprefix(prefix_to_remove),
             to=to,
             message_text=message_data["Body"],
-            content_type=content_type,
+            content_type=message_type,
             media_url=message_data.get("MediaUrl0"),
-            attachment_mime_type=content_type,
+            attachment_mime_type=message_data.get("MediaContentType0"),
             platform=platform,
         )
 
