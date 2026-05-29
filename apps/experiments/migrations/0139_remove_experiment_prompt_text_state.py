@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ("experiments", "0136_remove_experiment_temperature_and_more"),
+        ("experiments", "0138_remove_experiment_input_formatter"),
     ]
 
     operations = [
