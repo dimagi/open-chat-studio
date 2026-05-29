@@ -1,5 +1,5 @@
 ---
-status: active
+status: extracted
 ---
 
 # Read-only Chatbot Inspection API
@@ -9,9 +9,11 @@ status: active
 > with consumer acceptance criteria from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458).
 > (A public-ID migration, [#3465](https://github.com/dimagi/open-chat-studio/issues/3465), was
 > originally a prerequisite but has been dropped — see [D4](#d4-no-new-public-ids-reuse-existing-identifiers).)
-> The nine questions in [§11](#11-resolved-questions) are now **resolved** (2026-05-29). The
-> document is held at `status: active` pending a design review; flip to `stable` once reviewed to
-> unlock ADR extraction.
+> `status: extracted` — the architectural decisions are now canonically recorded as
+> [ADR-0019 through ADR-0026](#decisions) (immutable; cite those). This document is retained as the
+> **implementation companion**: the payload shape, node-reference mapping, secrets-exclusion audit,
+> versioning rules, implementation plan, and test plan are the HOW that the ADRs deliberately omit.
+> Where this doc and an ADR appear to conflict, the ADR is authoritative on the *decision*.
 
 ## TL;DR
 
@@ -145,8 +147,24 @@ the pipeline graph.
 
 ## Decisions
 
-This section is the ADR-extraction surface. Each decision is independently supersedable and is
-written to stand on its own.
+The architectural decisions below were **extracted into ADRs** (canonical and immutable — cite
+those, not this section). The write-ups are retained here as design narrative.
+
+| Decision | ADR | Notes |
+|---|---|---|
+| D1 — invest in API, not a read-only role | [ADR-0019](../adr/0019-invest-in-api-surface-not-readonly-role.md) | |
+| D2 — URL-path versioning, v1 frozen / v2 new | [ADR-0020](../adr/0020-url-path-api-versioning.md) | |
+| D3 — rename experiment → chatbot in v2 | [ADR-0021](../adr/0021-rename-experiment-to-chatbot-in-v2.md) | extends ADR-0020 |
+| D4 — no new public IDs (defer to write API) | [ADR-0024](../adr/0024-defer-public-ids-to-write-api.md) | extends ADR-0023 |
+| D5 — `/inspect/` denormalized read-only projection | [ADR-0022](../adr/0022-inspect-denormalized-readonly-projection.md) | extends ADR-0020 |
+| D6 — inline nested resource tree | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folds D9 (events block) and D10 (implicit wiring) |
+| D7 — signal-driven node walker + completeness guard | *(this doc only)* | implementation-specific; not an ADR |
+| D8 — secrets exclusion via allowlist serializers | [ADR-0025](../adr/0025-secrets-exclusion-via-allowlist-serializers.md) | folds resolved Q7 (api_schema digest) and Q8 (channels) |
+| D9 — experiment-level events block | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folded into D6 |
+| D10 — wiring implicit in nesting | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folded into D6 |
+| Q1 — inspect authorization (team-scoped, no per-resource checks) | [ADR-0026](../adr/0026-inspect-authorization-team-scoped.md) | extends ADR-0019, ADR-0022 |
+
+Each decision below is written to stand on its own.
 
 ### D1 — Invest in API surface, not a read-only role
 
