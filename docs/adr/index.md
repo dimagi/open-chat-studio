@@ -34,3 +34,7 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0012](0012-score-value-layer-in-apps-assessments.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Lean Score value layer in apps/assessments |
 | [0013](0013-dual-write-scores-from-evaluations-and-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Dual-write Scores from evaluations and annotations |
 | [0014](0014-minimal-read-side-concordance-view.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Minimal read-side concordance view backed by Score |
+| [0015](0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Dedicated human_annotations app with queue/item/annotation/aggregate model |
+| [0016](0016-authoritative-annotation-for-multi-reviewer-consensus.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Authoritative annotation for multi-reviewer consensus |
+| [0017](0017-eager-aggregation-of-submitted-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Eager per-submission aggregation into a per-queue record |
+| [0018](0018-scope-team-querysets-by-fk-not-slug-join.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Scope team querysets by FK identity, not slug join |

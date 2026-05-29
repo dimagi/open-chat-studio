@@ -11,7 +11,15 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-  <h1 class="text-2xl font-bold mb-4">{% translate "Concordance" %}</h1>
+  <div class="flex items-center mb-4">
+    <h1 class="text-2xl font-bold flex-1">{% translate "Concordance" %}</h1>
+    {% if rows is not None %}
+      <a href="{% url 'assessments:concordance_export' request.team.slug %}?{{ request.GET.urlencode }}"
+         class="btn btn-secondary btn-sm">
+        <i class="fa-solid fa-download"></i> {% translate "Export CSV" %}
+      </a>
+    {% endif %}
+  </div>
 
   <form method="get" class="mb-6 flex gap-4 items-end flex-wrap">
     <label class="form-control">

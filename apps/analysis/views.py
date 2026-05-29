@@ -128,7 +128,7 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 
 @login_and_team_required
 def run_analysis(request, team_slug, pk):
-    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team=request.team)
 
     if analysis.is_processing:
         messages.error(request, "Analysis has already been completed or is in progress.")
@@ -143,7 +143,7 @@ def run_analysis(request, team_slug, pk):
 
 @login_and_team_required
 def download_analysis_results(request, team_slug, pk):
-    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team=request.team)
 
     if not analysis.is_complete or not analysis.result_file:
         messages.error(request, "Analysis results are not available yet.")
@@ -156,7 +156,7 @@ def download_analysis_results(request, team_slug, pk):
 
 @login_and_team_required
 def export_sessions(request, team_slug, pk):
-    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team=request.team)
     sessions = analysis.sessions.all()
     rows = generate_export_rows(analysis.experiment, sessions, translation_language=analysis.translation_language)
     response = StreamingHttpResponse(export_rows_to_csv_stream(rows), content_type="text/csv")
@@ -166,7 +166,7 @@ def export_sessions(request, team_slug, pk):
 
 @login_and_team_required
 def clone(request, team_slug, pk):
-    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team=request.team)
     new_analysis = TranscriptAnalysis.objects.create(
         name=f"Copy of {analysis.name}",
         description=analysis.description,
@@ -193,7 +193,7 @@ def clone(request, team_slug, pk):
 
 @login_and_team_required
 def update_field(request, team_slug, pk):
-    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team=request.team)
     allowed_fields = {"name", "description"}
 
     if request.method == "POST":
@@ -239,7 +239,7 @@ def update_field(request, team_slug, pk):
 @require_POST
 @login_and_team_required
 def add_query(request, team_slug, pk):
-    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team__slug=team_slug)
+    analysis = get_object_or_404(TranscriptAnalysis, id=pk, team=request.team)
 
     name = request.POST.get("name", "")
     prompt = request.POST.get("prompt", "")
@@ -258,7 +258,7 @@ def add_query(request, team_slug, pk):
 
 @login_and_team_required
 def update_query(request, team_slug, pk, query_id):
-    query = get_object_or_404(AnalysisQuery, id=query_id, analysis_id=pk, analysis__team__slug=team_slug)
+    query = get_object_or_404(AnalysisQuery, id=query_id, analysis_id=pk, analysis__team=request.team)
     analysis = query.analysis
 
     template = "analysis/components/query_edit.html"

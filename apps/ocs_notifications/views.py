@@ -114,7 +114,7 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
             EventUser.objects.with_latest_event().with_mute_status(),
             id=notification_id,
             user=self.request.user,
-            team__slug=team_slug,
+            team=request.team,
         )
 
         toggle_notification_read(user=request.user, event_user=event_user, read=not event_user.read)
@@ -130,7 +130,7 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
             EventUser.objects.with_mute_status().select_related("event_type"),
             id=notification_id,
             user=self.request.user,
-            team__slug=team_slug,
+            team=request.team,
         )
 
         # Get duration from POST data (in hours)
@@ -172,7 +172,7 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
             EventUser.objects.select_related("event_type"),
             id=notification_id,
             user=self.request.user,
-            team__slug=team_slug,
+            team=request.team,
         )
 
         unmute_notification(user=request.user, team=request.team, event_type=user_notification.event_type)

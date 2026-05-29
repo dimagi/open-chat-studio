@@ -100,7 +100,7 @@ class DeleteMcpServer(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 @login_required
 @permission_required("mcp_integrations.change_mcpserver", raise_exception=True)
 def trigger_refresh_view(request, team_slug: str, pk: int):
-    mcp_server = get_object_or_404(McpServer, id=pk, team__slug=team_slug, team=request.team)
+    mcp_server = get_object_or_404(McpServer, id=pk, team=request.team)
     sync_tools_task.delay(mcp_server.id)
     messages.success(request, "Tool refresh has been queued.")
     return redirect(reverse("single_team:manage_team", args=[team_slug]))

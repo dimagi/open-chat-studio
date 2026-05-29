@@ -142,7 +142,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
     }
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
-        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
+        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
         return {
             **super().get_context_data(**kwargs),
@@ -164,7 +164,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
     ]
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
-        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
+        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
         date_range = self.request.GET.get("range", "30")
 
@@ -218,7 +218,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         evaluation_run = get_object_or_404(
-            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
+            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team=self.request.team
         )
 
         title = (
@@ -269,7 +269,7 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
     @cached_property
     def evaluation_run(self) -> EvaluationRun:
         return get_object_or_404(
-            EvaluationRun.objects.select_related("generation_experiment").filter(team__slug=self.kwargs["team_slug"]),
+            EvaluationRun.objects.select_related("generation_experiment").filter(team=self.request.team),
             pk=self.kwargs["evaluation_run_pk"],
         )
 
@@ -447,14 +447,14 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_run(request, team_slug, evaluation_pk):
-    config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
+    config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
     run = config.run()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_preview(request, team_slug, evaluation_pk):
-    config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
+    config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
     run = config.run_preview()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
@@ -462,7 +462,7 @@ def create_evaluation_preview(request, team_slug, evaluation_pk):
 @permission_required("evaluations.view_evaluationrun")
 def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
     evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
     )
     filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
     table_data = list(evaluation_run.get_table_data(include_ids=True))
@@ -530,7 +530,7 @@ def load_experiment_versions(request, team_slug: str):
 def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Upload CSV to update evaluation run results"""
     evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
     )
     if request.method == "GET":
         context = {
@@ -561,7 +561,7 @@ def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk:
     """Parse uploaded CSV and return column names and sample data for evaluation results."""
     try:
         evaluation_run = get_object_or_404(
-            EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+            EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
         )
         csv_file = request.FILES.get("csv_file")
         if not csv_file:

@@ -15,7 +15,7 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
+from django.core.validators import validate_email
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
@@ -180,11 +180,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
-
-    @transaction.atomic()
-    def archive(self):
-        super().archive()
-        self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -556,23 +551,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         verbose_name="Pipeline",
     )
-    temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
-    prompt_text = models.TextField(blank=True, default="")
-    input_formatter = models.TextField(
-        blank=True,
-        default="",
-        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
-        "E.g. 'Safe or unsafe? {input}'",
-    )
-
-    source_material = models.ForeignKey(
-        SourceMaterial,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="If provided, the source material will be given to every bot in the chain.",
-    )
     seed_message = models.TextField(
         blank=True,
         default="",
@@ -617,7 +596,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     echo_transcript = models.BooleanField(
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
@@ -644,7 +622,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default="",
     )
     debug_mode_enabled = models.BooleanField(default=False)
-    citations_enabled = models.BooleanField(default=True)
     create_version_task_id = models.CharField(max_length=128, blank=True)
     file_uploads_enabled = models.BooleanField(
         default=False,
@@ -913,7 +890,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
-            self._copy_attr_to_new_version("source_material", new_version)
             self._copy_attr_to_new_version("consent_form", new_version)
             self._copy_attr_to_new_version("pre_survey", new_version)
             self._copy_attr_to_new_version("post_survey", new_version)
@@ -1684,8 +1660,7 @@ class ExperimentSession(BaseTeamModel):
             router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
             prompts = llm_prompts + router_prompts
             return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
-        else:
-            return "{participant_data}" in self.experiment.prompt_text
+        return False
 
     def as_experiment_chip(self) -> Chip:
         """Returns a link to the (legacy) experiment session page"""

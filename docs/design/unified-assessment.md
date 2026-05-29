@@ -23,6 +23,8 @@ OCS has two assessment subsystems today:
 - [`apps/evaluations/`](../../apps/evaluations/) — automated scoring via LLM judges or Python code, batch-orchestrated through Celery.
 - [`apps/human_annotations/`](../../apps/human_annotations/) — multi-reviewer rubric annotation, with queues, assignees, and flag/draft workflow.
 
+They are separate apps for historical reasons, not by design: `apps/evaluations/` was built in mid-2025, before human annotation had been conceived, and was shaped entirely around automated, Celery-driven scoring. When human review came along its data models and workflows didn't fit, and retrofitting them would have meant re-architecting evaluations — so it shipped as a separate peer app ([ADR-0015](../adr/0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md)). In hindsight the crossover workflows below have made that separation worth revisiting; this consolidation is the result.
+
 Both are in alpha/beta. They share more than they diverge:
 
 - The schema language is identical: both use `FieldDefinition` from [`apps/evaluations/field_definitions.py`](../../apps/evaluations/field_definitions.py).

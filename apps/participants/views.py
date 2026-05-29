@@ -179,8 +179,8 @@ class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
     permission_required = "experiments.change_participantdata"
 
     def post(self, request, team_slug, participant_id, experiment_id):
-        experiment = get_object_or_404(Experiment, team__slug=team_slug, id=experiment_id)
-        participant = get_object_or_404(Participant, team__slug=team_slug, id=participant_id)
+        experiment = get_object_or_404(Experiment, team=request.team, id=experiment_id)
+        participant = get_object_or_404(Participant, team=request.team, id=participant_id)
         error = ""
         new_data = None
         raw_data = request.POST["participant-data"]
@@ -242,7 +242,7 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
 @login_and_team_required
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
     query = (
-        Participant.objects.filter(team__slug=team_slug, experimentsession__experiment_id=experiment_id)
+        Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
         .values_list("identifier", "remote_id")
         .distinct()
     )
@@ -252,7 +252,7 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
-    query = Participant.objects.filter(team__slug=team_slug).values_list("identifier", "remote_id").distinct()
+    query = Participant.objects.filter(team=request.team).values_list("identifier", "remote_id").distinct()
     return _get_identifiers_response(query)
 
 

@@ -417,7 +417,7 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
-    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     parsed_url = urlparse(request.htmx.current_url)
     query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
@@ -680,7 +680,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "selected_tags": selected_tags,
         "language": language,
         "available_languages": available_languages,
-        "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+        "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
         "translate_form_all": translate_form_all,
@@ -812,7 +812,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
             "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
             "form": form,
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             **version_specific_vars,
         },
     )
@@ -835,7 +835,7 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
 @team_required
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+        File, id=pk, team=request.team, chatattachment__chat__experiment_session__id=session_id
     )
     # An empty FileField (no underlying storage) raises ValueError when opened.
     # Treat this the same as a missing file on disk.
@@ -854,7 +854,7 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
 def get_image_html(request, team_slug: str, session_id: int, pk: int):
     """Return HTML for displaying an image attachment."""
     resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+        File, id=pk, team=request.team, chatattachment__chat__experiment_session__id=session_id
     )
 
     if not resource.is_image:
@@ -884,7 +884,7 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
     Experiment.objects.exclude(version_number=version_number).filter(
-        team__slug=team_slug, working_version_id=experiment_id
+        team=request.team, working_version_id=experiment_id
     ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
     experiment.is_default_version = True
     experiment.save()
@@ -950,14 +950,14 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     Returns JSON data for the experiment's trend barchart chart.
     """
+    experiment = get_object_or_404(Experiment.objects.filter(team=request.team), id=experiment_id)
     try:
-        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
         successes, errors = experiment.get_trend_data()
-        data = {"successes": successes, "errors": errors}
-        return JsonResponse({"trends": data})
     except Exception:
         logging.exception(f"Error loading barchart data for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
+    data = {"successes": successes, "errors": errors}
+    return JsonResponse({"trends": data})
 
 
 @require_GET
@@ -967,10 +967,10 @@ def get_experiment_version_names(request, team_slug: str, experiment_id: int):
     """
     Returns JSON data for the filters widget
     """
+    experiment = get_object_or_404(Experiment.objects.filter(team=request.team), id=experiment_id)
     try:
-        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
         version_names = Experiment.objects.get_version_names(experiment.team, working_version=experiment)
-        return JsonResponse({"version_names": version_names})
     except Exception:
         logging.exception(f"Error loading version names for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
+    return JsonResponse({"version_names": version_names})

@@ -63,11 +63,19 @@ For each approved candidate **one at a time** (not batched):
    - `<p class="adr-meta">Author: {user name} · Created: {today's date as YYYY-MM-DD}</p>` meta line.
    - Optional `Extends: [ADR-NNNN](NNNN-prior-title.md)` line (filled in during Phase 4).
    - `## Context` — paraphrase the source doc's framing of why this decision was needed. Keep tight: one or two paragraphs.
-   - `## Decision` — one paragraph, lead with "We will…".
+   - `## Decision` — a short "We will…" lead-in; one paragraph for a simple decision, or bullets when it has several parts.
    - `## Consequences` — bullets, good and bad.
    - `## Alternatives considered` — bullets, one line each, name + rejection reason.
 
    **Content discipline.** ADRs are immutable once accepted, so anything that decays must stay out. Inside the body: **cut** file paths, `file.py:lineno` references, private helper names (`_foo`, internal underscore-prefixed methods), code-walk paraphrases of the implementation, exact log strings, and dated migration filenames. **Keep** identifiers the decision creates as public contracts: model + field names, DB constraint / index names, enum values, waffle flag IDs, URL routes and query-parameter surfaces, and ORM lookup paths when the join *is* the decision (e.g. "filter through `run.config`, not `evaluator`"). Deciding heuristic: "If I rename this tomorrow, do I need a migration or just a refactor?" Migration → keep. Refactor → cut.
+
+   **Concision discipline.** An ADR records the *decision*, not the implementation — keep it dense. Verbosity is the most common failure mode, so draft tight from the start rather than trimming later:
+   - **One idea per sentence.** If a sentence chains three clauses with em-dashes or semicolons, split it or cut the weakest clause.
+   - **State each fact once.** Don't restate the Context reasoning in Consequences or Alternatives — cross-reference it ("the main fork, covered in Context") instead of repeating it.
+   - **No editorializing or self-praise** ("hits the right point on the rigidity/flexibility curve", "elegantly", "honestly", "the conservative default"). State the trade-off plainly and let it stand.
+   - **Bullets are one sentence:** each Consequence and Alternative is `name → reason`. If you're adding a clause to explain the explanation, cut it.
+   - **Soft budgets:** Context ≤ 2 short paragraphs; ≤ 1 sentence of rationale per Decision bullet. A single-decision ADR rarely needs more than ~400 words; a complex multi-model one more than ~700.
+   - **Final pass:** re-read the draft and delete every sentence that wouldn't change what a future engineer *does*. If cutting it loses no decision, constraint, or durable identifier, it was prose.
 
 4. Use `AskUserQuestion` to confirm the ADR `status`:
    - `accepted` (default for extraction from shipped work).

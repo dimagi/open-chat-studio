@@ -9,7 +9,7 @@ name: Auto Update LLM Models
 
 on:
   schedule:
-    - cron: '0 7 * * *'  # Daily at 07:00 UTC
+    - cron: '0 4 * * *'  # Daily at 04:00 UTC
   workflow_dispatch:
     inputs:
       days:
