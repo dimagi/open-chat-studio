@@ -353,7 +353,7 @@ leaks until someone remembers to add it to the denylist.
 
 ### D9 — Experiment-level events block
 
-**Decision.** The payload includes a top-level `events` block (peer to `pipeline` and `nodes`) with
+**Decision.** The payload includes a top-level `events` block (peer to `pipeline`) with
 `static_triggers[]` and `timeout_triggers[]`, each nesting its `EventAction` (`action_type` +
 `params`). This is in addition to the node walk.
 
@@ -441,6 +441,11 @@ the resources it references. The chatbot's own `id` is its existing UUID; embedd
 their numeric DB `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)).
 Provider + model pairs are grouped under a concept key. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
 
+A **Pipeline** has a single canonical serialized shape — `{ id, name, version_number, graph, nodes:[…] }`
+(`graph` = topology, `nodes` = per-node detail with resources embedded) — used **identically**
+wherever a pipeline appears: at the top level, and embedded under a `pipeline_start` event action. One
+shape, one parser.
+
 ```jsonc
 {
   "chatbot": {
@@ -481,11 +486,13 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
     ]
   },
 
+  // canonical Pipeline object — identical shape wherever a pipeline appears
+  // (top level here, and embedded under a pipeline_start event action)
   "pipeline": {
     "id": 42,
     "name": "Support flow v3",
     "version_number": 0,
-    "graph": {                            // digested — positions stripped, edges kept (trim of Pipeline.data_without_positions)
+    "graph": {                            // topology — positions stripped, edges kept (trim of Pipeline.data_without_positions)
       "nodes": [
         {"flow_id": "start-1",  "type": "StartNode",            "label": "Start"},
         {"flow_id": "llm-1",    "type": "LLMResponseWithPrompt", "label": "Classify intent"},
@@ -496,52 +503,51 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
         {"source": "start-1",  "target": "llm-1",    "source_handle": "output", "target_handle": "input"},
         {"source": "router-1", "target": "end-1",    "source_handle": "branch_a", "target_handle": "input"}
       ]
-    }
-  },
-
-  "nodes": [
-    {
-      "flow_id": "llm-1",
-      "type": "LLMResponseWithPrompt",
-      "label": "Classify intent",
-      "params": {                         // non-reference fields, verbatim
-        "prompt": "You are…",
-        "history_type": "global",
-        "tools": []
-      },
-      // reference fields resolved + embedded inline via the signal registry (D7); null if unset
-      "llm": {                            // provider + model grouped (D6)
-        "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
-        "model":    { "id": 18, "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false }
-      },
-      "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
-      "media_collection": {               // node field collection_id ("Media") — files, NO embedding provider
-        "id": 21, "name": "Policy docs",
-        "files": [                        // collection files embedded → assertion #3
-          { "id": 101, "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection" }
-        ]
-      },
-      "indexed_collections": [            // node field collection_index_ids (list) — RAG indexes, WITH embedding
-        {
-          "id": 33, "name": "Policy index",
-          "embedding": {                  // embedding provider+model grouped (D6); from the collection's llm_provider (D3 rename)
-            "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
-            "model":    { "id": 7, "type": "openai", "model_name": "text-embedding-3-small" }
-          },
-          "files": [
-            { "id": 201, "name": "policy.pdf", "content_type": "application/pdf", "content_size": 40112, "purpose": "collection" }
+    },
+    "nodes": [                            // detail — one entry per graph node, resources embedded inline
+      {
+        "flow_id": "llm-1",
+        "type": "LLMResponseWithPrompt",
+        "label": "Classify intent",
+        "params": {                       // non-reference fields, verbatim
+          "prompt": "You are…",
+          "history_type": "global",
+          "tools": []
+        },
+        // reference fields resolved + embedded inline via the signal registry (D7); null if unset
+        "llm": {                          // provider + model grouped (D6)
+          "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
+          "model":    { "id": 18, "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false }
+        },
+        "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
+        "media_collection": {             // node field collection_id ("Media") — files, NO embedding provider
+          "id": 21, "name": "Policy docs",
+          "files": [                      // collection files embedded → assertion #3
+            { "id": 101, "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection" }
           ]
-        }
-      ],
-      "custom_actions": [                 // wired-to-this-node by containment → assertion #5 (D10)
-        { "id": 12, "name": "Session Completion", "server_url": "https://…",
-          "allowed_operations": ["complete_session"],
-          "api_schema": { "paths": ["/complete_session"] },    // path/operation digest only (resolved Q7)
-          "auth_provider": { "id": 2, "type": "oauth", "name": "Partner API auth" } }  // name/type only; config excluded (D8)
-      ]
-    }
-    // … one entry per node
-  ],
+        },
+        "indexed_collections": [          // node field collection_index_ids (list) — RAG indexes, WITH embedding
+          {
+            "id": 33, "name": "Policy index",
+            "embedding": {                // embedding provider+model grouped (D6); from the collection's llm_provider (D3 rename)
+              "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
+              "model":    { "id": 7, "type": "openai", "model_name": "text-embedding-3-small" }
+            },
+            "files": [
+              { "id": 201, "name": "policy.pdf", "content_type": "application/pdf", "content_size": 40112, "purpose": "collection" }
+            ]
+          }
+        ],
+        "custom_actions": [               // wired-to-this-node by containment → assertion #5 (D10)
+          { "id": 12, "name": "Session Completion", "server_url": "https://…",
+            "allowed_operations": ["complete_session"],
+            "api_schema": { "paths": ["/complete_session"] },    // path/operation digest only (resolved Q7)
+            "auth_provider": { "id": 2, "type": "oauth", "name": "Partner API auth" } }  // name/type only; config excluded (D8)
+        ]
+      }
+      // … one entry per node
+    ]
+  },
 
   "events": {                             // experiment-level — D9
     "static_triggers": [
@@ -551,14 +557,13 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
         "is_active": true,
         "action": {
           "id": 47, "action_type": "pipeline_start",
-          // pipeline_start embeds the referenced pipeline with the SAME shape as the
-          // top-level pipeline + nodes — graph digest AND detailed nodes with their own
-          // inline resources (resolved Q2). Self-contained; no recursion (a pipeline has
-          // no triggers of its own — triggers attach to chatbots, not pipelines).
+          // pipeline_start embeds the referenced pipeline using the SAME canonical Pipeline
+          // object as the top level (resolved Q2). Self-contained; no recursion (a pipeline
+          // has no triggers of its own — triggers attach to chatbots, not pipelines).
           "pipeline": {
-            "id": 99, "name": "Completion flow",
+            "id": 99, "name": "Completion flow", "version_number": 0,
             "graph": { "nodes": [ /* flow_id/type/label */ ], "edges": [ /* … */ ] },
-            "nodes": [ /* full per-node detail with embedded resources, as in top-level nodes[] */ ]
+            "nodes": [ /* detailed nodes with embedded resources — same as pipeline.nodes above */ ]
           }
         }
       }
