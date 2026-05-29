@@ -175,7 +175,9 @@ OpenAPI schemas and Swagger UIs (`/api/v1/schema/`, `/api/v2/schema/`). No depre
 yet — add `Sunset`/`Deprecation` headers later once external adoption is understood.
 
 **Context.** There is no versioning today, and the rename + new endpoints would otherwise break
-existing callers if done in place.
+existing callers if done in place. The dual-version cost is only justified if `/api/experiments/`
+has real external consumers — this was **verified** (API request logs checked 2026-05-29 confirm
+real external usage), so an in-place rename is off the table.
 
 **Consequences.** v1 and v2 can share zero code if needed; a version is explicit in any log line
 and trivially testable from curl. Cost: two routers, two schemas, two docs pages to maintain.
@@ -290,23 +292,46 @@ each resource type once to avoid N+1, then inline copies (see [implementation](#
   deduped, but verbose envelope and `{type, id}` linkage boilerplate for what is a read-only
   projection, and the consumer still resolves `included[]`. Rejected.
 
-### D7 — Data-driven node walker via `options_source`
+### D7 — Signal-driven node walker with a completeness guard
 
 **Decision.** The serializer does not hand-maintain a node-type → reference-field table. It looks up
 each node's pydantic class from the registry (`apps/pipelines/nodes/__init__.py`), iterates its
-model fields, and uses `json_schema_extra.options_source` (e.g. `OptionsSource.collection`,
-`OptionsSource.llm_provider_model`) as the canonical signal that a field is a resource reference.
-Fields with an `options_source` are resolved to their resource and **embedded inline** under a named
-key (per [D6](#d6-inline-nested-resource-tree-denormalized)); the rest go verbatim into `params`.
+model fields, and classifies each field's *UI signal* against an explicit **signal → resource-type
+registry**. Fields whose signal maps to a resource type are resolved and **embedded inline** under a
+named key (per [D6](#d6-inline-nested-resource-tree-denormalized)); everything else goes verbatim
+into `params`.
 
-**Context.** Node types are added over time; a hand-maintained mapping goes stale silently.
+The signal is **not** simply "has an `options_source`" — that is neither necessary nor sufficient
+(see Context). The registry maps:
 
-**Consequences.** Adding a new node type requires no serializer change as long as its reference
-fields declare an `options_source`. Cost: correctness depends on node authors setting
-`options_source` consistently — worth a test that exercises every node type.
+- a curated subset of `OptionsSource` values — `source_material`, `assistant`, `custom_actions`,
+  `collection`, `collection_index`, `voice_provider_id`, `synthetic_voice_id` — to their resource
+  types; **and**
+- the `Widgets.llm_provider_model` widget to the `llm_provider_id` + `llm_provider_model_id` pair
+  (these carry no `options_source`).
 
-**Alternatives considered.** A static node-type → field mapping table — rejected as a maintenance
-liability that drifts from reality.
+Tool fields (`agent_tools`, `built_in_tools`, `mcp_tools`) are **not** resources — they reference
+enum values or external tool ids, not OCS resource models — and stay in `params`.
+
+**Context.** `options_source` is a UI hint for populating select widgets, used for both resource
+references *and* non-resources (`agent_tools`, `built_in_tools`, `mcp_tools`, `jinja_node`,
+`text_editor_autocomplete_vars_*`). Worse, the most common reference — the LLM provider/model
+(`apps/pipelines/nodes/mixins.py:72-73`) — carries **no** `options_source` at all; it is signalled
+by the `llm_provider_model` widget. So an "any `options_source` ⇒ reference" rule would both miss
+the LLM provider/model on every LLM/Router/Boolean/Extract node *and* wrongly embed tool enums.
+
+**Consequences.** Adding a node type that reuses existing field signals requires no serializer
+change. **Introducing a new kind of resource reference does** require registering its signal — and a
+**completeness-guard test** makes that loud, not silent: the test enumerates every `OptionsSource`
+value and every `Widget` and asserts each is classified as either "embeds resource X" or "explicitly
+not a resource", failing CI when a new, unclassified signal appears. This converts the
+silent-omission risk (the failure mode [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)
+exists to prevent) into a build break.
+
+**Alternatives considered.** *"Any field with an `options_source` is a reference"* — rejected: it
+misses the LLM provider/model (no `options_source`) and wrongly includes tool enums. A static
+node-type → field mapping table — rejected as a maintenance liability that drifts silently; the
+signal registry + completeness guard achieves the same coverage without per-node-type upkeep.
 
 ### D8 — Secrets exclusion via per-resource serializers with explicit field lists
 
@@ -395,6 +420,15 @@ No new mechanism. Reuses what the chatbot ViewSet already has:
 **Resolved:** reuse the existing `view` permission — no dedicated `inspect_chatbot` perm. A
 `read_only` key with `view` access can inspect. See [resolved Q1](#11-resolved-questions).
 
+**Transitive exposure — a deliberate choice.** inspect authorizes solely on
+`experiments.view_experiment` + team scope. It intentionally does **not** enforce per-resource
+`view_*` permissions on the embedded resources (collections, files, custom actions, providers,
+assistants, scheduled messages) — so a key with only `view_experiment` can read all of a chatbot's
+wiring across apps. This is acceptable because every embedded resource is **team-scoped** and already
+co-visible to anyone who can view the chatbot (there is no intra-team gating that lets someone view a
+chatbot but not its collections/actions/providers); the consumer is a team-scoped `read_only` key.
+Flagged explicitly so it reads as a conscious decision, not an accident, in security review.
+
 ## Response shape
 
 Inline nested tree ([D6](#d6-inline-nested-resource-tree-denormalized)). Each node and event embeds
@@ -445,7 +479,7 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
     "id": 42,
     "name": "Support flow v3",
     "version_number": 0,
-    "graph": {                            // digested — positions stripped, edges kept
+    "graph": {                            // digested — positions stripped, edges kept (trim of Pipeline.data_without_positions)
       "nodes": [
         {"flow_id": "start-1",  "type": "StartNode",            "label": "Start"},
         {"flow_id": "llm-1",    "type": "LLMResponseWithPrompt", "label": "Classify intent"},
@@ -469,7 +503,7 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
         "history_type": "global",
         "tools": []
       },
-      // fields with an options_source resolved + embedded inline (D7); null if unset
+      // reference fields resolved + embedded inline via the signal registry (D7); null if unset
       "llm": {                            // provider + model grouped (D6)
         "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
         "model":    { "id": 18, "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false }
@@ -489,7 +523,8 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
       "custom_actions": [                 // wired-to-this-node by containment → assertion #5 (D10)
         { "id": 12, "name": "Session Completion", "server_url": "https://…",
           "allowed_operations": ["complete_session"],
-          "api_schema": { "paths": ["/complete_session"] } }   // path/operation digest only (resolved Q7)
+          "api_schema": { "paths": ["/complete_session"] },    // path/operation digest only (resolved Q7)
+          "auth_provider": { "id": 2, "type": "oauth", "name": "Partner API auth" } }  // name/type only; config excluded (D8)
       ]
     }
     // … one entry per node
@@ -511,7 +546,7 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
     "timeout_triggers": [
       {
         "id": 22,
-        "delay_seconds": 86400,           // 24h inactivity → assertion #4
+        "delay_seconds": 86400,           // 24h inactivity → assertion #4; v2 rename of model field `delay` (D3)
         "total_num_triggers": 1,
         "trigger_from_first_message": false,
         "is_active": true,
@@ -532,11 +567,13 @@ to deduplicate index by `id`.
 
 ## Node type → reference field mapping
 
-The walker is data-driven ([D7](#d7-data-driven-node-walker-via-options_source)); this table is
-illustrative, not hand-maintained in code. Derived from `apps/pipelines/nodes/nodes.py` and
+The walker is signal-driven ([D7](#d7-signal-driven-node-walker-with-a-completeness-guard)); this
+table is illustrative, not hand-maintained in code. Derived from `apps/pipelines/nodes/nodes.py` and
 `apps/pipelines/nodes/mixins.py`. These are the *source* fields the walker reads; in the payload a
 `llm_provider_id` + `llm_provider_model_id` pair renders grouped under `llm = { provider, model }`
-([D6](#d6-inline-nested-resource-tree-denormalized)).
+([D6](#d6-inline-nested-resource-tree-denormalized)). Note `llm_provider_id`/`llm_provider_model_id`
+are matched by the `llm_provider_model` *widget* (no `options_source`); the rest by their
+`options_source` value.
 
 | Node class | Reference fields |
 |---|---|
@@ -560,9 +597,10 @@ Per [D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-
 | `SyntheticVoice` | `apps/experiments/models.py` | file payload (ID only) |
 | `SourceMaterial`, `ConsentForm`, `Survey` | `apps/experiments/models.py` | — |
 | `Collection` | `apps/documents/models.py` | — (`openai_vector_store_id` **exposed** — opaque pointer, not a credential; see [resolved Q6](#11-resolved-questions)) |
-| `File` | `apps/files/models.py` | **`file` URL** — signed storage URL; never expose |
+| `File` | `apps/files/models.py` | **`file` URL** — signed storage URL; never expose. Also **`summary` + `metadata` omitted** from the inline file object — not secrets, but dropped for size (duplicated under inline nesting; not needed for assertion #3). Embedded file is identity-lean: `id, name, content_type, content_size, external_source, external_id, purpose` (Q6). |
 | `OpenAiAssistant` | `apps/assistants/models.py` | — (`instructions` and `assistant_id` **exposed**; see [resolved Q4/Q5](#11-resolved-questions)) |
-| `CustomAction` | `apps/custom_actions/models.py` | **full `api_schema`** — reduce to path/operation digest (OpenAPI docs can embed `securitySchemes` with key examples) |
+| `CustomAction` | `apps/custom_actions/models.py` | **full `api_schema`** — reduce to path/operation digest (OpenAPI docs can embed `securitySchemes` with key examples). Embeds its `auth_provider` as `{id, type, name}` only (config excluded); `server_url` exposed (team-set config). |
+| `ExperimentChannel` | `apps/channels/models.py` | **entire `extra_data`** — freeform auth material (`bot_token`, `widget_token`, …); allowlist `platform` + `name` only (resolved Q8) |
 
 The audit lives in code as a resource-type → serializer registry, never `__all__`.
 
@@ -570,9 +608,18 @@ The audit lives in code as a resource-type → serializer registry, never `__all
 
 - `?version=<n>` → resolve the matching `Experiment` version
   (`working_version=root, version_number=n`); `?version=default` → `is_default_version=True`.
-- Published experiments link to a **snapshotted** pipeline and snapshotted FK'd resources. The
-  endpoint serializes whichever version the experiment version points at — no special logic; just
-  follow the already-snapshotted FKs.
+- **Snapshotted vs live resources.** Creating a version snapshots the pipeline, its nodes, and the
+  node-referenced `source_material` / `collection` / `collection_index` / `assistant` and
+  custom-action operations (versioning repoints the ids in node params —
+  `apps/pipelines/models.py:413-417`), plus the experiment-level `source_material`/`consent_form`/
+  surveys and triggers. These reflect the state at publish time. **Not** snapshotted are the
+  non-versioned shared rows — `llm_provider` / `llm_provider_model`, `voice_provider`,
+  `synthetic_voice`: a node's `llm_provider_id` is *not* repointed, so for a published version these
+  still reflect the **current** (live) config. This is acceptable because providers are exposed as
+  name/type only (no secrets), so liveness is harmless; we deliberately add **no payload signal**
+  distinguishing snapshotted from live resources.
+- Either way the walker needs no special logic: versioning already repointed the snapshotted ids, so
+  it just reads each node's ids and loads those rows.
 - The response always includes `is_working_version`, `version_number`, `is_default_version` so the
   client knows what it received.
 - For working-version requests, triggers come from `experiment.static_triggers.all()` /
@@ -600,7 +647,7 @@ of PRs. (The earlier public-ID prerequisite track and #3465 are dropped per
    model pairs render under a grouped concept key (`llm`, `voice`, `embedding`) per
    [D6](#d6-inline-nested-resource-tree-denormalized).
 5. Pipeline node walker (e.g. `apps/pipelines/inspect.py`): walk `pipeline.node_set.all()`, look up
-   each pydantic class via the registry, classify fields by `options_source`. Non-reference fields →
+   each pydantic class via the registry, classify fields by the D7 signal registry. Non-reference fields →
    `params`; for each reference field record `(field_name, resource_type, id)` and accumulate
    `resource_refs: dict[ResourceKey, set[id]]` so the collector can pre-load in batch.
 6. Events serializer (e.g. `apps/events/api_serializers.py`): `StaticTrigger` + `TimeoutTrigger`
@@ -624,7 +671,9 @@ of PRs. (The earlier public-ID prerequisite track and #3465 are dropped per
 - **Auth:** anonymous → 401; wrong team → 404; `read_only` API key → 200.
 - **Versioning:** working version by default; `?version=N` returns the right snapshot;
   `?version=default` resolves the default published version.
-- **Node coverage:** a pipeline exercising each node type verifies the `options_source` split.
+- **Node coverage:** a pipeline exercising each node type verifies the signal-registry split.
+- **Completeness guard (D7):** a test enumerating every `OptionsSource` value and `Widget` fails when
+  a new, unclassified signal appears — preventing silent omission of a new resource reference.
 - **Secret-leak:** for each provider, assert `config` (and every other excluded key) appears
   nowhere in the response JSON (`assertNotIn` against the serialized payload).
 - **Acceptance #1–#5** (from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)):
@@ -652,9 +701,14 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
    credential. (Note: this went *against* the initial lean to exclude — recorded deliberately.)
 7. **`CustomAction.api_schema`** → **path/operation digest.** Strip to operation IDs, paths, and
    summaries; never expose the raw schema (it can embed `securitySchemes` with key examples).
-8. **Channels** → **include, secrets stripped.** Surface `ExperimentChannel` under
-   `chatbot.channels[]`, each embedding its `messaging_provider` inline; strip tokens from
-   `extra_data`.
+8. **Channels** → **include, explicit allowlist (not a denylist).** Surface `ExperimentChannel`
+   under `chatbot.channels[]` with an explicit allowlist of `platform` + `name` + the embedded
+   `messaging_provider`. **`extra_data` is not exposed at all** — it is a freeform JSONField holding
+   per-platform authorization material (`bot_token`, `widget_token`, …), so a "strip the secrets"
+   denylist would violate [D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)
+   (opt-in exposure, never denylist). The deployment-audit use case only needs which platforms the
+   bot is exposed on, which `platform` + `name` answers. A specific non-secret `extra_data` field can
+   be added to a per-platform allowlist later if a real need appears.
 9. **Response size** → **ship the full payload in v1.** No `?include=` selective-expansion filter
    for now; revisit only if a real consumer hits size problems.
 
