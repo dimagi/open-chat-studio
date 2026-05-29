@@ -88,7 +88,7 @@ nav:
       - 0015 Dedicated human_annotations app with queue/item/annotation/aggregate model: adr/0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md
       - 0016 Authoritative annotation for multi-reviewer consensus: adr/0016-authoritative-annotation-for-multi-reviewer-consensus.md
       - 0017 Eager per-submission aggregation into a per-queue record: adr/0017-eager-aggregation-of-submitted-annotations.md
-      - 0018 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0015-download-whatsapp-inbound-attachments-in-hydration-stage.md
+      - 0018 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0018-download-whatsapp-inbound-attachments-in-hydration-stage.md
   - Developer Guides:
     - Processes:
       - Igor (Incremental Worker): developer_guides/igor.md

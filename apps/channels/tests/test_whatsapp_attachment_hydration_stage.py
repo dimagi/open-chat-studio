@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.channels.channels_v2.stages.core import WhatsappAttachmentHydrationStage
+from apps.channels.channels_v2.whatsapp_channel import WhatsappAttachmentHydrationStage
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.files.models import File, FilePurpose
 

@@ -208,6 +208,10 @@ class WhatsAppMessage(BaseMessage):
                 return MESSAGE_TYPES.TEXT
             case _ if MESSAGE_TYPES.is_member(value):
                 return MESSAGE_TYPES(value)
+            case _:
+                # Unknown/unsupported provider types (e.g. sticker, location) fall back to
+                # OTHER so content_type is never None and downstream support checks behave.
+                return MESSAGE_TYPES.OTHER
 
     @classmethod
     def parse(cls, message_data: dict) -> "WhatsAppMessage":
