@@ -136,7 +136,7 @@ assertions. They are the acceptance tests for the payload.
 |---|---|---|
 | 1 | Bot exists + is the working/published version we expect | `name`, `external_id`/`public_id`, `version_number` |
 | 2 | Pipeline has a router node whose routing keywords match the cohort's schedule | digested graph + per-node detail incl. router `keywords`/`route_key` |
-| 3 | An LLM node points at the expected collection (RAG), and the collection has the expected files | node's embedded `collection.files[]` |
+| 3 | An LLM node points at the expected collection (RAG), and the collection has the expected files | node's embedded `indexed_collections[].files[]` (RAG) / `media_collection.files[]` |
 | 4 | A 24-hr inactivity `TimeoutTrigger` exists and its action is the completion handler | **experiment-level `events` block** (see [D9](#d9-experiment-level-events-block)) |
 | 5 | A "Session Completion" custom action exists and is **wired to fire** | custom action embedded under the node/event that fires it (see [D10](#d10-wiring-is-implicit-in-nesting)) |
 
@@ -259,14 +259,15 @@ per the read-constrains-write risk above.
 ### D6 — Inline nested resource tree (denormalized)
 
 **Decision.** Each node and event embeds the resources it references **inline**, under named keys
-(e.g. a node carries `collection` objects directly; a `collection` carries its `files[]`). The
-response is a self-contained tree read top-to-bottom with no pointer-chasing. Each embedded resource
-carries its numeric DB id as `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)),
+(e.g. a node carries `media_collection` / `indexed_collections` objects directly; each carries its
+`files[]`). The response is a self-contained tree read top-to-bottom with no pointer-chasing. Each
+embedded resource carries its numeric DB id as `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)),
 so a consumer that wants to deduplicate can build its own map keyed by `id`.
 
 A **provider + model pair is grouped under a single concept key**: a node carries `llm = { provider,
 model }` rather than sibling `llm_provider` / `llm_provider_model`, and the same grouping applies to
-voice (`voice = { provider, voice }`) and a collection's embedding (`embedding = { provider, model }`).
+voice (`voice = { provider, voice }`) and an indexed collection's embedding
+(`embedding = { provider, model }` — media collections have no embedding).
 Provider and model are independent catalog rows (joined by `type`, not a FK), so they stay as
 distinct sub-objects — grouped for readability, not merged into one (which would imply an ownership
 that doesn't exist and diverge from the likely write shape of two separate references).
@@ -364,9 +365,13 @@ verifier checks.
 **Consequences.** Assertion #4 becomes reachable. `EventLog` entries are excluded (operational
 telemetry, not config). `EventAction.params` reference other resources, embedded inline on the action
 (per [D6](#d6-inline-nested-resource-tree-denormalized)): `pipeline_start` embeds the referenced
-pipeline with its digested graph ([resolved Q2](#11-resolved-questions)); `schedule_trigger` embeds
-the `ScheduledMessage` cadence ([resolved Q3](#11-resolved-questions)). Disabled triggers are
-included but flagged via `is_active`, so a verifier can assert a trigger *isn't* armed.
+pipeline with the **same `{ id, name, graph, nodes:[...] }` shape as the top-level pipeline** — graph
+digest *and* fully-detailed nodes with their own inline resources ([resolved Q2](#11-resolved-questions)).
+This is self-contained and does not recurse: a pipeline has no triggers of its own (triggers attach
+to chatbots, not pipelines), so embedding a referenced pipeline pulls in its nodes/resources but no
+further events. `schedule_trigger` embeds the `ScheduledMessage` cadence
+([resolved Q3](#11-resolved-questions)). Disabled triggers are included but flagged via `is_active`,
+so a verifier can assert a trigger *isn't* armed.
 
 **Alternatives considered.** Treating triggers as node resources — rejected: they are not nodes and
 do not live in the graph.
@@ -448,17 +453,18 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
     "version_description": null,
     "team_slug": "acme",
     "settings": {
-      // every non-secret field on Experiment, null if unset
-      "temperature": 0.7,
+      // non-secret Experiment fields, null if unset. NOTE: prompt/temperature/tools/
+      // source_material/citations live on the LLM node now, NOT on the chatbot — the
+      // legacy Experiment-level fields (temperature, tools, citations_enabled, prompt_text,
+      // input_formatter, source_material) are removed/not surfaced.
+      "seed_message": null,
       "conversational_consent_enabled": false,
-      "citations_enabled": true,
       "voice_response_behaviour": "reciprocal",
-      "participant_allowlist": [],
-      "tools": ["delete-reminder", "..."]
+      "echo_transcript": false,
+      "participant_allowlist": []
     },
 
     // chatbot-level resources embedded inline (numeric db id; null if unset)
-    "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
     "consent_form":    { "id": 3, "name": "Default", "consent_text": "…", "capture_identifier": true },
     "pre_survey":      null,
     "post_survey":     { "id": 9, "name": "CSAT", "url": "https://…" },
@@ -509,17 +515,24 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
         "model":    { "id": 18, "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false }
       },
       "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
-      "collection": {
-        "id": 21, "name": "Policy docs", "is_index": false,
-        "embedding": {                    // a collection's embedding provider+model (D6); field renamed from llm_provider in v2 (D3)
-          "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
-          "model":    { "id": 7, "type": "openai", "model_name": "text-embedding-3-small" }
-        },
+      "media_collection": {               // node field collection_id ("Media") — files, NO embedding provider
+        "id": 21, "name": "Policy docs",
         "files": [                        // collection files embedded → assertion #3
           { "id": 101, "name": "returns.pdf", "content_type": "application/pdf", "content_size": 50321, "purpose": "collection" }
         ]
       },
-      "collection_indexes": [],
+      "indexed_collections": [            // node field collection_index_ids (list) — RAG indexes, WITH embedding
+        {
+          "id": 33, "name": "Policy index",
+          "embedding": {                  // embedding provider+model grouped (D6); from the collection's llm_provider (D3 rename)
+            "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
+            "model":    { "id": 7, "type": "openai", "model_name": "text-embedding-3-small" }
+          },
+          "files": [
+            { "id": 201, "name": "policy.pdf", "content_type": "application/pdf", "content_size": 40112, "purpose": "collection" }
+          ]
+        }
+      ],
       "custom_actions": [                 // wired-to-this-node by containment → assertion #5 (D10)
         { "id": 12, "name": "Session Completion", "server_url": "https://…",
           "allowed_operations": ["complete_session"],
@@ -538,8 +551,15 @@ Provider + model pairs are grouped under a concept key. Credentials are excluded
         "is_active": true,
         "action": {
           "id": 47, "action_type": "pipeline_start",
-          // pipeline_start embeds the referenced pipeline inline (resolved Q2)
-          "pipeline": { "id": 99, "name": "Completion flow", "graph": { "nodes": [], "edges": [] } }
+          // pipeline_start embeds the referenced pipeline with the SAME shape as the
+          // top-level pipeline + nodes — graph digest AND detailed nodes with their own
+          // inline resources (resolved Q2). Self-contained; no recursion (a pipeline has
+          // no triggers of its own — triggers attach to chatbots, not pipelines).
+          "pipeline": {
+            "id": 99, "name": "Completion flow",
+            "graph": { "nodes": [ /* flow_id/type/label */ ], "edges": [ /* … */ ] },
+            "nodes": [ /* full per-node detail with embedded resources, as in top-level nodes[] */ ]
+          }
         }
       }
     ],
@@ -573,12 +593,14 @@ table is illustrative, not hand-maintained in code. Derived from `apps/pipelines
 `llm_provider_id` + `llm_provider_model_id` pair renders grouped under `llm = { provider, model }`
 ([D6](#d6-inline-nested-resource-tree-denormalized)). Note `llm_provider_id`/`llm_provider_model_id`
 are matched by the `llm_provider_model` *widget* (no `options_source`); the rest by their
-`options_source` value.
+`options_source` value. Payload renames (D3): `collection_id` → `media_collection` (files, no
+embedding), `collection_index_ids` → `indexed_collections` (RAG, with embedding). Tool fields
+(`agent_tools`, `built_in_tools`, `mcp_tools`) are not resources and stay in `params` (D7).
 
 | Node class | Reference fields |
 |---|---|
 | `LLMResponse` | `llm_provider_id`, `llm_provider_model_id` |
-| `LLMResponseWithPrompt` | above + `source_material_id`, `collection_id`, `collection_index_ids[]`, `custom_actions[]`, `synthetic_voice_id`, `mcp_tools[]` |
+| `LLMResponseWithPrompt` | above + `source_material_id`, `collection_id` (→ `media_collection`), `collection_index_ids[]` (→ `indexed_collections`), `custom_actions[]`, `synthetic_voice_id` |
 | `RouterNode`, `BooleanNode` | `llm_provider_id`, `llm_provider_model_id` |
 | `ExtractStructuredData` / `ExtractParticipantData` | `llm_provider_id`, `llm_provider_model_id` |
 | `AssistantNode` | `assistant_id` (→ `OpenAiAssistant`, which references `llm_provider_id`, `llm_provider_model_id`) |
@@ -596,7 +618,7 @@ Per [D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-
 | `LlmProviderModel`, `EmbeddingProviderModel` | same | — |
 | `SyntheticVoice` | `apps/experiments/models.py` | file payload (ID only) |
 | `SourceMaterial`, `ConsentForm`, `Survey` | `apps/experiments/models.py` | — |
-| `Collection` | `apps/documents/models.py` | — (`openai_vector_store_id` **exposed** — opaque pointer, not a credential; see [resolved Q6](#11-resolved-questions)) |
+| `Collection` | `apps/documents/models.py` | — (`openai_vector_store_id` **exposed** — opaque pointer, not a credential; see [resolved Q6](#11-resolved-questions)). Rendered two ways: `media_collection` (files, no embedding) and `indexed_collections` (RAG: embedding provider+model + files). |
 | `File` | `apps/files/models.py` | **`file` URL** — signed storage URL; never expose. Also **`summary` + `metadata` omitted** from the inline file object — not secrets, but dropped for size (duplicated under inline nesting; not needed for assertion #3). Embedded file is identity-lean: `id, name, content_type, content_size, external_source, external_id, purpose` (Q6). |
 | `OpenAiAssistant` | `apps/assistants/models.py` | — (`instructions` and `assistant_id` **exposed**; see [resolved Q4/Q5](#11-resolved-questions)) |
 | `CustomAction` | `apps/custom_actions/models.py` | **full `api_schema`** — reduce to path/operation digest (OpenAPI docs can embed `securitySchemes` with key examples). Embeds its `auth_provider` as `{id, type, name}` only (config excluded); `server_url` exposed (team-set config). |
@@ -693,7 +715,7 @@ of PRs. (The earlier public-ID prerequisite track and #3465 are dropped per
 - **Secret-leak:** for each provider, assert `config` (and every other excluded key) appears
   nowhere in the response JSON (`assertNotIn` against the serialized payload).
 - **Acceptance #1–#5** (from [#3458](https://github.com/dimagi/open-chat-studio/issues/3458)):
-  identity; router keywords; node's embedded `collection.files[]` inventory; 24-hr `TimeoutTrigger` +
+  identity; router keywords; node's embedded `indexed_collections[].files[]` inventory; 24-hr `TimeoutTrigger` +
   its embedded action in the `events` block; custom action embedded under the node/event that fires it.
 - **Inline shape:** a resource referenced by two nodes appears (identically) under both; assert the
   duplicated objects share the same `id`.
@@ -705,9 +727,12 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
 1. **Permission granularity** → **reuse the existing `view` permission.** No dedicated
    `inspect_chatbot` perm; a `read_only` key with `view` access can inspect. A least-privilege
    inspect-only perm can be added later if a concrete need appears.
-2. **`EventAction.params` for `pipeline_start`** → **embed the referenced pipeline.** The
-   `pipeline_start` action embeds the referenced pipeline (with its digested graph) inline, so a
-   verifier can inspect trigger-launched flows without a second request.
+2. **`EventAction.params` for `pipeline_start`** → **embed the referenced pipeline, full shape.** The
+   `pipeline_start` action embeds the referenced pipeline inline using the same
+   `{ id, name, graph, nodes:[...] }` structure as the top-level pipeline (graph digest *and*
+   detailed nodes with their embedded resources), so a verifier can inspect trigger-launched flows
+   without a second request. Self-contained and non-recursive — a pipeline carries no triggers of its
+   own, so no further events are pulled in.
 3. **`schedule_trigger` / `ScheduledMessage`** → **include the cadence.** The `schedule_trigger`
    action embeds the `ScheduledMessage` cadence inline.
 4. **`OpenAiAssistant.instructions`** → **expose as-is.** Prompt text the verifier may want to
