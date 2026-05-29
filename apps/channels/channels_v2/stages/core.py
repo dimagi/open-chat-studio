@@ -718,19 +718,12 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
     Meta already caps what reaches us.
     """
 
-    # Excluded MIME markers — voice/audio is handled via the audio transcription path,
-    # never persisted as an inbound media attachment.
-    _VOICE_MIMES = {"audio", "voice"}
-
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         if not ctx.experiment_session or not ctx.message:
             return False
         if ctx.message.attachments:
             return False
-        mime = ctx.message.attachment_mime_type
-        if not mime:
-            return False
-        return not (mime in self._VOICE_MIMES or mime.startswith("audio/"))
+        return bool(ctx.message.attachment_mime_type)
 
     def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
         messaging_service = ctx.experiment_channel.messaging_provider.get_messaging_service()

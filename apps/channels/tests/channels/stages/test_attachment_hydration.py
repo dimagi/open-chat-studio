@@ -139,12 +139,6 @@ class TestWhatsappAttachmentHydrationStage:
         ctx = make_context(message=self._image_message(mime), experiment_session=MagicMock())
         assert self.stage.should_run(ctx) is True
 
-    @pytest.mark.parametrize("mime", ["audio", "voice", "audio/ogg", "audio/mpeg"])
-    def test_skips_voice_audio_messages(self, mime):
-        """Voice/audio is routed via get_message_audio, never hydrated as a media attachment."""
-        ctx = make_context(message=self._image_message(mime), experiment_session=MagicMock())
-        assert self.stage.should_run(ctx) is False
-
     @pytest.mark.django_db()
     def test_process_populates_attachments(self):
         """process() downloads the image via the messaging service, persists it,
