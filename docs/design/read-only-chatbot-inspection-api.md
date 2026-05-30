@@ -458,10 +458,12 @@ Flagged explicitly so it reads as a conscious decision, not an accident, in secu
 
 ## Response shape
 
-Inline nested tree ([D6](#d6-inline-nested-resource-tree-denormalized)). Each node and event embeds
-the resources it references. The chatbot's own `id` is its existing UUID; embedded resources carry
-their numeric DB `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)).
-Provider + model pairs are flattened into a single object. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
+Inline nested tree ([D6](#d6-inline-nested-resource-tree-denormalized)). **The response root *is*
+the chatbot** — there is no wrapper key; the chatbot's own fields sit at the top level and `pipeline`,
+`events`, and `channels` are members of it. Each node and event embeds the resources it references.
+The chatbot's own `id` is its existing UUID; embedded resources carry their numeric DB `id` (no new
+public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)). Provider + model pairs are
+flattened into a single object. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
 
 A **Pipeline** has a single canonical serialized shape — `{ id, name, version_number, graph, nodes:[…] }`
 (`graph` = topology, `nodes` = per-node detail with resources embedded) — used **identically**
@@ -470,42 +472,41 @@ shape, one parser.
 
 ```jsonc
 {
-  "chatbot": {
-    "id": "5a3c…",                        // Experiment.public_id (existing UUID)
-    "name": "Customer Support Bot",
-    "description": "…",
-    "version_number": 0,
-    "is_working_version": true,
-    "is_default_version": false,
-    "version_description": null,
-    "team_slug": "acme",
-    "settings": {
-      // non-secret Experiment fields, null if unset. NOTE: prompt/temperature/tools/
-      // source_material/citations live on the LLM node now, NOT on the chatbot — the
-      // legacy Experiment-level fields (temperature, tools, citations_enabled, prompt_text,
-      // input_formatter, source_material) are removed/not surfaced.
-      "seed_message": null,
-      "conversational_consent_enabled": false,
-      "voice_response_behaviour": "reciprocal",
-      "echo_transcript": false,
-      "participant_allowlist": []
-    },
-
-    // chatbot-level resources embedded inline (numeric db id; null if unset)
-    "consent_form":    { "id": 3, "name": "Default", "consent_text": "…", "capture_identifier": true },
-    "pre_survey":      null,
-    "post_survey":     { "id": 9, "name": "CSAT", "url": "https://…" },
-    "voice": {                            // provider + synthetic voice flattened (D6)
-      "provider_id": 4, "provider_name": "ElevenLabs Prod", "type": "elevenlabs",
-      "voice_name": "Rachel", "language": "English", "neural": true
-    },
-    "trace_provider":  null,
-
-    "channels": [                         // ExperimentChannel — secrets stripped (resolved Q8)
-      { "platform": "telegram", "name": "Support TG",
-        "messaging_provider": { "id": 6, "type": "telegram", "name": "Support TG bot" } }
-    ]
+  // the response root IS the chatbot — no wrapper key; pipeline and events are members
+  "id": "5a3c…",                          // Experiment.public_id (existing UUID)
+  "name": "Customer Support Bot",
+  "description": "…",
+  "version_number": 0,
+  "is_working_version": true,
+  "is_default_version": false,
+  "version_description": null,
+  "team_slug": "acme",
+  "settings": {
+    // non-secret Experiment fields, null if unset. NOTE: prompt/temperature/tools/
+    // source_material/citations live on the LLM node now, NOT on the chatbot — the
+    // legacy Experiment-level fields (temperature, tools, citations_enabled, prompt_text,
+    // input_formatter, source_material) are removed/not surfaced.
+    "seed_message": null,
+    "conversational_consent_enabled": false,
+    "voice_response_behaviour": "reciprocal",
+    "echo_transcript": false,
+    "participant_allowlist": []
   },
+
+  // chatbot resources embedded inline (numeric db id; null if unset)
+  "consent_form":    { "id": 3, "name": "Default", "consent_text": "…", "capture_identifier": true },
+  "pre_survey":      null,
+  "post_survey":     { "id": 9, "name": "CSAT", "url": "https://…" },
+  "voice": {                              // provider + synthetic voice flattened (D6)
+    "provider_id": 4, "provider_name": "ElevenLabs Prod", "type": "elevenlabs",
+    "voice_name": "Rachel", "language": "English", "neural": true
+  },
+  "trace_provider":  null,
+
+  "channels": [                           // ExperimentChannel — secrets stripped (resolved Q8)
+    { "platform": "telegram", "name": "Support TG",
+      "messaging_provider": { "id": 6, "type": "telegram", "name": "Support TG bot" } }
+  ],
 
   // canonical Pipeline object — identical shape wherever a pipeline appears
   // (top level here, and embedded under a pipeline_start event action)
@@ -770,7 +771,7 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
 7. **`CustomAction.api_schema`** → **path/operation digest.** Strip to operation IDs, paths, and
    summaries; never expose the raw schema (it can embed `securitySchemes` with key examples).
 8. **Channels** → **include, explicit allowlist (not a denylist).** Surface `ExperimentChannel`
-   under `chatbot.channels[]` with an explicit allowlist of `platform` + `name` + the embedded
+   under the top-level `channels[]` with an explicit allowlist of `platform` + `name` + the embedded
    `messaging_provider`. **`extra_data` is not exposed at all** — it is a freeform JSONField holding
    per-platform authorization material (`bot_token`, `widget_token`, …), so a "strip the secrets"
    denylist would violate [D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)
