@@ -3,6 +3,7 @@
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
+<p class="adr-meta">Extends: <a href="0022-inspect-denormalized-readonly-projection.md">ADR-0022</a></p>
 
 ## Context
 
@@ -12,7 +13,7 @@ The inspect projection ([ADR-0022](0022-inspect-denormalized-readonly-projection
 
 We will embed each referenced resource **inline** under a named key on the node or event that uses it, producing a self-contained tree read top-to-bottom with no pointer-chasing. Specifically:
 
-- A provider + model pair is grouped under one concept key (`llm`, `voice`, `embedding`) but kept as two distinct sub-objects, because a model is an independent catalog row joined to a provider by `type`, not owned by it.
+- A provider + model pair is **flattened into a single object** under one concept key (`llm`, `voice`, `embedding`) — e.g. `llm = { provider_id, provider_name, type, model, max_token_limit, deprecated }`. Although provider and model are separate DB rows (joined by `type`, not a foreign key), they are selected together via a single combined widget, and a model is identified by type + name + token-limit so its DB id is not externally meaningful. Because this projection is not round-trippable ([ADR-0022](0022-inspect-denormalized-readonly-projection.md)), the shape is optimized for the consumer's view of effective config rather than the two-FK write structure.
 - Chatbot triggers are walked as a top-level `events` block (with `static_triggers` and `timeout_triggers`) **in addition** to the pipeline nodes, because triggers attach to the chatbot, not the pipeline graph — a node-only walk would silently omit them.
 - A `pipeline_start` event embeds its referenced pipeline using the **same** canonical Pipeline shape (`{ id, name, version_number, graph, nodes }`) used at the top level; this does not recurse, since a pipeline carries no triggers of its own.
 - Wiring is conveyed by **containment** — a resource nested under a node is wired to that node — so no separate back-reference field is emitted.
@@ -27,4 +28,4 @@ We will embed each referenced resource **inline** under a named key on the node 
 
 - Flat lookup tables keyed by id — rejected: forces the consumer to dereference and reads poorly in isolation.
 - JSON:API compound document — rejected: verbose envelope and `{type, id}` linkage boilerplate for a read-only projection.
-- A true provider+model merge into one object — rejected: implies an ownership that does not exist and diverges from the likely write shape (two separate references).
+- Nesting provider and model as two distinct sub-objects (`{ provider, model }`) — rejected: the pair is selected as one in the UI and inspect is a projection ([ADR-0022](0022-inspect-denormalized-readonly-projection.md)), so a flat object better matches how a consumer reasons about effective config; the model's DB id carries no external meaning.

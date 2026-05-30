@@ -42,7 +42,7 @@ Four decisions shape the work:
 The endpoint itself — `GET /api/v2/chatbots/{id}/inspect/` — returns a **denormalized,
 read-only projection**: a digested pipeline graph, per-node detail, an experiment-level events
 block, and an inline, denormalized tree where each node and event embeds the resources it references
-(provider + model pairs grouped under a concept key), with all credentials excluded.
+(provider + model pairs flattened into one object), with all credentials excluded.
 
 ## Context
 
@@ -282,13 +282,17 @@ per the read-constrains-write risk above.
 embedded resource carries its numeric DB id as `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)),
 so a consumer that wants to deduplicate can build its own map keyed by `id`.
 
-A **provider + model pair is grouped under a single concept key**: a node carries `llm = { provider,
-model }` rather than sibling `llm_provider` / `llm_provider_model`, and the same grouping applies to
-voice (`voice = { provider, voice }`) and an indexed collection's embedding
-(`embedding = { provider, model }` — media collections have no embedding).
-Provider and model are independent catalog rows (joined by `type`, not a FK), so they stay as
-distinct sub-objects — grouped for readability, not merged into one (which would imply an ownership
-that doesn't exist and diverge from the likely write shape of two separate references).
+A **provider + model pair is flattened into a single object** under one concept key: a node carries
+`llm = { provider_id, provider_name, type, model, max_token_limit, deprecated }` rather than sibling
+`llm_provider` / `llm_provider_model` or nested sub-objects. The same flattening applies to `voice`
+(`{ provider_id, provider_name, type, voice_name, language, … }`) and an indexed collection's
+`embedding` (`{ provider_id, provider_name, type, model }` — media collections have no embedding).
+Although provider and model are separate DB rows (joined by `type`, not a FK), they are **selected
+together** — the node's LLM field is a single combined provider+model widget — and a model is
+uniquely identified by type+name+token_limit, so its DB id carries no external meaning. Because
+`/inspect/` is a projection ([D5](#d5-inspect-is-a-denormalized-read-only-projection-on-a-distinct-url)),
+not a round-trippable representation, the read shape is optimized for the consumer's view of
+*effective config* rather than mirroring the two-FK write/DB structure.
 
 **Context.** The primary consumer is an LLM-agent verifier reasoning over the JSON. Locality —
 having a node's resources right there beside it — matters more for that consumer than wire-size
@@ -457,7 +461,7 @@ Flagged explicitly so it reads as a conscious decision, not an accident, in secu
 Inline nested tree ([D6](#d6-inline-nested-resource-tree-denormalized)). Each node and event embeds
 the resources it references. The chatbot's own `id` is its existing UUID; embedded resources carry
 their numeric DB `id` (no new public IDs — [D4](#d4-no-new-public-ids-reuse-existing-identifiers)).
-Provider + model pairs are grouped under a concept key. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
+Provider + model pairs are flattened into a single object. Credentials are excluded ([D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-lists)).
 
 A **Pipeline** has a single canonical serialized shape — `{ id, name, version_number, graph, nodes:[…] }`
 (`graph` = topology, `nodes` = per-node detail with resources embedded) — used **identically**
@@ -491,9 +495,9 @@ shape, one parser.
     "consent_form":    { "id": 3, "name": "Default", "consent_text": "…", "capture_identifier": true },
     "pre_survey":      null,
     "post_survey":     { "id": 9, "name": "CSAT", "url": "https://…" },
-    "voice": {                            // provider + voice grouped (D6)
-      "provider": { "id": 4, "type": "elevenlabs", "name": "ElevenLabs Prod" },
-      "voice":    { "id": 12, "name": "Rachel", "language": "English" }
+    "voice": {                            // provider + synthetic voice flattened (D6)
+      "provider_id": 4, "provider_name": "ElevenLabs Prod", "type": "elevenlabs",
+      "voice_name": "Rachel", "language": "English", "neural": true
     },
     "trace_provider":  null,
 
@@ -532,9 +536,9 @@ shape, one parser.
           "tools": []
         },
         // reference fields resolved + embedded inline via the signal registry (D7); null if unset
-        "llm": {                          // provider + model grouped (D6)
-          "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
-          "model":    { "id": 18, "type": "openai", "name": "gpt-4o", "max_token_limit": 128000, "deprecated": false }
+        "llm": {                          // provider + model flattened into one object (D6)
+          "provider_id": 5, "provider_name": "Prod OpenAI", "type": "openai",
+          "model": "gpt-4o", "max_token_limit": 128000, "deprecated": false
         },
         "source_material": { "id": 7, "topic": "Returns policy", "material": "# Returns\n…" },
         "media_collection": {             // node field collection_id ("Media") — files, NO embedding provider
@@ -546,9 +550,9 @@ shape, one parser.
         "indexed_collections": [          // node field collection_index_ids (list) — RAG indexes, WITH embedding
           {
             "id": 33, "name": "Policy index",
-            "embedding": {                // embedding provider+model grouped (D6); from the collection's llm_provider (D3 rename)
-              "provider": { "id": 5, "type": "openai", "name": "Prod OpenAI" },
-              "model":    { "id": 7, "type": "openai", "model_name": "text-embedding-3-small" }
+            "embedding": {                // provider+model flattened (D6); provider from the collection's llm_provider (D3 rename)
+              "provider_id": 5, "provider_name": "Prod OpenAI", "type": "openai",
+              "model": "text-embedding-3-small"
             },
             "files": [
               { "id": 201, "name": "policy.pdf", "content_type": "application/pdf", "content_size": 40112, "purpose": "collection" }
@@ -612,7 +616,8 @@ to deduplicate index by `id`.
 The walker is signal-driven ([D7](#d7-signal-driven-node-walker-with-a-completeness-guard)); this
 table is illustrative, not hand-maintained in code. Derived from `apps/pipelines/nodes/nodes.py` and
 `apps/pipelines/nodes/mixins.py`. These are the *source* fields the walker reads; in the payload a
-`llm_provider_id` + `llm_provider_model_id` pair renders grouped under `llm = { provider, model }`
+`llm_provider_id` + `llm_provider_model_id` pair renders **flattened** under
+`llm = { provider_id, provider_name, type, model, … }`
 ([D6](#d6-inline-nested-resource-tree-denormalized)). Note `llm_provider_id`/`llm_provider_model_id`
 are matched by the `llm_provider_model` *widget* (no `options_source`); the rest by their
 `options_source` value. Payload renames (D3): `collection_id` → `media_collection` (files, no
