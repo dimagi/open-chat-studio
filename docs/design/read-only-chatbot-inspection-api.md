@@ -496,7 +496,6 @@ shape, one parser.
       "voice":    { "id": 12, "name": "Rachel", "language": "English" }
     },
     "trace_provider":  null,
-    "safety_layers":   [],
 
     "channels": [                         // ExperimentChannel — secrets stripped (resolved Q8)
       { "platform": "telegram", "name": "Support TG",
