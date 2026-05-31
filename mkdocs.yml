@@ -91,7 +91,7 @@ nav:
       - 0018 Scope team querysets by FK identity, not slug join: adr/0018-scope-team-querysets-by-fk-not-slug-join.md
   - Developer Guides:
     - Processes:
-      - Claude Code Agents: developer_guides/igor.md
+      - Claude Code Agents: developer_guides/claude_code_agent.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Deployment: developer_guides/deployment.md
