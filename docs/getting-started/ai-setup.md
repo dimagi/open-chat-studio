@@ -22,7 +22,7 @@ This project's AI workflow is built around [Claude Code](https://docs.anthropic.
 
 ## Project AI Instructions
 
-The project's [`AGENTS.md`](../../AGENTS.md) file provides project-specific context that guides AI agent behavior. It covers project architecture, conventions, key file paths, and which docs to consult for specific features. This file is loaded automatically — you do not need to reference it manually.
+The project's `AGENTS.md` file provides project-specific context that guides AI agent behavior. It covers project architecture, conventions, key file paths, and which docs to consult for specific features. This file is loaded automatically — you do not need to reference it manually.
 
 `CLAUDE.md` is a one-line file that points to `AGENTS.md`. Other tools read `AGENTS.md` directly (see [Other Tools](#other-tools) below).
 

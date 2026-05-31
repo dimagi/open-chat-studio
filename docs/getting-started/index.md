@@ -15,4 +15,4 @@ This section will help you set up your development environment and get started w
 
 Once your environment is running, see [Common Development Tasks](common-tasks.md) for everyday commands covering tests, linting, and dependency management.
 
-Consider using [Claude Assisted Development](../developer_guides/ai_development.md) for this project. See [AI Tool setup](./ai-setup.md) instructions.
+Consider using [AI Assisted Development](../developer_guides/ai_development.md) for this project. See [AI Tool setup](./ai-setup.md) instructions.
