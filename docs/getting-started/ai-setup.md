@@ -2,6 +2,14 @@
 
 New to AI-assisted development on this project? Complete this setup first, then follow the [AI development workflow](../developer_guides/ai_development.md).
 
+## Do I need this?
+
+| Situation | Action |
+|-----------|--------|
+| You plan to use Claude Code or another AI coding agent for feature work | **Required** — complete this page, then follow the [AI development workflow](../developer_guides/ai_development.md) |
+| You want occasional AI assistance but won't adopt the full workflow | **Optional** — at minimum, install Claude Code; skip the Dimagi Toolkit |
+| You're getting the project running, fixing a quick bug, or don't plan to use AI tooling | **Skip for now** — nothing here is needed to run the project or contribute code |
+
 ## Claude Code
 
 This project's AI workflow is built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
