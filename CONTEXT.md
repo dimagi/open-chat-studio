@@ -18,7 +18,7 @@ _Avoid_: "the Experiment", when what you mean is a particular version row.
 The single editable draft of a Chatbot — the head of the family, where edits land before they're promoted into a snapshot. Identified in code by `working_version_id IS NULL`.
 
 **Published Version**:
-The Chatbot (or Pipeline) Version that external channels and APIs serve. Exactly one per family. A new snapshot becomes the Published Version automatically when created; the previous one is demoted.
+The Chatbot (or Pipeline) Version that external channels and APIs serve. Exactly one per family. Becoming the Published Version is a **choice made at snapshot time** (`make_default` on `create_new_version`), not an automatic consequence of snapshotting — the one exception is the very first version, which is published automatically. When a new snapshot is published, the previous Published Version is demoted. So "snapshot" and "publish" are separable: a Working Version can be snapshotted into an immutable Chatbot Version *without* that version going live.
 _Avoid_: Default Version (the underlying field is `is_default_version`, but new writing should say Published Version to match the UI).
 
 **Pipeline**:
