@@ -99,6 +99,7 @@ nav:
       - 0026 Identify v2-exposed resources by database primary key: adr/0026-identify-resources-by-primary-key.md
       - 0027 Secrets exclusion via per-resource allowlist serializers: adr/0027-secrets-exclusion-via-allowlist-serializers.md
       - 0028 Inspect authorizes on chatbot view + team scope: adr/0028-inspect-authorization-team-scoped.md
+      - 0029 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0029-download-whatsapp-inbound-attachments-in-hydration-stage.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md

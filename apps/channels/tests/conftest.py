@@ -2,7 +2,9 @@ import hashlib
 
 import pytest
 
+from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProviderType
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
@@ -62,4 +64,24 @@ def meta_cloud_api_provider():
         extra_data={
             "verify_token_hash": hashlib.sha256(verify_token.encode()).hexdigest(),
         },
+    )
+
+
+@pytest.fixture()
+def turnio_whatsapp_channel(turn_io_provider):
+    return ExperimentChannelFactory.create(
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=turn_io_provider,
+        experiment__team=turn_io_provider.team,
+        extra_data={"number": "+14155238886"},
+    )
+
+
+@pytest.fixture()
+def meta_cloud_api_whatsapp_channel(meta_cloud_api_provider):
+    return ExperimentChannelFactory.create(
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=meta_cloud_api_provider,
+        experiment__team=meta_cloud_api_provider.team,
+        extra_data={"number": "+15551234567", "phone_number_id": "12345"},
     )

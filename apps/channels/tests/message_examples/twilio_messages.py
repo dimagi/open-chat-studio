@@ -14,17 +14,27 @@ def _text_message(to: str, from_: str):
         "AccountSid": "AAAAAAAAAAAAA",
         "From": from_,
         "ApiVersion": "2010-04-01",
+        "MessageType": "text",
     }
 
 
 def _image_message(message: dict):
+    message["MessageType"] = "image"
     message["MediaContentType0"] = "image/png"
     message["MediaUrl0"] = "http://example.com/media"
     return message
 
 
 def _audio_message(message: dict):
+    message["MessageType"] = "audio"
     message["MediaContentType0"] = "audio/ogg"
+    message["MediaUrl0"] = "http://example.com/media"
+    return message
+
+
+def _document_message(message: dict, mime_type: str = "application/pdf"):
+    message["MessageType"] = "document"
+    message["MediaContentType0"] = mime_type
     message["MediaUrl0"] = "http://example.com/media"
     return message
 
@@ -44,6 +54,10 @@ class Whatsapp:
     @staticmethod
     def audio_message():
         return _audio_message(Whatsapp.text_message())
+
+    @staticmethod
+    def document_message(mime_type: str = "application/pdf"):
+        return _document_message(Whatsapp.text_message(), mime_type=mime_type)
 
 
 class Messenger:
