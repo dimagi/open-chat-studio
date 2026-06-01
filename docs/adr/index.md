@@ -43,6 +43,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0021](0021-rename-experiment-to-chatbot-in-v2.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Rename experiment to chatbot in the v2 API |
 | [0022](0022-inspect-denormalized-readonly-projection.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | inspect as a denormalized read-only projection |
 | [0023](0023-inline-nested-resource-tree.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inline nested resource tree for the inspect payload |
-| [0024](0024-defer-public-ids-to-write-api.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Defer stable public IDs to a future write API |
+| [0024](0024-identify-resources-by-primary-key.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Identify v2-exposed resources by database primary key |
 | [0025](0025-secrets-exclusion-via-allowlist-serializers.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Secrets exclusion via per-resource allowlist serializers |
 | [0026](0026-inspect-authorization-team-scoped.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inspect authorizes on chatbot view + team scope, not per-resource permissions |

@@ -155,7 +155,7 @@ those, not this section). The write-ups are retained here as design narrative.
 | D1 — invest in API, not a read-only role | [ADR-0019](../adr/0019-invest-in-api-surface-not-readonly-role.md) | |
 | D2 — URL-path versioning, v1 frozen / v2 new | [ADR-0020](../adr/0020-url-path-api-versioning.md) | |
 | D3 — rename experiment → chatbot in v2 | [ADR-0021](../adr/0021-rename-experiment-to-chatbot-in-v2.md) | extends ADR-0020 |
-| D4 — no new public IDs (defer to write API) | [ADR-0024](../adr/0024-defer-public-ids-to-write-api.md) | extends ADR-0023 |
+| D4 — no UUID public IDs; identify by primary key | [ADR-0024](../adr/0024-identify-resources-by-primary-key.md) | extends ADR-0023 |
 | D5 — `/inspect/` denormalized read-only projection | [ADR-0022](../adr/0022-inspect-denormalized-readonly-projection.md) | extends ADR-0020 |
 | D6 — inline nested resource tree | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folds D9 (events block) and D10 (implicit wiring) |
 | D7 — signal-driven node walker + completeness guard | *(this doc only)* | implementation-specific; not an ADR |

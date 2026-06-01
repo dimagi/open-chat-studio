@@ -94,7 +94,7 @@ nav:
       - 0021 Rename experiment to chatbot in the v2 API: adr/0021-rename-experiment-to-chatbot-in-v2.md
       - 0022 inspect as a denormalized read-only projection: adr/0022-inspect-denormalized-readonly-projection.md
       - 0023 Inline nested resource tree for the inspect payload: adr/0023-inline-nested-resource-tree.md
-      - 0024 Defer stable public IDs to a future write API: adr/0024-defer-public-ids-to-write-api.md
+      - 0024 Identify v2-exposed resources by database primary key: adr/0024-identify-resources-by-primary-key.md
       - 0025 Secrets exclusion via per-resource allowlist serializers: adr/0025-secrets-exclusion-via-allowlist-serializers.md
       - 0026 Inspect authorizes on chatbot view + team scope: adr/0026-inspect-authorization-team-scoped.md
   - Developer Guides:
