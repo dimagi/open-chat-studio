@@ -1,13 +1,13 @@
-# ADR-0021: Rename experiment to chatbot in the v2 API
+# ADR-0023: Rename experiment to chatbot in the v2 API
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
-<p class="adr-meta">Extends: <a href="0020-url-path-api-versioning.md">ADR-0020</a></p>
+<p class="adr-meta">Extends: <a href="0022-url-path-api-versioning.md">ADR-0022</a></p>
 
 ## Context
 
-"Chatbot" is the user-facing domain term; "Experiment" is the legacy internal model name. The external API is mid-migration and inconsistent: OAuth scopes and OpenAPI summaries already say "chatbot", but URLs, operation IDs, and most serializer fields still say "experiment". The v2 boundary from [ADR-0020](0020-url-path-api-versioning.md) is a clean point to finish the rename without disturbing existing callers.
+"Chatbot" is the user-facing domain term; "Experiment" is the legacy internal model name. The external API is mid-migration and inconsistent: OAuth scopes and OpenAPI summaries already say "chatbot", but URLs, operation IDs, and most serializer fields still say "experiment". The v2 boundary from [ADR-0022](0022-url-path-api-versioning.md) is a clean point to finish the rename without disturbing existing callers.
 
 ## Decision
 
@@ -20,5 +20,5 @@ We will use `chatbot` throughout v2: the `/api/v2/chatbots/` route, `chatbot_*` 
 
 ## Alternatives considered
 
-- Rename in place with no version boundary — rejected: breaks existing callers (see [ADR-0020](0020-url-path-api-versioning.md)).
+- Rename in place with no version boundary — rejected: breaks existing callers (see [ADR-0022](0022-url-path-api-versioning.md)).
 - Leave the experiment/chatbot inconsistency in v2 — rejected: API names ossify once consumed, so a half-done rename becomes permanent.

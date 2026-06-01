@@ -1,4 +1,4 @@
-# ADR-0019: Invest in API surface, not a read-only role
+# ADR-0021: Invest in API surface, not a read-only role
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 

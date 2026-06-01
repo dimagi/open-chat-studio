@@ -1,13 +1,13 @@
-# ADR-0026: Inspect authorizes on chatbot view + team scope, not per-resource permissions
+# ADR-0028: Inspect authorizes on chatbot view + team scope, not per-resource permissions
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
-<p class="adr-meta">Extends: <a href="0019-invest-in-api-surface-not-readonly-role.md">ADR-0019</a>, <a href="0022-inspect-denormalized-readonly-projection.md">ADR-0022</a></p>
+<p class="adr-meta">Extends: <a href="0021-invest-in-api-surface-not-readonly-role.md">ADR-0021</a>, <a href="0024-inspect-denormalized-readonly-projection.md">ADR-0024</a></p>
 
 ## Context
 
-The inspect projection ([ADR-0022](0022-inspect-denormalized-readonly-projection.md)) embeds resources owned by many apps — collections, files, custom actions, providers, assistants, scheduled messages — each of which has its own model-level view permission. The endpoint reuses the chatbot view permission and a team-scoped `read_only` key ([ADR-0019](0019-invest-in-api-surface-not-readonly-role.md)). This raises the question of whether inspect must also enforce each embedded resource's own view permission.
+The inspect projection ([ADR-0024](0024-inspect-denormalized-readonly-projection.md)) embeds resources owned by many apps — collections, files, custom actions, providers, assistants, scheduled messages — each of which has its own model-level view permission. The endpoint reuses the chatbot view permission and a team-scoped `read_only` key ([ADR-0021](0021-invest-in-api-surface-not-readonly-role.md)). This raises the question of whether inspect must also enforce each embedded resource's own view permission.
 
 ## Decision
 

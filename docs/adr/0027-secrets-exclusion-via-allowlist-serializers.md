@@ -1,4 +1,4 @@
-# ADR-0025: Secrets exclusion via per-resource allowlist serializers
+# ADR-0027: Secrets exclusion via per-resource allowlist serializers
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 

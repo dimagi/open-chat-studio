@@ -10,7 +10,7 @@ status: extracted
 > (A public-ID migration, [#3465](https://github.com/dimagi/open-chat-studio/issues/3465), was
 > originally a prerequisite but has been dropped — see [D4](#d4-no-new-public-ids-reuse-existing-identifiers).)
 > `status: extracted` — the architectural decisions are now canonically recorded as
-> [ADR-0019 through ADR-0026](#decisions) (immutable; cite those). This document is retained as the
+> [ADR-0021 through ADR-0028](#decisions) (immutable; cite those). This document is retained as the
 > **implementation companion**: the payload shape, node-reference mapping, secrets-exclusion audit,
 > versioning rules, implementation plan, and test plan are the HOW that the ADRs deliberately omit.
 > Where this doc and an ADR appear to conflict, the ADR is authoritative on the *decision*.
@@ -152,17 +152,17 @@ those, not this section). The write-ups are retained here as design narrative.
 
 | Decision | ADR | Notes |
 |---|---|---|
-| D1 — invest in API, not a read-only role | [ADR-0019](../adr/0019-invest-in-api-surface-not-readonly-role.md) | |
-| D2 — URL-path versioning, v1 frozen / v2 new | [ADR-0020](../adr/0020-url-path-api-versioning.md) | |
-| D3 — rename experiment → chatbot in v2 | [ADR-0021](../adr/0021-rename-experiment-to-chatbot-in-v2.md) | extends ADR-0020 |
-| D4 — no UUID public IDs; identify by primary key | [ADR-0024](../adr/0024-identify-resources-by-primary-key.md) | extends ADR-0026 |
-| D5 — `/inspect/` denormalized read-only projection | [ADR-0022](../adr/0022-inspect-denormalized-readonly-projection.md) | extends ADR-0020 |
-| D6 — inline nested resource tree | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folds D9 (events block) and D10 (implicit wiring) |
+| D1 — invest in API, not a read-only role | [ADR-0021](../adr/0021-invest-in-api-surface-not-readonly-role.md) | |
+| D2 — URL-path versioning, v1 frozen / v2 new | [ADR-0022](../adr/0022-url-path-api-versioning.md) | |
+| D3 — rename experiment → chatbot in v2 | [ADR-0023](../adr/0023-rename-experiment-to-chatbot-in-v2.md) | extends ADR-0022 |
+| D4 — no UUID public IDs; identify by primary key | [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) | extends ADR-0028 |
+| D5 — `/inspect/` denormalized read-only projection | [ADR-0024](../adr/0024-inspect-denormalized-readonly-projection.md) | extends ADR-0022 |
+| D6 — inline nested resource tree | [ADR-0025](../adr/0025-inline-nested-resource-tree.md) | folds D9 (events block) and D10 (implicit wiring) |
 | D7 — signal-driven node walker + completeness guard | *(this doc only)* | implementation-specific; not an ADR |
-| D8 — secrets exclusion via allowlist serializers | [ADR-0025](../adr/0025-secrets-exclusion-via-allowlist-serializers.md) | folds resolved Q8 (channels). Q7 (api_schema digest) is a size/relevance trim, not a secrets measure — stays here. |
-| D9 — experiment-level events block | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folded into D6 |
-| D10 — wiring implicit in nesting | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folded into D6 |
-| Q1 — inspect authorization (team-scoped, no per-resource checks) | [ADR-0026](../adr/0026-inspect-authorization-team-scoped.md) | extends ADR-0019, ADR-0022 |
+| D8 — secrets exclusion via allowlist serializers | [ADR-0027](../adr/0027-secrets-exclusion-via-allowlist-serializers.md) | folds resolved Q8 (channels). Q7 (api_schema digest) is a size/relevance trim, not a secrets measure — stays here. |
+| D9 — experiment-level events block | [ADR-0025](../adr/0025-inline-nested-resource-tree.md) | folded into D6 |
+| D10 — wiring implicit in nesting | [ADR-0025](../adr/0025-inline-nested-resource-tree.md) | folded into D6 |
+| Q1 — inspect authorization (team-scoped, no per-resource checks) | [ADR-0028](../adr/0028-inspect-authorization-team-scoped.md) | extends ADR-0021, ADR-0024 |
 
 Each decision below is written to stand on its own.
 
@@ -244,7 +244,7 @@ A non-guessable id only buys security where a resource is reachable **unauthenti
 `Experiment`/`Participant`/`ExperimentSession` carry opaque/UUID identifiers precisely because they
 appear in public URLs (the web widget, the OpenAI-compat endpoint), where sequential integers would
 invite enumeration. The inspect-embedded resources are reachable only through the authenticated,
-team-scoped endpoint ([Q1 / ADR-0026](#11-resolved-questions)), so a caller already sees only its own
+team-scoped endpoint ([Q1 / ADR-0028](#11-resolved-questions)), so a caller already sees only its own
 team's resources — non-guessability adds little. That removes the main remaining argument for the
 migration, leaving only speculative write-API forward-compat — not enough to justify a 21-model
 migration as a hard blocker.

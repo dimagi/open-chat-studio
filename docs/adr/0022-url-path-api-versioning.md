@@ -1,4 +1,4 @@
-# ADR-0020: URL-path API versioning, v1 frozen / v2 new
+# ADR-0022: URL-path API versioning, v1 frozen / v2 new
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 
@@ -6,7 +6,7 @@
 
 ## Context
 
-The public API has no versioning. We need to rename the external surface (see [ADR-0021](0021-rename-experiment-to-chatbot-in-v2.md)) and add new endpoints, but doing either in place would break existing callers — and request logs confirm the current `/api/experiments/` surface has real external consumers. API shapes ossify once consumed, so this is the moment to introduce a version boundary.
+The public API has no versioning. We need to rename the external surface (see [ADR-0023](0023-rename-experiment-to-chatbot-in-v2.md)) and add new endpoints, but doing either in place would break existing callers — and request logs confirm the current `/api/experiments/` surface has real external consumers. API shapes ossify once consumed, so this is the moment to introduce a version boundary.
 
 ## Decision
 

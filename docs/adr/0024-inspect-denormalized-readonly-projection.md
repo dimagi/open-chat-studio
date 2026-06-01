@@ -1,9 +1,9 @@
-# ADR-0022: `/inspect/` as a denormalized read-only projection on a distinct URL
+# ADR-0024: `/inspect/` as a denormalized read-only projection on a distinct URL
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
-<p class="adr-meta">Extends: <a href="0020-url-path-api-versioning.md">ADR-0020</a></p>
+<p class="adr-meta">Extends: <a href="0022-url-path-api-versioning.md">ADR-0022</a></p>
 
 ## Context
 
