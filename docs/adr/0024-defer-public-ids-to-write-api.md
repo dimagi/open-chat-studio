@@ -7,7 +7,9 @@
 
 ## Context
 
-An earlier plan added a `public_id` UUID to the ~21 resource models the v2 API exposes, so nested *references* in the inspect payload could be dereferenced by a stable, environment-portable key (tracked in a separate prerequisite issue). The switch to an inline nested tree ([ADR-0023](0023-inline-nested-resource-tree.md)) removed that need: the consumer never addresses a resource by id during a read. What remained was speculative forward-compatibility with a future write API and a mild "don't leak sequential primary keys" concern — not enough to justify a large migration as a blocker.
+An earlier plan added a `public_id` UUID to the ~21 resource models the v2 API exposes, so nested *references* in the inspect payload could be dereferenced by a stable, environment-portable key (tracked in a separate prerequisite issue). The switch to an inline nested tree ([ADR-0023](0023-inline-nested-resource-tree.md)) removed that need: the consumer never addresses a resource by id during a read. What remained was speculative forward-compatibility with a future write API.
+
+A non-guessable identifier carries a security benefit only where a resource is reachable without authentication. `Experiment`, `Participant`, and `ExperimentSession` have UUID/opaque identifiers precisely because they appear in public, unauthenticated URLs (the web widget, the OpenAI-compatible endpoint), where a sequential integer would invite enumeration. The resources the inspect payload embeds are reachable only through the authenticated, team-scoped endpoint ([ADR-0026](0026-inspect-authorization-team-scoped.md)), so a caller can already see only its own team's resources — a non-guessable id adds little there. That removes the main remaining argument for the migration.
 
 ## Decision
 
@@ -16,7 +18,7 @@ We will not add `public_id` fields to the v2-exposed resource models. The chatbo
 ## Consequences
 
 - The inspect endpoint ships without a large migration — no shared mixin, no backfills, no per-version UUID reset in versioning logic.
-- The read payload exposes numeric database primary keys for nested resources (judged acceptable for a team-scoped, authenticated, read-only endpoint per [ADR-0026](0026-inspect-authorization-team-scoped.md)), and those ids are not portable across environments.
+- The read payload exposes numeric database primary keys for nested resources. This is acceptable because the endpoint is authenticated and team-scoped ([ADR-0026](0026-inspect-authorization-team-scoped.md)): unlike the public-facing chatbot identifier, these ids are never exposed unauthenticated, so their guessability is not an enumeration risk. They are, however, not portable across environments.
 - A later write API inherits the obligation to add stable IDs where it needs them, rather than the read API carrying them speculatively.
 
 ## Alternatives considered

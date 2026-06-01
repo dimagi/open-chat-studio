@@ -238,17 +238,25 @@ resources carry their numeric DB primary key as `id`. This eliminates the public
 could be dereferenced by a stable, environment-portable key. The switch to an inline nested tree
 ([D6](#d6-inline-nested-resource-tree-denormalized)) removed that need entirely — the consumer never
 addresses a resource by ID for reads; the resource is embedded right where it's used. What remained
-was speculative write-API forward-compat and a mild "don't leak sequential PKs" concern — not enough
-to justify a 21-model migration as a hard blocker on the endpoint.
+was speculative write-API forward-compat.
+
+A non-guessable id only buys security where a resource is reachable **unauthenticated**.
+`Experiment`/`Participant`/`ExperimentSession` carry opaque/UUID identifiers precisely because they
+appear in public URLs (the web widget, the OpenAI-compat endpoint), where sequential integers would
+invite enumeration. The inspect-embedded resources are reachable only through the authenticated,
+team-scoped endpoint ([Q1 / ADR-0026](#11-resolved-questions)), so a caller already sees only its own
+team's resources — non-guessability adds little. That removes the main remaining argument for the
+migration, leaving only speculative write-API forward-compat — not enough to justify a 21-model
+migration as a hard blocker.
 
 **Consequences.** Inspect ships without waiting on a large migration; no `PublicIdMixin`, no
 backfills, no per-version UUID reset in `create_new_version`. Cost: the read payload exposes numeric
-DB primary keys for nested resources (an information-leak the team judged acceptable for a
-team-scoped, read-only, authenticated endpoint), and numeric IDs are not portable across
-environments. If/when a write API is specced, it can introduce stable external IDs **scoped to the
-specific resources it accepts as references** — a targeted addition driven by real need rather than
-a speculative sweep. The chatbot's own identifier stays the existing UUID, so the top-level handle is
-already stable.
+DB primary keys for nested resources — acceptable because, unlike the public-facing chatbot
+identifier, these ids are never exposed unauthenticated, so their guessability is not an enumeration
+risk; they are, however, not portable across environments. If/when a write API is specced, it can
+introduce stable external IDs **scoped to the specific resources it accepts as references** — a
+targeted addition driven by real need rather than a speculative sweep. The chatbot's own identifier
+stays the existing UUID, so the top-level handle is already stable.
 
 **Alternatives considered.** Add `public_id` to all v2-exposed models up front (the original D4) —
 rejected: the inline tree removed the dereferencing rationale, leaving only speculative
