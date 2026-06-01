@@ -93,7 +93,7 @@ nav:
       - 0020 Delta evaluation runs scoped to newly appended messages: adr/0020-delta-evaluation-runs-scoped-to-appended-messages.md
   - Developer Guides:
     - Processes:
-      - Claude Code Agents: developer_guides/igor.md
+      - Claude Code Agents: developer_guides/claude_code_agent.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Deployment: developer_guides/deployment.md
