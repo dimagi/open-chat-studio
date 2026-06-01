@@ -498,8 +498,7 @@ def create_dataset_from_csv_task(
 
             # Bulk create messages
             progress_recorder.set_progress(95, 100, "Creating messages...")
-            created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
-            dataset.messages.add(*created_messages)
+            created_messages, _ = dataset.add_messages(evaluation_messages)
 
             # Mark as completed
             dataset.status = DatasetCreationStatus.COMPLETED
@@ -878,33 +877,7 @@ def create_dataset_from_session_messages_task(
                 40, 100, f"Found {len(evaluation_messages)} messages, checking for duplicates..."
             )
 
-            # Get existing chat message pairs to avoid duplicates
-            existing_chat_message_pairs = set(
-                dataset.messages.filter(
-                    input_chat_message_id__isnull=False,
-                    expected_output_chat_message_id__isnull=False,
-                ).values_list("input_chat_message_id", "expected_output_chat_message_id")
-            )
-
-            # Filter out duplicates based on ChatMessage IDs
-            messages_to_add = []
-            for msg in evaluation_messages:
-                chat_pair = (msg.input_chat_message_id, msg.expected_output_chat_message_id)
-                if chat_pair not in existing_chat_message_pairs:
-                    messages_to_add.append(msg)
-                    existing_chat_message_pairs.add(chat_pair)
-
-            if not messages_to_add:
-                dataset.status = DatasetCreationStatus.COMPLETED
-                dataset.job_id = ""
-                dataset.save(update_fields=["status", "job_id"])
-                progress_recorder.set_progress(100, 100, "Clone complete - no new messages to add")
-                return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
-
-            progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new messages...")
-
-            created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
-            dataset.messages.add(*created_messages)
+            created_messages, duplicates_skipped = dataset.add_messages(evaluation_messages)
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -912,8 +885,11 @@ def create_dataset_from_session_messages_task(
 
             progress_recorder.set_progress(100, 100, "Clone complete")
 
-            duplicates_skipped = len(evaluation_messages) - len(messages_to_add)
-            return {"success": True, "created_count": len(created_messages), "duplicates_skipped": duplicates_skipped}
+            return {
+                "success": True,
+                "created_count": len(created_messages),
+                "duplicates_skipped": duplicates_skipped,
+            }
 
     except Exception as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
@@ -956,35 +932,19 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
                 40, 100, f"Found {len(evaluation_messages)} sessions, checking for duplicates..."
             )
 
-            with transaction.atomic():
-                # Re-read existing session PKs inside the transaction for consistency
-                existing_session_pks = set(
-                    dataset.messages.select_for_update()
-                    .filter(session__isnull=False)
-                    .values_list("session_id", flat=True)
-                )
+            created_messages, duplicates_skipped = dataset.add_messages(evaluation_messages)
 
-                messages_to_add = [msg for msg in evaluation_messages if msg.session_id not in existing_session_pks]
-
-                if not messages_to_add:
-                    dataset.status = DatasetCreationStatus.COMPLETED
-                    dataset.job_id = ""
-                    dataset.save(update_fields=["status", "job_id"])
-                    progress_recorder.set_progress(100, 100, "Clone complete - no new sessions to add")
-                    return {"success": True, "created_count": 0, "duplicates_skipped": len(evaluation_messages)}
-
-                progress_recorder.set_progress(70, 100, f"Creating {len(messages_to_add)} new session messages...")
-
-                created_messages = EvaluationMessage.objects.bulk_create(messages_to_add)
-                dataset.messages.add(*created_messages)
-                dataset.status = DatasetCreationStatus.COMPLETED
-                dataset.job_id = ""
-                dataset.save(update_fields=["status", "job_id"])
+            dataset.status = DatasetCreationStatus.COMPLETED
+            dataset.job_id = ""
+            dataset.save(update_fields=["status", "job_id"])
 
             progress_recorder.set_progress(100, 100, "Clone complete")
 
-            duplicates_skipped = len(evaluation_messages) - len(messages_to_add)
-            return {"success": True, "created_count": len(created_messages), "duplicates_skipped": duplicates_skipped}
+            return {
+                "success": True,
+                "created_count": len(created_messages),
+                "duplicates_skipped": duplicates_skipped,
+            }
 
     except Exception as e:
         logger.exception(f"Error in session-mode clone task for dataset {dataset_id}: {e}")
