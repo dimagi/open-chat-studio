@@ -159,7 +159,7 @@ those, not this section). The write-ups are retained here as design narrative.
 | D5 — `/inspect/` denormalized read-only projection | [ADR-0022](../adr/0022-inspect-denormalized-readonly-projection.md) | extends ADR-0020 |
 | D6 — inline nested resource tree | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folds D9 (events block) and D10 (implicit wiring) |
 | D7 — signal-driven node walker + completeness guard | *(this doc only)* | implementation-specific; not an ADR |
-| D8 — secrets exclusion via allowlist serializers | [ADR-0025](../adr/0025-secrets-exclusion-via-allowlist-serializers.md) | folds resolved Q7 (api_schema digest) and Q8 (channels) |
+| D8 — secrets exclusion via allowlist serializers | [ADR-0025](../adr/0025-secrets-exclusion-via-allowlist-serializers.md) | folds resolved Q8 (channels). Q7 (api_schema digest) is a size/relevance trim, not a secrets measure — stays here. |
 | D9 — experiment-level events block | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folded into D6 |
 | D10 — wiring implicit in nesting | [ADR-0023](../adr/0023-inline-nested-resource-tree.md) | folded into D6 |
 | Q1 — inspect authorization (team-scoped, no per-resource checks) | [ADR-0026](../adr/0026-inspect-authorization-team-scoped.md) | extends ADR-0019, ADR-0022 |
@@ -368,8 +368,10 @@ signal registry + completeness guard achieves the same coverage without per-node
 
 **Decision.** Each resource type has its own `ModelSerializer` with an explicit `fields = [...]`
 list — never `__all__`. Encrypted `config` blobs (provider API keys, bot tokens, OAuth creds),
-signed file-storage URLs, and full `CustomAction.api_schema` are excluded; custom-action schemas
-are reduced to a path/operation-only digest. A registry maps resource type → serializer.
+signed file-storage URLs, and channel `extra_data` are excluded as secrets. A registry maps resource
+type → serializer. (Separately, some non-secret fields are trimmed for size/relevance — `File`
+`summary`/`metadata`, and `CustomAction.api_schema` reduced to a path/operation digest — but that is
+payload minimization, not secrecy.)
 
 **Context.** The endpoint is read by an external agent; a single leaked field is a credential
 breach. Adding a field to a model must never silently expose it.
@@ -660,7 +662,7 @@ Per [D8](#d8-secrets-exclusion-via-per-resource-serializers-with-explicit-field-
 | `Collection` | `apps/documents/models.py` | — (`openai_vector_store_id` **exposed** — opaque pointer, not a credential; see [resolved Q6](#11-resolved-questions)). Rendered two ways: `media_collection` (files, no embedding) and `indexed_collections` (RAG: embedding provider+model + files). |
 | `File` | `apps/files/models.py` | **`file` URL** — signed storage URL; never expose. Also **`summary` + `metadata` omitted** from the inline file object — not secrets, but dropped for size (duplicated under inline nesting; not needed for assertion #3). Embedded file is identity-lean: `id, name, content_type, content_size, external_source, external_id, purpose` (Q6). |
 | `OpenAiAssistant` | `apps/assistants/models.py` | — (`instructions` and `assistant_id` **exposed**; see [resolved Q4/Q5](#11-resolved-questions)) |
-| `CustomAction` | `apps/custom_actions/models.py` | **full `api_schema`** — reduce to path/operation digest (OpenAPI docs can embed `securitySchemes` with key examples). Embeds its `auth_provider` as `{id, type, name}` only (config excluded); `server_url` exposed (team-set config). |
+| `CustomAction` | `apps/custom_actions/models.py` | `api_schema` reduced to a path/operation digest — for **size/relevance**, not secrecy (OpenAPI schemas are public by design; `securitySchemes` only declares the auth mechanism, not credentials). Embeds its `auth_provider` as `{id, type, name}` only (config excluded); `server_url` exposed (team-set config). |
 | `ExperimentChannel` | `apps/channels/models.py` | **entire `extra_data`** — freeform auth material (`bot_token`, `widget_token`, …); allowlist `platform` + `name` only (resolved Q8) |
 
 The audit lives in code as a resource-type → serializer registry, never `__all__`.
@@ -780,7 +782,10 @@ All resolved 2026-05-29. Recorded here so the rationale survives into ADR extrac
 6. **`Collection.openai_vector_store_id`** → **expose.** Treated as an opaque pointer rather than a
    credential. (Note: this went *against* the initial lean to exclude — recorded deliberately.)
 7. **`CustomAction.api_schema`** → **path/operation digest.** Strip to operation IDs, paths, and
-   summaries; never expose the raw schema (it can embed `securitySchemes` with key examples).
+   summaries — a **size/relevance** trim (the full OpenAPI doc is large and the verifier only needs
+   which operations exist), **not** a secrecy measure. OpenAPI schemas are public by design and
+   `securitySchemes` declares only the auth mechanism, not credentials, so there is no secret to
+   exclude here. (Exposing the full schema instead would be acceptable; the digest is just leaner.)
 8. **Channels** → **include, explicit allowlist (not a denylist).** Surface `ExperimentChannel`
    under the top-level `channels[]` with an explicit allowlist of `platform` + `name` + the embedded
    `messaging_provider`. **`extra_data` is not exposed at all** — it is a freeform JSONField holding

@@ -6,11 +6,11 @@
 
 ## Context
 
-The inspect endpoint is read by an external agent and aggregates resources drawn from many apps. A single leaked field is a credential breach. The resource models hold sensitive material: encrypted provider `config` blobs (API keys, bot tokens, OAuth credentials), signed file-storage URLs, freeform channel authorization blobs, and custom-action OpenAPI schemas that can embed `securitySchemes` examples.
+The inspect endpoint is read by an external agent and aggregates resources drawn from many apps. A single leaked field is a credential breach. The resource models hold sensitive material: encrypted provider `config` blobs (API keys, bot tokens, OAuth credentials), signed file-storage URLs, and freeform channel authorization blobs (`extra_data`).
 
 ## Decision
 
-We will serialize each resource through its own serializer with an **explicit allowlist** of fields — never `__all__` and never a denylist. Concretely: encrypted provider `config`, signed file-storage URLs, and channel `extra_data` are excluded outright; a custom action's OpenAPI schema is reduced to a path/operation digest; a custom action's auth provider is surfaced as name and type only. Adding a field to a model never exposes it by default. A test asserts that excluded keys (such as `config`) appear nowhere in the response payload.
+We will serialize each resource through its own serializer with an **explicit allowlist** of fields — never `__all__` and never a denylist. Concretely: encrypted provider `config`, signed file-storage URLs, and channel `extra_data` are excluded outright; a custom action's auth provider is surfaced as name and type only. Adding a field to a model never exposes it by default. A test asserts that excluded keys (such as `config`) appear nowhere in the response payload. (Non-secret fields may still be trimmed for size or relevance — e.g. a custom action's OpenAPI schema is reduced to a path/operation digest — but that is a payload-minimization choice, not a secrets measure; OpenAPI schemas are public by design.)
 
 ## Consequences
 
