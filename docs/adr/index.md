@@ -38,4 +38,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0016](0016-authoritative-annotation-for-multi-reviewer-consensus.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Authoritative annotation for multi-reviewer consensus |
 | [0017](0017-eager-aggregation-of-submitted-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Eager per-submission aggregation into a per-queue record |
 | [0018](0018-scope-team-querysets-by-fk-not-slug-join.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Scope team querysets by FK identity, not slug join |
-| [0019](0019-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
+| [0019](0019-poll-source-experiments-to-auto-populate-eval-datasets.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Poll source experiments to auto-populate evaluation datasets |
+| [0020](0020-delta-evaluation-runs-scoped-to-appended-messages.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Delta evaluation runs scoped to newly appended messages |
+| [0021](0021-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |

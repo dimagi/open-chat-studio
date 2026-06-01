@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -257,6 +257,62 @@ class EvaluationDataset(BaseTeamModel):
     @property
     def is_pending(self):
         return self.status == DatasetCreationStatus.PENDING
+
+    def add_messages(self, messages: list[EvaluationMessage]) -> tuple[list[EvaluationMessage], int]:
+        """Persist and link messages to this dataset, skipping duplicate references.
+
+        Deduplication is mode-aware:
+        - message mode: a message duplicates another when they share the same
+          (input_chat_message_id, expected_output_chat_message_id) pair.
+        - session mode: a message duplicates another when they share the same session_id.
+
+        Messages without the relevant references (e.g. manual or CSV rows with null
+        FKs) are never treated as duplicates. The dataset row is locked for the
+        duration to serialise concurrent adds. Returns (created_messages, skipped_count).
+        """
+        with transaction.atomic():
+            # Lock the dataset row so concurrent add_messages calls can't both
+            # read "not a duplicate" and each insert the same reference.
+            EvaluationDataset.objects.select_for_update().get(pk=self.pk)
+
+            seen = self._existing_dedup_keys()
+            to_create = []
+            skipped = 0
+            for message in messages:
+                key = self._dedup_key(message)
+                if key is not None and key in seen:
+                    skipped += 1
+                    continue
+                if key is not None:
+                    seen.add(key)
+                to_create.append(message)
+
+            created = []
+            if to_create:
+                created = EvaluationMessage.objects.bulk_create(to_create)
+                self.messages.add(*created)
+            return created, skipped
+
+    def _dedup_key(self, message: EvaluationMessage) -> tuple | None:
+        """Return the dedup key for a message, or None if it can't be a duplicate."""
+        if self.evaluation_mode == EvaluationMode.SESSION:
+            if message.session_id is None:
+                return None
+            return ("session", message.session_id)
+        if message.input_chat_message_id is None or message.expected_output_chat_message_id is None:
+            return None
+        return ("pair", message.input_chat_message_id, message.expected_output_chat_message_id)
+
+    def _existing_dedup_keys(self) -> set[tuple]:
+        """Build the set of dedup keys already present in this dataset."""
+        if self.evaluation_mode == EvaluationMode.SESSION:
+            session_ids = self.messages.filter(session__isnull=False).values_list("session_id", flat=True)
+            return {("session", session_id) for session_id in session_ids}
+        pairs = self.messages.filter(
+            input_chat_message_id__isnull=False,
+            expected_output_chat_message_id__isnull=False,
+        ).values_list("input_chat_message_id", "expected_output_chat_message_id")
+        return {("pair", input_id, output_id) for input_id, output_id in pairs}
 
     class Meta:
         unique_together = ("name", "team")
