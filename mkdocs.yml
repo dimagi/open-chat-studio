@@ -89,6 +89,8 @@ nav:
       - 0016 Authoritative annotation for multi-reviewer consensus: adr/0016-authoritative-annotation-for-multi-reviewer-consensus.md
       - 0017 Eager per-submission aggregation into a per-queue record: adr/0017-eager-aggregation-of-submitted-annotations.md
       - 0018 Scope team querysets by FK identity, not slug join: adr/0018-scope-team-querysets-by-fk-not-slug-join.md
+      - 0019 Poll source experiments to auto-populate evaluation datasets: adr/0019-poll-source-experiments-to-auto-populate-eval-datasets.md
+      - 0020 Delta evaluation runs scoped to newly appended messages: adr/0020-delta-evaluation-runs-scoped-to-appended-messages.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/igor.md
