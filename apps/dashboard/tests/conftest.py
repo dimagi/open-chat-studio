@@ -40,7 +40,6 @@ def experiment(team, user):
         description="A test experiment for dashboard testing",
         team=team,
         owner=user,
-        prompt_text="Test prompt",
     )
 
 
@@ -153,7 +152,6 @@ def multiple_experiments(team, user):
             description=f"Test experiment {i + 1} for dashboard testing",
             team=team,
             owner=user,
-            prompt_text=f"Test prompt {i + 1}",
         )
         experiments.append(exp)
 

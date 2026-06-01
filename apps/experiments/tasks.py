@@ -137,9 +137,6 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     llm = with_llm_retry(llm)
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
-    input_formatter = data_dict["inputFormatter"]
-    if input_formatter:
-        last_user_message = input_formatter.format(input=last_user_message)
 
     # Get the response from the bot using the last message from the user and return it
     answer, input_tokens, output_tokens = conversation.predict(last_user_message)

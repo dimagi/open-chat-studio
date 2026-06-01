@@ -17,7 +17,6 @@ class TestExperimentChannelObjectManager(TestCase):
             owner=self.user,
             name="TestExperiment",
             description="test",
-            prompt_text="You are a helpful assistant",
             consent_form=ConsentForm.get_default(self.team),
         )
         self.bot_token = "123123123"

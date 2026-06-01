@@ -37,4 +37,5 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0015](0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Dedicated human_annotations app with queue/item/annotation/aggregate model |
 | [0016](0016-authoritative-annotation-for-multi-reviewer-consensus.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Authoritative annotation for multi-reviewer consensus |
 | [0017](0017-eager-aggregation-of-submitted-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Eager per-submission aggregation into a per-queue record |
-| [0018](0018-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
+| [0018](0018-scope-team-querysets-by-fk-not-slug-join.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Scope team querysets by FK identity, not slug join |
+| [0019](0019-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |

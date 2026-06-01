@@ -633,10 +633,6 @@ class TestExperimentModel:
         experiment = ExperimentFactory.create()
         team = experiment.team
         experiment.consent_form = ConsentForm.get_default(team)
-
-        # Setup Safety Layers
-        # Setup Source material
-        experiment.source_material = SourceMaterialFactory.create(team=team, material="material science is interesting")
         experiment.save()
 
         # Setup Static Trigger
@@ -685,7 +681,6 @@ class TestExperimentModel:
             new=new_version,
             expected_changed_fields=[
                 "id",
-                "source_material",
                 "public_id",
                 "working_version",
                 "version_number",
@@ -697,10 +692,8 @@ class TestExperimentModel:
                 "pipeline",
             ],
         )
-        self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
-        self._assert_attribute_duplicated("source_material", original_experiment, new_version)
         self._assert_attribute_duplicated(
             "consent_form", original_experiment, new_version, changed_fields_extra=["is_default"]
         )
@@ -731,36 +724,31 @@ class TestExperimentModel:
         new experiment version.
         """
         original_experiment = self._setup_original_experiment()
-        # Choose source_material as the attribute / related model
-        original_related_instance = original_experiment.source_material
+        # Choose consent_form as the attribute / related model
+        original_related_instance = original_experiment.consent_form
 
-        # The original related object has not versions, so we expeect a new version to be created
+        # The original related object has no versions, so we expect a new version to be created
         experiment_version1 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("source_material", experiment_version1)
+        original_experiment._copy_attr_to_new_version("consent_form", experiment_version1)
         assert original_related_instance.versions.count() == 1
-        assert experiment_version1.source_material != original_related_instance
-        assert experiment_version1.source_material.working_version == original_related_instance
+        assert experiment_version1.consent_form != original_related_instance
+        assert experiment_version1.consent_form.working_version == original_related_instance
 
         # No change between the original and versioned instances, so we don't want yet another version to be made
         experiment_version2 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("source_material", experiment_version2)
+        original_experiment._copy_attr_to_new_version("consent_form", experiment_version2)
         assert original_related_instance.versions.count() == 1
         # The new instance version should be the same as the previous one
-        assert experiment_version2.source_material == experiment_version1.source_material
+        assert experiment_version2.consent_form == experiment_version1.consent_form
 
         # Changing the working instance causes a new version to be made
-        original_experiment.source_material.material = "Saucy Sauceness"
-        original_experiment.source_material.save()
+        original_experiment.consent_form.consent_text = "Updated consent text"
+        original_experiment.consent_form.save()
         experiment_version3 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("source_material", experiment_version3)
+        original_experiment._copy_attr_to_new_version("consent_form", experiment_version3)
         assert original_related_instance.versions.count() == 2
-        assert experiment_version3.source_material != experiment_version2.source_material
-        assert experiment_version3.source_material.working_version == original_experiment.source_material
-
-    def _assert_source_material_is_duplicated(self, original_experiment, new_version):
-        assert new_version.source_material != original_experiment.source_material
-        assert new_version.source_material.working_version == original_experiment.source_material
-        assert new_version.source_material.material == original_experiment.source_material.material
+        assert experiment_version3.consent_form != experiment_version2.consent_form
+        assert experiment_version3.consent_form.working_version == original_experiment.consent_form
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         if trigger_type == "static":

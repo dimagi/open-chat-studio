@@ -4,7 +4,7 @@ from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, SourceMaterialFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
@@ -301,14 +301,12 @@ class TestCopyExperiment:
         assert experiment_copy.voice_provider_id == experiment.voice_provider_id
 
     def test_related_models(self, team):
-        source_material = SourceMaterialFactory.create()
-        experiment = ExperimentFactory.create(team=team, source_material=source_material)
+        experiment = ExperimentFactory.create(team=team)
 
         static_trigger = StaticTriggerFactory.create(experiment=experiment)
         timeout_trigger = TimeoutTriggerFactory.create(experiment=experiment)
 
         experiment_copy = experiment.create_new_version(is_copy=True)
-        assert experiment_copy.source_material == source_material
 
         assert experiment_copy.static_triggers.count() == 1
         static_trigger_copy = experiment_copy.static_triggers.first()
