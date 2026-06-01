@@ -35,4 +35,3 @@ We will run a periodic Celery task (`auto_populate_eval_datasets`, every 5 minut
 - **High-water-mark cursor on the rule** — rejected: a `last_seen_session_at` cursor would skip sessions whose matching tag is added after the cursor advances. `NOT IN dataset` dedup is the only correct approach when filter criteria depend on mutable state.
 - **Lifecycle hook on `ExperimentSession.end()`** — deferred: useful for near-real-time but redundant with polling for v1.
 - **Sampling sessions** (ingest only N% of matches) — deferred; mentioned in the source issue but not needed for v1.
-- **DB-backed beat schedule via `django_celery_beat.PeriodicTask`** — rejected: the schedule is fixed for all deployments, so a `CELERY_BEAT_SCHEDULE` entry avoids the data migration and keeps the cadence in source control.
