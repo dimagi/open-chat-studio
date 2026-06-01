@@ -1,0 +1,37 @@
+<div class="flex flex-row gap-1" id="eval-bulk-download">
+  <button class="btn btn-sm btn-outline"
+          hx-post="{% url 'evaluations:evaluation_bulk_download_start' request.team.slug config.id %}"
+          hx-trigger="click"
+          hx-swap="outerHTML"
+          hx-target="#eval-bulk-download"
+          {% if task_id %}disabled{% endif %}>
+    <i class="fa-solid fa-file-csv"></i>
+    {% if task_id %}
+      <span class="loading loading-bars loading-xs"></span> Generating
+    {% else %}
+      Download Latest Results
+    {% endif %}
+  </button>
+
+  {% if task_id %}
+    <div hx-get="{% url 'evaluations:evaluation_bulk_download_link' request.team.slug config.id task_id %}"
+         hx-trigger="every 2s"
+         hx-swap="outerHTML"
+         hx-target="#eval-bulk-download">
+    </div>
+  {% endif %}
+
+  {% if export_download_url %}
+    <a class="btn btn-sm btn-outline btn-success" href="{{ export_download_url }}">
+      <i class="fa-solid fa-download"></i>
+      Download CSV
+    </a>
+  {% endif %}
+
+  {% if export_error %}
+    <span class="text-error text-sm flex items-center gap-1">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      {{ export_error }}
+    </span>
+  {% endif %}
+</div>

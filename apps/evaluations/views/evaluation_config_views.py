@@ -9,7 +9,11 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
+
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.template.response import TemplateResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -21,7 +25,7 @@ from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
-from apps.evaluations.tasks import upload_evaluation_run_results_task
+from apps.evaluations.tasks import export_evaluation_bulk_results_task, upload_evaluation_run_results_task
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
@@ -611,3 +615,42 @@ def generate_evaluation_results_column_suggestions(result_columns, evaluation_ru
         suggestions[column] = suggested_evaluator_id
 
     return suggestions
+
+
+@login_and_team_required
+@permission_required("evaluations.view_evaluationrun")
+@require_POST
+def start_bulk_download(request, team_slug: str, evaluation_pk: int):
+    """Start an async bulk export of the most recent results per dataset item."""
+    config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
+    task = export_evaluation_bulk_results_task.delay(config.id, request.team.id)
+    return TemplateResponse(
+        request,
+        "evaluations/partials/bulk_download.html",
+        {"config": config, "task_id": task.id},
+    )
+
+
+@login_and_team_required
+@permission_required("evaluations.view_evaluationrun")
+def get_bulk_download_link(request, team_slug: str, evaluation_pk: int, task_id: str):
+    """Poll the bulk export task and return a download link when ready."""
+    config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
+    info = Progress(AsyncResult(task_id)).get_info()
+    context: dict = {"config": config}
+    if info["complete"] and info["success"]:
+        file_id = info["result"].get("file_id")
+        if file_id:
+            download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
+            context["export_download_url"] = download_url
+        else:
+            context["export_error"] = info["result"].get("error", "Export failed.")
+    elif info["complete"]:
+        context["export_error"] = "Export failed."
+    else:
+        context["task_id"] = task_id
+    return TemplateResponse(
+        request,
+        "evaluations/partials/bulk_download.html",
+        context,
+    )
