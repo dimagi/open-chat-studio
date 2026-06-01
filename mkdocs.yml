@@ -89,6 +89,7 @@ nav:
       - 0016 Authoritative annotation for multi-reviewer consensus: adr/0016-authoritative-annotation-for-multi-reviewer-consensus.md
       - 0017 Eager per-submission aggregation into a per-queue record: adr/0017-eager-aggregation-of-submitted-annotations.md
       - 0018 Scope team querysets by FK identity, not slug join: adr/0018-scope-team-querysets-by-fk-not-slug-join.md
+      - 0019 Index collection content is a live shared resource: adr/0019-index-content-is-live-shared-resource.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/igor.md

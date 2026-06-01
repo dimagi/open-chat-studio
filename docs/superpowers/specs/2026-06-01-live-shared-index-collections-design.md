@@ -1,5 +1,5 @@
 ---
-status: active
+status: stable
 issue: https://github.com/dimagi/open-chat-studio/issues/2123
 ---
 
