@@ -1,4 +1,4 @@
-# ADR-0018: Download WhatsApp inbound attachments in an overridden hydration stage
+# ADR-0019: Download WhatsApp inbound attachments in an overridden hydration stage
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
