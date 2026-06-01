@@ -1,4 +1,4 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework import routers
 
 from . import openai, views
@@ -23,7 +23,9 @@ chat_patterns = [
     path("<uuid:session_id>/<str:task_id>/poll/", views.chat_poll_task_response, name="task-poll-response"),
 ]
 
-urlpatterns = [
+# The v1 API surface. v1 is frozen against today's URLs and serializers; new endpoints and the
+# experiment -> chatbot rename land under v2 (added in a later phase).
+v1_patterns = [
     # Keep participants/ lying around for backwards compatability
     path("participants/", views.ParticipantView.as_view(), name="update-participant-data-old"),
     # GET: list participants; POST: update participant data
@@ -43,4 +45,14 @@ urlpatterns = [
     path("trigger_bot", views.TriggerBotMessageView.as_view(), name="trigger_bot"),
     path("chat/", include((chat_patterns, "chat"))),
     path("", include(router.urls)),
+]
+
+# Serve the v1 surface under an optional, non-capturing ``v1/`` prefix. The version is detected
+# from the request path by apps.api.versioning.URLPathVersioning, so it is never passed to views.
+# Because the prefix is optional and non-capturing:
+#   * ``/api/v1/...`` and the unversioned ``/api/...`` alias both resolve to these views, and
+#   * reverse() always produces the unversioned URL, keeping existing callers and hyperlinked
+#     serializer fields stable.
+urlpatterns = [
+    re_path(r"^(?:v1/)?", include(v1_patterns)),
 ]
