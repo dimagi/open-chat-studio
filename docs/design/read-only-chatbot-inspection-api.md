@@ -386,7 +386,7 @@ leaks until someone remembers to add it to the denylist.
 ### D9 — Experiment-level events block
 
 **Decision.** The payload includes a top-level `events` block (peer to `pipeline`) with
-`static_triggers[]` and `timeout_triggers[]`, each nesting its `EventAction` (`action_type` +
+`static_triggers[]` and `timeout_triggers[]`, each nesting its `EventAction` (`type` +
 `params`). This is in addition to the node walk.
 
 **Context.** `StaticTrigger` and `TimeoutTrigger` (`apps/events/models.py`) attach to the
@@ -492,10 +492,7 @@ shape, one parser.
   "version_description": null,
   "team_slug": "acme",
   "settings": {
-    // non-secret Experiment fields, null if unset. NOTE: prompt/temperature/tools/
-    // source_material/citations live on the LLM node now, NOT on the chatbot — the
-    // legacy Experiment-level fields (temperature, tools, citations_enabled, prompt_text,
-    // input_formatter, source_material) are removed/not surfaced.
+    // non-secret Experiment fields, null if unset.
     "seed_message": null,
     "conversational_consent_enabled": false,
     "voice_response_behaviour": "reciprocal",
@@ -591,7 +588,7 @@ shape, one parser.
         "type": "conversation_end",       // StaticTriggerType
         "is_active": true,
         "action": {
-          "id": 47, "action_type": "pipeline_start",
+          "type": "pipeline_start",
           // pipeline_start embeds the referenced pipeline using the SAME canonical Pipeline
           // object as the top level (resolved Q2). Self-contained; no recursion (a pipeline
           // has no triggers of its own — triggers attach to chatbots, not pipelines).
@@ -611,7 +608,7 @@ shape, one parser.
         "trigger_from_first_message": false,
         "is_active": true,
         "action": {
-          "id": 48, "action_type": "send_message_to_bot",
+          "type": "send_message_to_bot",
           "params": { "message": "Are you still there?" }
           // schedule_trigger actions instead embed: "scheduled_message": { … cadence … } (resolved Q3)
         }
