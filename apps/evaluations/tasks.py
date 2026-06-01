@@ -955,6 +955,96 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
         return {"success": False, "error": message}
 
 
+def _get_bulk_results_queryset(config, team):
+    """Return the most recent EvaluationResult per (message, evaluator) across all
+    completed FULL/DELTA runs for *config*, pushing deduplication into the DB via
+    DISTINCT ON so only the latest-run row per pair is fetched."""
+    return (
+        EvaluationResult.objects.filter(
+            run__config=config,
+            run__status=EvaluationRunStatus.COMPLETED,
+            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+            team=team,
+        )
+        .select_related("message__session__experiment", "evaluator", "session", "run")
+        .prefetch_related("applied_tags__tag")
+        .order_by("message_id", "evaluator_id", "-run__created_at")
+        .distinct("message_id", "evaluator_id")
+    )
+
+
+def _populate_message_row_fixed_fields(row_data: OrderedDict, result) -> None:
+    """Populate the fixed/shared fields for a new message row."""
+    source_session = result.message.session if result.message.session_id else None
+    row_data["session"] = result.session.external_id if result.session_id else ""
+    row_data["source_session"] = source_session.external_id if source_session else ""
+    row_data["source_experiment_id"] = (
+        str(source_session.experiment.public_id) if source_session and source_session.experiment_id else ""
+    )
+    row_data["message_id"] = result.message.id
+    row_data["Dataset Input"] = result.input_message
+    row_data["Dataset Output"] = result.output_message
+    row_data["Generated Response"] = result.output.get("generated_response", "")
+    row_data.update({k: v for k, v in result.message_context.items() if k != "current_datetime"})
+
+
+def _build_evaluation_table_data(results) -> list[dict]:
+    """Aggregate *results* (an iterable of EvaluationResult) into a list of per-message
+    row dicts, combining evaluator columns and tags.
+
+    Errors are namespaced per evaluator (``error (EvaluatorName)``) so that failures
+    from different evaluators on the same message are preserved rather than overwritten.
+    """
+    table_by_message: dict[int, OrderedDict] = {}
+    tags_by_message: dict[int, set] = defaultdict(set)
+
+    for result in results:
+        row_data = table_by_message.setdefault(result.message_id, OrderedDict())
+        if not row_data:
+            _populate_message_row_fixed_fields(row_data, result)
+
+        for k, v in result.output.get("result", {}).items():
+            row_data[f"{k} ({result.evaluator.name})"] = v
+
+        if result.output.get("error"):
+            row_data[f"error ({result.evaluator.name})"] = result.output["error"]
+
+        for applied_tag in result.applied_tags.all():
+            tags_by_message[result.message_id].add(applied_tag.tag.name)
+
+    for message_id, row_data in table_by_message.items():
+        tags = tags_by_message.get(message_id)
+        row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
+
+    return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
+
+
+def _write_evaluation_csv(writer, table_data: list[dict]) -> None:
+    """Write *table_data* rows to *writer* using the standard evaluation column ordering.
+
+    Fixed headers come first, then alphabetically-sorted dynamic columns, then any
+    error columns last.  This is shared between the per-run and bulk-download exports.
+    """
+    from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+
+    if not table_data:
+        writer.writerow(["No results available yet"])
+        return
+
+    all_headers: set[str] = set()
+    for row in table_data:
+        all_headers.update(row.keys())
+
+    error_headers = sorted(h for h in all_headers if h == "error" or h.startswith("error ("))
+    other_headers = sorted(
+        h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h not in error_headers
+    )
+    headers = [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + error_headers
+    writer.writerow(headers)
+    for row in table_data:
+        writer.writerow([row.get(header, "") for header in headers])
+
+
 @shared_task(bind=True, base=TaskbadgerTask)
 def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
     """
@@ -963,8 +1053,6 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
 
     Returns {"file_id": <id>} on success.
     """
-    from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
-
     progress_recorder = ProgressRecorder(self)
     progress_recorder.set_progress(0, 100, "Starting export...")
 
@@ -974,96 +1062,14 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
 
         with current_team(team):
             progress_recorder.set_progress(10, 100, "Fetching results...")
+            results = _get_bulk_results_queryset(config, team)
 
-            completed_run_ids = list(
-                EvaluationRun.objects.filter(
-                    config=config,
-                    status=EvaluationRunStatus.COMPLETED,
-                    type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-                ).values_list("id", flat=True)
-            )
-
-            # Fetch all results for completed runs, newest run first.
-            # We deduplicate on (message_id, evaluator_id) to keep only the most recent run's result.
-            results = list(
-                EvaluationResult.objects.filter(run_id__in=completed_run_ids, team=team)
-                .select_related("message__session__experiment", "evaluator", "session", "run")
-                .prefetch_related("applied_tags__tag")
-                .order_by("message_id", "evaluator_id", "-run__created_at")
-            )
-
-            progress_recorder.set_progress(40, 100, f"Processing {len(results)} results...")
-
-            table_by_message: dict[int, OrderedDict] = {}
-            tags_by_message: dict[int, set] = defaultdict(set)
-            seen_message_evaluator: set[tuple] = set()
-
-            for result in results:
-                key = (result.message_id, result.evaluator_id)
-                if key in seen_message_evaluator:
-                    # Already have a more-recent result for this (message, evaluator) pair
-                    continue
-                seen_message_evaluator.add(key)
-
-                row_data = table_by_message.setdefault(result.message_id, OrderedDict())
-
-                # Populate fixed fields on first encounter for this message
-                if not row_data:
-                    row_data["session"] = result.session.external_id if result.session_id else ""
-                    source_session = result.message.session if result.message.session_id else None
-                    row_data["source_session"] = source_session.external_id if source_session else ""
-                    row_data["source_experiment_id"] = (
-                        str(source_session.experiment.public_id)
-                        if source_session and source_session.experiment_id
-                        else ""
-                    )
-                    row_data["message_id"] = result.message.id
-                    row_data["Dataset Input"] = result.input_message
-                    row_data["Dataset Output"] = result.output_message
-                    row_data["Generated Response"] = result.output.get("generated_response", "")
-
-                    context_columns = {
-                        k: v for k, v in result.message_context.items() if k != "current_datetime"
-                    }
-                    row_data.update(context_columns)
-
-                # Add evaluator result columns
-                for k, v in result.output.get("result", {}).items():
-                    row_data[f"{k} ({result.evaluator.name})"] = v
-
-                if result.output.get("error"):
-                    row_data["error"] = result.output.get("error")
-
-                for applied_tag in result.applied_tags.all():
-                    tags_by_message[result.message_id].add(applied_tag.tag.name)
-
-            for message_id, row_data in table_by_message.items():
-                tags = tags_by_message.get(message_id)
-                row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
-
-            table_data = [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
+            progress_recorder.set_progress(40, 100, "Processing results...")
+            table_data = _build_evaluation_table_data(results)
 
             progress_recorder.set_progress(80, 100, "Generating CSV...")
-
             csv_buffer = StringIO()
-            writer = csv.writer(csv_buffer)
-
-            if not table_data:
-                writer.writerow(["No results available yet"])
-            else:
-                all_headers: set[str] = set()
-                for row in table_data:
-                    all_headers.update(row.keys())
-
-                other_headers = sorted(
-                    [h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h != "error"]
-                )
-                headers = (
-                    [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + ["error"]
-                )
-                writer.writerow(headers)
-                for row in table_data:
-                    writer.writerow([row.get(header, "") for header in headers])
+            _write_evaluation_csv(csv.writer(csv_buffer), table_data)
 
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
             file_obj = File.objects.create(

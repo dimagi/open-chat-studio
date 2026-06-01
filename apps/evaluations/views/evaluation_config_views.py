@@ -25,7 +25,11 @@ from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
-from apps.evaluations.tasks import export_evaluation_bulk_results_task, upload_evaluation_run_results_task
+from apps.evaluations.tasks import (
+    _write_evaluation_csv,
+    export_evaluation_bulk_results_task,
+    upload_evaluation_run_results_task,
+)
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
@@ -472,23 +476,7 @@ def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_ru
     table_data = list(evaluation_run.get_table_data(include_ids=True))
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f"attachment; filename={filename}"
-    writer = csv.writer(response)
-
-    if not table_data:
-        writer.writerow(["No results available yet"])
-        return response
-
-    all_headers = set()
-    for row in table_data:
-        all_headers.update(row.keys())
-
-    other_headers = sorted([h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h != "error"])
-    headers = [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + ["error"]
-    writer.writerow(headers)
-
-    for row in table_data:
-        writer.writerow([row.get(header, "") for header in headers])
-
+    _write_evaluation_csv(csv.writer(response), table_data)
     return response
 
 
