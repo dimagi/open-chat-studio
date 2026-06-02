@@ -74,7 +74,7 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
         )
 
     def get_object(self, queryset=None):
-        from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+        from apps.annotations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
 
         trace = super().get_object(queryset)
         attach_tag_attributions([m for m in (trace.input_message, trace.output_message) if m is not None])

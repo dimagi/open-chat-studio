@@ -16,6 +16,7 @@ from django_tables2 import SingleTableView
 from apps.annotations.forms import TagForm
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.annotations.tables import TagTable
+from apps.annotations.tag_attribution import attach_tag_attributions
 from apps.evaluations.models import AppliedTag, Evaluator, EvaluatorTagRule
 from apps.generics.chips import Chip
 from apps.generics.referenced_objects import render_referenced_objects_modal
@@ -170,8 +171,6 @@ class TagUI(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 to_attr="prefetched_tagged_items",
             )
         ).get(id=object_id)
-        from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
-
         attach_tag_attributions([obj])
 
         return render(

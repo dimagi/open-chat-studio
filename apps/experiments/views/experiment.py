@@ -668,7 +668,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
 
-    from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+    from apps.annotations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
 
     attach_tag_attributions(current_page_messages)
 

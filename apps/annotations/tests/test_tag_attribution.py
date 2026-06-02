@@ -3,13 +3,13 @@
 import pytest
 from django.utils import timezone
 
+from apps.annotations.tag_attribution import attach_tag_attributions
 from apps.evaluations.models import (
     ConditionType,
     EvaluationMode,
     EvaluationRunStatus,
     EvaluationRunType,
 )
-from apps.evaluations.tag_attribution import attach_tag_attributions
 from apps.evaluations.tagging import apply_rules_to_result, archive_superseded_runs, undo_run_tags
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,

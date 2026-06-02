@@ -19,7 +19,7 @@ def render_session_details(
     session = ExperimentSession.objects.prefetch_related(chat_tagged_items_prefetch()).get(
         external_id=session_id, team=request.team
     )
-    from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+    from apps.annotations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
 
     attach_tag_attributions([session.chat])
     experiment = request.experiment
