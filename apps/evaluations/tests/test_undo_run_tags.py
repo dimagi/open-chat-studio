@@ -14,7 +14,13 @@ from apps.evaluations.models import (
     EvaluationRunStatus,
     EvaluationRunType,
 )
-from apps.evaluations.tagging import apply_rules_to_result, undo_run_tags
+from apps.evaluations.tagging import (
+    _latest_completed_full_run,
+    _restore_set_for_run,
+    apply_rules_to_result,
+    can_undo_tags,
+    undo_run_tags,
+)
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -221,6 +227,41 @@ class TestUndoRunTags:
         assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
         delta_run.refresh_from_db()
         assert delta_run.tags_archived is False
+
+    def test_equal_finished_at_uses_id_tiebreaker_and_strict_bound(self, team):
+        """Two FULL runs finishing at the same instant: the higher-id run is the 'latest'
+        (``-finished_at, -id`` order) and is the only one undoable, and the restore-set
+        lookup uses a strict ``finished_at`` bound — so the equal-time earlier run is NOT
+        treated as the prior epoch and undo strips to untagged rather than reverting to it.
+        """
+        config, evaluator, rule_neg, rule_pos, message = self._make_setup(team)
+        same_time = timezone.now()
+
+        full_a = self._make_run(config, {"result": {"sentiment": "negative"}}, rule_neg, message)
+        full_b = self._make_run(config, {"result": {"sentiment": "positive"}}, rule_pos, message)
+        # Force identical finished_at; full_b keeps the higher id (created later).
+        EvaluationRun.objects.filter(pk__in=[full_a.pk, full_b.pk]).update(finished_at=same_time)
+        full_a.refresh_from_db()
+        full_b.refresh_from_db()
+
+        # The -id tiebreaker makes full_b the latest; only it is undoable.
+        assert _latest_completed_full_run(config).pk == full_b.pk
+        assert can_undo_tags(full_b) is True
+        assert can_undo_tags(full_a) is False
+
+        # Strict bound: full_a (equal finished_at) is not "before" full_b, so nothing is restored.
+        assert _restore_set_for_run(full_b) == []
+
+        # Simulate reverse_stale_tags removing the superseded "bad" tag full_a applied.
+        chat_message = message.expected_output_chat_message
+        CustomTaggedItem.objects.filter(object_id=chat_message.pk, tag_id=rule_neg.tag_id).delete()
+        assert chat_message.tags.filter(pk=rule_pos.tag_id).exists()
+
+        undo_run_tags(full_b)
+
+        # No restorable prior epoch -> full_b's tags are stripped, nothing comes back.
+        assert not chat_message.tags.filter(pk=rule_pos.tag_id).exists()
+        assert not chat_message.tags.filter(pk=rule_neg.tag_id).exists()
 
     def test_session_mode_restores_chat_tags(self, team):
         """Session-mode runs tag the Chat object; undo must restore those tags."""
