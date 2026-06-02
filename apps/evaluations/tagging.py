@@ -168,11 +168,6 @@ def _applied_by_message_for_run_ids(run_ids: list[int]) -> defaultdict[int, set[
     return applied
 
 
-def _build_applied_by_message(run: EvaluationRun) -> defaultdict[int, set[int]]:
-    """Batch all AppliedTag lookups for this run to avoid an O(N) query per message."""
-    return _applied_by_message_for_run_ids([run.pk])
-
-
 def _compute_stale_by_target(
     run: EvaluationRun,
     possible_tags: frozenset[int],
@@ -215,7 +210,7 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     # All evaluators in a config share the dataset's evaluation_mode (enforced by
     # form validation). Use the first as a representative to carry mode into resolve_target.
     representative_evaluator = evaluators[0]
-    applied_by_message = _build_applied_by_message(run)
+    applied_by_message = _applied_by_message_for_run_ids([run.pk])
     stale_by_target, content_type = _compute_stale_by_target(
         run, possible_tags, applied_by_message, representative_evaluator
     )
@@ -290,7 +285,7 @@ def _compute_undo_target_diffs(
     resolution. Returns (remove_by_target, add_by_target, content_type); content_type is
     None when no message resolved to a target.
     """
-    current_applied = _build_applied_by_message(run)
+    current_applied = _applied_by_message_for_run_ids([run.pk])
     restore_applied = _applied_by_message_for_run_ids([r.pk for r in restore_runs])
 
     # Every message either run touched: undone-run messages (remove) and restore-set

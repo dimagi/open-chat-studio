@@ -29,6 +29,11 @@ def _build_attributions(target_ids: list[int], target_path: str) -> dict[int, di
 
     Ordered by ascending run id so that when more than one active row applies the
     same tag to the same target, the latest run's attribution wins.
+
+    No explicit team filter is applied: ``target_ids`` are Chat/ChatMessage primary keys
+    (globally unique) sourced exclusively from team-scoped caller querysets, so an
+    AppliedTag from another team cannot match a target id this team does not own. The
+    `__in` lookup is therefore implicitly team-bounded by its inputs.
     """
     if not target_ids:
         return {}
