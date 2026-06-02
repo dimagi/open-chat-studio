@@ -38,7 +38,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
-from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
+from apps.evaluations.tagging import apply_rules_to_result, archive_superseded_runs, reverse_stale_tags
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File
@@ -224,6 +224,7 @@ def mark_evaluation_complete(results, evaluation_run_id):
             evaluation_run.mark_complete()
             compute_aggregates_for_run(evaluation_run)
             reverse_stale_tags(evaluation_run)
+            archive_superseded_runs(evaluation_run)
     except Exception as e:
         logger.exception(f"Error marking evaluation run {evaluation_run_id} complete: {e}")
 

@@ -442,7 +442,27 @@ class EvaluationConfig(BaseTeamModel):
 
         When `scoped_messages` is provided, the run only evaluates those
         messages instead of the dataset's full membership.
+
+        DELTA invariant: `scoped_messages` for a DELTA run must be disjoint from every
+        message any prior run of this config has evaluated. This is what lets tag undo
+        treat a tagging epoch as a run set (previous FULL + intervening DELTAs) instead of
+        walking back per message — see the FULL-only-undo ADR. The sole live caller
+        (auto-population over brand-new sessions) always satisfies it; we reject violations
+        loudly rather than let them silently corrupt undo.
         """
+        if run_type == EvaluationRunType.DELTA and scoped_messages:
+            scoped_ids = [message.id for message in scoped_messages]
+            overlap = set(
+                EvaluationResult.objects.filter(run__config=self, message_id__in=scoped_ids).values_list(
+                    "message_id", flat=True
+                )
+            )
+            if overlap:
+                raise ValueError(
+                    f"DELTA run scoped_messages overlap messages already evaluated by prior runs "
+                    f"of config {self.id}: {sorted(overlap)}"
+                )
+
         generation_experiment = self.get_generation_experiment_version()
         run = EvaluationRun.objects.create(
             team=self.team,
@@ -491,6 +511,15 @@ class EvaluationRun(BaseTeamModel):
         blank=True,
         related_name="scoping_runs",
         help_text="Subset of dataset messages this run evaluated. Empty for FULL/PREVIEW.",
+    )
+    tags_archived = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "True when this run's applied tags are no longer the live set — either superseded "
+            "by a later FULL run or undone. The AppliedTag rows of non-archived runs mirror the "
+            "live tag state; the active set is always {latest FULL run} ∪ {DELTAs after it}."
+        ),
     )
 
     def __str__(self):

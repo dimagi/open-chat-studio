@@ -43,7 +43,7 @@
             <i class="fa-solid fa-upload"></i>
             Edit Results
           </a>
-          {% if evaluation_run.type != "preview" %}
+          {% if can_undo_tags %}
             <form id="undo-tags-form-{{ evaluation_run.id }}"
                   style="display: contents;"
                   method="post"

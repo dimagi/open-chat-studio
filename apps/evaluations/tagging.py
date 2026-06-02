@@ -150,12 +150,27 @@ def _get_possible_tags(evaluators: list[Evaluator]) -> frozenset[int]:
     return frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
 
 
-def _build_applied_by_message(run: EvaluationRun) -> defaultdict[int, set[int]]:
-    """Batch all AppliedTag lookups for this run to avoid an O(N) query per message."""
+def _applied_by_message_for_run_ids(run_ids: list[int]) -> defaultdict[int, set[int]]:
+    """Map message_id -> {tag_id} across the AppliedTag rows of the given runs.
+
+    One query for the whole run set. Because DELTA message-sets are disjoint and a FULL
+    run re-covers everything (the DELTA invariant), a run set of {previous FULL + its
+    DELTAs} contributes at most one tag-set per message, so no per-message run resolution
+    is needed.
+    """
     applied: defaultdict[int, set[int]] = defaultdict(set)
-    for row in AppliedTag.objects.filter(evaluation_result__run=run).values("evaluation_result__message_id", "tag_id"):
+    if not run_ids:
+        return applied
+    for row in AppliedTag.objects.filter(evaluation_result__run_id__in=run_ids).values(
+        "evaluation_result__message_id", "tag_id"
+    ):
         applied[row["evaluation_result__message_id"]].add(row["tag_id"])
     return applied
+
+
+def _build_applied_by_message(run: EvaluationRun) -> defaultdict[int, set[int]]:
+    """Batch all AppliedTag lookups for this run to avoid an O(N) query per message."""
+    return _applied_by_message_for_run_ids([run.pk])
 
 
 def _compute_stale_by_target(
@@ -215,95 +230,78 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q).delete()
 
 
-def _message_ids_by_latest_prior_run(run: EvaluationRun, message_ids: list[int]) -> defaultdict[int, set[int]]:
-    """Identify the latest prior FULL/DELTA run of the same config that evaluated each
-    message in `message_ids`, and return a mapping `{run_id: {message_id, ...}}` grouping
-    messages by their shared previous-state run.
+def archive_superseded_runs(run: EvaluationRun) -> None:
+    """Mark the runs this run supersedes as ``tags_archived=True``.
 
-    Only runs that are COMPLETED, of the same config, and that finished strictly before
-    `run` are considered. Completion time (`finished_at`, set in `mark_complete()`) — not
-    creation time — orders candidates, because runs for the same config can overlap (there
-    is no server-side concurrency guard), so the run created later may not be the one whose
-    tag state was finalized later. `-run_id` is a stable tie-breaker that makes the choice
-    deterministic when two runs share a `finished_at`. COMPLETED runs always have a non-null
-    `finished_at`, and undo only operates on a COMPLETED `run` (guarded in the view), so
-    `run.finished_at` is non-null here. Postgres `DISTINCT ON (message_id)` does the
-    per-message dedup in the DB. Extracted from `_previous_applied_by_message` so it can be
-    tested in isolation.
+    The AppliedTag rows of non-archived runs mirror the live tag state. Only a FULL run
+    supersedes anything: it re-evaluates the whole dataset, so every other currently-active
+    run of the config (the previous FULL and its DELTAs) is superseded. A DELTA run only
+    adds tags for disjoint, brand-new sessions (the DELTA invariant), so it supersedes
+    nothing. PREVIEW runs never apply tags. Called at run completion.
     """
-    qs = (
-        EvaluationResult.objects.filter(
-            run__config=run.config,
-            run__status=EvaluationRunStatus.COMPLETED,
-            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            run__finished_at__lt=run.finished_at,
-            message_id__in=message_ids,
-        )
-        .order_by("message_id", "-run__finished_at", "-run_id")
-        .distinct("message_id")
-        .values_list("message_id", "run_id")
+    if run.type != EvaluationRunType.FULL:
+        return
+
+    EvaluationRun.objects.filter(config=run.config, tags_archived=False).exclude(pk=run.pk).update(tags_archived=True)
+
+
+def _restore_set_for_run(run: EvaluationRun) -> list[EvaluationRun]:
+    """The runs whose tags become live again when `run` (a FULL run) is undone.
+
+    A FULL run supersedes the previous tagging epoch: the most recent FULL run that
+    finished before it (``P``) plus every DELTA that finished between ``P`` and this run.
+    Undoing `run` restores exactly that set. When there is no earlier FULL run, the epoch
+    is just the DELTAs that finished before this run (the first FULL re-covered their
+    new sessions, so they revert to their own tags).
+
+    Ordering uses ``finished_at`` (with ``-id`` as a stable tie-breaker), consistent with
+    ``_latest_completed_full_run``: runs for a config can overlap with no concurrency guard,
+    so completion time — not creation time — reflects which prior state is most recent.
+    """
+    completed = EvaluationRun.objects.filter(
+        config=run.config,
+        status=EvaluationRunStatus.COMPLETED,
+        finished_at__lt=run.finished_at,
     )
-    runs_to_message_ids: defaultdict[int, set[int]] = defaultdict(set)
-    for message_id, run_id in qs.iterator():
-        runs_to_message_ids[run_id].add(message_id)
-    return runs_to_message_ids
+    prev_full = completed.filter(type=EvaluationRunType.FULL).order_by("-finished_at", "-id").first()
 
+    deltas = completed.filter(type=EvaluationRunType.DELTA)
+    if prev_full is not None:
+        deltas = deltas.filter(finished_at__gt=prev_full.finished_at)
 
-def _previous_applied_by_message(run: EvaluationRun, message_ids: list[int]) -> dict[int, set[int]]:
-    """For each message_id, return tags applied by the most recent *prior* run that evaluated it.
-
-    A DELTA run that did not touch a given message is skipped per-message: the walk continues
-    back through prior FULL/DELTA runs until one is found whose EvaluationResult set
-    includes that message. That run's AppliedTag rows for the message form the
-    "previous state" we restore.
-
-    A prior run that evaluated the message but produced no tag fires is treated as
-    "previous state = no managed tags" — which is what we want, since `reverse_stale_tags`
-    would have wiped any older tags at that point.
-
-    Returns a defaultdict(set) keyed by message_id.
-    """
-    if not message_ids:
-        return defaultdict(set)
-
-    runs_to_message_ids = _message_ids_by_latest_prior_run(run, message_ids)
-    if not runs_to_message_ids:
-        return defaultdict(set)
-
-    # One AppliedTag query for all (run, messages) groups, instead of one per run.
-    filter_q = Q()
-    for run_id, msg_id_set in runs_to_message_ids.items():
-        filter_q |= Q(evaluation_result__run_id=run_id, evaluation_result__message_id__in=msg_id_set)
-
-    applied: defaultdict[int, set[int]] = defaultdict(set)
-    rows = AppliedTag.objects.filter(filter_q).values_list("evaluation_result__message_id", "tag_id")
-    for message_id, tag_id in rows:
-        applied[message_id].add(tag_id)
-
-    return applied
+    restore = list(deltas)
+    if prev_full is not None:
+        restore.append(prev_full)
+    return restore
 
 
 def _compute_undo_target_diffs(
     run: EvaluationRun,
-    evaluated_message_ids: list[int],
+    restore_runs: list[EvaluationRun],
     possible_tags: frozenset[int],
     representative_evaluator: Evaluator,
 ) -> tuple[dict[int, set[int]], dict[int, set[int]], ContentType | None]:
-    """For each evaluated message, compute the (remove, add) managed-tag deltas per target.
+    """Compute the (remove, add) managed-tag deltas per target for undoing `run`.
 
-    `remove` is tags this run's AppliedTag rows applied; `add` is tags the most recent
-    prior run had applied. Both are intersected with `possible_tags` so we never touch
-    tags this config doesn't manage. Returns (remove_by_target, add_by_target, content_type);
-    content_type is None when no message resolved to a target.
+    `remove` is tags `run` applied that the restore set does not have; `add` is tags the
+    restore set applied that `run` does not have. Both are intersected with `possible_tags`
+    so we never touch tags this config doesn't manage. The restore set's AppliedTag rows
+    cover disjoint messages (the DELTA invariant), so they compose without per-message run
+    resolution. Returns (remove_by_target, add_by_target, content_type); content_type is
+    None when no message resolved to a target.
     """
     current_applied = _build_applied_by_message(run)
-    previous_applied = _previous_applied_by_message(run, evaluated_message_ids)
+    restore_applied = _applied_by_message_for_run_ids([r.pk for r in restore_runs])
+
+    # Every message either run touched: undone-run messages (remove) and restore-set
+    # messages (add). Their union is the full set of targets undo must reconcile.
+    message_ids = set(current_applied) | set(restore_applied)
 
     content_type: ContentType | None = None
     remove_by_target: defaultdict[int, set[int]] = defaultdict(set)
     add_by_target: defaultdict[int, set[int]] = defaultdict(set)
 
-    messages_iter = EvaluationMessage.objects.filter(pk__in=evaluated_message_ids).select_related(
+    messages_iter = EvaluationMessage.objects.filter(pk__in=message_ids).select_related(
         "session__chat", "expected_output_chat_message"
     )
     for message in messages_iter:
@@ -312,13 +310,13 @@ def _compute_undo_target_diffs(
             continue
         if content_type is None:
             content_type = ContentType.objects.get_for_model(type(target))
-        # Diff current vs previous so we only touch tags that actually change:
-        # drop tags this run added that the prior run didn't have, and restore
-        # prior tags this run no longer has. Tags common to both are left alone.
+        # Diff current vs restore so we only touch tags that actually change:
+        # drop tags this run added that the restored epoch didn't have, and restore
+        # epoch tags this run no longer has. Tags common to both are left alone.
         current_tags = current_applied[message.pk] & possible_tags
-        previous_tags = previous_applied[message.pk] & possible_tags
-        remove_by_target[target.pk] |= current_tags - previous_tags
-        add_by_target[target.pk] |= previous_tags - current_tags
+        restore_tags = restore_applied[message.pk] & possible_tags
+        remove_by_target[target.pk] |= current_tags - restore_tags
+        add_by_target[target.pk] |= restore_tags - current_tags
 
     return remove_by_target, add_by_target, content_type
 
@@ -353,28 +351,36 @@ def _apply_undo_target_diffs(
             )
 
 
-def undo_run_tags(run: EvaluationRun) -> None:
-    """Undo the tag changes applied by this run.
+def _update_archive_flags_for_undo(run: EvaluationRun, restore_runs: list[EvaluationRun]) -> None:
+    """Flip ``tags_archived`` to reflect the post-undo live state.
 
-    For each message this run evaluated:
-    - removes every managed tag the current run applied to the target
-      (tags found in the run's AppliedTag audit records)
-    - re-applies every managed tag from the most recent prior completed FULL/DELTA
-      run that evaluated that *same message*. The walk is per-message: a DELTA
-      predecessor that did not touch a given message is skipped, and we look
-      further back until a prior run that did evaluate the message is found.
-
-    PREVIEW runs are skipped entirely.
-
-    The set of messages to process is sourced from this run's EvaluationResult rows,
-    not the live dataset — so later edits to the dataset do not affect what undo
-    touches.
-
-    AppliedTag audit rows are never deleted — they remain as history. Only
-    CustomTaggedItem (live tag state) is mutated. The delete + bulk_create are
-    wrapped in a single transaction.atomic() block so a partial failure rolls back.
+    This run's tags become archived (no longer live); the restored epoch — the previous
+    FULL run plus its DELTAs — becomes active again. Keeps the "non-archived runs mirror
+    live tags" invariant true after an undo. Must run in the same transaction as the
+    CustomTaggedItem mutation.
     """
-    if run.type == EvaluationRunType.PREVIEW:
+    EvaluationRun.objects.filter(pk=run.pk).update(tags_archived=True)
+    if restore_runs:
+        EvaluationRun.objects.filter(pk__in=[r.pk for r in restore_runs]).update(tags_archived=False)
+
+
+def undo_run_tags(run: EvaluationRun) -> None:
+    """Undo the tag changes applied by this FULL run, restoring the previous epoch.
+
+    Undo reverts the live tags to the state immediately before `run`: the previous FULL
+    run plus every DELTA that ran between it and `run` (the "restore set"). Per resolved
+    target, tags `run` added that the restore set lacks are removed, and tags the restore
+    set had that `run` dropped are re-applied. Because DELTA message-sets are disjoint and
+    a FULL run re-covers everything (the DELTA invariant), the restore set composes into
+    one coherent prior state with no per-message run resolution.
+
+    Only FULL runs are undoable; DELTA and PREVIEW runs are no-ops here (eligibility is
+    enforced by ``can_undo_tags``). AppliedTag audit rows are never deleted — only
+    ``EvaluationRun.tags_archived`` flips (this run archived, the restore set reactivated)
+    and CustomTaggedItem (live tag state) is mutated. Both share a single
+    transaction.atomic() block so a partial failure rolls back.
+    """
+    if run.type != EvaluationRunType.FULL:
         return
 
     evaluators = list(run.config.evaluators.prefetch_related("tag_rules").all())
@@ -382,20 +388,46 @@ def undo_run_tags(run: EvaluationRun) -> None:
     if not possible_tags:
         return
 
-    evaluated_message_ids = list(
-        EvaluationResult.objects.filter(run=run).values_list("message_id", flat=True).distinct()
-    )
-    if not evaluated_message_ids:
-        return
-
     # All evaluators in a config share the dataset's evaluation_mode.
     # Use the first as a representative to carry mode into resolve_target.
     representative_evaluator = evaluators[0]
 
+    restore_runs = _restore_set_for_run(run)
     remove_by_target, add_by_target, content_type = _compute_undo_target_diffs(
-        run, evaluated_message_ids, possible_tags, representative_evaluator
+        run, restore_runs, possible_tags, representative_evaluator
     )
-    if content_type is None:
-        return
 
-    _apply_undo_target_diffs(run.team, content_type, remove_by_target, add_by_target)
+    with transaction.atomic():
+        if content_type is not None:
+            _apply_undo_target_diffs(run.team, content_type, remove_by_target, add_by_target)
+        _update_archive_flags_for_undo(run, restore_runs)
+
+
+def _latest_completed_full_run(config) -> EvaluationRun | None:
+    """The most recently finished COMPLETED FULL run for the config (``-finished_at, -id`` order)."""
+    return (
+        EvaluationRun.objects.filter(
+            config=config,
+            status=EvaluationRunStatus.COMPLETED,
+            type=EvaluationRunType.FULL,
+        )
+        .order_by("-finished_at", "-id")
+        .first()
+    )
+
+
+def can_undo_tags(run: EvaluationRun) -> bool:
+    """Whether this run's tags may be undone.
+
+    Only the latest completed FULL run for its config is undoable, and only once: once its
+    tags have been archived (by a prior undo) it can no longer be undone. DELTA/PREVIEW runs
+    are never directly undoable — undoing the trailing FULL run restores their tags instead.
+    """
+    if run.status != EvaluationRunStatus.COMPLETED or run.type != EvaluationRunType.FULL:
+        return False
+
+    latest = _latest_completed_full_run(run.config)
+    if latest is None or latest.pk != run.pk:
+        return False
+
+    return not run.tags_archived

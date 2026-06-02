@@ -22,7 +22,7 @@ from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
-from apps.evaluations.tagging import undo_run_tags
+from apps.evaluations.tagging import can_undo_tags, undo_run_tags
 from apps.evaluations.tasks import upload_evaluation_run_results_task
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
@@ -232,6 +232,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
+            "can_undo_tags": can_undo_tags(evaluation_run),
         }
 
         # Calculate duration if finished
@@ -463,9 +464,7 @@ def create_evaluation_preview(request, team_slug, evaluation_pk):
 
 @permission_required("evaluations.view_evaluationrun")
 def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
     table_data = list(evaluation_run.get_table_data(include_ids=True))
     response = HttpResponse(content_type="text/csv")
@@ -531,9 +530,7 @@ def load_experiment_versions(request, team_slug: str):
 @permission_required("evaluations.change_evaluationrun")
 def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Upload CSV to update evaluation run results"""
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     if request.method == "GET":
         context = {
             "active_tab": "evaluations",
@@ -627,6 +624,9 @@ def undo_evaluation_run_tags(request, team_slug: str, evaluation_pk: int, evalua
     )
     if evaluation_run.status != EvaluationRunStatus.COMPLETED:
         messages.error(request, "Can only undo tags on a completed run.")
+        return HttpResponseRedirect(run_home_url)
+    if not can_undo_tags(evaluation_run):
+        messages.error(request, "Tags can only be undone on the latest evaluation run, and only once.")
         return HttpResponseRedirect(run_home_url)
     undo_run_tags(evaluation_run)
     logger.info(
