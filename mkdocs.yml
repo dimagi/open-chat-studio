@@ -88,9 +88,21 @@ nav:
       - 0015 Dedicated human_annotations app with queue/item/annotation/aggregate model: adr/0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md
       - 0016 Authoritative annotation for multi-reviewer consensus: adr/0016-authoritative-annotation-for-multi-reviewer-consensus.md
       - 0017 Eager per-submission aggregation into a per-queue record: adr/0017-eager-aggregation-of-submitted-annotations.md
+      - 0018 Scope team querysets by FK identity, not slug join: adr/0018-scope-team-querysets-by-fk-not-slug-join.md
+      - 0019 Poll source experiments to auto-populate evaluation datasets: adr/0019-poll-source-experiments-to-auto-populate-eval-datasets.md
+      - 0020 Delta evaluation runs scoped to newly appended messages: adr/0020-delta-evaluation-runs-scoped-to-appended-messages.md
+      - 0021 Invest in API surface, not a read-only role: adr/0021-invest-in-api-surface-not-readonly-role.md
+      - 0022 URL-path API versioning, v1 frozen / v2 new: adr/0022-url-path-api-versioning.md
+      - 0023 Rename experiment to chatbot in the v2 API: adr/0023-rename-experiment-to-chatbot-in-v2.md
+      - 0024 inspect as a denormalized read-only projection: adr/0024-inspect-denormalized-readonly-projection.md
+      - 0025 Inline nested resource tree for the inspect payload: adr/0025-inline-nested-resource-tree.md
+      - 0026 Identify v2-exposed resources by database primary key: adr/0026-identify-resources-by-primary-key.md
+      - 0027 Secrets exclusion via per-resource allowlist serializers: adr/0027-secrets-exclusion-via-allowlist-serializers.md
+      - 0028 Inspect authorizes on chatbot view + team scope: adr/0028-inspect-authorization-team-scoped.md
+      - 0029 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0029-download-whatsapp-inbound-attachments-in-hydration-stage.md
   - Developer Guides:
     - Processes:
-      - Igor (Incremental Worker): developer_guides/igor.md
+      - Claude Code Agents: developer_guides/claude_code_agent.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Deployment: developer_guides/deployment.md

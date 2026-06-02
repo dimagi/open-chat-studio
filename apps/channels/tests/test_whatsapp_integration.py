@@ -6,7 +6,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
-from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage, TwilioMessage
+from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.chat.channels import MESSAGE_TYPES
@@ -20,26 +20,6 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 from .message_examples import meta_cloud_api_messages, turnio_messages, twilio_messages
-
-
-@pytest.fixture()
-def turnio_whatsapp_channel(turn_io_provider):
-    return ExperimentChannelFactory.create(
-        platform=ChannelPlatform.WHATSAPP,
-        messaging_provider=turn_io_provider,
-        experiment__team=turn_io_provider.team,
-        extra_data={"number": "+14155238886"},
-    )
-
-
-@pytest.fixture()
-def meta_cloud_api_whatsapp_channel(meta_cloud_api_provider):
-    return ExperimentChannelFactory.create(
-        platform=ChannelPlatform.WHATSAPP,
-        messaging_provider=meta_cloud_api_provider,
-        experiment__team=meta_cloud_api_provider.team,
-        extra_data={"number": "+15551234567", "phone_number_id": "12345"},
-    )
 
 
 @pytest.fixture()
@@ -148,7 +128,7 @@ class TestTurnio:
         ],
     )
     def test_parse_text_message(self, message, message_type):
-        message = TurnWhatsappMessage.parse(message)
+        message = WhatsAppMessage.parse(message)
         assert message.participant_id == "27456897512"
         if message_type == "text":
             assert message.message_text == "Hi there!"
@@ -243,7 +223,7 @@ class TestMetaCloudApi:
         ],
     )
     def test_parse_messages(self, message, message_type):
-        parsed = MetaCloudAPIMessage.parse(message)
+        parsed = WhatsAppMessage.parse(message)
         assert parsed.participant_id == "27456897512"
         if message_type == "text":
             assert parsed.message_text == "Hello"
