@@ -39,7 +39,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.4",
     "globals": "^17.4.0",
-    "mini-css-extract-plugin": "^2.9.1",
+    "mini-css-extract-plugin": "^2.10.2",
     "postcss": "^8.5.10",
     "postcss-import": "^16.1.1",
     "postcss-loader": "^8.2.0",
