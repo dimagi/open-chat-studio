@@ -4,7 +4,6 @@ from django.db.models import Subquery
 
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.tracing import TraceInfo
@@ -101,13 +100,9 @@ def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, 
     target_experiment = resolve_published_or_working(experiment)
 
     with current_team(experiment.team):
-        if message_text:
-            ChatMessage.objects.create(
-                chat=session.chat,
-                message_type=ChatMessageType.AI,
-                content=message_text,
-                metadata={"direct_to_user": True},
-            )
-            session.try_send_message(message_text)
-        else:
-            session.ad_hoc_bot_message(prompt_text, TraceInfo(name="api trigger"), use_experiment=target_experiment)
+        session.ad_hoc_bot_message(
+            prompt_text,
+            TraceInfo(name="api trigger"),
+            use_experiment=target_experiment,
+            message_text=message_text,
+        )
