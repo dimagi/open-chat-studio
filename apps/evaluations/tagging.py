@@ -35,9 +35,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.evaluations.tagging")
 
-# message_id -> set of tag_ids applied to that message's resolved target.
-AppliedByMessage = defaultdict[int, set[int]]
-
 
 def matches(condition_type: str, condition_value: dict, field_value: Any) -> bool:
     """Return True if field_value satisfies the condition. Raises on unknown type."""
@@ -166,7 +163,7 @@ def _get_possible_tags(evaluators: list[Evaluator]) -> frozenset[int]:
     return frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
 
 
-def _applied_by_message_for_run_ids(run_ids: list[int]) -> AppliedByMessage:
+def _applied_by_message_for_run_ids(run_ids: list[int]) -> dict[int, set[int]]:
     """Map message_id -> {tag_id} across the AppliedTag rows of the given runs.
 
     One query for the whole run set. Because DELTA message-sets are disjoint and a FULL
@@ -174,7 +171,7 @@ def _applied_by_message_for_run_ids(run_ids: list[int]) -> AppliedByMessage:
     DELTAs} contributes at most one tag-set per message, so no per-message run resolution
     is needed.
     """
-    applied: AppliedByMessage = defaultdict(set)
+    applied = defaultdict(set)
     if not run_ids:
         return applied
     for row in AppliedTag.objects.filter(evaluation_result__run_id__in=run_ids).values(
@@ -187,7 +184,7 @@ def _applied_by_message_for_run_ids(run_ids: list[int]) -> AppliedByMessage:
 def _compute_stale_by_target(
     run: EvaluationRun,
     possible_tags: frozenset[int],
-    applied_by_message: AppliedByMessage,
+    applied_by_message: dict[int, set[int]],
     evaluation_mode: str,
 ) -> defaultdict[int, set[int]]:
     stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
