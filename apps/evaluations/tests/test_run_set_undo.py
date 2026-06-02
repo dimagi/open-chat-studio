@@ -6,6 +6,7 @@ of FULL and DELTA runs, then undo the latest FULL run and assert the live tags r
 the previous FULL plus the DELTAs that ran between it and the undone run.
 """
 
+from collections import namedtuple
 from datetime import timedelta
 
 import pytest
@@ -39,6 +40,9 @@ from apps.utils.factories.team import TeamFactory
 NEG = {"result": {"sentiment": "negative"}}
 POS = {"result": {"sentiment": "positive"}}
 
+# Bundles the config + evaluator a run needs so _complete_run stays within a small arg count.
+Setup = namedtuple("Setup", "config evaluator rule_neg rule_pos")
+
 
 @pytest.fixture()
 def team(db):
@@ -50,7 +54,7 @@ def base_time():
     return timezone.now()
 
 
-def _setup(team):
+def _setup(team) -> Setup:
     """Config with two opposite-sentiment rules ('bad'/'good') and an empty dataset."""
     evaluator = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
     rule_neg = EvaluatorTagRuleFactory.create(
@@ -71,29 +75,28 @@ def _setup(team):
     )
     dataset = EvaluationDatasetFactory.create(team=team, messages=[])
     config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
-    return config, evaluator, rule_neg, rule_pos
+    return Setup(config, evaluator, rule_neg, rule_pos)
 
 
-def _complete_run(config, evaluator, results, run_type, base_time, minutes):
+def _complete_run(setup: Setup, results, run_type, finished_at):
     """Create + finish a run that evaluated `results` (list of (message, output)).
 
     Mirrors mark_evaluation_complete: applies tag rules per result, then runs
-    reverse_stale_tags and archive_superseded_runs. `minutes` stamps finished_at so
+    reverse_stale_tags and archive_superseded_runs. `finished_at` stamps the run so
     runs order deterministically.
     """
     run = EvaluationRunFactory.create(
-        team=config.team, config=config, status=EvaluationRunStatus.COMPLETED, type=run_type
+        team=setup.config.team, config=setup.config, status=EvaluationRunStatus.COMPLETED, type=run_type
     )
-    stamp = base_time + timedelta(minutes=minutes)
-    EvaluationRun.objects.filter(pk=run.pk).update(created_at=stamp, finished_at=stamp)
+    EvaluationRun.objects.filter(pk=run.pk).update(created_at=finished_at, finished_at=finished_at)
     run.refresh_from_db()
 
     scoped = []
     for message, output in results:
         result = EvaluationResultFactory.create(
-            team=config.team, evaluator=evaluator, message=message, run=run, output=output
+            team=setup.config.team, evaluator=setup.evaluator, message=message, run=run, output=output
         )
-        apply_rules_to_result(result, evaluator, message)
+        apply_rules_to_result(result, setup.evaluator, message)
         scoped.append(message)
     if run_type == EvaluationRunType.DELTA:
         run.scoped_messages.add(*scoped)
@@ -107,32 +110,34 @@ def _tags(message):
     return set(message.expected_output_chat_message.tags.values_list("name", flat=True))
 
 
+def _new_dataset_message(config):
+    """Create a chat-backed message and add it to the config's dataset."""
+    message = EvaluationMessageFactory.create(create_chat_messages=True)
+    config.dataset.messages.add(message)
+    return message
+
+
 class TestRunSetUndo:
     def test_undo_full_restores_previous_full_and_intervening_deltas(self, team, base_time):
         """FULL1 -> DELTA1 -> DELTA2 -> FULL2; undo FULL2 reverts every session to the
         run that last tagged it before FULL2: m_orig->FULL1, m_d1->DELTA1, m_d2->DELTA2."""
-        config, evaluator, rule_neg, rule_pos = _setup(team)
+        setup = _setup(team)
 
-        m_orig = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_orig)
-        full1 = _complete_run(config, evaluator, [(m_orig, NEG)], EvaluationRunType.FULL, base_time, 0)
+        m_orig = _new_dataset_message(setup.config)
+        full1 = _complete_run(setup, [(m_orig, NEG)], EvaluationRunType.FULL, base_time)
 
-        m_d1 = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_d1)
-        delta1 = _complete_run(config, evaluator, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time, 10)
+        m_d1 = _new_dataset_message(setup.config)
+        delta1 = _complete_run(setup, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time + timedelta(minutes=10))
 
-        m_d2 = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_d2)
-        delta2 = _complete_run(config, evaluator, [(m_d2, NEG)], EvaluationRunType.DELTA, base_time, 20)
+        m_d2 = _new_dataset_message(setup.config)
+        delta2 = _complete_run(setup, [(m_d2, NEG)], EvaluationRunType.DELTA, base_time + timedelta(minutes=20))
 
         # FULL2 re-tags everything positive ("good"), superseding all three.
         full2 = _complete_run(
-            config,
-            evaluator,
+            setup,
             [(m_orig, POS), (m_d1, POS), (m_d2, POS)],
             EvaluationRunType.FULL,
-            base_time,
-            30,
+            base_time + timedelta(minutes=30),
         )
 
         # Live state after FULL2: all "good".
@@ -162,26 +167,25 @@ class TestRunSetUndo:
     def test_undo_restores_only_the_latest_epoch(self, team, base_time):
         """FULL1 -> DELTA1 -> FULL2 -> DELTA2 -> FULL3; undo FULL3 restores FULL2 + DELTA2
         only. FULL1 and DELTA1 (superseded by FULL2) stay archived."""
-        config, evaluator, rule_neg, rule_pos = _setup(team)
+        setup = _setup(team)
 
-        m_orig = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_orig)
-        full1 = _complete_run(config, evaluator, [(m_orig, NEG)], EvaluationRunType.FULL, base_time, 0)
+        m_orig = _new_dataset_message(setup.config)
+        full1 = _complete_run(setup, [(m_orig, NEG)], EvaluationRunType.FULL, base_time)
 
-        m_d1 = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_d1)
-        delta1 = _complete_run(config, evaluator, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time, 10)
+        m_d1 = _new_dataset_message(setup.config)
+        delta1 = _complete_run(setup, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time + timedelta(minutes=10))
 
         # FULL2: m_orig stays bad, m_d1 flips to good.
-        full2 = _complete_run(config, evaluator, [(m_orig, NEG), (m_d1, POS)], EvaluationRunType.FULL, base_time, 20)
+        full2 = _complete_run(
+            setup, [(m_orig, NEG), (m_d1, POS)], EvaluationRunType.FULL, base_time + timedelta(minutes=20)
+        )
 
-        m_d2 = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_d2)
-        delta2 = _complete_run(config, evaluator, [(m_d2, NEG)], EvaluationRunType.DELTA, base_time, 30)
+        m_d2 = _new_dataset_message(setup.config)
+        delta2 = _complete_run(setup, [(m_d2, NEG)], EvaluationRunType.DELTA, base_time + timedelta(minutes=30))
 
         # FULL3: everything good.
         full3 = _complete_run(
-            config, evaluator, [(m_orig, POS), (m_d1, POS), (m_d2, POS)], EvaluationRunType.FULL, base_time, 40
+            setup, [(m_orig, POS), (m_d1, POS), (m_d2, POS)], EvaluationRunType.FULL, base_time + timedelta(minutes=40)
         )
         assert _tags(m_orig) == {"good"}
         assert _tags(m_d1) == {"good"}
@@ -206,15 +210,13 @@ class TestRunSetUndo:
 
     def test_delta_completion_archives_nothing(self, team, base_time):
         """A DELTA run only adds disjoint new-session tags; it supersedes no prior run."""
-        config, evaluator, rule_neg, rule_pos = _setup(team)
+        setup = _setup(team)
 
-        m_orig = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_orig)
-        full1 = _complete_run(config, evaluator, [(m_orig, NEG)], EvaluationRunType.FULL, base_time, 0)
+        m_orig = _new_dataset_message(setup.config)
+        full1 = _complete_run(setup, [(m_orig, NEG)], EvaluationRunType.FULL, base_time)
 
-        m_d1 = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_d1)
-        delta1 = _complete_run(config, evaluator, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time, 10)
+        m_d1 = _new_dataset_message(setup.config)
+        delta1 = _complete_run(setup, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time + timedelta(minutes=10))
 
         full1.refresh_from_db()
         delta1.refresh_from_db()
@@ -224,17 +226,17 @@ class TestRunSetUndo:
         assert _tags(m_d1) == {"bad"}
 
     def test_full_completion_archives_prior_full_and_deltas(self, team, base_time):
-        config, evaluator, rule_neg, rule_pos = _setup(team)
+        setup = _setup(team)
 
-        m_orig = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_orig)
-        full1 = _complete_run(config, evaluator, [(m_orig, NEG)], EvaluationRunType.FULL, base_time, 0)
+        m_orig = _new_dataset_message(setup.config)
+        full1 = _complete_run(setup, [(m_orig, NEG)], EvaluationRunType.FULL, base_time)
 
-        m_d1 = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(m_d1)
-        delta1 = _complete_run(config, evaluator, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time, 10)
+        m_d1 = _new_dataset_message(setup.config)
+        delta1 = _complete_run(setup, [(m_d1, NEG)], EvaluationRunType.DELTA, base_time + timedelta(minutes=10))
 
-        full2 = _complete_run(config, evaluator, [(m_orig, POS), (m_d1, POS)], EvaluationRunType.FULL, base_time, 20)
+        full2 = _complete_run(
+            setup, [(m_orig, POS), (m_d1, POS)], EvaluationRunType.FULL, base_time + timedelta(minutes=20)
+        )
 
         for run in (full1, delta1):
             run.refresh_from_db()
