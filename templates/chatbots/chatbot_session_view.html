@@ -23,11 +23,11 @@
         {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
         <div class="flex flex-wrap items-center justify-end gap-2">
           <div class="join">
-            <a class="btn join-item"
+            <a class="btn btn-sm join-item"
                href="{{ paginate_url }}?dir=prev">
               <i class="fa-solid fa-backward-step"></i> Older
             </a>
-            <a class="btn join-item"
+            <a class="btn btn-sm join-item"
                href="{{ paginate_url }}?dir=next">
               Newer <i class="fa-solid fa-forward-step"></i>
             </a>
