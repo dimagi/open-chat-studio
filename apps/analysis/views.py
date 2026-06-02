@@ -10,7 +10,7 @@ from django.views.generic import CreateView, DeleteView, DetailView
 from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefresh
 from django_tables2 import RequestConfig, SingleTableView
 
-from apps.annotations.prefetch import chat_tagged_items_prefetch
+from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.models import Experiment, ExperimentSession
@@ -101,13 +101,13 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         return context
 
     def get_table(self):
-        sessions = (
-            ExperimentSession.objects.get_table_queryset(self.request.team)
-            .filter(analyses=self.object)
-            .prefetch_related(chat_tagged_items_prefetch())
-        )
+        sessions = ExperimentSession.objects.get_table_queryset(self.request.team).filter(analyses=self.object)
         table = ChatbotSessionsTable(data=sessions)
-        return RequestConfig(self.request).configure(table)
+        configured = RequestConfig(self.request).configure(table)
+        # Page-bounded tag prefetch + eval attribution after slicing to the visible page.
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return configured
 
 
 class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):

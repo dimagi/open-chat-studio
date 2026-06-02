@@ -170,6 +170,9 @@ class TagUI(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 to_attr="prefetched_tagged_items",
             )
         ).get(id=object_id)
+        from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+
+        attach_tag_attributions([obj])
 
         return render(
             request,

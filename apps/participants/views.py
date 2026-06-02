@@ -46,11 +46,14 @@ def single_participant_home_context(team, context: dict, participant_id: int, ex
     sessions = []
 
     if experiment_id:
-        sessions = (
+        sessions = list(
             ExperimentSession.objects.get_table_queryset(team, experiment_id)
             .filter(participant=participant)
             .prefetch_related(chat_tagged_items_prefetch())
         )
+        from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+
+        attach_tag_attributions([session.chat for session in sessions])
         context["session_table"] = ChatbotSessionsTable(
             sessions,
             exclude=["participant"],  # remove participant column

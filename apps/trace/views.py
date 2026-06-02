@@ -73,6 +73,13 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
             .filter(team=self.request.team)
         )
 
+    def get_object(self, queryset=None):
+        from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+
+        trace = super().get_object(queryset)
+        attach_tag_attributions([m for m in (trace.input_message, trace.output_message) if m is not None])
+        return trace
+
 
 class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DetailView):
     model = Trace

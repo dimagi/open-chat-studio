@@ -60,4 +60,8 @@ def attach_chat_tagged_items(rows):
         tagged_by_chat[item.object_id].append(item)
     for row in records:
         row.chat.prefetched_tagged_items = tagged_by_chat.get(row.chat_id, [])
+
+    from apps.evaluations.tag_attribution import attach_tag_attributions  # noqa: PLC0415 — avoid circular import
+
+    attach_tag_attributions([row.chat for row in records])
     return records

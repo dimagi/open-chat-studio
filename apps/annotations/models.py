@@ -147,12 +147,18 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
             logger.warning("Warning: unable to prefectch tags")
             return []
 
+        # Optional {tag_id: label} attached by callers (e.g. eval-driven tag attribution)
+        # to override the default authorship text for system-applied tags.
+        attributions = getattr(self, "prefetched_tag_attributions", None) or {}
+
         tags = []
         for tagged_item in self.prefetched_tagged_items:
             if tagged_item.tag.is_system_tag:
                 added_by = "System"
             elif tagged_item.user and tagged_item.user.email:
                 added_by = tagged_item.user.email
+            elif tagged_item.tag_id in attributions:
+                added_by = attributions[tagged_item.tag_id]
             else:
                 added_by = "Participant"
             tags.append(
