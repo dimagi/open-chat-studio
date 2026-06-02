@@ -7,6 +7,8 @@ from apps.evaluations.tasks import run_evaluation_task
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
     EvaluatorFactory,
 )
 
@@ -22,6 +24,57 @@ def test_run_with_scoped_messages_persists_scope():
 
     assert run.type == EvaluationRunType.DELTA
     assert set(run.scoped_messages.all()) == {msg1, msg2}
+    mock_delay.assert_called_once_with(run.id)
+
+
+@pytest.mark.django_db()
+def test_delta_run_rejects_messages_already_evaluated_by_prior_run():
+    """The DELTA invariant: scoped_messages must be disjoint from prior runs of the config.
+
+    Auto-population only ever feeds brand-new sessions, so the sole live caller never
+    trips this — but a future caller passing an already-evaluated message would silently
+    break the run-set undo, so we fail loudly instead.
+    """
+    config = EvaluationConfigFactory.create()
+    evaluator = EvaluatorFactory.create(team=config.team)
+    config.evaluators.add(evaluator)
+    message = EvaluationMessageFactory.create()
+    config.dataset.messages.add(message)
+
+    # A prior run already evaluated `message`.
+    prior_run = EvaluationRunFactory.create(
+        team=config.team, config=config, status=EvaluationRunStatus.COMPLETED, type=EvaluationRunType.FULL
+    )
+    EvaluationResultFactory.create(team=config.team, evaluator=evaluator, message=message, run=prior_run)
+
+    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
+        with pytest.raises(ValueError, match="overlap"):
+            config.run(run_type=EvaluationRunType.DELTA, scoped_messages=[message])
+
+    mock_delay.assert_not_called()
+    # The overlap check must reject before creating a run row.
+    assert not EvaluationRun.objects.filter(config=config, type=EvaluationRunType.DELTA).exists()
+
+
+@pytest.mark.django_db()
+def test_delta_run_allows_messages_not_seen_by_prior_runs():
+    """A DELTA over genuinely new messages is accepted."""
+    config = EvaluationConfigFactory.create()
+    evaluator = EvaluatorFactory.create(team=config.team)
+    config.evaluators.add(evaluator)
+    seen = EvaluationMessageFactory.create()
+    fresh = EvaluationMessageFactory.create()
+    config.dataset.messages.add(seen, fresh)
+
+    prior_run = EvaluationRunFactory.create(
+        team=config.team, config=config, status=EvaluationRunStatus.COMPLETED, type=EvaluationRunType.FULL
+    )
+    EvaluationResultFactory.create(team=config.team, evaluator=evaluator, message=seen, run=prior_run)
+
+    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
+        run = config.run(run_type=EvaluationRunType.DELTA, scoped_messages=[fresh])
+
+    assert set(run.scoped_messages.all()) == {fresh}
     mock_delay.assert_called_once_with(run.id)
 
 

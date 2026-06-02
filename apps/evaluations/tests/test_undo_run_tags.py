@@ -14,7 +14,7 @@ from apps.evaluations.models import (
     EvaluationRunStatus,
     EvaluationRunType,
 )
-from apps.evaluations.tagging import _message_ids_by_latest_prior_run, apply_rules_to_result, undo_run_tags
+from apps.evaluations.tagging import apply_rules_to_result, undo_run_tags
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -192,32 +192,10 @@ class TestUndoRunTags:
         undo_run_tags(run)
         assert CustomTaggedItem.objects.count() == 0
 
-    def test_delta_run_only_processes_scoped_messages(self, team):
-        """DELTA runs scope to scoped_messages; undo only touches those targets."""
+    def test_undo_on_delta_run_is_a_no_op(self, team):
+        """DELTA runs are never directly undoable; undo_run_tags must leave their tags alone."""
         config, evaluator, rule_neg, _, message = self._make_setup(team)
-        # Add a second message NOT in the delta scope
-        other_message = EvaluationMessageFactory.create(create_chat_messages=True)
-        config.dataset.messages.add(other_message)
 
-        # Apply the tag to other_message directly (simulating a previous run's effect)
-        # We'll use apply_rules_to_result with a separate run so it has AppliedTag rows
-        setup_run = EvaluationRunFactory.create(
-            team=team,
-            config=config,
-            status=EvaluationRunStatus.COMPLETED,
-            type=EvaluationRunType.FULL,
-        )
-        other_result = EvaluationResultFactory.create(
-            team=team,
-            evaluator=evaluator,
-            message=other_message,
-            run=setup_run,
-            output={"result": {"sentiment": "negative"}},
-        )
-        apply_rules_to_result(other_result, evaluator, other_message)
-        _stamp(setup_run, timedelta(hours=-2))
-
-        # DELTA run scoped only to `message` (not `other_message`)
         delta_run = EvaluationRunFactory.create(
             team=team,
             config=config,
@@ -233,15 +211,16 @@ class TestUndoRunTags:
         )
         apply_rules_to_result(delta_result, evaluator, message)
         delta_run.scoped_messages.add(message)
-        _stamp(delta_run, timedelta(hours=-1))
 
-        other_chat_message = other_message.expected_output_chat_message
-        assert other_chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+        chat_message = message.expected_output_chat_message
+        assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
 
         undo_run_tags(delta_run)
 
-        # other_message was NOT in the delta scope — its tag must be untouched
-        assert other_chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+        # DELTA undo is a no-op: the tag remains and the run is not archived.
+        assert chat_message.tags.filter(pk=rule_neg.tag_id).exists()
+        delta_run.refresh_from_db()
+        assert delta_run.tags_archived is False
 
     def test_session_mode_restores_chat_tags(self, team):
         """Session-mode runs tag the Chat object; undo must restore those tags."""
@@ -256,8 +235,8 @@ class TestUndoRunTags:
         # No previous run -> stripped
         assert not chat.tags.filter(pk=rule_neg.tag_id).exists()
 
-    def test_undo_walks_past_delta_that_skipped_message(self, team):
-        """Undo must look past a DELTA predecessor that did not evaluate the target message.
+    def test_undo_restores_full_epoch_across_intervening_delta(self, team):
+        """Undoing a FULL run restores the previous FULL plus the DELTAs between them.
 
         Sequence:
           Run A (FULL):  applies "bad" to message M  (output sentiment=negative)
@@ -265,8 +244,8 @@ class TestUndoRunTags:
           Run C (FULL):  re-evaluates M with sentiment=positive -> applies "good";
                          reverse_stale_tags would have removed "bad" from M.
 
-        Undo of Run C must restore Run A's tag on M (not leave M tagless), because
-        Run B did not evaluate M and so its "state for M" is older than A.
+        Undo of Run C restores the Run A + Run B epoch: M reverts to Run A's "bad"
+        (Run B only tagged OTHER, so the restore set's tag for M comes from Run A).
         """
         config, evaluator, rule_neg, rule_pos, message = self._make_setup(team)
 
@@ -306,10 +285,10 @@ class TestUndoRunTags:
 
         undo_run_tags(run_c)
 
-        # After undo: "bad" restored from Run A (NOT left tagless because B skipped M);
+        # After undo: "bad" restored from Run A (the restore set is Run A + Run B);
         # "good" removed.
         assert chat_message.tags.filter(pk=rule_neg.tag_id).exists(), (
-            "Undo should have walked past the DELTA that skipped M and restored Run A's tag."
+            "Undo should have restored Run A's tag on M from the prior epoch."
         )
         assert not chat_message.tags.filter(pk=rule_pos.tag_id).exists()
 
@@ -365,192 +344,3 @@ class TestUndoRunTags:
 
         # other_message was not evaluated by current_run -> its tag must be untouched
         assert other_chat_message.tags.filter(pk=rule_neg.tag_id).exists()
-
-
-# ---- _message_ids_by_latest_prior_run ----------------------------------------
-
-
-class TestMessageIdsByLatestPriorRun:
-    """Focused tests for the candidates queryset that drives undo's previous-state lookup."""
-
-    def _make_config(self, team):
-        evaluator = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
-        dataset = EvaluationDatasetFactory.create(team=team, messages=[])
-        return EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator]), evaluator
-
-    def _make_run_with_results(self, config, evaluator, messages, run_type=EvaluationRunType.FULL):
-        run = EvaluationRunFactory.create(
-            team=config.team,
-            config=config,
-            status=EvaluationRunStatus.COMPLETED,
-            type=run_type,
-            finished_at=timezone.now(),
-        )
-        for message in messages:
-            EvaluationResultFactory.create(
-                team=config.team, evaluator=evaluator, message=message, run=run, output={"result": {}}
-            )
-        return run
-
-    def test_empty_message_ids_returns_empty(self, team):
-        config, _ = self._make_config(team)
-        future_run = EvaluationRunFactory.create(
-            team=team, config=config, status=EvaluationRunStatus.COMPLETED, finished_at=timezone.now()
-        )
-        assert _message_ids_by_latest_prior_run(future_run, []) == {}
-
-    def test_returns_most_recent_prior_run_per_message(self, team):
-        """When two prior runs evaluated the same message, only the latest is returned."""
-        config, evaluator = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        old_run = self._make_run_with_results(config, evaluator, [message])
-        _stamp(old_run, timedelta(hours=-3))
-
-        recent_run = self._make_run_with_results(config, evaluator, [message])
-        _stamp(recent_run, timedelta(hours=-1))
-
-        # The current run has to be later than both
-        curr_run = self._make_run_with_results(config, evaluator, [message])
-
-        result = _message_ids_by_latest_prior_run(curr_run, [message.pk])
-        assert dict(result) == {recent_run.pk: {message.pk}}
-
-    def test_groups_messages_sharing_a_previous_run(self, team):
-        """Two messages whose latest prior run is the same should be grouped under that run_id."""
-        config, evaluator = self._make_config(team)
-        m1 = EvaluationMessageFactory.create(create_chat_messages=True)
-        m2 = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        shared_prior = self._make_run_with_results(config, evaluator, [m1, m2])
-        _stamp(shared_prior, timedelta(hours=-1))
-
-        curr_run = self._make_run_with_results(config, evaluator, [m1, m2])
-
-        result = _message_ids_by_latest_prior_run(curr_run, [m1.pk, m2.pk])
-        assert dict(result) == {shared_prior.pk: {m1.pk, m2.pk}}
-
-    def test_walks_past_delta_that_skipped_message(self, team):
-        """A DELTA predecessor that did not touch a message must be skipped per-message."""
-        config, evaluator = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-        other_message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        # Run A (FULL): evaluated `message`
-        run_a = self._make_run_with_results(config, evaluator, [message])
-        _stamp(run_a, timedelta(hours=-3))
-
-        # Run B (DELTA): evaluated only `other_message`
-        self._make_run_with_results(config, evaluator, [other_message], run_type=EvaluationRunType.DELTA)
-
-        # Current run
-        curr_run = self._make_run_with_results(config, evaluator, [message])
-
-        result = _message_ids_by_latest_prior_run(curr_run, [message.pk])
-        # For `message`, the latest prior run is Run A — Run B skipped it.
-        assert dict(result) == {run_a.pk: {message.pk}}
-
-    def test_excludes_preview_and_non_completed_runs(self, team):
-        """PREVIEW runs and non-COMPLETED runs must never appear as previous-state."""
-        config, evaluator = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        preview_run = self._make_run_with_results(config, evaluator, [message], run_type=EvaluationRunType.PREVIEW)
-        _stamp(preview_run, timedelta(hours=-2))
-
-        # A pending run evaluated the message but is not COMPLETED
-        pending_run = EvaluationRunFactory.create(
-            team=team, config=config, status=EvaluationRunStatus.PENDING, type=EvaluationRunType.FULL
-        )
-        EvaluationResultFactory.create(
-            team=team, evaluator=evaluator, message=message, run=pending_run, output={"result": {}}
-        )
-        _stamp(pending_run, timedelta(hours=-2))
-
-        curr_run = self._make_run_with_results(config, evaluator, [message])
-
-        assert _message_ids_by_latest_prior_run(curr_run, [message.pk]) == {}
-
-    def test_excludes_runs_from_other_configs(self, team):
-        """Only prior runs of the *same* config count as previous state."""
-        config_a, evaluator_a = self._make_config(team)
-        config_b, evaluator_b = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        # Prior run on config B that happens to have evaluated the same message
-        other_config_run = self._make_run_with_results(config_b, evaluator_b, [message])
-        _stamp(other_config_run, timedelta(hours=-2))
-
-        # Current run on config A
-        curr_run = self._make_run_with_results(config_a, evaluator_a, [message])
-
-        assert _message_ids_by_latest_prior_run(curr_run, [message.pk]) == {}
-
-    def test_excludes_runs_at_or_after_current(self, team):
-        """Only runs strictly older than the current run are candidates."""
-        config, evaluator = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        curr_run = self._make_run_with_results(config, evaluator, [message])
-
-        # Run created after curr_run is not a candidate
-        later_run = self._make_run_with_results(config, evaluator, [message])
-        _stamp(later_run, timedelta(hours=1))
-
-        assert _message_ids_by_latest_prior_run(curr_run, [message.pk]) == {}
-
-    def test_only_returns_rows_for_requested_messages(self, team):
-        """Messages outside `message_ids` must not appear, even if they have prior runs."""
-        config, evaluator = self._make_config(team)
-        m1 = EvaluationMessageFactory.create(create_chat_messages=True)
-        m2 = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        prior_run = self._make_run_with_results(config, evaluator, [m1, m2])
-        _stamp(prior_run, timedelta(hours=-1))
-
-        curr_run = self._make_run_with_results(config, evaluator, [m1, m2])
-
-        result = _message_ids_by_latest_prior_run(curr_run, [m1.pk])
-        assert dict(result) == {prior_run.pk: {m1.pk}}
-
-    def test_orders_by_finished_at_not_created_at(self, team):
-        """When runs overlap, the run that *finished* most recently wins, even if it was
-        created earlier. Runs can overlap (no concurrency guard), so completion time — not
-        creation time — reflects which prior tag state is the most recent."""
-        config, evaluator = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        # long_run: created earliest (-3h) but finished latest (-1h) — it overlapped.
-        long_run = self._make_run_with_results(config, evaluator, [message])
-        _stamp(long_run, timedelta(hours=-3), finished_delta=timedelta(hours=-1))
-
-        # short_run: created later (-2h) but finished earlier (-90min).
-        short_run = self._make_run_with_results(config, evaluator, [message])
-        _stamp(short_run, timedelta(hours=-2), finished_delta=timedelta(minutes=-90))
-
-        curr_run = self._make_run_with_results(config, evaluator, [message])
-
-        # By finished_at, long_run (-1h) is the most recent prior state, not short_run.
-        result = _message_ids_by_latest_prior_run(curr_run, [message.pk])
-        assert dict(result) == {long_run.pk: {message.pk}}
-
-    def test_tie_broken_deterministically_by_run_id(self, team):
-        """Two prior runs finishing at the exact same instant must resolve deterministically:
-        the higher run_id wins (stable tie-breaker for DISTINCT ON)."""
-        config, evaluator = self._make_config(team)
-        message = EvaluationMessageFactory.create(create_chat_messages=True)
-
-        first = self._make_run_with_results(config, evaluator, [message])
-        second = self._make_run_with_results(config, evaluator, [message])
-        # Force identical created_at AND finished_at on both, so only the run_id tie-breaker
-        # can separate them — otherwise DISTINCT ON picks an arbitrary row.
-        tied = timezone.now() - timedelta(hours=1)
-        EvaluationRun.objects.filter(pk__in=[first.pk, second.pk]).update(created_at=tied, finished_at=tied)
-        first.refresh_from_db()
-        second.refresh_from_db()
-
-        curr_run = self._make_run_with_results(config, evaluator, [message])
-
-        winner = max(first.pk, second.pk)
-        result = _message_ids_by_latest_prior_run(curr_run, [message.pk])
-        assert dict(result) == {winner: {message.pk}}
