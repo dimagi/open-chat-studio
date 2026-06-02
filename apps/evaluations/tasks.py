@@ -10,6 +10,7 @@ from typing import cast
 from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Prefetch
 from django.http import QueryDict
@@ -26,8 +27,10 @@ from apps.evaluations.auto_population import (
 )
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
+from apps.evaluations.export import build_evaluation_table_data, write_evaluation_csv
 from apps.evaluations.models import (
     DatasetCreationStatus,
+    EvaluationConfig,
     EvaluationDataset,
     EvaluationMessage,
     EvaluationMessageContent,
@@ -951,3 +954,55 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
         message = "An error occurred while creating session-mode messages"
         _save_dataset_error(dataset, message)
         return {"success": False, "error": message}
+
+
+def _get_bulk_results_queryset(config, team):
+    """Return the most recent EvaluationResult per (message, evaluator) across all
+    completed FULL/DELTA runs for *config*, pushing deduplication into the DB via
+    DISTINCT ON so only the latest-run row per pair is fetched."""
+    return (
+        EvaluationResult.objects.filter(
+            run__config=config,
+            run__status=EvaluationRunStatus.COMPLETED,
+            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+            team=team,
+        )
+        .select_related("message__session__experiment", "evaluator", "session", "run")
+        .prefetch_related("applied_tags__tag")
+        .order_by("message_id", "evaluator_id", "-run__created_at")
+        .distinct("message_id", "evaluator_id")
+    )
+
+
+@shared_task(base=TaskbadgerTask)
+def export_evaluation_bulk_results_task(evaluation_config_id, team_id):
+    """
+    Async export of the most recent evaluation result for each dataset item,
+    across all completed evaluation runs for the given config.
+
+    Returns {"file_id": <id>} on success.
+    """
+    try:
+        config = EvaluationConfig.objects.select_related("team").get(id=evaluation_config_id, team_id=team_id)
+        team = config.team
+
+        with current_team(team):
+            results = _get_bulk_results_queryset(config, team)
+            table_data = build_evaluation_table_data(results)
+
+            csv_buffer = StringIO()
+            write_evaluation_csv(csv.writer(csv_buffer), table_data)
+
+            filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+            file_obj = File.objects.create(
+                name=filename,
+                team=team,
+                content_type="text/csv",
+                file=ContentFile(csv_buffer.getvalue().encode("utf-8"), name=filename),
+            )
+
+            return {"file_id": file_obj.id}
+
+    except Exception as e:
+        logger.exception(f"Error exporting bulk evaluation results for config {evaluation_config_id}: {e}")
+        return {"error": str(e)}

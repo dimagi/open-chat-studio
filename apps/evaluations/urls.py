@@ -58,6 +58,16 @@ urlpatterns = [
         name="evaluation_run_update",
     ),
     path(
+        "<int:evaluation_pk>/bulk_download/start/",
+        evaluation_config_views.start_bulk_download,
+        name="evaluation_bulk_download_start",
+    ),
+    path(
+        "<int:evaluation_pk>/bulk_download/<str:task_id>/",
+        evaluation_config_views.get_bulk_download_link,
+        name="evaluation_bulk_download_link",
+    ),
+    path(
         "sessions_selection_table",
         dataset_views.DatasetSessionsSelectionTableView.as_view(),
         name="dataset_sessions_selection_list",
