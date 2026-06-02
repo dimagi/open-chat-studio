@@ -438,6 +438,12 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
     "PAGE_SIZE": 100,
+    # URL-path API versioning. v1 is frozen against today's surface and is also served under the
+    # unversioned /api/ alias (the permanent default); v2 (renamed surface + new endpoints) lands
+    # in a later phase. See apps/api/versioning.py and docs/design/read-only-chatbot-inspection-api.md.
+    "DEFAULT_VERSIONING_CLASS": "apps.api.versioning.URLPathVersioning",
+    "DEFAULT_VERSION": "v1",
+    "ALLOWED_VERSIONS": ["v1", "v2"],
 }
 
 SPECTACULAR_SETTINGS = {

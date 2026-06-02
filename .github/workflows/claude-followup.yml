@@ -164,7 +164,8 @@ jobs:
             **For CI failures:**
             - Lint errors: run `ruff check --fix` and `ruff format` to fix Python issues
             - JS/TS lint: run `npm run lint` to check, fix issues manually
-            - Type errors: run `npm run type-check` to check, fix issues manually
+            - Python type errors: run `uv run ty check apps/` to check, fix issues manually
+            - JS/TS type errors: run `npm run type-check` to check, fix issues manually
             - Test failures: read the failing test, understand the failure, fix the code or test
             - Lock file issues: run `uv lock` to regenerate
 
@@ -177,6 +178,7 @@ jobs:
 
             Run the checks locally to verify your fixes:
             - `ruff check && ruff format --check` (Python lint)
+            - `uv run ty check apps/` (Python types)
             - `npm run build` (frontend build)
             - `npm run type-check` (TypeScript types)
             - `pytest path/to/relevant/tests.py -v` (relevant tests)
@@ -190,7 +192,7 @@ jobs:
 
             If CI passed and there are no actionable review comments:
             1. Comment on the PR noting that no changes were needed
-          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(npm run dev:*),Bash(npm ci:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(npm run dev:*),Bash(npm ci:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(ty check:*),Bash(ty:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
 
       - name: Add followup-done label
         if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''

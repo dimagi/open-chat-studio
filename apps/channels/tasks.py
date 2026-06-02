@@ -15,11 +15,10 @@ from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.datamodels import (
     BaseMessage,
-    MetaCloudAPIMessage,
     SureAdhereMessage,
     TelegramMessage,
-    TurnWhatsappMessage,
     TwilioMessage,
+    WhatsAppMessage,
 )
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
@@ -120,7 +119,7 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
-    message = TurnWhatsappMessage.parse(message_data)
+    message = WhatsAppMessage.parse(message_data)
     experiment_channel = get_experiment_channel(
         ChannelPlatform.WHATSAPP,
         experiment__public_id=experiment_id,
@@ -129,6 +128,7 @@ def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     if not experiment_channel:
         log.info(f"No experiment channel found for experiment_id: {experiment_id}")
         return
+    set_current_team(experiment_channel.team)
     channel = WhatsappChannel(resolve_published_or_working(experiment_channel.experiment), experiment_channel)
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
@@ -198,7 +198,7 @@ def get_experiment_channel_base_query(platform, **query_kwargs):
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
 def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: dict):
-    message = MetaCloudAPIMessage.parse(message_data)
+    message = WhatsAppMessage.parse(message_data)
     experiment_channel = (
         ExperimentChannel.objects.filter(
             id=channel_id,

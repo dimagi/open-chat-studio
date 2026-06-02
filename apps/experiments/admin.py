@@ -91,12 +91,11 @@ class ExperimentAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelA
         "name",
         "team",
         "owner",
-        "source_material",
         "version_family",
         "version_number",
         "is_archived",
     )
-    list_filter = ("team", "owner", "source_material")
+    list_filter = ("team", "owner")
     search_fields = ("public_id", "name")
 
 

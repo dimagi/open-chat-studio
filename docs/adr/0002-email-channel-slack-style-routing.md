@@ -8,27 +8,33 @@
 
 ## Context
 
-An inbound email must be routed to (a) the correct experiment and (b) the correct ongoing conversation if one already exists. The system already has working channels for Slack, Telegram, and WhatsApp; Slack's routing chain (`thread_ts` → `slack_channel_id` → `SLACK_ALL_CHANNELS` default) in `apps/slack/slack_listeners.py:get_experiment_channel()` is a tested precedent. Email surfaces analogous signals: `In-Reply-To` / `References` headers (thread analog), the to-address (channel analog), and a global "default" channel for unsolicited mail.
+An inbound email must be routed to the correct experiment and, if one exists, the correct ongoing conversation. Slack's routing chain (`thread_ts` → `slack_channel_id` → `SLACK_ALL_CHANNELS` default) is a tested precedent. Email offers analogous signals: `In-Reply-To` / `References` headers (thread), the to-address (channel), and a global default for unsolicited mail.
 
-We also need to decide what to do when nothing matches, and how to identify the participant. Sending an automated reply on no-match can trigger bounce loops against another autoresponder. Identity is non-trivial because a single human can write from multiple addresses, but a richer identity model is out of scope for v1.
+We also need to handle the no-match case and identify the participant. Auto-replying on no-match can trigger bounce loops with another autoresponder. A single human may write from multiple addresses, but a richer identity model is out of scope for v1.
 
 ## Decision
 
-We will route inbound email using a four-tier priority chain that mirrors Slack: (1) the `In-Reply-To` header is looked up against `ExperimentSession.external_id`; (2) if that misses, each `Message-ID` in the `References` header is scanned in turn; (3) the to-address is matched against `ExperimentChannel.extra_data["email_address"]`, creating a new session; (4) if no channel matches the to-address, a channel with `extra_data["is_default"] == True` handles it — a global fallback checked across all teams, not team-scoped (see `get_email_experiment_channel` in `apps/channels/channels_v2/email_channel.py`). If even the default is absent we silently drop the message — never auto-reply on no-match. The participant identifier is the sender's email `addr_spec`; multi-address resolution is an accepted v1 limitation.
+We will route inbound email using a four-tier priority chain mirroring Slack:
+
+1. `In-Reply-To` is looked up against `ExperimentSession.external_id`.
+2. On a miss, each `Message-ID` in the `References` header is scanned in turn. Per RFC 2822 threading the root `Message-ID` is typically present in `References` (best-effort, not guaranteed), so replies to interior messages usually still resolve.
+3. The to-address is matched against `ExperimentChannel.extra_data["email_address"]`, creating a new session.
+4. Otherwise a channel with `extra_data["is_default"] == True` handles it — a global fallback checked across all teams, not team-scoped.
+
+If even the default is absent we silently drop the message; never auto-reply on no-match. The participant identifier is the sender's email `addr_spec`; multi-address resolution is an accepted v1 limitation.
 
 ## Consequences
 
-- **Positive:** Routing reuses the mental model contributors already know from Slack; the priority chain is the same shape and order.
-- **Positive:** Each tier hits either an indexed column (`external_id`) or a `JSONField` containment lookup on `extra_data` — cheap, no new tables.
-- **Positive:** Silent-drop on no-match makes the system safe to expose to public addresses; bounces from autoresponders can't loop us.
-- **Positive:** The `References` fallback handles replies to older messages in a thread, where `In-Reply-To` points at an interior `Message-ID`. RFC 2822 guarantees the root `Message-ID` appears in `References`, so the scan succeeds.
-- **Negative:** Address fuzziness — the same human with two addresses is two participants. Acceptable for v1.
-- **Negative:** Silent-drop makes legitimate routing failures invisible to the sender. We rely on logs for debugging.
+- **Positive:** Reuses the Slack routing mental model — same shape and order.
+- **Positive:** Each tier hits either the indexed `external_id` column or a `JSONField` containment lookup on `extra_data` — no new tables.
+- **Positive:** Silent-drop on no-match makes the system safe to expose to public addresses; autoresponder bounces can't loop.
+- **Negative:** The same human with two addresses becomes two participants. Acceptable for v1.
+- **Negative:** Silent-drop makes legitimate routing failures invisible to the sender; we rely on logs for debugging.
 
 ## Alternatives considered
 
-- **Subject-line keyword parsing** (e.g. `[bot:foo]` à la Mailman): rejected — fragile, hostile UX, broken the moment a client renames a thread.
-- **Separate inbound address per session** (`session-abc@chat...`): rejected — exhausts the address space, complicates DNS, and degrades poorly if the address is mangled in transit.
-- **Auto-reply "no matching bot" on no-match:** rejected — risks infinite bounce loops with automated senders.
-- **Multi-address identity resolution (Identity / claim flow):** deferred — meaningful model surface; not needed to ship v1.
-- **Per-channel custom routing functions (instead of a fixed priority chain):** rejected — needless flexibility; the Slack precedent works, and a single chain is easier to reason about.
+- **Subject-line keyword parsing** (e.g. `[bot:foo]`) → rejected: fragile and breaks when a client renames a thread.
+- **Separate inbound address per session** (`session-abc@chat...`) → rejected: exhausts the address space and degrades if the address is mangled in transit.
+- **Auto-reply "no matching bot" on no-match** → rejected: risks infinite bounce loops with automated senders.
+- **Multi-address identity resolution (Identity / claim flow)** → deferred: meaningful model surface, not needed to ship v1.
+- **Per-channel custom routing functions** → rejected: needless flexibility; a single chain is easier to reason about.

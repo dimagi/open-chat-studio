@@ -38,4 +38,4 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 
     def get_queryset(self):
         # Only return working experiments
-        return Experiment.objects.filter(team__slug=self.request.team.slug).filter(working_version__isnull=True)
+        return Experiment.objects.filter(team=self.request.team).filter(working_version__isnull=True)

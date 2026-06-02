@@ -21,8 +21,6 @@
                         </template>
                         <template x-if="message.task_id === undefined">
                             <div>
-                                <small x-text="message.prepend_input_formatting" class="disabled:bg-gray-100"
-                                       x-bind:disabled="$store.promptBuilder.disjointState()"></small>
                                 <textarea type="text"
                                           :placeholder="message.author === 'User' ? 'Enter a user message here' : 'Enter an assistant message here'"
                                           rows="1" style="line-height:1.25em; height:40px;"
@@ -30,8 +28,6 @@
                                           x-model="message.message" x-init="$nextTick(() => resize($el))"
                                           x-bind:disabled="$store.promptBuilder.disjointState()"
                                           @input="resize($el)"></textarea>
-                                <small x-text="message.appended_input_formatting" class="disabled:bg-gray-100"
-                                       x-bind:disabled="$store.promptBuilder.disjointState()"></small>
                             </div>
                         </template>
                     </div>
@@ -84,8 +80,6 @@
             "author": task_id ? "Assistant" : newAuthor,
             "message": "",
             "task_id": task_id,
-            "prepend_input_formatting": undefined,
-            "appended_input_formatting": undefined,
             "input_tokens": 0,
             "output_tokens": 0,
             "id": Date.now()
