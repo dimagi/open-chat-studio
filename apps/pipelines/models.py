@@ -57,23 +57,6 @@ def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
                 node_version.params[param_name] = str(param_instance.latest_version.id)
 
 
-def _set_versioned_param_list_values(node_version: Self, param_name: str, param_cls):
-    """
-    Handles list parameters referencing versioned models with the same logic as _set_versioned_param_value
-    but for a list of IDs.
-    """
-    if param_instance_ids := node_version.params.get(param_name):
-        versioned_ids = []
-        for param_instance_id in param_instance_ids:
-            if param_instance := param_cls.objects.filter(id=param_instance_id).first():
-                if not param_instance.has_versions or param_instance.compare_with_latest():
-                    new_instance_version = param_instance.create_new_version()
-                    versioned_ids.append(new_instance_version.id)
-                else:
-                    versioned_ids.append(param_instance.latest_version.id)
-        node_version.params[param_name] = versioned_ids
-
-
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self):
         return (
@@ -420,7 +403,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if not is_copy and self.type == LLMResponseWithPrompt.__name__:
             _set_versioned_param_value(new_version, "source_material_id", SourceMaterial)
             _set_versioned_param_value(new_version, "collection_id", Collection)
-            _set_versioned_param_list_values(new_version, "collection_index_ids", Collection)
 
         if pipeline is not None:
             new_version.pipeline = pipeline
@@ -552,7 +534,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 for collection_id in collection_index_ids:
                     try:
                         collection = Collection.objects.get(id=collection_id)
-                        collection.archive()
+                        # ADR-0019: index collections are live shared resources. Only archive
+                        # frozen per-bot versions (legacy data); never the live working index.
+                        if collection.is_a_version:
+                            collection.archive()
                     except ObjectDoesNotExist:
                         versioning_logger.exception(
                             f"Failed to archive collection_index_ids with id {collection_id}: not found"

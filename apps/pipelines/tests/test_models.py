@@ -87,15 +87,17 @@ class TestVersioningNodes:
             param_value = str(collection.id)
         node = NodeFactory.create(type=node_type, pipeline=pipeline, params={param_name: param_value})
 
-        # Versioning it should version the collection as well
+        pipeline.create_new_version()
         pipeline.create_new_version()
 
-        # Versioning it without changes to the collection should not version the collection
-        pipeline.create_new_version()
         if is_index:
-            assert node.versions.first().params[param_name] == [collection.versions.first().id]
-            assert node.versions.last().params[param_name] == [collection.versions.first().id]
+            # ADR-0019: index collections are live shared resources. Publishing keeps the working
+            # id verbatim and does NOT create a collection version.
+            assert not collection.versions.exists()
+            assert node.versions.first().params[param_name] == [collection.id]
+            assert node.versions.last().params[param_name] == [collection.id]
         else:
+            # Media collections still version per published bot.
             assert node.versions.first().params[param_name] == str(collection.versions.first().id)
             assert node.versions.last().params[param_name] == str(collection.versions.first().id)
 
@@ -136,23 +138,23 @@ class TestVersioningNodes:
             },
         )
 
-        # First versioning - should create versions of all dependencies
+        # First versioning - media + source material version; the index stays live (ADR-0019).
         pipeline_version = pipeline.create_new_version()
         collection_version = collection.latest_version
-        collection_index_version = collection_index.latest_version
         source_material_version = source_material.latest_version
 
         node_version = pipeline_version.node_set.get(type=node_type)
         assert node_version.params["collection_id"] == str(collection_version.id)
-        assert node_version.params["collection_index_ids"] == [collection_index_version.id]
+        assert node_version.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version.params["source_material_id"] == str(source_material_version.id)
+        assert not collection_index.versions.exists()
 
-        # Second versioning without changes - should reuse existing dependency versions
+        # Second versioning - reuse existing media/source-material versions; index still live.
         pipeline_version_2 = pipeline.create_new_version()
 
         node_version_2 = pipeline_version_2.node_set.get(type=node_type)
         assert node_version_2.params["collection_id"] == str(collection_version.id)
-        assert node_version_2.params["collection_index_ids"] == [collection_index_version.id]
+        assert node_version_2.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
 
 
@@ -172,17 +174,13 @@ class TestArchivingNodes:
         archive_related_params.assert_called()
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
-    def test_archive_related_objects(self, create_remote_index):
+    def test_archive_related_objects(self):
         # Setup related objects
         assistant = OpenAiAssistantFactory.create()
         collection = CollectionFactory.create()
         collection_index = CollectionFactory.create(
             is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
         )
-
-        # Setup mocks
-        create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory.create()
@@ -199,26 +197,26 @@ class TestArchivingNodes:
 
         assistant_version = assistant.versions.first()
         collection_version = collection.versions.first()
-        collection_index_version = collection_index.versions.first()
 
         pipeline.archive()
 
-        # Ensure that the working versions are not archived, but the versions of each related object are
+        # Ensure that the working versions are not archived
         assistant.refresh_from_db()
         collection.refresh_from_db()
         collection_index.refresh_from_db()
-
         assistant_version.refresh_from_db()
         collection_version.refresh_from_db()
-        collection_index_version.refresh_from_db()
 
         assert assistant.is_archived is False
         assert collection.is_archived is False
+        # ADR-0019: the index is live and never versioned per bot, so the working index is untouched
+        # and no index version exists to archive.
         assert collection_index.is_archived is False
+        assert not collection_index.versions.exists()
 
+        # Per-bot versioned dependencies are archived
         assert assistant_version.is_archived is True
         assert collection_version.is_archived is True
-        assert collection_index_version.is_archived is True
 
 
 class TestPipeline:
