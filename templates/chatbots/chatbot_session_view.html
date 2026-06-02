@@ -34,7 +34,7 @@
           </div>
           {% if perms.trace.view_trace %}
             <a class="btn btn-sm"
-               href="{% url 'trace:home' team.slug %}?filter_0_column=session_id&filter_0_operator=equals&filter_0_value={{ experiment_session.external_id }}">
+               href="{% url 'trace:home' team.slug %}{% querystring filter_0_column='session_id' filter_0_operator='equals' filter_0_value=experiment_session.external_id %}">
               <i class="fa-solid fa-stream"></i> View Traces
             </a>
           {% endif %}

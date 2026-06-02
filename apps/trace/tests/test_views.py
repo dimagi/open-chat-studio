@@ -1,3 +1,7 @@
+import re
+from html import unescape
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 from django.urls import reverse
 
@@ -33,10 +37,24 @@ def test_trace_detail_view_renders_filter_links(client, team_with_users):
     assert response.status_code == 200
     content = response.content.decode()
     home_url = reverse("trace:home", args=[team.slug])
-    assert f"{home_url}?filter_0_column=session_id&filter_0_operator=equals" in content
-    assert str(trace.session.external_id) in content
-    assert "filter_0_column=experiment&filter_0_operator=any+of" in content
-    assert "filter_0_column=participant&filter_0_operator=equals" in content
+
+    # Collect the filter query params from each link pointing at the trace table home.
+    links = {}
+    for href in re.findall(rf'href="({re.escape(home_url)}\?[^"]+)"', content):
+        params = parse_qs(urlparse(unescape(href)).query)
+        links[params["filter_0_column"][0]] = params
+
+    session_link = links["session_id"]
+    assert session_link["filter_0_operator"] == ["equals"]
+    assert session_link["filter_0_value"] == [str(trace.session.external_id)]
+
+    experiment_link = links["experiment"]
+    assert experiment_link["filter_0_operator"] == ["any of"]
+    assert experiment_link["filter_0_value"] == [f"[{trace.experiment_id}]"]
+
+    participant_link = links["participant"]
+    assert participant_link["filter_0_operator"] == ["equals"]
+    assert participant_link["filter_0_value"] == [trace.participant.identifier]
 
 
 @pytest.mark.django_db()
