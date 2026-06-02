@@ -17,7 +17,7 @@ def test_schema_is_up_to_date_and_valid(pytestconfig):
     with open(path) as f:
         new_schema = yaml.safe_load(f)
 
-    with open(f"{pytestconfig.rootdir}/api-schema.yml") as f:
+    with open(f"{pytestconfig.rootdir}/api-schemas/v1.yml") as f:
         old_schema = yaml.safe_load(f)
 
     assert old_schema == new_schema

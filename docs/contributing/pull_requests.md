@@ -45,7 +45,7 @@ Regardless of automated tests, ensure the quality of your changes:
 ## Documentation Policy
 
 * **User-facing changes** follow these [guidelines](../developer_guides/user_docs.md)
-* **API changes**: If your changes affect the REST API schema, update the `api-schema.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
+* **API changes**: If your changes affect the REST API schema, update the `api-schemas/v1.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
 
 ## Communication
 
