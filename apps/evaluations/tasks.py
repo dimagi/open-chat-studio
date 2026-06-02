@@ -1,7 +1,7 @@
 import contextlib
 import csv
 import math
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from collections.abc import Iterable
 from datetime import timedelta
 from io import StringIO
@@ -27,6 +27,7 @@ from apps.evaluations.auto_population import (
 )
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
+from apps.evaluations.export import build_evaluation_table_data, write_evaluation_csv
 from apps.evaluations.models import (
     DatasetCreationStatus,
     EvaluationConfig,
@@ -973,78 +974,6 @@ def _get_bulk_results_queryset(config, team):
     )
 
 
-def _populate_message_row_fixed_fields(row_data: OrderedDict, result) -> None:
-    """Populate the fixed/shared fields for a new message row."""
-    source_session = result.message.session if result.message.session_id else None
-    row_data["session"] = result.session.external_id if result.session_id else ""
-    row_data["source_session"] = source_session.external_id if source_session else ""
-    row_data["source_experiment_id"] = (
-        str(source_session.experiment.public_id) if source_session and source_session.experiment_id else ""
-    )
-    row_data["message_id"] = result.message.id
-    row_data["Dataset Input"] = result.input_message
-    row_data["Dataset Output"] = result.output_message
-    row_data["Generated Response"] = result.output.get("generated_response", "")
-    row_data.update({k: v for k, v in result.message_context.items() if k != "current_datetime"})
-
-
-def _build_evaluation_table_data(results) -> list[dict]:
-    """Aggregate *results* (an iterable of EvaluationResult) into a list of per-message
-    row dicts, combining evaluator columns and tags.
-
-    Errors are namespaced per evaluator (``error (EvaluatorName)``) so that failures
-    from different evaluators on the same message are preserved rather than overwritten.
-    """
-    table_by_message: dict[int, OrderedDict] = {}
-    tags_by_message: dict[int, set] = defaultdict(set)
-
-    for result in results:
-        row_data = table_by_message.setdefault(result.message_id, OrderedDict())
-        if not row_data:
-            _populate_message_row_fixed_fields(row_data, result)
-
-        for k, v in result.output.get("result", {}).items():
-            row_data[f"{k} ({result.evaluator.name})"] = v
-
-        if result.output.get("error"):
-            row_data[f"error ({result.evaluator.name})"] = result.output["error"]
-
-        for applied_tag in result.applied_tags.all():
-            tags_by_message[result.message_id].add(applied_tag.tag.name)
-
-    for message_id, row_data in table_by_message.items():
-        tags = tags_by_message.get(message_id)
-        row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
-
-    return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
-
-
-def _write_evaluation_csv(writer, table_data: list[dict]) -> None:
-    """Write *table_data* rows to *writer* using the standard evaluation column ordering.
-
-    Fixed headers come first, then alphabetically-sorted dynamic columns, then any
-    error columns last.  This is shared between the per-run and bulk-download exports.
-    """
-    from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
-
-    if not table_data:
-        writer.writerow(["No results available yet"])
-        return
-
-    all_headers: set[str] = set()
-    for row in table_data:
-        all_headers.update(row.keys())
-
-    error_headers = sorted(h for h in all_headers if h == "error" or h.startswith("error ("))
-    other_headers = sorted(
-        h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h not in error_headers
-    )
-    headers = [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + error_headers
-    writer.writerow(headers)
-    for row in table_data:
-        writer.writerow([row.get(header, "") for header in headers])
-
-
 @shared_task(bind=True, base=TaskbadgerTask)
 def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
     """
@@ -1065,11 +994,11 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
             results = _get_bulk_results_queryset(config, team)
 
             progress_recorder.set_progress(40, 100, "Processing results...")
-            table_data = _build_evaluation_table_data(results)
+            table_data = build_evaluation_table_data(results)
 
             progress_recorder.set_progress(80, 100, "Generating CSV...")
             csv_buffer = StringIO()
-            _write_evaluation_csv(csv.writer(csv_buffer), table_data)
+            write_evaluation_csv(csv.writer(csv_buffer), table_data)
 
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
             file_obj = File.objects.create(

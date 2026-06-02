@@ -6,15 +6,14 @@ from functools import cached_property
 from io import StringIO
 from typing import Any
 
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
-
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.template.response import TemplateResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
@@ -22,11 +21,11 @@ from django.views.generic import CreateView, DeleteView, TemplateView, UpdateVie
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tasks import (
-    _write_evaluation_csv,
     export_evaluation_bulk_results_task,
     upload_evaluation_run_results_task,
 )
@@ -469,14 +468,12 @@ def create_evaluation_preview(request, team_slug, evaluation_pk):
 
 @permission_required("evaluations.view_evaluationrun")
 def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
     table_data = list(evaluation_run.get_table_data(include_ids=True))
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f"attachment; filename={filename}"
-    _write_evaluation_csv(csv.writer(response), table_data)
+    write_evaluation_csv(csv.writer(response), table_data)
     return response
 
 
@@ -521,9 +518,7 @@ def load_experiment_versions(request, team_slug: str):
 @permission_required("evaluations.change_evaluationrun")
 def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Upload CSV to update evaluation run results"""
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     if request.method == "GET":
         context = {
             "active_tab": "evaluations",
@@ -567,9 +562,9 @@ def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk:
         sample_rows = all_rows[:3]
         total_rows = len(all_rows)
 
-        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | set(["error"])
+        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | {"error"}
 
-        result_columns = [col for col in columns if col not in protected_columns]
+        result_columns = [col for col in columns if col not in protected_columns and not col.startswith("error (")]
         suggestions = generate_evaluation_results_column_suggestions(result_columns, evaluation_run)
         return JsonResponse(
             {
