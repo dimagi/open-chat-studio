@@ -47,7 +47,7 @@ jobs:
           python3 << 'PY'
           import json
           import os
-          import sys
+          import sys3
           import urllib.error
           import urllib.request
 
@@ -119,7 +119,7 @@ jobs:
 
       - name: Upload matched models payload
         if: steps.fetch.outputs.has_models == 'true'
-        uses: actions/upload-artifact@v8
+        uses: actions/upload-artifact@v7
         with:
           name: matched-models
           path: matched_models.json
