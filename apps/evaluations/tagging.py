@@ -35,6 +35,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.evaluations.tagging")
 
+# message_id -> set of tag_ids applied to that message's resolved target.
+AppliedByMessage = defaultdict[int, set[int]]
+
 
 def matches(condition_type: str, condition_value: dict, field_value: Any) -> bool:
     """Return True if field_value satisfies the condition. Raises on unknown type."""
@@ -71,18 +74,31 @@ def evaluate_rules(rules: list[EvaluatorTagRule], result_output: dict) -> list[E
     return matched
 
 
-def resolve_target(evaluator: Evaluator, evaluation_message: EvaluationMessage) -> Chat | ChatMessage | None:
-    """Return the object to tag based on the evaluator's mode, or None if no target.
+def resolve_target(evaluation_mode: str, evaluation_message: EvaluationMessage) -> Chat | ChatMessage | None:
+    """Return the object to tag for the given evaluation mode, or None if no target.
 
     SESSION mode returns the session's `Chat` (not the `ExperimentSession` itself) because
     `Chat` owns the TaggedModelMixin contract — tags live on the chat, not the session row.
+    MESSAGE mode tags the expected-output `ChatMessage`.
     """
-    if evaluator.evaluation_mode == EvaluationMode.SESSION:
+    if evaluation_mode == EvaluationMode.SESSION:
         session = evaluation_message.session
         if session is None:
             return None
         return session.chat
     return evaluation_message.expected_output_chat_message
+
+
+def _content_type_for_mode(evaluation_mode: str) -> ContentType:
+    """ContentType of the object a mode tags: `Chat` for SESSION, `ChatMessage` otherwise.
+
+    Mirrors `resolve_target`'s target choice, letting callers derive the content type from
+    the mode alone instead of from a resolved instance.
+    """
+    from apps.chat.models import Chat, ChatMessage  # noqa: PLC0415 — avoid circular import
+
+    model = Chat if evaluation_mode == EvaluationMode.SESSION else ChatMessage
+    return ContentType.objects.get_for_model(model)
 
 
 def _get_cached_tag_rules(evaluator: Evaluator) -> list[EvaluatorTagRule]:
@@ -108,7 +124,7 @@ def apply_rules_to_result(
     if not rules:
         return
 
-    target = resolve_target(evaluator, evaluation_message)
+    target = resolve_target(evaluator.evaluation_mode, evaluation_message)
     if target is None:
         return
 
@@ -117,7 +133,7 @@ def apply_rules_to_result(
         return
 
     tags_to_apply = {rule.tag_id: rule.tag for rule in matched_rules}
-    content_type = ContentType.objects.get_for_model(type(target))
+    content_type = _content_type_for_mode(evaluator.evaluation_mode)
     team = evaluation_result.team
 
     CustomTaggedItem.objects.bulk_create(
@@ -150,7 +166,7 @@ def _get_possible_tags(evaluators: list[Evaluator]) -> frozenset[int]:
     return frozenset(rule.tag_id for evaluator in evaluators for rule in evaluator.tag_rules.all())
 
 
-def _applied_by_message_for_run_ids(run_ids: list[int]) -> defaultdict[int, set[int]]:
+def _applied_by_message_for_run_ids(run_ids: list[int]) -> AppliedByMessage:
     """Map message_id -> {tag_id} across the AppliedTag rows of the given runs.
 
     One query for the whole run set. Because DELTA message-sets are disjoint and a FULL
@@ -158,7 +174,7 @@ def _applied_by_message_for_run_ids(run_ids: list[int]) -> defaultdict[int, set[
     DELTAs} contributes at most one tag-set per message, so no per-message run resolution
     is needed.
     """
-    applied: defaultdict[int, set[int]] = defaultdict(set)
+    applied: AppliedByMessage = defaultdict(set)
     if not run_ids:
         return applied
     for row in AppliedTag.objects.filter(evaluation_result__run_id__in=run_ids).values(
@@ -171,22 +187,19 @@ def _applied_by_message_for_run_ids(run_ids: list[int]) -> defaultdict[int, set[
 def _compute_stale_by_target(
     run: EvaluationRun,
     possible_tags: frozenset[int],
-    applied_by_message: defaultdict[int, set[int]],
-    representative_evaluator: Evaluator,
-) -> tuple[defaultdict[int, set[int]], ContentType | None]:
-    content_type = None
+    applied_by_message: AppliedByMessage,
+    evaluation_mode: str,
+) -> defaultdict[int, set[int]]:
     stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
     messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
     for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
-        target = resolve_target(representative_evaluator, message)
+        target = resolve_target(evaluation_mode, message)
         if target is None:
             continue
-        if content_type is None:
-            content_type = ContentType.objects.get_for_model(type(target))
         stale_tags = possible_tags - applied_by_message[message.pk]
         if stale_tags:
             stale_by_target[target.pk] |= stale_tags
-    return stale_by_target, content_type
+    return stale_by_target
 
 
 def reverse_stale_tags(run: EvaluationRun) -> None:
@@ -207,17 +220,16 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     if not possible_tags:
         return
 
-    # All evaluators in a config share the dataset's evaluation_mode (enforced by
-    # form validation). Use the first as a representative to carry mode into resolve_target.
-    representative_evaluator = evaluators[0]
+    # All evaluators in a config share the dataset's evaluation_mode (enforced by form
+    # validation), so the first evaluator's mode determines every target and content type.
+    evaluation_mode = evaluators[0].evaluation_mode
     applied_by_message = _applied_by_message_for_run_ids([run.pk])
-    stale_by_target, content_type = _compute_stale_by_target(
-        run, possible_tags, applied_by_message, representative_evaluator
-    )
+    stale_by_target = _compute_stale_by_target(run, possible_tags, applied_by_message, evaluation_mode)
 
-    if not stale_by_target or content_type is None:
+    if not stale_by_target:
         return
 
+    content_type = _content_type_for_mode(evaluation_mode)
     filter_q = Q()
     for target_pk, tag_ids in stale_by_target.items():
         filter_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
@@ -274,16 +286,16 @@ def _compute_undo_target_diffs(
     run: EvaluationRun,
     restore_runs: list[EvaluationRun],
     possible_tags: frozenset[int],
-    representative_evaluator: Evaluator,
-) -> tuple[dict[int, set[int]], dict[int, set[int]], ContentType | None]:
+    evaluation_mode: str,
+) -> tuple[dict[int, set[int]], dict[int, set[int]]]:
     """Compute the (remove, add) managed-tag deltas per target for undoing `run`.
 
     `remove` is tags `run` applied that the restore set does not have; `add` is tags the
     restore set applied that `run` does not have. Both are intersected with `possible_tags`
     so we never touch tags this config doesn't manage. The restore set's AppliedTag rows
     cover disjoint messages (the DELTA invariant), so they compose without per-message run
-    resolution. Returns (remove_by_target, add_by_target, content_type); content_type is
-    None when no message resolved to a target.
+    resolution. Returns (remove_by_target, add_by_target); both are empty when no message
+    resolved to a target.
     """
     current_applied = _applied_by_message_for_run_ids([run.pk])
     restore_applied = _applied_by_message_for_run_ids([r.pk for r in restore_runs])
@@ -292,7 +304,6 @@ def _compute_undo_target_diffs(
     # messages (add). Their union is the full set of targets undo must reconcile.
     message_ids = set(current_applied) | set(restore_applied)
 
-    content_type: ContentType | None = None
     remove_by_target: defaultdict[int, set[int]] = defaultdict(set)
     add_by_target: defaultdict[int, set[int]] = defaultdict(set)
 
@@ -300,11 +311,9 @@ def _compute_undo_target_diffs(
         "session__chat", "expected_output_chat_message"
     )
     for message in messages_iter:
-        target = resolve_target(representative_evaluator, message)
+        target = resolve_target(evaluation_mode, message)
         if target is None:
             continue
-        if content_type is None:
-            content_type = ContentType.objects.get_for_model(type(target))
         # Diff current vs restore so we only touch tags that actually change:
         # drop tags this run added that the restored epoch didn't have, and restore
         # epoch tags this run no longer has. Tags common to both are left alone.
@@ -313,7 +322,7 @@ def _compute_undo_target_diffs(
         remove_by_target[target.pk] |= current_tags - restore_tags
         add_by_target[target.pk] |= restore_tags - current_tags
 
-    return remove_by_target, add_by_target, content_type
+    return remove_by_target, add_by_target
 
 
 def _apply_undo_target_diffs(
@@ -383,17 +392,16 @@ def undo_run_tags(run: EvaluationRun) -> None:
     if not possible_tags:
         return
 
-    # All evaluators in a config share the dataset's evaluation_mode.
-    # Use the first as a representative to carry mode into resolve_target.
-    representative_evaluator = evaluators[0]
+    # All evaluators in a config share the dataset's evaluation_mode, so the first
+    # evaluator's mode determines every target and content type.
+    evaluation_mode = evaluators[0].evaluation_mode
 
     restore_runs = _restore_set_for_run(run)
-    remove_by_target, add_by_target, content_type = _compute_undo_target_diffs(
-        run, restore_runs, possible_tags, representative_evaluator
-    )
+    remove_by_target, add_by_target = _compute_undo_target_diffs(run, restore_runs, possible_tags, evaluation_mode)
 
     with transaction.atomic():
-        if content_type is not None:
+        if remove_by_target or add_by_target:
+            content_type = _content_type_for_mode(evaluation_mode)
             _apply_undo_target_diffs(run.team, content_type, remove_by_target, add_by_target)
         _update_archive_flags_for_undo(run, restore_runs)
 

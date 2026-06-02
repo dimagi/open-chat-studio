@@ -154,24 +154,18 @@ class TestEvaluateRules:
 
 class TestResolveTarget:
     def test_session_mode_with_session(self):
-        evaluator = MagicMock()
-        evaluator.evaluation_mode = "session"
         message = MagicMock()
         chat = MagicMock()
         message.session.chat = chat
-        assert resolve_target(evaluator, message) is chat
+        assert resolve_target("session", message) is chat
 
     def test_session_mode_no_session(self):
-        evaluator = MagicMock()
-        evaluator.evaluation_mode = "session"
         message = MagicMock()
         message.session = None
-        assert resolve_target(evaluator, message) is None
+        assert resolve_target("session", message) is None
 
     def test_message_mode_with_chat_message(self):
-        evaluator = MagicMock()
-        evaluator.evaluation_mode = "message"
         message = MagicMock()
         chat_message = MagicMock()
         message.expected_output_chat_message = chat_message
-        assert resolve_target(evaluator, message) is chat_message
+        assert resolve_target("message", message) is chat_message
