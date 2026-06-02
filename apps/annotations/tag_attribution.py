@@ -65,6 +65,6 @@ def attach_tag_attributions(objects) -> None:
     message_map = _build_attributions([m.id for m in messages], _MESSAGE_PATH)
 
     for chat in chats:
-        chat.prefetched_tag_attributions = dict(chat_map.get(chat.id, {}))
+        chat.prefetched_tag_attributions = chat_map.get(chat.id, {})
     for message in messages:
-        message.prefetched_tag_attributions = dict(message_map.get(message.id, {}))
+        message.prefetched_tag_attributions = message_map.get(message.id, {})
