@@ -974,29 +974,22 @@ def _get_bulk_results_queryset(config, team):
     )
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
-def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
+@shared_task(base=TaskbadgerTask)
+def export_evaluation_bulk_results_task(evaluation_config_id, team_id):
     """
     Async export of the most recent evaluation result for each dataset item,
     across all completed evaluation runs for the given config.
 
     Returns {"file_id": <id>} on success.
     """
-    progress_recorder = ProgressRecorder(self)
-    progress_recorder.set_progress(0, 100, "Starting export...")
-
     try:
         config = EvaluationConfig.objects.select_related("team").get(id=evaluation_config_id, team_id=team_id)
         team = config.team
 
         with current_team(team):
-            progress_recorder.set_progress(10, 100, "Fetching results...")
             results = _get_bulk_results_queryset(config, team)
-
-            progress_recorder.set_progress(40, 100, "Processing results...")
             table_data = build_evaluation_table_data(results)
 
-            progress_recorder.set_progress(80, 100, "Generating CSV...")
             csv_buffer = StringIO()
             write_evaluation_csv(csv.writer(csv_buffer), table_data)
 
@@ -1008,7 +1001,6 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id, team_id):
                 file=ContentFile(csv_buffer.getvalue().encode("utf-8"), name=filename),
             )
 
-            progress_recorder.set_progress(100, 100, "Export complete")
             return {"file_id": file_obj.id}
 
     except Exception as e:
