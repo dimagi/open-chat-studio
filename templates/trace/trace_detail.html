@@ -27,9 +27,34 @@
   <div>
     <div class="container mx-auto px-4 py-6">
       {# Heading #}
-      <div class="mb-6">
-        <h1 class="text-3xl font-bold mb-1">{{ trace.experiment.name }}</h1>
-        <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
+      <div class="flex flex-wrap items-start justify-between gap-2 mb-6">
+        <div>
+          <h1 class="text-3xl font-bold mb-1">{{ trace.experiment.name }}</h1>
+          <p class="text-sm text-base-content/60">Trace ID: {{ trace.trace_id }}</p>
+        </div>
+        {# Quick links to the trace table pre-filtered by this trace's session/chatbot/participant #}
+        {% if perms.trace.view_trace %}
+          <div class="flex flex-wrap gap-2">
+            {% if trace.session %}
+              <a href="{% url 'trace:home' request.team.slug %}?filter_0_column=session_id&filter_0_operator=equals&filter_0_value={{ trace.session.external_id }}"
+                 class="btn btn-sm btn-ghost">
+                <i class="fas fa-stream"></i> View session traces
+              </a>
+            {% endif %}
+            {% if trace.experiment %}
+              <a href="{% url 'trace:home' request.team.slug %}?filter_0_column=experiment&filter_0_operator=any+of&filter_0_value=%5B{{ trace.experiment.working_version_id|default:trace.experiment_id }}%5D"
+                 class="btn btn-sm btn-ghost">
+                <i class="fas fa-robot"></i> View chatbot traces
+              </a>
+            {% endif %}
+            {% if trace.participant %}
+              <a href="{% url 'trace:home' request.team.slug %}?filter_0_column=participant&filter_0_operator=equals&filter_0_value={{ trace.participant.identifier|urlencode }}"
+                 class="btn btn-sm btn-ghost">
+                <i class="fas fa-user"></i> View participant traces
+              </a>
+            {% endif %}
+          </div>
+        {% endif %}
       </div>
 
       {# Summary cards #}
@@ -122,30 +147,6 @@
           </time>
         </div>
       </div>
-
-      {# Quick links to the trace table pre-filtered by this trace's session/chatbot/participant #}
-      {% if perms.trace.view_trace %}
-        <div class="flex flex-wrap gap-2 mt-4">
-          {% if trace.session %}
-            <a href="{% url 'trace:home' request.team.slug %}?filter_0_column=session_id&filter_0_operator=equals&filter_0_value={{ trace.session.external_id }}"
-               class="btn btn-sm btn-ghost">
-              <i class="fas fa-stream"></i> View session traces
-            </a>
-          {% endif %}
-          {% if trace.experiment %}
-            <a href="{% url 'trace:home' request.team.slug %}?filter_0_column=experiment&filter_0_operator=any+of&filter_0_value=%5B{{ trace.experiment.working_version_id|default:trace.experiment_id }}%5D"
-               class="btn btn-sm btn-ghost">
-              <i class="fas fa-robot"></i> View chatbot traces
-            </a>
-          {% endif %}
-          {% if trace.participant %}
-            <a href="{% url 'trace:home' request.team.slug %}?filter_0_column=participant&filter_0_operator=equals&filter_0_value={{ trace.participant.identifier|urlencode }}"
-               class="btn btn-sm btn-ghost">
-              <i class="fas fa-user"></i> View participant traces
-            </a>
-          {% endif %}
-        </div>
-      {% endif %}
     </div>
     <div class="border-t border-base-200 mt-2 pt-4">
       {% if trace.error %}
