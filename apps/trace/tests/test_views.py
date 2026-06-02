@@ -21,6 +21,25 @@ def _make_trace(team, **kwargs):
 
 
 @pytest.mark.django_db()
+def test_trace_detail_view_renders_filter_links(client, team_with_users):
+    """The trace detail page links to the trace table pre-filtered by session/chatbot/participant."""
+    team = team_with_users
+    user = team.members.first()
+    trace = _make_trace(team)
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    home_url = reverse("trace:home", args=[team.slug])
+    assert f"{home_url}?filter_0_column=session_id&filter_0_operator=equals" in content
+    assert str(trace.session.external_id) in content
+    assert "filter_0_column=experiment&filter_0_operator=any+of" in content
+    assert "filter_0_column=participant&filter_0_operator=equals" in content
+
+
+@pytest.mark.django_db()
 def test_trace_table_view_filters_by_team(client, team_with_users):
     """The trace list view must return only traces belonging to the requesting team."""
     team = team_with_users
