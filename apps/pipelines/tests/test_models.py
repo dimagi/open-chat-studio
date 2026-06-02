@@ -256,6 +256,41 @@ class TestArchivingNodes:
         assert assistant_version.is_archived is True
         assert collection_version.is_archived is True
 
+    def test_archive_legacy_frozen_index_version(self):
+        """
+        LEGACY data: a pre-ADR-0019 node may reference both the live working index id and a
+        frozen index version id in collection_index_ids. Archiving the pipeline must archive the
+        frozen copy (is_a_version=True) while leaving the live working index (is_a_version=False)
+        untouched. Including both ids makes the is_a_version guard load-bearing: dropping the guard
+        would wrongly archive the working index and fail this test.
+        """
+        # Working index collection (is_a_version=False)
+        collection_index = CollectionFactory.create(is_index=True)
+        # Frozen version of the index (is_a_version=True) — simulates the legacy per-bot copy
+        frozen_index = collection_index.create_new_version()
+        assert frozen_index.is_a_version, "pre-condition: frozen_index must be a version"
+
+        # Node references BOTH the live working id and the frozen version id (legacy stored data)
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"collection_index_ids": [collection_index.id, frozen_index.id]},
+        )
+
+        # Version the pipeline — the version node copies the param verbatim
+        pipeline.create_new_version()
+
+        # Archive the pipeline (working version → archives all version nodes too)
+        pipeline.archive()
+
+        frozen_index.refresh_from_db()
+        collection_index.refresh_from_db()
+        # The frozen per-bot copy is archived (legacy cleanup branch)
+        assert frozen_index.is_archived is True
+        # The live working index is protected by the is_a_version guard
+        assert collection_index.is_archived is False
+
 
 class TestPipeline:
     @pytest.mark.django_db()
