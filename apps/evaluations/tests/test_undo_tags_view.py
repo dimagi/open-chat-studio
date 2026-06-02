@@ -54,16 +54,16 @@ def _setup_tagging_config(team):
         tag__name="good",
     )
     dataset = EvaluationDatasetFactory.create(team=team, messages=[])
-    config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
-    return config, evaluator
+    return EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
 
 
-def _complete_run(config, evaluator, results, run_type, finished_at):
+def _complete_run(config, results, run_type, finished_at):
     """Create + finish a run that evaluated `results` (list of (message, output)).
 
     Mirrors mark_evaluation_complete: apply tag rules per result, reverse stale tags, then
     archive superseded runs. `finished_at` is stamped so runs order deterministically.
     """
+    evaluator = config.evaluators.get()
     run = EvaluationRunFactory.create(
         team=config.team, config=config, status=EvaluationRunStatus.COMPLETED, type=run_type
     )
@@ -151,7 +151,7 @@ class TestUndoEvaluationRunTagsView:
 
     def test_undo_on_delta_run_is_rejected(self, client, team_with_users):
         """DELTA runs are never directly undoable; the view rejects them without calling undo."""
-        config, _ = _setup_tagging_config(team_with_users)
+        config = _setup_tagging_config(team_with_users)
         delta_run = EvaluationRunFactory.create(
             team=team_with_users,
             config=config,
@@ -175,13 +175,13 @@ class TestUndoEvaluationRunTagsView:
         """A successful POST runs the real undo: live tags revert to the prior FULL run and
         the undone run's tags_archived flips, exercising the view's success branch end-to-end."""
         base = timezone.now()
-        config, evaluator = _setup_tagging_config(team_with_users)
+        config = _setup_tagging_config(team_with_users)
 
         message = EvaluationMessageFactory.create(create_chat_messages=True)
         config.dataset.messages.add(message)
 
-        full1 = _complete_run(config, evaluator, [(message, NEG)], EvaluationRunType.FULL, base)
-        full2 = _complete_run(config, evaluator, [(message, POS)], EvaluationRunType.FULL, base + timedelta(minutes=10))
+        full1 = _complete_run(config, [(message, NEG)], EvaluationRunType.FULL, base)
+        full2 = _complete_run(config, [(message, POS)], EvaluationRunType.FULL, base + timedelta(minutes=10))
 
         # Live state after FULL2 re-tagged the message positive.
         assert _tags(message) == {"good"}
