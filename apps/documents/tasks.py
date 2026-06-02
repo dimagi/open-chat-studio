@@ -5,7 +5,6 @@ from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
-from botocore.exceptions import BotoCoreError, ClientError
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -211,6 +210,7 @@ def sync_all_document_sources_task():
     auto_sources = DocumentSource.objects.filter(
         auto_sync_enabled=True,
         collection__is_index=True,  # Only sync indexed collections
+        collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0019)
     ).values_list("id", flat=True)
 
     sync_document_source_task.map(auto_sources).delay()
@@ -331,7 +331,9 @@ def _read_file_content(file, collection_id: int, log_level: int, retry_count: in
             "File integrity check failed while building ZIP archive",
             extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
         )
-        raise ZipIntegrityError(f"File '{file.name}' ({file.id}) returned {len(content)} bytes but expected {file.content_size}")
+        raise ZipIntegrityError(
+            f"File '{file.name}' ({file.id}) returned {len(content)} bytes but expected {file.content_size}"
+        )
 
     return content
 
