@@ -1,5 +1,5 @@
-<div class="flex flex-row gap-1" id="eval-bulk-download">
-  <button class="btn btn-sm btn-outline"
+<div class="flex flex-row gap-2" id="eval-bulk-download">
+  <button class="btn btn-outline"
           hx-post="{% url 'evaluations:evaluation_bulk_download_start' request.team.slug config.id %}"
           hx-trigger="click"
           hx-swap="outerHTML"
@@ -22,7 +22,7 @@
   {% endif %}
 
   {% if export_download_url %}
-    <a class="btn btn-sm btn-outline btn-success" href="{{ export_download_url }}">
+    <a class="btn btn-outline btn-success" href="{{ export_download_url }}">
       <i class="fa-solid fa-download"></i>
       Download CSV
     </a>
