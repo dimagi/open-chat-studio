@@ -16,7 +16,6 @@ from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
-from apps.events.models import ScheduledMessage
 from apps.experiments.models import ConsentForm, SourceMaterial, Survey
 from apps.files.models import File
 
@@ -63,32 +62,6 @@ class ChannelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExperimentChannel
         fields = ["platform", "name"]
-
-
-class ScheduledMessageSerializer(serializers.Serializer):
-    """The schedule cadence (resolved Q3). ``ScheduledMessage.params`` is a derived dict."""
-
-    id = serializers.IntegerField()
-    name = serializers.SerializerMethodField()
-    frequency = serializers.SerializerMethodField()
-    time_period = serializers.SerializerMethodField()
-    repetitions = serializers.SerializerMethodField()
-    prompt_text = serializers.SerializerMethodField()
-
-    def get_name(self, obj: ScheduledMessage):
-        return obj.params.get("name")
-
-    def get_frequency(self, obj: ScheduledMessage):
-        return obj.params.get("frequency")
-
-    def get_time_period(self, obj: ScheduledMessage):
-        return obj.params.get("time_period")
-
-    def get_repetitions(self, obj: ScheduledMessage):
-        return obj.params.get("repetitions")
-
-    def get_prompt_text(self, obj: ScheduledMessage):
-        return obj.params.get("prompt_text")
 
 
 def serialize_custom_action(action: CustomAction) -> dict:
