@@ -1542,6 +1542,9 @@ class ExperimentSession(BaseTeamModel):
             specific child bot to handle the check-in.
             message_text: A message to deliver to the participant directly, bypassing the LLM.
         """
+        if (instruction_prompt is None) == (message_text is None):
+            raise ValueError("Exactly one of instruction_prompt or message_text must be provided")
+
         trace_service = None
         try:
             with current_team(self.team):

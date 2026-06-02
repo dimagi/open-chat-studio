@@ -103,6 +103,7 @@ def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, 
         session.ad_hoc_bot_message(
             prompt_text,
             TraceInfo(name="api trigger"),
+            fail_silently=False,
             use_experiment=target_experiment,
             message_text=message_text,
         )

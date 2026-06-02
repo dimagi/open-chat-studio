@@ -469,6 +469,15 @@ class TestExperimentSession:
         trace = Trace.objects.get(session=experiment_session)
         assert trace.output_message_id == ai_message.id
 
+    @pytest.mark.parametrize(
+        ("instruction_prompt", "message_text"),
+        [(None, None), ("prompt", "message")],
+    )
+    def test_ad_hoc_message_requires_exactly_one_input(self, instruction_prompt, message_text, experiment_session):
+        """Neither-or-both of instruction_prompt/message_text is a programming error."""
+        with pytest.raises(ValueError, match="Exactly one of instruction_prompt or message_text"):
+            experiment_session.ad_hoc_bot_message(instruction_prompt, TraceInfo(name="test"), message_text=message_text)
+
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
         prompt = "data: {participant_data}" if participant_data_injected else "data"
