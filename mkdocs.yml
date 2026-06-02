@@ -101,7 +101,6 @@ nav:
       - 0028 Inspect authorizes on chatbot view + team scope: adr/0028-inspect-authorization-team-scoped.md
       - 0029 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0029-download-whatsapp-inbound-attachments-in-hydration-stage.md
       - 0030 Gate the email channel with a global allowed-domains setting: adr/0030-email-channel-allowed-domains-global-setting.md
-      - 0031 Enforce email allowed-domains at three layers: adr/0031-email-allowed-domains-three-layer-enforcement.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
