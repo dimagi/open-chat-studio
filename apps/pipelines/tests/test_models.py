@@ -5,9 +5,11 @@ import pytest
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
+from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
+from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     boolean_node,
     create_runnable,
@@ -20,6 +22,7 @@ from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
@@ -156,6 +159,41 @@ class TestVersioningNodes:
         assert node_version_2.params["collection_id"] == str(collection_version.id)
         assert node_version_2.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
+
+    def test_published_node_resolves_live_index(self):
+        """A bot published after ADR-0019 references the live working index, not a frozen copy."""
+        node_type = LLMResponseWithPrompt.__name__
+        collection_index = CollectionFactory.create(is_index=True)
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_index_ids": [collection_index.id]})
+        pipeline_version = pipeline.create_new_version()
+
+        node_version = pipeline_version.node_set.get(type=node_type)
+        # End-to-end: publishing keeps the working id (precondition), and runtime lookup resolves it to the live
+        # working index.
+        published_ids = node_version.params["collection_index_ids"]
+        assert published_ids == [collection_index.id]
+
+        resolved = ORMRepository().get_collections_for_search(published_ids)
+        assert [c.id for c in resolved] == [collection_index.id]
+        assert resolved[0].is_working_version
+
+    def test_index_content_change_does_not_mark_node_dirty(self):
+        """ADR-0019: index content drift must not flag a published bot as having unpublished changes."""
+        node_type = LLMResponseWithPrompt.__name__
+        collection_index = CollectionFactory.create(is_index=True)
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(
+            type=node_type, pipeline=pipeline, params={"collection_index_ids": [collection_index.id]}
+        )
+        pipeline.create_new_version()
+
+        # Simulate a document-source sync adding a file to the working index.
+        file = FileFactory.create(team=collection_index.team)
+        CollectionFile.objects.create(file=file, collection=collection_index, document_source=None)
+
+        node.refresh_from_db()
+        assert not node.compare_with_latest()
 
 
 @pytest.mark.django_db()
