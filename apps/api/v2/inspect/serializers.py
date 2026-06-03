@@ -77,19 +77,24 @@ class ChannelSerializer(serializers.ModelSerializer):
         fields = ["platform", "name", "messaging_provider"]
 
 
-def serialize_custom_action(action: CustomAction) -> dict:
-    """Custom action with its OpenAPI schema reduced to a path digest (resolved Q7 — size, not
-    secrecy) and its auth provider as ``{id, type, name}`` only (config excluded, ADR-0027)."""
-    schema = action.api_schema or {}
-    # Sorted for a deterministic digest (the underlying paths dict has no meaningful order).
-    paths = sorted(schema.get("paths", {}).keys()) if isinstance(schema, dict) else []
+def serialize_custom_action(action: CustomAction, operation_ids: list[str]) -> dict:
+    """Custom action with ``allowed_operations`` reflecting the operations selected at the
+    reference site (the node's ``"{action_id}:{operation_id}"`` params) — never the action's full
+    operation set — and its OpenAPI schema reduced to the selected operations' path digest
+    (resolved Q7 — size, not secrecy). A selected operation no longer present in the action's
+    schema resolves to absent. Auth provider is ``{id, type, name}`` only (ADR-0027)."""
+    operations_by_id = action.get_operations_by_id()
+    operations = [
+        operation for operation in (operations_by_id.get(operation_id) for operation_id in operation_ids) if operation
+    ]
     return {
         "id": action.id,
         "name": action.name,
         "description": action.description,
         "server_url": action.server_url,
-        "allowed_operations": list(action.allowed_operations or []),
-        "api_schema": {"paths": paths},
+        "allowed_operations": [operation.operation_id for operation in operations],
+        # Sorted for a deterministic digest (selection order carries no meaning for paths).
+        "api_schema": {"paths": sorted({operation.path for operation in operations})},
         "auth_provider": ProviderSerializer(action.auth_provider).data if action.auth_provider else None,
     }
 

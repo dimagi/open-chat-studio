@@ -8,6 +8,7 @@ from apps.api.v2.inspect.node_walker import (
     LLM_PROVIDER_MODEL,
     SOURCE_MATERIAL,
     SYNTHETIC_VOICE,
+    CustomActionsRef,
     ListRef,
     LlmRef,
     SingleRef,
@@ -46,8 +47,8 @@ def test_llm_node_splits_refs_and_params():
     assert result.refs["source_material"] == SingleRef(SOURCE_MATERIAL, 7)
     assert result.refs["media_collection"] == SingleRef(COLLECTION, 21)
     assert result.refs["indexed_collections"] == ListRef(COLLECTION, [33, 34])
-    # "12:op1", "12:op2", "15:foo" -> distinct action ids [12, 15]
-    assert result.refs["custom_actions"] == ListRef(CUSTOM_ACTION, [12, 15])
+    # "12:op1", "12:op2", "15:foo" -> per-action operation selections, grouped in first-seen order
+    assert result.refs["custom_actions"] == CustomActionsRef([(12, ["complete_session", "other_op"]), (15, ["foo"])])
     assert result.refs["voice"] == VoiceRef(synthetic_voice_id=4)
 
     # Non-reference fields stay verbatim; name is dropped (carried as label); ref fields removed.
@@ -97,11 +98,13 @@ def test_accumulate_refs_collects_ids_by_kind():
     accumulate_refs({"a": SingleRef(SOURCE_MATERIAL, 7)}, acc)
     accumulate_refs({"b": ListRef(COLLECTION, [33, 34]), "c": LlmRef(5, 9), "v": VoiceRef(4)}, acc)
     accumulate_refs({"d": SingleRef(SOURCE_MATERIAL, 8)}, acc)
+    accumulate_refs({"e": CustomActionsRef([(12, ["op_a"]), (15, [])])}, acc)
     assert acc[SOURCE_MATERIAL] == {7, 8}
     assert acc[COLLECTION] == {33, 34}
     assert acc[LLM_PROVIDER] == {5}
     assert acc[LLM_PROVIDER_MODEL] == {9}
     assert acc[SYNTHETIC_VOICE] == {4}
+    assert acc[CUSTOM_ACTION] == {12, 15}
 
 
 def test_graph_digest_normalises_handles_and_strips_positions():

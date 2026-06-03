@@ -43,13 +43,15 @@ def test_provider_serializer_excludes_config(factory):
 @pytest.mark.django_db()
 def test_custom_action_excludes_auth_config_and_digests_schema():
     action = CustomActionFactory.create(auth_provider=AuthProviderFactory.create())
-    data = serialize_custom_action(action)
+    data = serialize_custom_action(action, ["weather_get"])
     blob = json.dumps(data)
     assert "config" not in blob
     assert set(data["auth_provider"].keys()) == {"id", "type", "name"}
-    # api_schema reduced to a path digest, not the full OpenAPI document
+    # only the selected operations are rendered — never the full OpenAPI document
+    assert data["allowed_operations"] == ["weather_get"]
+    # api_schema reduced to a path digest of the selected operations, not the full OpenAPI document
     assert set(data["api_schema"].keys()) == {"paths"}
-    assert isinstance(data["api_schema"]["paths"], list)
+    assert data["api_schema"]["paths"] == ["/weather"]
     assert "securitySchemes" not in blob
 
 

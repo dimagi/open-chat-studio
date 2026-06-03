@@ -8,6 +8,7 @@ from apps.api.v2.inspect.node_walker import (
     LLM_PROVIDER_MODEL,
     SOURCE_MATERIAL,
     SYNTHETIC_VOICE,
+    CustomActionsRef,
     ListRef,
     LlmRef,
     SingleRef,
@@ -80,9 +81,12 @@ def test_custom_actions_list():
     team = TeamFactory.create()
     action = CustomActionFactory.create(team=team)
     collector = InspectCollector(team).load({CUSTOM_ACTION: {action.id}})
-    out = collector.inline_refs({"custom_actions": ListRef(CUSTOM_ACTION, [action.id])})
+    out = collector.inline_refs({"custom_actions": CustomActionsRef([(action.id, ["weather_get"])])})
     assert len(out["custom_actions"]) == 1
     assert out["custom_actions"][0]["id"] == action.id
+    # only the selected operations are rendered, not the action's full operation set
+    assert out["custom_actions"][0]["allowed_operations"] == ["weather_get"]
+    assert out["custom_actions"][0]["api_schema"] == {"paths": ["/weather"]}
 
 
 @pytest.mark.django_db()

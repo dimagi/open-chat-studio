@@ -18,6 +18,7 @@ from apps.api.v2.inspect.node_walker import (
     SOURCE_MATERIAL,
     SYNTHETIC_VOICE,
     VOICE_PROVIDER,
+    CustomActionsRef,
     ListRef,
     LlmRef,
     SingleRef,
@@ -108,6 +109,11 @@ class InspectCollector:
         if isinstance(ref, ListRef):
             rendered = [self._serialize(payload_key, ref.kind, self._get(ref.kind, rid)) for rid in ref.ids]
             return [item for item in rendered if item is not None]
+        if isinstance(ref, CustomActionsRef):
+            actions = (
+                (self._get(CUSTOM_ACTION, action_id), operation_ids) for action_id, operation_ids in ref.selections
+            )
+            return [serialize_custom_action(action, operation_ids) for action, operation_ids in actions if action]
         return None
 
     def _serialize(self, payload_key: str, kind: str, obj) -> dict | None:
@@ -121,6 +127,4 @@ class InspectCollector:
             return SourceMaterialSerializer(obj).data
         if kind == ASSISTANT:
             return AssistantSerializer(obj).data
-        if kind == CUSTOM_ACTION:
-            return serialize_custom_action(obj)
         return None

@@ -87,7 +87,7 @@ def inspect_bot(db):
             "llm_provider_id": provider.id,
             "llm_provider_model_id": model.id,
             "collection_index_ids": [collection.id],
-            "custom_actions": [f"{action.id}:complete_session"],
+            "custom_actions": [f"{action.id}:weather_get"],
             "prompt": "Answer the user",
         },
     )
@@ -225,7 +225,8 @@ def test_acceptance_4_timeout_trigger(inspect_bot):
 
 @pytest.mark.django_db()
 def test_acceptance_5_custom_action_wired(inspect_bot):
-    # wiring is implicit in containment — the action lives under the node that fires it (D10)
+    # wiring is implicit in containment — the action lives under the node that fires it (D10).
+    # Only the operations selected on the node are rendered, not the action's full operation set.
     assert _node(_get(inspect_bot), "Answer")["custom_actions"] == [
         {
             "id": inspect_bot.action.id,
@@ -233,7 +234,34 @@ def test_acceptance_5_custom_action_wired(inspect_bot):
             "description": "Custom action description",
             "server_url": "https://api.weather.com",
             "allowed_operations": ["weather_get"],
-            "api_schema": {"paths": ["/pollen", "/weather"]},
+            "api_schema": {"paths": ["/weather"]},
+            "auth_provider": {
+                "id": inspect_bot.auth.id,
+                "type": "commcare",
+                "name": inspect_bot.auth.name,
+            },
+        }
+    ]
+
+
+@pytest.mark.django_db()
+def test_custom_action_unknown_operation_resolves_to_absent(inspect_bot):
+    NodeFactory.create(
+        pipeline=inspect_bot.experiment.pipeline,
+        flow_id="stale-1",
+        type="LLMResponseWithPrompt",
+        label="Stale",
+        params={"custom_actions": [f"{inspect_bot.action.id}:no_such_op"]},
+    )
+    # A selected operation that no longer exists in the action's schema renders as absent.
+    assert _node(_get(inspect_bot), "Stale")["custom_actions"] == [
+        {
+            "id": inspect_bot.action.id,
+            "name": "Session Completion",
+            "description": "Custom action description",
+            "server_url": "https://api.weather.com",
+            "allowed_operations": [],
+            "api_schema": {"paths": []},
             "auth_provider": {
                 "id": inspect_bot.auth.id,
                 "type": "commcare",
@@ -387,7 +415,7 @@ def _full_bot():
                             "source_material_id": str(source.id),
                             "collection_id": str(media_collection.id),
                             "collection_index_ids": [str(index_collection.id)],
-                            "custom_actions": [f"{action.id}:complete_session"],
+                            "custom_actions": [f"{action.id}:weather_get", f"{action.id}:pollen_get"],
                             "synthetic_voice_id": str(synthetic_voice.id),
                             "prompt": "Answer the user",
                         },
@@ -617,7 +645,7 @@ def test_full_response_body():
                             "name": "Session Completion",
                             "description": "Custom action description",
                             "server_url": "https://api.weather.com",
-                            "allowed_operations": ["weather_get"],
+                            "allowed_operations": ["weather_get", "pollen_get"],
                             "api_schema": {"paths": ["/pollen", "/weather"]},
                             "auth_provider": {
                                 "id": bot.auth_provider.id,

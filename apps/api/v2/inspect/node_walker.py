@@ -100,6 +100,15 @@ class ListRef:
 
 
 @dataclasses.dataclass(frozen=True)
+class CustomActionsRef:
+    """Per-node custom-action selection: ``(action_id, [operation_ids])`` pairs in first-seen
+    order. The operation ids are kept so only the node-selected operations are rendered, not the
+    action's full operation set."""
+
+    selections: list[tuple[int, list[str]]]
+
+
+@dataclasses.dataclass(frozen=True)
 class LlmRef:
     provider_id: int | None
     model_id: int | None
@@ -147,19 +156,20 @@ def _node_class(node_type: str):
     return getattr(pipeline_nodes, node_type, None)
 
 
-def _parse_action_ids(value) -> list[int]:
-    """``custom_actions`` values are ``"{action_id}:{operation_id}"`` strings. Extract the distinct
-    custom-action ids (preserving first-seen order)."""
-    ids: list[int] = []
+def _parse_custom_actions(value) -> list[tuple[int, list[str]]]:
+    """``custom_actions`` values are ``"{action_id}:{operation_id}"`` strings. Group the selected
+    operation ids per custom action (preserving first-seen order)."""
+    selections: dict[int, list[str]] = {}
     for entry in value or []:
-        action_id = str(entry).split(":", 1)[0]
+        action_part, _, operation_id = str(entry).partition(":")
         try:
-            parsed = int(action_id)
+            action_id = int(action_part)
         except (TypeError, ValueError):
             continue
-        if parsed not in ids:
-            ids.append(parsed)
-    return ids
+        operation_ids = selections.setdefault(action_id, [])
+        if operation_id and operation_id not in operation_ids:
+            operation_ids.append(operation_id)
+    return list(selections.items())
 
 
 def _coerce_int_list(value) -> list[int]:
@@ -209,7 +219,7 @@ def walk_node(node) -> NodeWalkResult:
             payload_key, kind, is_list = OPTIONS_SOURCE_RESOURCES[options_source]
             value = node.params.get(field_name)
             if options_source == OptionsSource.custom_actions:
-                refs[payload_key] = ListRef(kind, _parse_action_ids(value))
+                refs[payload_key] = CustomActionsRef(_parse_custom_actions(value))
             elif is_list:
                 refs[payload_key] = ListRef(kind, _coerce_int_list(value))
             else:
@@ -231,6 +241,9 @@ def accumulate_refs(refs: dict[str, object], into: dict[str, set[int]]) -> None:
         elif isinstance(ref, ListRef):
             for rid in ref.ids:
                 into.setdefault(ref.kind, set()).add(int(rid))
+        elif isinstance(ref, CustomActionsRef):
+            for action_id, _operation_ids in ref.selections:
+                into.setdefault(CUSTOM_ACTION, set()).add(int(action_id))
         elif isinstance(ref, LlmRef):
             if ref.provider_id:
                 into.setdefault(LLM_PROVIDER, set()).add(int(ref.provider_id))
