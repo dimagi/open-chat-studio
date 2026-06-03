@@ -28,6 +28,8 @@ urlpatterns = [
         name="file_chunks",
     ),
     path("collections/<int:pk>/retry_failed_uploads", views.retry_failed_uploads, name="retry_failed_uploads"),
+    path("collections/<int:pk>/snapshot", views.create_collection_version, name="create_collection_version"),
+    path("collections/<int:pk>/snapshots", views.collection_snapshots, name="collection_snapshots"),
     path(
         "collections/create-from-assistant", views.CreateCollectionFromAssistant.as_view(), name="create_from_assistant"
     ),
