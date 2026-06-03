@@ -70,5 +70,5 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         try:
             target = resolve_inspect_version(family, request.query_params.get("version"))
         except InspectVersionError as err:
-            raise NotFound(str(err)) from err
+            raise NotFound("Requested chatbot version was not found.") from err
         return Response(build_inspect_payload(target))
