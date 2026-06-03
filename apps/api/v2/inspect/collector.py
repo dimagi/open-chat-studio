@@ -26,10 +26,10 @@ from apps.api.v2.inspect.node_walker import (
 from apps.api.v2.inspect.serializers import (
     AssistantSerializer,
     SourceMaterialSerializer,
-    flatten_llm,
-    flatten_voice,
     serialize_collection,
     serialize_custom_action,
+    serialize_llm_model,
+    serialize_synthetic_voice,
 )
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.models import CustomAction
@@ -97,10 +97,12 @@ class InspectCollector:
 
     def _render(self, payload_key: str, ref) -> object:
         if isinstance(ref, LlmRef):
-            return flatten_llm(self._get(LLM_PROVIDER, ref.provider_id), self._get(LLM_PROVIDER_MODEL, ref.model_id))
+            return serialize_llm_model(
+                self._get(LLM_PROVIDER, ref.provider_id), self._get(LLM_PROVIDER_MODEL, ref.model_id)
+            )
         if isinstance(ref, VoiceRef):
             voice = self._get(SYNTHETIC_VOICE, ref.synthetic_voice_id)
-            return flatten_voice(getattr(voice, "voice_provider", None), voice)
+            return serialize_synthetic_voice(getattr(voice, "voice_provider", None), voice)
         if isinstance(ref, SingleRef):
             return self._serialize(payload_key, ref.kind, self._get(ref.kind, ref.id))
         if isinstance(ref, ListRef):

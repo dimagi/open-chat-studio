@@ -13,7 +13,7 @@ from apps.api.v2.inspect.serializers import (
     ConsentFormSerializer,
     ProviderSerializer,
     SurveySerializer,
-    flatten_voice,
+    serialize_synthetic_voice,
 )
 from apps.channels.models import ExperimentChannel
 from apps.chatbots.version_resolver import (
@@ -82,7 +82,7 @@ def build_inspect_payload(experiment) -> dict:
         "consent_form": _serialize_or_none(ConsentFormSerializer, experiment.consent_form),
         "pre_survey": _serialize_or_none(SurveySerializer, experiment.pre_survey),
         "post_survey": _serialize_or_none(SurveySerializer, experiment.post_survey),
-        "voice": flatten_voice(experiment.voice_provider, experiment.synthetic_voice),
+        "voice": serialize_synthetic_voice(experiment.voice_provider, experiment.synthetic_voice),
         "trace_provider": _serialize_or_none(ProviderSerializer, experiment.trace_provider),
         "channels": _serialize_channels(experiment),
         "pipeline": _render_pipeline(pipeline_walk, collector),

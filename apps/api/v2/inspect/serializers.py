@@ -158,7 +158,7 @@ class CollectionSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "files"]
 
 
-def flatten_llm(provider, model) -> dict | None:
+def serialize_llm_model(provider, model) -> dict | None:
     """Flatten an ``(LlmProvider, LlmProviderModel)`` pair into one ``llm`` object (ADR-0025)."""
     if provider is None and model is None:
         return None
@@ -173,7 +173,7 @@ def flatten_llm(provider, model) -> dict | None:
     return result
 
 
-def flatten_voice(provider, voice) -> dict | None:
+def serialize_synthetic_voice(provider, voice) -> dict | None:
     """Flatten a ``(VoiceProvider, SyntheticVoice)`` pair into one ``voice`` object (ADR-0025)."""
     if provider is None and voice is None:
         return None
@@ -185,7 +185,7 @@ def flatten_voice(provider, voice) -> dict | None:
     return result
 
 
-def flatten_embedding(provider, model) -> dict | None:
+def serialize_embedding_model(provider, model) -> dict | None:
     """Flatten a collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair (ADR-0025)."""
     if provider is None and model is None:
         return None
@@ -204,5 +204,5 @@ def serialize_collection(collection: Collection, *, with_embedding: bool) -> dic
     indexed/RAG collection (embedding provider+model + files)."""
     data = dict(CollectionSerializer(collection).data)
     if with_embedding:
-        data["embedding"] = flatten_embedding(collection.llm_provider, collection.embedding_provider_model)
+        data["embedding"] = serialize_embedding_model(collection.llm_provider, collection.embedding_provider_model)
     return data
