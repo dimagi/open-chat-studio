@@ -68,18 +68,8 @@ class Command(BaseCommand):
                 break
 
             last_id = batch[-1][0]
-
-            traces_to_update = []
-            for trace_id, chat_id in batch:
-                processed += 1
-                message = self._find_output_message(trace_id, chat_id)
-                if message:
-                    traces_to_update.append(Trace(id=trace_id, output_message=message))
-
-            if traces_to_update:
-                if not dry_run:
-                    Trace.objects.bulk_update(traces_to_update, ["output_message"], batch_size=self.batch_size)
-                updated_count += len(traces_to_update)
+            processed += len(batch)
+            updated_count += self._update_batch(batch, dry_run)
 
             if processed % (self.batch_size * 5) == 0 or len(batch) < self.batch_size:
                 action = "Would update" if dry_run else "Updated"
@@ -87,19 +77,31 @@ class Command(BaseCommand):
 
         return updated_count
 
+    def _update_batch(self, batch, dry_run) -> int:
+        """Link each trace in the batch to its output message; returns the number linked."""
+        traces_to_update = []
+        for trace_id, chat_id in batch:
+            message = self._find_output_message(trace_id, chat_id)
+            if message:
+                traces_to_update.append(Trace(id=trace_id, output_message=message))
+
+        if traces_to_update and not dry_run:
+            Trace.objects.bulk_update(traces_to_update, ["output_message"], batch_size=self.batch_size)
+        return len(traces_to_update)
+
     def _find_output_message(self, trace_id, chat_id) -> ChatMessage | None:
         """Find the AI message in the trace's chat that references the trace in its metadata.
 
         ``trace_info`` is a list of per-provider entries; the OCS entry stores the Trace pk
         as an integer, so JSONB containment will not match external providers' string ids.
         Legacy messages stored ``trace_info`` as a single dict. If multiple messages match,
-        the latest one is taken as the final bot response of the trace.
+        the latest one (pk as tie-breaker) is taken as the final bot response of the trace.
         """
         return (
             ChatMessage.objects.filter(chat_id=chat_id, message_type=ChatMessageType.AI)
             .filter(
                 Q(metadata__trace_info__contains=[{"trace_id": trace_id}]) | Q(metadata__trace_info__trace_id=trace_id)
             )
-            .order_by("created_at")
+            .order_by("created_at", "id")
             .last()
         )

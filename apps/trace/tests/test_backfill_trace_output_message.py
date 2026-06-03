@@ -1,7 +1,8 @@
 import pytest
 from django.core.management import call_command
+from django.utils import timezone
 
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.traces import TraceFactory
 
@@ -85,8 +86,11 @@ class TestBackfillTraceOutputMessage:
 
     def test_picks_latest_message_when_multiple_match(self, session):
         trace = _make_trace(session)
-        _make_message(session, trace.id)
+        first = _make_message(session, trace.id)
         latest = _make_message(session, trace.id)
+        # created_at is auto_now_add, so force identical timestamps to pin the
+        # tie-breaking behaviour: the higher pk (later insert) must win.
+        ChatMessage.objects.filter(id__in=[first.id, latest.id]).update(created_at=timezone.now())
 
         self._call_command()
 
