@@ -262,7 +262,7 @@ class InspectSettingsSerializer(serializers.Serializer):
 
 @extend_schema_serializer(component_name="InspectGraphNode")
 class GraphNodeSerializer(serializers.Serializer):
-    flow_id = serializers.CharField()
+    node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
     label = serializers.CharField()
 
@@ -286,7 +286,7 @@ class GraphSerializer(serializers.Serializer):
 class InspectNodeSerializer(serializers.Serializer):
     """One pipeline node with its resource references inlined (ADR-0025)."""
 
-    flow_id = serializers.CharField()
+    node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
     label = serializers.CharField()
     params = serializers.DictField(help_text="The node's non-resource configuration, verbatim; keys vary by node type.")
