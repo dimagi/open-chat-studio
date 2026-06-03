@@ -15,6 +15,7 @@ from apps.api.v2.inspect.serializers import (
     SurveySerializer,
     flatten_voice,
 )
+from apps.channels.models import ExperimentChannel
 from apps.chatbots.version_resolver import (
     NoPublishedVersion,
     VersionNotFound,
@@ -94,7 +95,11 @@ def _serialize_or_none(serializer_cls, instance):
 
 
 def _serialize_channels(experiment) -> list[dict]:
-    channels = experiment.experimentchannel_set.select_related("messaging_provider").all()
+    # Channels are only ever linked to the working version, so resolve the family head regardless
+    # of which version is being inspected.
+    channels = ExperimentChannel.objects.filter(experiment_id=experiment.get_working_version_id()).select_related(
+        "messaging_provider"
+    )
     return ChannelSerializer(channels, many=True).data
 
 

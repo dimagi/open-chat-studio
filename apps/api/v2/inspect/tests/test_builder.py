@@ -1,6 +1,7 @@
 import pytest
 
 from apps.api.v2.inspect.builder import InspectVersionError, build_inspect_payload, resolve_inspect_version
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -58,6 +59,18 @@ def test_pipeline_node_embeds_flattened_llm(chatbot_with_llm_node):
     assert llm_node["llm"]["model"] == "gpt-4o"
     assert llm_node["llm"]["max_token_limit"] == 128000
     assert llm_node["llm"]["deprecated"] is False
+
+
+@pytest.mark.django_db()
+def test_channels_come_from_working_version():
+    """Channels are only ever linked to the working version, so every inspected version
+    must surface the working version's channels."""
+    experiment = ExperimentFactory.create()
+    ExperimentChannelFactory.create(experiment=experiment, name="working-telegram", platform="telegram")
+    version = experiment.create_new_version()
+
+    payload = build_inspect_payload(version)
+    assert [c["name"] for c in payload["channels"]] == ["working-telegram"]
 
 
 @pytest.mark.django_db()
