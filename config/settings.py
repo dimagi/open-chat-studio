@@ -456,10 +456,34 @@ SPECTACULAR_SETTINGS = {
     },
     "TAGS": [
         {
+            "name": "Channels",
+            "description": "Trigger bot messages or deliver messages directly to users on a channel.",
+        },
+        {
             "name": "Chat",
             "description": """
                 The Chat API is designed to be used for integrating chatbots into external systems.
             """,
+        },
+        {
+            "name": "Experiments",
+            "description": "List and retrieve chatbots (formerly 'experiments').",
+        },
+        {
+            "name": "Experiment Sessions",
+            "description": "Manage chatbot sessions including session state, and session tags.",
+        },
+        {
+            "name": "Files",
+            "description": "Download the content of files associated with chat messages.",
+        },
+        {
+            "name": "OpenAI",
+            "description": "OpenAI-compatible endpoints for interacting with chatbots.",
+        },
+        {
+            "name": "Participants",
+            "description": "Manage participants, their data, and their schedules.",
         },
     ],
 }
