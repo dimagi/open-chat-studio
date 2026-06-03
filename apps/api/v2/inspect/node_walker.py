@@ -176,7 +176,12 @@ def _coerce_int_list(value) -> list[int]:
 
 
 def walk_node(node) -> NodeWalkResult:
-    """Classify one :class:`~apps.pipelines.models.Node`'s fields into ``params`` + ``refs``."""
+    """Split a pipeline node's stored params into resource references and plain config.
+
+    Classifies each field of the node's pydantic class by its UI signal (widget / options_source):
+    fields that signal a resource become typed refs (``SingleRef``/``ListRef``/``LlmRef``/``VoiceRef``)
+    keyed by payload key; everything else stays verbatim in ``params``.
+    """
     node_class = _node_class(node.type)
     fields = node_class.model_fields if node_class is not None else {}
     refs: dict[str, object] = {}
