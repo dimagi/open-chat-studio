@@ -447,8 +447,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Dimagi Chatbots",
-    "DESCRIPTION": "Experiments with AI, GPT and LLMs",
+    "TITLE": "Open Chat Studio",
+    "DESCRIPTION": "Build, deploy and monitor chatbots.",
     "VERSION": "1",
     "SERVE_INCLUDE_SCHEMA": False,
     "SWAGGER_UI_SETTINGS": {
