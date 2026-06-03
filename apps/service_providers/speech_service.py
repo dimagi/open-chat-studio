@@ -1,4 +1,5 @@
 import logging
+import os
 import tempfile
 import time
 from contextlib import closing
@@ -122,8 +123,11 @@ class AzureSpeechService(SpeechService):
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+            temp_file_name = temp_file.name
+
+        try:
             # Create an audio configuration that points to the output audio file
-            audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_file_name)
 
             # Setup voice font (Azure refers to synthetic voices as voice fonts)
             speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
@@ -136,12 +140,30 @@ class AzureSpeechService(SpeechService):
 
             # Check if synthesis was successful
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                # Validate the output file before attempting to decode it.
+                # Azure may report success but write an empty or invalid WAV file
+                # when the text language does not match the configured voice language.
+                file_size = os.path.getsize(temp_file_name)
+                if file_size < 4:
+                    raise AudioSynthesizeException(
+                        f"Azure returned an empty audio file for voice '{synthetic_voice.language_code}-{synthetic_voice.name}'. "
+                        "This is likely caused by a mismatch between the text language and the configured voice language."
+                    )
+                with open(temp_file_name, "rb") as f:
+                    header = f.read(4)
+                if header != b"RIFF":
+                    raise AudioSynthesizeException(
+                        f"Azure returned an invalid WAV file (bad RIFF header) for voice "
+                        f"'{synthetic_voice.language_code}-{synthetic_voice.name}'. "
+                        "This is likely caused by a mismatch between the text language and the configured voice language."
+                    )
+
                 audio_segment = AudioSegment.from_file(
-                    temp_file.name, format="wav"
+                    temp_file_name, format="wav"
                 )  # Azure returns audio in WAV format
                 duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
 
-                with open(temp_file.name, "rb") as f:
+                with open(temp_file_name, "rb") as f:
                     file_content = f.read()
 
                 return SynthesizedAudio(audio=BytesIO(file_content), duration=duration_seconds, format="wav")
@@ -153,6 +175,9 @@ class AzureSpeechService(SpeechService):
                         msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
             raise AudioSynthesizeException(f"Unexpected result: {result}")
+        finally:
+            if os.path.exists(temp_file_name):
+                os.unlink(temp_file_name)
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         # keep heavy imports inline
