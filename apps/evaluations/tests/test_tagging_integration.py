@@ -375,6 +375,76 @@ class TestEvaluatorFormSchemaDrift:
             assert not form.is_valid()
         assert any("sentiment" in str(e) for e in form.errors.get("__all__", []))
 
+    def test_renaming_field_and_updating_rule_in_same_submit_succeeds(self, team, message_evaluator):
+        """Renaming an output field and updating the tag rule's field_name in the same POST
+        should not raise a false schema-drift validation error."""
+        rule = EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=message_evaluator,
+            field_name="old_field",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "negative"},
+        )
+        # New schema renames "old_field" to "new_field"; the submitted formset
+        # updates the rule to reference "new_field" in the same request.
+        new_params = {
+            "llm_prompt": "prompt",
+            "llm_provider_id": 1,
+            "llm_provider_model_id": 1,
+            "output_schema": {
+                "new_field": {
+                    "type": "choice",
+                    "description": "d",
+                    "choices": ["negative", "positive"],
+                }
+            },
+        }
+        form_data = {
+            "name": message_evaluator.name,
+            "type": "LlmEvaluator",
+            "params": new_params,
+            "evaluation_mode": message_evaluator.evaluation_mode,
+        }
+        form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
+        form.submitted_rule_field_names = {rule.pk: "new_field"}
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            assert form.is_valid(), form.errors
+
+    def test_renaming_rule_to_nonexistent_field_is_blocked(self, team, message_evaluator):
+        """If the submitted rule field name doesn't exist in the new schema, it should still
+        be rejected — we validate the submitted field name, not skip validation entirely."""
+        rule = EvaluatorTagRuleFactory.create(
+            team=team,
+            evaluator=message_evaluator,
+            field_name="old_field",
+            condition_type=ConditionType.EQUALS,
+            condition_value={"value": "negative"},
+        )
+        new_params = {
+            "llm_prompt": "prompt",
+            "llm_provider_id": 1,
+            "llm_provider_model_id": 1,
+            "output_schema": {
+                "new_field": {
+                    "type": "choice",
+                    "description": "d",
+                    "choices": ["negative", "positive"],
+                }
+            },
+        }
+        form_data = {
+            "name": message_evaluator.name,
+            "type": "LlmEvaluator",
+            "params": new_params,
+            "evaluation_mode": message_evaluator.evaluation_mode,
+        }
+        form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
+        # Simulate the user submitting a rule that references a field not in the new schema
+        form.submitted_rule_field_names = {rule.pk: "completely_wrong_field"}
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            assert not form.is_valid()
+        assert any("completely_wrong_field" in str(e) for e in form.errors.get("__all__", []))
+
     def test_rule_with_incompatible_type_blocks_save(self, team, message_evaluator):
         EvaluatorTagRuleFactory.create(
             team=team,

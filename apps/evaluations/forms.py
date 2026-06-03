@@ -283,8 +283,11 @@ class EvaluatorForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
         # Set by the view before is_valid() so the schema-drift check can
-        # ignore rules the user is deleting in the same submit.
+        # ignore rules the user is deleting in the same submit, and use the
+        # *submitted* field name (rather than the persisted one) for rules
+        # being edited in the same submit.
         self.pending_deleted_rule_pks: set[int] = set()
+        self.submitted_rule_field_names: dict[int, str] = {}
 
     def clean(self):
         cleaned_data = super().clean()
@@ -335,12 +338,18 @@ class EvaluatorForm(forms.ModelForm):
         rules = self.instance.tag_rules.exclude(pk__in=self.pending_deleted_rule_pks)
         errors = []
         for rule in rules:
+            # If the user is renaming this rule's field in the same submit, validate
+            # against the submitted field name rather than the persisted one so that
+            # a consistent rename (schema field + rule field changed together) is
+            # accepted, while an inconsistent rename (rule points to a non-existent
+            # field in the new schema) is still rejected.
+            field_name = self.submitted_rule_field_names.get(rule.pk, rule.field_name)
             try:
-                field_def = validate_field_in_schema(rule.field_name, output_schema)
+                field_def = validate_field_in_schema(field_name, output_schema)
                 validate_condition(rule.condition_type, rule.condition_value, field_def)
             except DjangoValidationError as err:
                 errors.append(
-                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
+                    f"Tag rule on field '{field_name}' is incompatible with the updated "
                     f"output schema: {err.messages[0] if err.messages else err}"
                 )
         if errors:
