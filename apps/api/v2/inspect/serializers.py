@@ -16,8 +16,9 @@ from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
-from apps.experiments.models import ConsentForm, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, SourceMaterial, Survey, SyntheticVoice
 from apps.files.models import File
+from apps.service_providers.models import EmbeddingProviderModel, LlmProvider, LlmProviderModel, VoiceProvider
 
 
 class FileSerializer(serializers.ModelSerializer):
@@ -93,23 +94,82 @@ def serialize_custom_action(action: CustomAction) -> dict:
     }
 
 
+class LlmProviderSerializer(serializers.ModelSerializer):
+    """Provider half of a flattened ``llm``/``embedding`` object — ``{id, name}`` renamed to
+    ``provider_id``/``provider_name`` so they can merge with the model half (ADR-0025)."""
+
+    provider_id = serializers.IntegerField(source="id")
+    provider_name = serializers.CharField(source="name")
+
+    class Meta:
+        model = LlmProvider
+        fields = ["provider_id", "provider_name", "type"]
+
+
+class LlmProviderModelSerializer(serializers.ModelSerializer):
+    """Model half of a flattened ``llm`` object; ``name`` is exposed as ``model`` (ADR-0025)."""
+
+    model = serializers.CharField(source="name")
+
+    class Meta:
+        model = LlmProviderModel
+        fields = ["model", "max_token_limit", "deprecated"]
+
+
+class VoiceProviderSerializer(serializers.ModelSerializer):
+    """Provider half of a flattened ``voice`` object (ADR-0025)."""
+
+    provider_id = serializers.IntegerField(source="id")
+    provider_name = serializers.CharField(source="name")
+
+    class Meta:
+        model = VoiceProvider
+        fields = ["provider_id", "provider_name", "type"]
+
+
+class SyntheticVoiceSerializer(serializers.ModelSerializer):
+    """Voice half of a flattened ``voice`` object; ``name`` is exposed as ``voice_name`` (ADR-0025)."""
+
+    voice_name = serializers.CharField(source="name")
+
+    class Meta:
+        model = SyntheticVoice
+        fields = ["voice_name", "language", "neural"]
+
+
+class EmbeddingProviderModelSerializer(serializers.ModelSerializer):
+    """Model half of a flattened ``embedding`` object; ``name`` is exposed as ``model`` (ADR-0025)."""
+
+    model = serializers.CharField(source="name")
+
+    class Meta:
+        model = EmbeddingProviderModel
+        fields = ["model"]
+
+
+class CollectionSerializer(serializers.ModelSerializer):
+    """Collection identity + files; the conditional ``embedding`` key is added by
+    ``serialize_collection`` (ADR-0025)."""
+
+    files = FileSerializer(many=True)
+
+    class Meta:
+        model = Collection
+        fields = ["id", "name", "files"]
+
+
 def flatten_llm(provider, model) -> dict | None:
     """Flatten an ``(LlmProvider, LlmProviderModel)`` pair into one ``llm`` object (ADR-0025)."""
     if provider is None and model is None:
         return None
     result = {"provider_id": None, "provider_name": None, "type": None}
     if provider is not None:
-        result.update({"provider_id": provider.id, "provider_name": provider.name, "type": provider.type})
+        result.update(LlmProviderSerializer(provider).data)
     if model is not None:
-        result.update(
-            {
-                "model": model.name,
-                "max_token_limit": model.max_token_limit,
-                "deprecated": model.deprecated,
-                # provider type falls back to the model's type when the provider is unset
-                "type": result["type"] if provider is not None else model.type,
-            }
-        )
+        result.update(LlmProviderModelSerializer(model).data)
+        # provider type falls back to the model's type when the provider is unset
+        if provider is None:
+            result["type"] = model.type
     return result
 
 
@@ -119,9 +179,9 @@ def flatten_voice(provider, voice) -> dict | None:
         return None
     result = {"provider_id": None, "provider_name": None, "type": None}
     if provider is not None:
-        result.update({"provider_id": provider.id, "provider_name": provider.name, "type": provider.type})
+        result.update(VoiceProviderSerializer(provider).data)
     if voice is not None:
-        result.update({"voice_name": voice.name, "language": voice.language, "neural": voice.neural})
+        result.update(SyntheticVoiceSerializer(voice).data)
     return result
 
 
@@ -131,9 +191,9 @@ def flatten_embedding(provider, model) -> dict | None:
         return None
     result = {"provider_id": None, "provider_name": None, "type": None}
     if provider is not None:
-        result.update({"provider_id": provider.id, "provider_name": provider.name, "type": provider.type})
+        result.update(LlmProviderSerializer(provider).data)
     if model is not None:
-        result["model"] = model.name
+        result.update(EmbeddingProviderModelSerializer(model).data)
         if provider is None:
             result["type"] = model.type
     return result
@@ -142,11 +202,7 @@ def flatten_embedding(provider, model) -> dict | None:
 def serialize_collection(collection: Collection, *, with_embedding: bool) -> dict:
     """Serialize a collection two ways (ADR-0025): a media collection (files, no embedding) or an
     indexed/RAG collection (embedding provider+model + files)."""
-    data = {
-        "id": collection.id,
-        "name": collection.name,
-        "files": FileSerializer(collection.files.all(), many=True).data,
-    }
+    data = dict(CollectionSerializer(collection).data)
     if with_embedding:
         data["embedding"] = flatten_embedding(collection.llm_provider, collection.embedding_provider_model)
     return data
