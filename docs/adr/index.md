@@ -50,3 +50,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0028](0028-inspect-authorization-team-scoped.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inspect authorizes on chatbot view + team scope, not per-resource permissions |
 | [0029](0029-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
 | [0030](0030-email-channel-allowed-domains-global-setting.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Gate the email channel with a global allowed-domains setting |
+| [0031](0031-json-collection-document-source-loader.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | JSON Collection document source as a hard-coded loader in the existing framework |
+| [0032](0032-json-collection-attachment-identity-and-failure-isolation.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Attachment-level document identity and per-attachment failure isolation |
+| [0033](0033-json-collection-outbound-fetch-policy.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Outbound fetch policy for the JSON collection loader |
