@@ -218,7 +218,7 @@ def test_acceptance_4_timeout_trigger(inspect_bot):
             "total_num_triggers": 1,
             "trigger_from_first_message": False,
             "is_active": True,
-            "action": {"type": "send_message_to_bot", "message_to_bot": "Are you still there?"},
+            "action": {"type": "send_message_to_bot", "params": {"message_to_bot": "Are you still there?"}},
         }
     ]
 
@@ -689,12 +689,14 @@ def test_full_response_body():
                     "is_active": True,
                     "action": {
                         "type": "schedule_trigger",
-                        "scheduled_message": {
-                            "name": "Daily nudge",
-                            "frequency": 1,
-                            "time_period": "days",
-                            "repetitions": 3,
-                            "prompt_text": "Hi",
+                        "params": {
+                            "scheduled_message": {
+                                "name": "Daily nudge",
+                                "frequency": 1,
+                                "time_period": "days",
+                                "repetitions": 3,
+                                "prompt_text": "Hi",
+                            },
                         },
                     },
                 }
@@ -706,7 +708,7 @@ def test_full_response_body():
                     "total_num_triggers": 1,
                     "trigger_from_first_message": False,
                     "is_active": True,
-                    "action": {"type": "send_message_to_bot", "message_to_bot": "Still there?"},
+                    "action": {"type": "send_message_to_bot", "params": {"message_to_bot": "Still there?"}},
                 }
             ],
         },

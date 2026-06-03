@@ -1,11 +1,16 @@
 import pytest
 
-from apps.api.v2.inspect.builder import InspectVersionError, build_inspect_payload, resolve_inspect_version
+from apps.api.v2.inspect.builder import InspectVersionError, build_inspect_context, resolve_inspect_version
+from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
+
+
+def _payload(experiment) -> dict:
+    return ChatbotInspectSerializer(build_inspect_context(experiment)).data
 
 
 @pytest.fixture()
@@ -26,7 +31,7 @@ def chatbot_with_llm_node(db):
 @pytest.mark.django_db()
 def test_payload_top_level_shape(chatbot_with_llm_node):
     experiment = chatbot_with_llm_node
-    payload = build_inspect_payload(experiment)
+    payload = _payload(experiment)
 
     assert payload["id"] == str(experiment.public_id)
     assert payload["name"] == experiment.name
@@ -50,7 +55,7 @@ def test_payload_top_level_shape(chatbot_with_llm_node):
 
 @pytest.mark.django_db()
 def test_pipeline_node_embeds_flattened_llm(chatbot_with_llm_node):
-    payload = build_inspect_payload(chatbot_with_llm_node)
+    payload = _payload(chatbot_with_llm_node)
     pipeline = payload["pipeline"]
     assert pipeline["id"] == chatbot_with_llm_node.pipeline_id
     assert set(pipeline.keys()) == {"id", "name", "version_number", "graph", "nodes"}
@@ -69,7 +74,7 @@ def test_pipeline_node_embeds_flattened_llm(chatbot_with_llm_node):
 def test_pipeline_nodes_render_start_first_end_last(chatbot_with_llm_node):
     # The LLM node was created after the default start/end nodes, so creation order alone would
     # put it last — the renderer must still pin StartNode first and EndNode last.
-    payload = build_inspect_payload(chatbot_with_llm_node)
+    payload = _payload(chatbot_with_llm_node)
     node_types = [n["type"] for n in payload["pipeline"]["nodes"]]
     assert node_types == ["StartNode", "LLMResponseWithPrompt", "EndNode"]
 
@@ -82,7 +87,7 @@ def test_channels_come_from_working_version():
     ExperimentChannelFactory.create(experiment=experiment, name="working-telegram", platform="telegram")
     version = experiment.create_new_version()
 
-    payload = build_inspect_payload(version)
+    payload = _payload(version)
     assert [c["name"] for c in payload["channels"]] == [
         "working-telegram",
         f"{experiment.team.slug}-web-channel",
@@ -106,3 +111,15 @@ def test_resolve_unknown_version_raises():
     with pytest.raises(InspectVersionError):
         # no published version exists yet
         resolve_inspect_version(experiment, "default")
+
+
+@pytest.mark.django_db()
+def test_voice_is_null_when_not_configured():
+    experiment = ExperimentFactory.create(voice_provider=None, synthetic_voice=None)
+    assert _payload(experiment)["voice"] is None
+
+
+@pytest.mark.django_db()
+def test_pipeline_is_null_when_not_configured():
+    experiment = ExperimentFactory.create(pipeline=None)
+    assert _payload(experiment)["pipeline"] is None

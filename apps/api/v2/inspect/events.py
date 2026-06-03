@@ -10,7 +10,7 @@ does not recurse, since a pipeline carries no triggers of its own.
 
 import dataclasses
 
-from apps.api.v2.inspect.node_walker import PipelineWalk, walk_pipeline
+from apps.api.v2.inspect.node_walker import PipelineWalk, ResourceRefMap, walk_pipeline
 from apps.events.models import EventActionType
 
 # Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3). The cadence lives directly
@@ -36,15 +36,15 @@ class TriggerWalk:
 class EventsWalk:
     static_triggers: list[TriggerWalk]
     timeout_triggers: list[TriggerWalk]
-    resource_refs: dict[str, set[int]]
+    resource_refs: ResourceRefMap
 
 
-def _merge_refs(into: dict[str, set[int]], more: dict[str, set[int]]) -> None:
+def _merge_refs(into: ResourceRefMap, more: ResourceRefMap) -> None:
     for kind, ids in more.items():
         into.setdefault(kind, set()).update(ids)
 
 
-def walk_action(action, team, resource_refs: dict[str, set[int]]) -> ActionWalk:
+def walk_action(action, team, resource_refs: ResourceRefMap) -> ActionWalk:
     """Walk a single :class:`~apps.events.models.EventAction` into an ``ActionWalk``.
 
     ``pipeline_start`` embeds the referenced pipeline (team-scoped) as a full ``PipelineWalk`` and
@@ -77,7 +77,7 @@ def walk_events(experiment) -> EventsWalk:
     """Walk a chatbot's static and timeout triggers (excluding archived). Disabled triggers are
     included but flagged via ``is_active`` so a verifier can assert a trigger is *not* armed."""
     team = experiment.team
-    resource_refs: dict[str, set[int]] = {}
+    resource_refs: ResourceRefMap = {}
 
     static = []
     for trigger in experiment.static_triggers.filter(is_archived=False).select_related("action"):

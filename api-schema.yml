@@ -997,6 +997,97 @@ paths:
                       channel
                   summary: Experiment cannot send messages on the specified channel
           description: ''
+  /api/v2/chatbots/:
+    get:
+      operationId: chatbot_list
+      summary: List Chatbots
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChatbotList'
+          description: ''
+  /api/v2/chatbots/{id}/:
+    get:
+      operationId: chatbot_retrieve
+      summary: Retrieve Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Chatbot'
+          description: ''
+  /api/v2/chatbots/{id}/inspect/:
+    get:
+      operationId: chatbot_inspect
+      description: Return a denormalized, read-only projection of the chatbot's full
+        configuration.
+      summary: Inspect Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: query
+        name: version
+        schema:
+          type: string
+        description: 'Which version to inspect: a version number, ''default'' for
+          the default published version, or omit for the working (draft) version.'
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotInspect'
+          description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
       operationId: new_api_message
@@ -1106,6 +1197,77 @@ components:
       required:
       - attachments
       - response
+    ApiSchemaDigest:
+      type: object
+      description: A custom action's OpenAPI schema reduced to the selected operations'
+        path digest.
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+      required:
+      - paths
+    Assistant:
+      type: object
+      description: '``instructions`` and ``assistant_id`` are intentionally exposed
+        (resolved Q4/Q5).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        assistant_id:
+          type: string
+          maxLength: 255
+        instructions:
+          type: string
+        builtin_tools:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        tools:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        temperature:
+          type: number
+          format: double
+          maximum: 2.0
+          minimum: 0.0
+        top_p:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+      required:
+      - assistant_id
+      - id
+      - instructions
+      - name
+    Channel:
+      type: object
+      description: |-
+        Allowlist ``platform`` + ``name`` + embedded ``messaging_provider`` ref. ``extra_data``
+        (freeform auth material) is excluded wholesale (resolved Q8).
+      properties:
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+        name:
+          type: string
+          description: The name of this channel
+          maxLength: 255
+        messaging_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+      required:
+      - messaging_provider
+      - name
     ChatCompletionResponseChoices:
       type: object
       properties:
@@ -1300,6 +1462,152 @@ components:
             $ref: '#/components/schemas/UploadedFile'
       required:
       - files
+    Chatbot:
+      type: object
+      description: |-
+        Minimal v2 representation of a Chatbot (list/retrieve).
+
+        The rich, denormalized configuration lives at the ``inspect`` action, not here
+        (ADR-0024). v2 renames the external surface from ``experiment`` to ``chatbot`` (ADR-0023).
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+          readOnly: true
+          title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotVersion'
+      required:
+      - id
+      - name
+      - url
+      - versions
+    ChatbotInspect:
+      type: object
+      description: |-
+        Denormalized, read-only projection of a chatbot's full configuration (ADR-0024). The
+        response root *is* the chatbot — there is no wrapper key. Instance:
+        :class:`apps.api.v2.inspect.builder.InspectContext`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        version_number:
+          type: integer
+        is_unreleased:
+          type: boolean
+        is_published_version:
+          type: boolean
+        version_description:
+          type: string
+        team_slug:
+          type: string
+        settings:
+          $ref: '#/components/schemas/InspectSettings'
+        consent_form:
+          allOf:
+          - $ref: '#/components/schemas/ConsentForm'
+          nullable: true
+        pre_survey:
+          allOf:
+          - $ref: '#/components/schemas/Survey'
+          nullable: true
+        post_survey:
+          allOf:
+          - $ref: '#/components/schemas/Survey'
+          nullable: true
+        voice:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedVoice'
+          nullable: true
+        trace_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Channel'
+        pipeline:
+          allOf:
+          - $ref: '#/components/schemas/InspectPipeline'
+          nullable: true
+        events:
+          $ref: '#/components/schemas/InspectEvents'
+      required:
+      - channels
+      - consent_form
+      - description
+      - events
+      - id
+      - is_published_version
+      - is_unreleased
+      - name
+      - pipeline
+      - post_survey
+      - pre_survey
+      - settings
+      - team_slug
+      - trace_provider
+      - version_description
+      - version_number
+      - voice
+    ChatbotVersion:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_default_version:
+          type: boolean
+        version_description:
+          type: string
+      required:
+      - name
+    ConsentForm:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+      required:
+      - consent_text
+      - id
+      - name
     CreateChatCompletionRequest:
       type: object
       properties:
@@ -1330,6 +1638,43 @@ components:
       - id
       - model
       - object
+    CustomAction:
+      type: object
+      description: |-
+        Custom action with ``allowed_operations`` reflecting the operations selected at the
+        reference site — never the action's full operation set — and its OpenAPI schema reduced to the
+        selected operations' path digest (resolved Q7 — size, not secrecy). Auth provider is
+        ``{id, type, name}`` only (ADR-0027). Instance: :class:`CustomActionSelection`.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        server_url:
+          type: string
+        allowed_operations:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        api_schema:
+          allOf:
+          - $ref: '#/components/schemas/ApiSchemaDigest'
+          readOnly: true
+        auth_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+      required:
+      - allowed_operations
+      - api_schema
+      - auth_provider
+      - description
+      - id
+      - name
+      - server_url
     Experiment:
       type: object
       properties:
@@ -1518,6 +1863,366 @@ components:
       - content_url
       - name
       - size
+    FlattenedEmbedding:
+      type: object
+      description: |-
+        A collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair flattened into one
+        object. Instance: :class:`ProviderModelPair`. Missing halves render their fields as null.
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+      required:
+      - type
+    FlattenedLlm:
+      type: object
+      description: An ``(LlmProvider, LlmProviderModel)`` pair flattened into one
+        ``llm`` object (ADR-0025).
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        max_token_limit:
+          type: integer
+          nullable: true
+        deprecated:
+          type: boolean
+          nullable: true
+      required:
+      - type
+    FlattenedVoice:
+      type: object
+      description: |-
+        A ``(VoiceProvider, SyntheticVoice)`` pair flattened into one ``voice`` object (ADR-0025).
+        Instance: :class:`VoicePair`.
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        voice_name:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+        neural:
+          type: boolean
+          nullable: true
+    IdentifierTypeEnum:
+      enum:
+      - email
+      - text
+      type: string
+      description: |-
+        * `email` - Email
+        * `text` - Text
+    IndexedCollection:
+      type: object
+      description: 'An indexed/RAG collection: identity + flattened embedding pair
+        + files (ADR-0025).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        embedding:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedEmbedding'
+          nullable: true
+          readOnly: true
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectFile'
+      required:
+      - embedding
+      - files
+      - id
+      - name
+    InspectEvents:
+      type: object
+      properties:
+        static_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectStaticTrigger'
+        timeout_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectTimeoutTrigger'
+      required:
+      - static_triggers
+      - timeout_triggers
+    InspectFile:
+      type: object
+      description: |-
+        Identity-lean file view. Excludes the signed ``file`` storage URL, ``summary`` and
+        ``metadata`` (the latter two are dropped for size, not secrecy — design D8/Q6).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        content_type:
+          type: string
+        content_size:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        external_source:
+          type: string
+          maxLength: 255
+        external_id:
+          type: string
+          maxLength: 255
+        purpose:
+          $ref: '#/components/schemas/PurposeEnum'
+      required:
+      - id
+      - name
+      - purpose
+    InspectGraph:
+      type: object
+      description: 'Pipeline topology digest: nodes as identity triples, edges with
+        positions stripped.'
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectGraphNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectGraphEdge'
+      required:
+      - edges
+      - nodes
+    InspectGraphEdge:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        source_handle:
+          type: string
+          nullable: true
+        target_handle:
+          type: string
+          nullable: true
+      required:
+      - source
+      - source_handle
+      - target
+      - target_handle
+    InspectGraphNode:
+      type: object
+      properties:
+        flow_id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+      required:
+      - flow_id
+      - label
+      - type
+    InspectNode:
+      type: object
+      description: One pipeline node with its resource references inlined (ADR-0025).
+      properties:
+        flow_id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        params:
+          type: object
+          additionalProperties: {}
+          description: The node's non-resource configuration, verbatim; keys vary
+            by node type.
+        llm:
+          $ref: '#/components/schemas/FlattenedLlm'
+        voice:
+          $ref: '#/components/schemas/FlattenedVoice'
+        source_material:
+          $ref: '#/components/schemas/SourceMaterial'
+        assistant:
+          $ref: '#/components/schemas/Assistant'
+        custom_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomAction'
+        media_collection:
+          $ref: '#/components/schemas/MediaCollection'
+        indexed_collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexedCollection'
+      required:
+      - flow_id
+      - label
+      - params
+      - type
+    InspectPipeline:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        version_number:
+          type: integer
+        graph:
+          $ref: '#/components/schemas/InspectGraph'
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectNode'
+      required:
+      - graph
+      - id
+      - name
+      - nodes
+      - version_number
+    InspectSettings:
+      type: object
+      description: |-
+        Non-secret Experiment fields surfaced under ``settings``. Sourced straight off the
+        experiment instance.
+      properties:
+        seed_message:
+          type: string
+        conversational_consent_enabled:
+          type: boolean
+        voice_response_behaviour:
+          type: string
+        echo_transcript:
+          type: boolean
+        use_processor_bot_voice:
+          type: boolean
+        debug_mode_enabled:
+          type: boolean
+        file_uploads_enabled:
+          type: boolean
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+      required:
+      - conversational_consent_enabled
+      - debug_mode_enabled
+      - echo_transcript
+      - file_uploads_enabled
+      - participant_allowlist
+      - seed_message
+      - use_processor_bot_voice
+      - voice_response_behaviour
+    InspectStaticTrigger:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        is_active:
+          type: boolean
+        action:
+          $ref: '#/components/schemas/InspectTriggerAction'
+      required:
+      - action
+      - id
+      - is_active
+      - type
+    InspectTimeoutTrigger:
+      type: object
+      properties:
+        id:
+          type: integer
+        delay_seconds:
+          type: integer
+        total_num_triggers:
+          type: integer
+        trigger_from_first_message:
+          type: boolean
+        is_active:
+          type: boolean
+        action:
+          $ref: '#/components/schemas/InspectTriggerAction'
+      required:
+      - action
+      - delay_seconds
+      - id
+      - is_active
+      - total_num_triggers
+      - trigger_from_first_message
+    InspectTriggerAction:
+      type: object
+      description: |-
+        An event trigger's action. ``pipeline`` is present only for ``pipeline_start`` actions
+        whose (team-scoped) pipeline resolves.
+      properties:
+        type:
+          type: string
+        params:
+          type: object
+          additionalProperties: {}
+          description: Action parameters; keys vary by action type.
+        pipeline:
+          $ref: '#/components/schemas/InspectPipeline'
+      required:
+      - params
+      - type
+    MediaCollection:
+      type: object
+      description: Collection identity + files, without embedding — the media-collection
+        shape (ADR-0025).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectFile'
+      required:
+      - files
+      - id
+      - name
     Message:
       type: object
       properties:
@@ -1567,6 +2272,25 @@ components:
       - chat.completion
       type: string
       description: '* `chat.completion` - chat.completion'
+    PaginatedChatbotList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Chatbot'
     PaginatedExperimentList:
       type: object
       required:
@@ -1764,6 +2488,37 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    Provider:
+      type: object
+      description: |-
+        Minimal provider reference — A plain ``Serializer`` (not ``ModelSerializer``) so it works for
+        any provider model (Llm/Voice/Messaging/Auth/Trace) via duck typing. Serializing ``None``
+        yields ``None`` when nested; standalone call sites must guard for ``None`` themselves.
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        name:
+          type: string
+      required:
+      - id
+      - name
+      - type
+    PurposeEnum:
+      enum:
+      - assistant
+      - collection
+      - evaluation_dataset
+      - data_export
+      - message_media
+      type: string
+      description: |-
+        * `assistant` - Assistant
+        * `collection` - Collection
+        * `evaluation_dataset` - Evaluation Dataset
+        * `data_export` - Data Export
+        * `message_media` - Message Media
     SessionStatusEnum:
       enum:
       - active
@@ -1772,6 +2527,25 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
+    SourceMaterial:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+      required:
+      - id
+      - material
+      - topic
     StatusCb5Enum:
       enum:
       - setup
@@ -1790,6 +2564,25 @@ components:
         * `pending-review` - Awaiting final review.
         * `complete` - Complete
         * `unknown` - Unknown
+    Survey:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+          maxLength: 500
+        confirmation_text:
+          type: string
+      required:
+      - id
+      - name
+      - url
     Team:
       type: object
       properties:

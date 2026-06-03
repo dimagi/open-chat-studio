@@ -10,7 +10,7 @@ runtime); the non-resource sets below exist only for this guard, so the "everyth
 is an explicit, reviewed decision rather than a silent default.
 """
 
-from apps.api.v2.inspect.node_walker import OPTIONS_SOURCE_RESOURCES
+from apps.api.v2.inspect.node_walker import OPTIONS_SOURCE_RESOURCES, WIDGET_RESOURCE_HANDLERS
 from apps.pipelines.nodes.base import OptionsSource, Widgets
 
 # ``OptionsSource`` values that are explicitly NOT resource references (tool enums, autocomplete
@@ -25,10 +25,10 @@ OPTIONS_SOURCE_NON_RESOURCES: set[OptionsSource] = {
     OptionsSource.text_editor_autocomplete_vars_router_node,
 }
 
-# Widget signals that carry a resource reference when there is no options_source. These mirror the
-# explicit widget handling in ``node_walker.walk_node`` (``llm_provider_model`` marks the LLM
-# provider/model pair; ``voice_widget`` marks the synthetic-voice field).
-WIDGET_RESOURCES: set[Widgets] = {Widgets.llm_provider_model, Widgets.voice_widget}
+# Widget signals that carry a resource reference when there is no options_source. Derived from the
+# runtime dispatch registry in ``node_walker.walk_node``, so this guard cannot drift from what the
+# walker actually embeds.
+WIDGET_RESOURCES: set[Widgets] = set(WIDGET_RESOURCE_HANDLERS)
 
 # Every other widget is presentational and not, on its own, a resource signal. Enumerated
 # explicitly so a newly added widget trips the completeness guard.
@@ -53,6 +53,9 @@ WIDGET_NON_RESOURCES: set[Widgets] = {
 
 
 def test_every_options_source_is_classified():
+    """Every ``OptionsSource`` enum value appears in either ``OPTIONS_SOURCE_RESOURCES`` (walker
+    embeds it as a resource) or ``OPTIONS_SOURCE_NON_RESOURCES`` (reviewed as not a resource), so a
+    newly added options source can't be silently omitted from the inspect payload."""
     classified = set(OPTIONS_SOURCE_RESOURCES) | OPTIONS_SOURCE_NON_RESOURCES
     unclassified = set(OptionsSource) - classified
     assert not unclassified, (
@@ -63,11 +66,16 @@ def test_every_options_source_is_classified():
 
 
 def test_options_source_classification_is_disjoint():
+    """No ``OptionsSource`` value is classified as both resource and non-resource — an overlap
+    would make the classification ambiguous (which set wins depends on the walker's code path)."""
     overlap = set(OPTIONS_SOURCE_RESOURCES) & OPTIONS_SOURCE_NON_RESOURCES
     assert not overlap, f"OptionsSource value(s) classified as both resource and non-resource: {overlap}"
 
 
 def test_every_widget_is_classified():
+    """Every ``Widgets`` enum value appears in either ``WIDGET_RESOURCES`` (handled explicitly in
+    ``walk_node``) or ``WIDGET_NON_RESOURCES`` (reviewed as presentational only), so a newly added
+    widget can't silently carry an unembedded resource reference."""
     classified = WIDGET_RESOURCES | WIDGET_NON_RESOURCES
     unclassified = set(Widgets) - classified
     assert not unclassified, (
@@ -78,5 +86,7 @@ def test_every_widget_is_classified():
 
 
 def test_widget_classification_is_disjoint():
+    """No ``Widgets`` value is classified as both resource and non-resource — an overlap would
+    make the classification ambiguous."""
     overlap = WIDGET_RESOURCES & WIDGET_NON_RESOURCES
     assert not overlap, f"Widget value(s) classified as both resource and non-resource: {overlap}"

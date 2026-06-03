@@ -13,40 +13,48 @@ silently omitting a resource reference.
 """
 
 import dataclasses
+import enum
+from typing import assert_never
 
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource, UiSchema, Widgets
 
-# Resource-kind keys — shared vocabulary across the walker, collector, and serializer registry.
-SOURCE_MATERIAL = "source_material"
-ASSISTANT = "assistant"
-CUSTOM_ACTION = "custom_action"
-COLLECTION = "collection"
-SYNTHETIC_VOICE = "synthetic_voice"
-VOICE_PROVIDER = "voice_provider"
-LLM_PROVIDER = "llm_provider"
-LLM_PROVIDER_MODEL = "llm_provider_model"
+
+class ResourceKind(enum.StrEnum):
+    """Resource-kind keys — shared vocabulary across the walker, collector, and serializer
+    registry. ``StrEnum`` so members stay interchangeable with their string values (dict keys,
+    payload rendering)."""
+
+    SOURCE_MATERIAL = "source_material"
+    ASSISTANT = "assistant"
+    CUSTOM_ACTION = "custom_action"
+    COLLECTION = "collection"
+    SYNTHETIC_VOICE = "synthetic_voice"
+    VOICE_PROVIDER = "voice_provider"
+    LLM_PROVIDER = "llm_provider"
+    LLM_PROVIDER_MODEL = "llm_provider_model"
+
+
+# ``resource_kind -> ids`` batch-load accumulator shape, shared by the walkers and the collector.
+ResourceRefMap = dict[ResourceKind, set[int]]
 
 # ── Signal registry ────────────────────────────────────────────────────────────────────────────
 # Each entry maps an ``OptionsSource`` that denotes a resource reference to
 # ``(payload_key, resource_kind, is_list)``.
-OPTIONS_SOURCE_RESOURCES: dict[OptionsSource, tuple[str, str, bool]] = {
-    OptionsSource.source_material: ("source_material", SOURCE_MATERIAL, False),
-    OptionsSource.assistant: ("assistant", ASSISTANT, False),
-    OptionsSource.custom_actions: ("custom_actions", CUSTOM_ACTION, True),
-    OptionsSource.collection: ("media_collection", COLLECTION, False),
-    OptionsSource.collection_index: ("indexed_collections", COLLECTION, True),
+OPTIONS_SOURCE_RESOURCES: dict[OptionsSource, tuple[str, ResourceKind, bool]] = {
+    OptionsSource.source_material: ("source_material", ResourceKind.SOURCE_MATERIAL, False),
+    OptionsSource.assistant: ("assistant", ResourceKind.ASSISTANT, False),
+    OptionsSource.custom_actions: ("custom_actions", ResourceKind.CUSTOM_ACTION, True),
+    OptionsSource.collection: ("media_collection", ResourceKind.COLLECTION, False),
+    OptionsSource.collection_index: ("indexed_collections", ResourceKind.COLLECTION, True),
     # Forward-compat: these enum values exist but no current node field uses them as an
-    # options_source (voice is signalled by the voice_widget widget in ``walk_node``). Classified so the
-    # completeness guard stays green and a future field using them embeds the right resource.
-    OptionsSource.voice_provider_id: ("voice", VOICE_PROVIDER, False),
-    OptionsSource.synthetic_voice_id: ("voice", SYNTHETIC_VOICE, False),
+    # options_source (voice is signalled by the voice_widget widget in ``walk_node``). Classified
+    # so the completeness guard stays green; the collector wraps the resolved instance in a
+    # ``VoicePair`` (``InspectCollector._wrap_single``) so a future field using them renders
+    # correctly through ``FlattenedVoiceSerializer``.
+    OptionsSource.voice_provider_id: ("voice", ResourceKind.VOICE_PROVIDER, False),
+    OptionsSource.synthetic_voice_id: ("voice", ResourceKind.SYNTHETIC_VOICE, False),
 }
-
-# Widget signals carry the reference when there is no options_source: ``llm_provider_model`` marks
-# the LLM provider/model pair; ``voice_widget`` marks the synthetic-voice field (handled in
-# ``walk_node``). Non-resource signals are enumerated in ``tests/test_completeness_guard.py``,
-# which asserts every ``OptionsSource`` and ``Widgets`` value is classified one way or the other.
 
 # Field names that pair with the ``llm_provider_model`` widget (mixins.LLMResponseMixin). The
 # widget sits on ``llm_provider_id``; ``llm_provider_model_id`` carries no signal of its own.
@@ -57,13 +65,13 @@ _LLM_PROVIDER_MODEL_FIELD = "llm_provider_model_id"
 # ── Reference value objects ──────────────────────────────────────────────────────────────────────
 @dataclasses.dataclass(frozen=True)
 class SingleRef:
-    kind: str
+    kind: ResourceKind
     id: int | None
 
 
 @dataclasses.dataclass(frozen=True)
 class ListRef:
-    kind: str
+    kind: ResourceKind
     ids: list[int]
 
 
@@ -87,13 +95,42 @@ class VoiceRef:
     synthetic_voice_id: int | None
 
 
+Ref = SingleRef | ListRef | CustomActionsRef | LlmRef | VoiceRef
+
+
+# ── Widget-resource registry ──────────────────────────────────────────────────────────────────────
+# Widget signals carry the reference when there is no options_source. ``walk_node`` dispatches
+# through this registry, and the completeness guard derives its ``WIDGET_RESOURCES`` set from it —
+# so the guard cannot drift from runtime behavior. Each handler takes ``(node, field_name)`` and
+# returns ``(payload_key, ref, consumed_field_names)``.
+def _walk_llm_provider_model_widget(node, _field_name: str) -> tuple[str, Ref, set[str]]:
+    """``llm_provider_model`` widget → LLM provider/model pair (consumes both mixin fields,
+    regardless of which one carries the widget signal)."""
+    ref = LlmRef(
+        provider_id=node.params.get(_LLM_PROVIDER_FIELD),
+        model_id=node.params.get(_LLM_PROVIDER_MODEL_FIELD),
+    )
+    return "llm", ref, {_LLM_PROVIDER_FIELD, _LLM_PROVIDER_MODEL_FIELD}
+
+
+def _walk_voice_widget(node, field_name: str) -> tuple[str, Ref, set[str]]:
+    """``voice_widget`` → synthetic-voice reference."""
+    return "voice", VoiceRef(synthetic_voice_id=node.params.get(field_name)), {field_name}
+
+
+WIDGET_RESOURCE_HANDLERS = {
+    Widgets.llm_provider_model: _walk_llm_provider_model_widget,
+    Widgets.voice_widget: _walk_voice_widget,
+}
+
+
 @dataclasses.dataclass
 class NodeWalkResult:
     flow_id: str
     type: str
     label: str
     params: dict
-    refs: dict[str, object]  # payload_key -> ref value object
+    refs: dict[str, Ref]  # payload_key -> ref value object
 
 
 @dataclasses.dataclass
@@ -103,7 +140,7 @@ class PipelineWalk:
     version_number: int
     graph: dict
     nodes: list[NodeWalkResult]
-    resource_refs: dict[str, set[int]]  # resource_kind -> ids to batch-load
+    resource_refs: ResourceRefMap  # resource_kind -> ids to batch-load
 
 
 def _signal(field_info) -> tuple[Widgets | None, OptionsSource | None]:
@@ -162,7 +199,7 @@ def walk_node(node) -> NodeWalkResult:
     """
     node_class = _node_class(node.type)
     fields = node_class.model_fields if node_class is not None else {}
-    refs: dict[str, object] = {}
+    refs: dict[str, Ref] = {}
     consumed: set[str] = set()
 
     for field_name, field_info in fields.items():
@@ -170,17 +207,11 @@ def walk_node(node) -> NodeWalkResult:
             continue
         widget, options_source = _signal(field_info)
 
-        if widget == Widgets.llm_provider_model:
-            refs["llm"] = LlmRef(
-                provider_id=node.params.get(_LLM_PROVIDER_FIELD),
-                model_id=node.params.get(_LLM_PROVIDER_MODEL_FIELD),
-            )
-            consumed.update({_LLM_PROVIDER_FIELD, _LLM_PROVIDER_MODEL_FIELD})
-            continue
-
-        if widget == Widgets.voice_widget:
-            refs["voice"] = VoiceRef(synthetic_voice_id=node.params.get(field_name))
-            consumed.add(field_name)
+        handler = WIDGET_RESOURCE_HANDLERS.get(widget) if widget is not None else None
+        if handler is not None:
+            payload_key, ref, used_fields = handler(node, field_name)
+            refs[payload_key] = ref
+            consumed.update(used_fields)
             continue
 
         if options_source in OPTIONS_SOURCE_RESOURCES:
@@ -200,8 +231,25 @@ def walk_node(node) -> NodeWalkResult:
     return NodeWalkResult(flow_id=node.flow_id, type=node.type, label=node.label, params=params, refs=refs)
 
 
-def accumulate_refs(refs: dict[str, object], into: dict[str, set[int]]) -> None:
-    """Merge a node/event's refs into the ``resource_kind -> ids`` batch-load accumulator."""
+def accumulate_refs(refs: dict[str, Ref], into: ResourceRefMap) -> None:
+    """Merge a node/event's refs into the ``resource_kind -> ids`` batch-load accumulator.
+
+    Example::
+
+        refs = {
+            "source_material": SingleRef(kind="source_material", id=7),
+            "indexed_collections": ListRef(kind="collection", ids=[3, 5]),
+            "llm": LlmRef(provider_id=2, model_id=11),
+        }
+        into = {"collection": {1}}
+        accumulate_refs(refs, into)
+        # into == {
+        #     "collection": {1, 3, 5},
+        #     "source_material": {7},
+        #     "llm_provider": {2},
+        #     "llm_provider_model": {11},
+        # }
+    """
     for ref in refs.values():
         if isinstance(ref, SingleRef):
             if ref.id:
@@ -211,15 +259,19 @@ def accumulate_refs(refs: dict[str, object], into: dict[str, set[int]]) -> None:
                 into.setdefault(ref.kind, set()).add(int(rid))
         elif isinstance(ref, CustomActionsRef):
             for action_id, _operation_ids in ref.selections:
-                into.setdefault(CUSTOM_ACTION, set()).add(int(action_id))
+                into.setdefault(ResourceKind.CUSTOM_ACTION, set()).add(int(action_id))
         elif isinstance(ref, LlmRef):
             if ref.provider_id:
-                into.setdefault(LLM_PROVIDER, set()).add(int(ref.provider_id))
+                into.setdefault(ResourceKind.LLM_PROVIDER, set()).add(int(ref.provider_id))
             if ref.model_id:
-                into.setdefault(LLM_PROVIDER_MODEL, set()).add(int(ref.model_id))
+                into.setdefault(ResourceKind.LLM_PROVIDER_MODEL, set()).add(int(ref.model_id))
         elif isinstance(ref, VoiceRef):
             if ref.synthetic_voice_id:
-                into.setdefault(SYNTHETIC_VOICE, set()).add(int(ref.synthetic_voice_id))
+                into.setdefault(ResourceKind.SYNTHETIC_VOICE, set()).add(int(ref.synthetic_voice_id))
+        else:
+            # Exhaustiveness guard: adding a member to the ``Ref`` union without handling it here
+            # is a type error (and raises at runtime) instead of silently dropping the reference.
+            assert_never(ref)
 
 
 def graph_digest(node_list, pipeline_data: dict | None) -> dict:
@@ -245,7 +297,7 @@ def walk_pipeline(pipeline) -> PipelineWalk:
     # Order by id (creation order) so the serialized node list is deterministic.
     node_list = list(pipeline.node_set.order_by("id"))
     results = [walk_node(node) for node in node_list]
-    resource_refs: dict[str, set[int]] = {}
+    resource_refs: ResourceRefMap = {}
     for result in results:
         accumulate_refs(result.refs, resource_refs)
     return PipelineWalk(

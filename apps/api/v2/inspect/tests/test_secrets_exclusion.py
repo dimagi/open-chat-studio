@@ -6,10 +6,12 @@ import pytest
 
 from apps.api.v2.inspect.serializers import (
     ChannelSerializer,
+    CustomActionSelection,
+    CustomActionSerializer,
     FileSerializer,
+    IndexedCollectionSerializer,
+    MediaCollectionSerializer,
     ProviderSerializer,
-    serialize_collection,
-    serialize_custom_action,
 )
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -43,7 +45,7 @@ def test_provider_serializer_excludes_config(factory):
 @pytest.mark.django_db()
 def test_custom_action_excludes_auth_config_and_digests_schema():
     action = CustomActionFactory.create(auth_provider=AuthProviderFactory.create())
-    data = serialize_custom_action(action, ["weather_get"])
+    data = CustomActionSerializer(CustomActionSelection(action, ["weather_get"])).data
     blob = json.dumps(data)
     assert "config" not in blob
     assert set(data["auth_provider"].keys()) == {"id", "type", "name"}
@@ -97,7 +99,7 @@ def test_channel_serializer_embeds_messaging_provider_without_config():
 def test_collection_media_vs_indexed():
     media = CollectionFactory.create(is_index=False)
     CollectionFileFactory.create(collection=media, file=FileFactory.create(team=media.team))
-    media_data = serialize_collection(media, with_embedding=False)
+    media_data = MediaCollectionSerializer(media).data
     assert "embedding" not in media_data
     assert len(media_data["files"]) == 1
 
@@ -106,6 +108,6 @@ def test_collection_media_vs_indexed():
         llm_provider=LlmProviderFactory.create(),
         embedding_provider_model=EmbeddingProviderModelFactory.create(),
     )
-    indexed_data = serialize_collection(indexed, with_embedding=True)
+    indexed_data = IndexedCollectionSerializer(indexed).data
     assert indexed_data["embedding"]["model"] == "text-embedding-3-small"
     assert "config" not in json.dumps(indexed_data)

@@ -2,18 +2,14 @@ import pytest
 
 from apps.api.v2.inspect.collector import InspectCollector
 from apps.api.v2.inspect.node_walker import (
-    COLLECTION,
-    CUSTOM_ACTION,
-    LLM_PROVIDER,
-    LLM_PROVIDER_MODEL,
-    SOURCE_MATERIAL,
-    SYNTHETIC_VOICE,
     CustomActionsRef,
     ListRef,
     LlmRef,
+    ResourceKind,
     SingleRef,
     VoiceRef,
 )
+from apps.api.v2.inspect.serializers import CustomActionSelection, ProviderModelPair, VoicePair
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -28,104 +24,139 @@ from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
-def test_llm_pair_flattened():
+def test_llm_ref_resolves_to_pair():
     team = TeamFactory.create()
-    provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai")
-    model = LlmProviderModelFactory.create(team=team, name="gpt-4o", max_token_limit=128000)
-    collector = InspectCollector(team).load({LLM_PROVIDER: {provider.id}, LLM_PROVIDER_MODEL: {model.id}})
-    out = collector.inline_refs({"llm": LlmRef(provider.id, model.id)})
-    assert out["llm"] == {
-        "provider_id": provider.id,
-        "provider_name": "Prod OpenAI",
-        "type": "openai",
-        "model": "gpt-4o",
-        "max_token_limit": 128000,
-        "deprecated": False,
-    }
+    provider = LlmProviderFactory.create(team=team)
+    model = LlmProviderModelFactory.create(team=team)
+    collector = InspectCollector(team).load(
+        {ResourceKind.LLM_PROVIDER: {provider.id}, ResourceKind.LLM_PROVIDER_MODEL: {model.id}}
+    )
+    out = collector.resolve_refs({"llm": LlmRef(provider.id, model.id)})
+    assert out["llm"] == ProviderModelPair(provider, model)
+
+
+@pytest.mark.django_db()
+def test_llm_ref_with_nothing_set_resolves_to_none():
+    collector = InspectCollector(TeamFactory.create()).load({})
+    assert collector.resolve_refs({"llm": LlmRef(None, None)}) == {"llm": None}
+
+
+@pytest.mark.django_db()
+def test_llm_ref_with_absent_model_resolves_to_partial_pair():
+    team = TeamFactory.create()
+    provider = LlmProviderFactory.create(team=team)
+    collector = InspectCollector(team).load({ResourceKind.LLM_PROVIDER: {provider.id}})
+    out = collector.resolve_refs({"llm": LlmRef(provider.id, None)})
+    assert out["llm"] == ProviderModelPair(provider, None)
 
 
 @pytest.mark.django_db()
 def test_global_llm_provider_model_loaded():
     team = TeamFactory.create()
     global_model = LlmProviderModelFactory.create(team=None, name="shared-model")
-    collector = InspectCollector(team).load({LLM_PROVIDER_MODEL: {global_model.id}})
-    out = collector.inline_refs({"llm": LlmRef(None, global_model.id)})
-    assert out["llm"]["model"] == "shared-model"
+    collector = InspectCollector(team).load({ResourceKind.LLM_PROVIDER_MODEL: {global_model.id}})
+    out = collector.resolve_refs({"llm": LlmRef(None, global_model.id)})
+    assert out["llm"] == ProviderModelPair(None, global_model)
 
 
 @pytest.mark.django_db()
-def test_media_vs_indexed_collection():
+def test_single_and_list_collection_refs_resolve_to_instances():
     team = TeamFactory.create()
     media = CollectionFactory.create(team=team, is_index=False, llm_provider=None, embedding_provider_model=None)
-    CollectionFileFactory.create(collection=media, file=FileFactory.create(team=team, name="returns.pdf"))
+    CollectionFileFactory.create(collection=media, file=FileFactory.create(team=team))
     indexed = CollectionFactory.create(
         team=team,
         is_index=True,
         llm_provider=LlmProviderFactory.create(team=team),
         embedding_provider_model=EmbeddingProviderModelFactory.create(team=team),
     )
-    collector = InspectCollector(team).load({COLLECTION: {media.id, indexed.id}})
-    out = collector.inline_refs(
+    collector = InspectCollector(team).load({ResourceKind.COLLECTION: {media.id, indexed.id}})
+    out = collector.resolve_refs(
         {
-            "media_collection": SingleRef(COLLECTION, media.id),
-            "indexed_collections": ListRef(COLLECTION, [indexed.id]),
+            "media_collection": SingleRef(ResourceKind.COLLECTION, media.id),
+            "indexed_collections": ListRef(ResourceKind.COLLECTION, [indexed.id]),
         }
     )
-    assert "embedding" not in out["media_collection"]
-    assert out["media_collection"]["files"][0]["name"] == "returns.pdf"
-    assert out["indexed_collections"][0]["embedding"]["model"] == "text-embedding-3-small"
+    assert out["media_collection"] == media
+    assert out["indexed_collections"] == [indexed]
 
 
 @pytest.mark.django_db()
-def test_custom_actions_list():
+def test_custom_actions_resolve_to_selections():
     team = TeamFactory.create()
     action = CustomActionFactory.create(team=team)
-    collector = InspectCollector(team).load({CUSTOM_ACTION: {action.id}})
-    out = collector.inline_refs({"custom_actions": CustomActionsRef([(action.id, ["weather_get"])])})
-    assert len(out["custom_actions"]) == 1
-    assert out["custom_actions"][0]["id"] == action.id
-    # only the selected operations are rendered, not the action's full operation set
-    assert out["custom_actions"][0]["allowed_operations"] == ["weather_get"]
-    assert out["custom_actions"][0]["api_schema"] == {"paths": ["/weather"]}
+    collector = InspectCollector(team).load({ResourceKind.CUSTOM_ACTION: {action.id}})
+    out = collector.resolve_refs({"custom_actions": CustomActionsRef([(action.id, ["weather_get"])])})
+    assert out["custom_actions"] == [CustomActionSelection(action, ["weather_get"])]
 
 
 @pytest.mark.django_db()
-def test_voice_flattened_from_synthetic_voice():
+def test_voice_ref_resolves_with_its_provider():
     team = TeamFactory.create()
-    provider = VoiceProviderFactory.create(team=team, name="ElevenLabs", type="elevenlabs")
-    voice = SyntheticVoiceFactory.create(name="Rachel", language="English", neural=True, voice_provider=provider)
-    collector = InspectCollector(team).load({SYNTHETIC_VOICE: {voice.id}})
-    out = collector.inline_refs({"voice": VoiceRef(voice.id)})
-    assert out["voice"]["voice_name"] == "Rachel"
-    assert out["voice"]["provider_name"] == "ElevenLabs"
-    assert out["voice"]["neural"] is True
+    provider = VoiceProviderFactory.create(team=team)
+    voice = SyntheticVoiceFactory.create(voice_provider=provider)
+    collector = InspectCollector(team).load({ResourceKind.SYNTHETIC_VOICE: {voice.id}})
+    assert collector.resolve_refs({"voice": VoiceRef(voice.id)}) == {"voice": VoicePair(provider, voice)}
+
+
+@pytest.mark.django_db()
+def test_voice_ref_without_provider_resolves_to_pair_with_none_provider():
+    team = TeamFactory.create()
+    voice = SyntheticVoiceFactory.create(voice_provider=None)
+    collector = InspectCollector(team).load({ResourceKind.SYNTHETIC_VOICE: {voice.id}})
+    assert collector.resolve_refs({"voice": VoiceRef(voice.id)}) == {"voice": VoicePair(None, voice)}
+
+
+@pytest.mark.django_db()
+def test_synthetic_voice_single_ref_resolves_to_pair():
+    # The forward-compat ``OptionsSource.synthetic_voice_id`` registry entry emits a SingleRef
+    # under the "voice" payload key, which FlattenedVoiceSerializer renders — so it must resolve
+    # to a VoicePair, not a raw SyntheticVoice instance.
+    team = TeamFactory.create()
+    provider = VoiceProviderFactory.create(team=team)
+    voice = SyntheticVoiceFactory.create(voice_provider=provider)
+    collector = InspectCollector(team).load({ResourceKind.SYNTHETIC_VOICE: {voice.id}})
+    out = collector.resolve_refs({"voice": SingleRef(ResourceKind.SYNTHETIC_VOICE, voice.id)})
+    assert out["voice"] == VoicePair(provider, voice)
+
+
+@pytest.mark.django_db()
+def test_voice_provider_single_ref_resolves_to_pair():
+    # Same for the forward-compat ``OptionsSource.voice_provider_id`` entry: a provider-only
+    # reference resolves to a VoicePair with no voice half.
+    team = TeamFactory.create()
+    provider = VoiceProviderFactory.create(team=team)
+    collector = InspectCollector(team).load({ResourceKind.VOICE_PROVIDER: {provider.id}})
+    out = collector.resolve_refs({"voice": SingleRef(ResourceKind.VOICE_PROVIDER, provider.id)})
+    assert out["voice"] == VoicePair(provider, None)
 
 
 @pytest.mark.django_db()
 def test_cross_team_id_resolves_to_absent():
     team = TeamFactory.create()
     other_material = SourceMaterialFactory.create(team=TeamFactory.create())
-    collector = InspectCollector(team).load({SOURCE_MATERIAL: {other_material.id}})
-    out = collector.inline_refs(
+    collector = InspectCollector(team).load({ResourceKind.SOURCE_MATERIAL: {other_material.id}})
+    out = collector.resolve_refs(
         {
-            "single": SingleRef(SOURCE_MATERIAL, other_material.id),
-            "list": ListRef(SOURCE_MATERIAL, [other_material.id]),
+            "single": SingleRef(ResourceKind.SOURCE_MATERIAL, other_material.id),
+            "list": ListRef(ResourceKind.SOURCE_MATERIAL, [other_material.id]),
         }
     )
-    # Cross-team id is not in the team-scoped map: single -> None, list -> dropped.
+    # Cross-team id is not in the team-scoped map: single -> None, list -> dropped (ADR-0028).
     assert out["single"] is None
     assert out["list"] == []
 
 
 @pytest.mark.django_db()
-def test_duplicate_reference_is_byte_identical_with_same_id():
+def test_duplicate_reference_resolves_to_the_same_instance():
     team = TeamFactory.create()
-    material = SourceMaterialFactory.create(team=team, topic="Returns policy")
-    collector = InspectCollector(team).load({SOURCE_MATERIAL: {material.id}})
-    a = collector.inline_refs({"source_material": SingleRef(SOURCE_MATERIAL, material.id)})
-    b = collector.inline_refs({"source_material": SingleRef(SOURCE_MATERIAL, material.id)})
-    assert a["source_material"] == b["source_material"]
-    assert a["source_material"]["id"] == material.id
+    material = SourceMaterialFactory.create(team=team)
+    collector = InspectCollector(team).load({ResourceKind.SOURCE_MATERIAL: {material.id}})
+    a = collector.resolve_refs({"source_material": SingleRef(ResourceKind.SOURCE_MATERIAL, material.id)})
+    b = collector.resolve_refs({"source_material": SingleRef(ResourceKind.SOURCE_MATERIAL, material.id)})
+    # The same loaded instance is handed to every reference site, so the serialized copies the
+    # response serializers later produce are byte-identical.
+    assert a["source_material"] is b["source_material"]
 
 
 @pytest.mark.django_db()
@@ -142,8 +173,8 @@ def test_collection_load_is_not_n_plus_one(django_assert_num_queries):
     ids = {c.id for c in collections}
     # 1 query for the collections + 1 for the prefetched files = 2.
     with django_assert_num_queries(2):
-        collector = InspectCollector(team).load({COLLECTION: ids})
-    # Inlining many sites copies from memory and issues no further queries.
+        collector = InspectCollector(team).load({ResourceKind.COLLECTION: ids})
+    # Resolving many sites copies from memory and issues no further queries.
     with django_assert_num_queries(0):
         for collection in collections:
-            collector.inline_refs({"media_collection": SingleRef(COLLECTION, collection.id)})
+            collector.resolve_refs({"media_collection": SingleRef(ResourceKind.COLLECTION, collection.id)})

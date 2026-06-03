@@ -1,7 +1,7 @@
 import pytest
 
 from apps.api.v2.inspect.events import walk_events
-from apps.api.v2.inspect.node_walker import LLM_PROVIDER, LLM_PROVIDER_MODEL
+from apps.api.v2.inspect.node_walker import ResourceKind
 from apps.events.models import EventActionType
 from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -87,8 +87,8 @@ def test_pipeline_start_embeds_pipeline_and_accumulates_refs():
     assert action.pipeline is not None
     assert any(node.type == "LLMResponseWithPrompt" for node in action.pipeline.nodes)
     # the embedded pipeline's resource references bubble up for batch loading
-    assert walk.resource_refs[LLM_PROVIDER] == {5}
-    assert walk.resource_refs[LLM_PROVIDER_MODEL] == {9}
+    assert walk.resource_refs[ResourceKind.LLM_PROVIDER] == {5}
+    assert walk.resource_refs[ResourceKind.LLM_PROVIDER_MODEL] == {9}
 
 
 @pytest.mark.django_db()

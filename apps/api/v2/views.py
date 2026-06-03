@@ -7,7 +7,8 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView
-from apps.api.v2.inspect.builder import InspectVersionError, build_inspect_payload, resolve_inspect_version
+from apps.api.v2.inspect.builder import InspectVersionError, build_inspect_context, resolve_inspect_version
+from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.serializers import ChatbotSerializer
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -62,6 +63,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
                 ),
             ),
         ],
+        responses=ChatbotInspectSerializer,
     )
     @action(detail=True, methods=["get"])
     def inspect(self, request, id=None):
@@ -71,4 +73,4 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             target = resolve_inspect_version(family, request.query_params.get("version"))
         except InspectVersionError as err:
             raise NotFound("Requested chatbot version was not found.") from err
-        return Response(build_inspect_payload(target))
+        return Response(ChatbotInspectSerializer(build_inspect_context(target)).data)
