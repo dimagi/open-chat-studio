@@ -118,41 +118,49 @@ class AzureSpeechService(SpeechService):
         # keep heavy imports inline
         import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
         from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
+        from pydub.exceptions import CouldntDecodeError  # noqa: PLC0415 - lazy: optional audio processing lib
 
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            # Create an audio configuration that points to the output audio file
-            audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
+        # Setup voice font (Azure refers to synthetic voices as voice fonts)
+        speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
 
-            # Setup voice font (Azure refers to synthetic voices as voice fonts)
-            speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
+        # Use audio_config=None so audio is returned in-memory via result.audio_data,
+        # avoiding a temp file that Azure may write as empty/corrupt without raising an error.
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
 
-            # Create a speech synthesizer
-            synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+        # Synthesize the text
+        result = synthesizer.speak_text(text)
 
-            # Synthesize the text
-            result = synthesizer.speak_text(text)
-
-            # Check if synthesis was successful
-            if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+        # Check if synthesis was successful
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            audio_data = result.audio_data
+            # Validate the returned audio: Azure can report success but return empty or null-header
+            # audio (e.g. when the configured voice doesn't support the input language/script).
+            if not audio_data or not audio_data.startswith(b"RIFF"):
+                raise AudioSynthesizeException(
+                    f"Azure TTS returned empty or invalid audio for voice "
+                    f"'{speech_config.speech_synthesis_voice_name}'. "
+                    "The configured voice may not support the input language or text."
+                )
+            try:
                 audio_segment = AudioSegment.from_file(
-                    temp_file.name, format="wav"
+                    BytesIO(audio_data), format="wav"
                 )  # Azure returns audio in WAV format
-                duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
-
-                with open(temp_file.name, "rb") as f:
-                    file_content = f.read()
-
-                return SynthesizedAudio(audio=BytesIO(file_content), duration=duration_seconds, format="wav")
-            elif result.reason == speechsdk.ResultReason.Canceled:
-                cancellation_details = result.cancellation_details
-                msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
-                if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                    if cancellation_details.error_details:
-                        msg += f". Error details: {cancellation_details.error_details}"
-                raise AudioSynthesizeException(msg)
-            raise AudioSynthesizeException(f"Unexpected result: {result}")
+            except CouldntDecodeError as e:
+                raise AudioSynthesizeException(
+                    f"Azure TTS audio could not be decoded: {e}"
+                ) from e
+            duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
+            return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="wav")
+        elif result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = result.cancellation_details
+            msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
+            if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                if cancellation_details.error_details:
+                    msg += f". Error details: {cancellation_details.error_details}"
+            raise AudioSynthesizeException(msg)
+        raise AudioSynthesizeException(f"Unexpected result: {result}")
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         # keep heavy imports inline
