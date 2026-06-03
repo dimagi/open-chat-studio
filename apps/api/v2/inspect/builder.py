@@ -9,10 +9,11 @@ from apps.api.v2.inspect.collector import InspectCollector
 from apps.api.v2.inspect.events import walk_events
 from apps.api.v2.inspect.node_walker import PipelineWalk, walk_pipeline
 from apps.api.v2.inspect.serializers import (
+    ChannelSerializer,
     ConsentFormSerializer,
+    ProviderSerializer,
     SurveySerializer,
     flatten_voice,
-    provider_ref,
 )
 from apps.chatbots.version_resolver import (
     NoPublishedVersion,
@@ -81,7 +82,7 @@ def build_inspect_payload(experiment) -> dict:
         "pre_survey": _serialize_or_none(SurveySerializer, experiment.pre_survey),
         "post_survey": _serialize_or_none(SurveySerializer, experiment.post_survey),
         "voice": flatten_voice(experiment.voice_provider, experiment.synthetic_voice),
-        "trace_provider": provider_ref(experiment.trace_provider),
+        "trace_provider": _serialize_or_none(ProviderSerializer, experiment.trace_provider),
         "channels": _serialize_channels(experiment),
         "pipeline": _render_pipeline(pipeline_walk, collector),
         "events": _render_events(events_walk, collector),
@@ -94,14 +95,7 @@ def _serialize_or_none(serializer_cls, instance):
 
 def _serialize_channels(experiment) -> list[dict]:
     channels = experiment.experimentchannel_set.select_related("messaging_provider").all()
-    return [
-        {
-            "platform": channel.platform,
-            "name": channel.name,
-            "messaging_provider": provider_ref(channel.messaging_provider),
-        }
-        for channel in channels
-    ]
+    return ChannelSerializer(channels, many=True).data
 
 
 def _render_pipeline(walk: PipelineWalk | None, collector: InspectCollector) -> dict | None:

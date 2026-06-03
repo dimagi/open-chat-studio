@@ -7,7 +7,7 @@ import pytest
 from apps.api.v2.inspect.serializers import (
     ChannelSerializer,
     FileSerializer,
-    provider_ref,
+    ProviderSerializer,
     serialize_collection,
     serialize_custom_action,
 )
@@ -30,18 +30,14 @@ from apps.utils.factories.service_provider_factories import (
     "factory",
     [LlmProviderFactory, VoiceProviderFactory, MessagingProviderFactory, AuthProviderFactory, TraceProviderFactory],
 )
-def test_provider_ref_excludes_config(factory):
+def test_provider_serializer_excludes_config(factory):
     provider = factory.create()
-    ref = provider_ref(provider)
+    ref = ProviderSerializer(provider).data
     assert set(ref.keys()) == {"id", "type", "name"}
     assert "config" not in json.dumps(ref)
     # The encrypted secret values must never appear anywhere in the projection.
     for secret in provider.config.values():
         assert str(secret) not in json.dumps(ref)
-
-
-def test_provider_ref_none():
-    assert provider_ref(None) is None
 
 
 @pytest.mark.django_db()
@@ -80,8 +76,19 @@ def test_file_serializer_excludes_url_summary_metadata():
 def test_channel_serializer_excludes_extra_data():
     channel = ExperimentChannelFactory.create(extra_data={"bot_token": "super-secret"})
     data = ChannelSerializer(channel).data
-    assert set(data.keys()) == {"platform", "name"}
+    assert set(data.keys()) == {"platform", "name", "messaging_provider"}
     assert "super-secret" not in json.dumps(data)
+
+
+@pytest.mark.django_db()
+def test_channel_serializer_embeds_messaging_provider_without_config():
+    provider = MessagingProviderFactory.create()
+    channel = ExperimentChannelFactory.create(messaging_provider=provider)
+    data = ChannelSerializer(channel).data
+    assert data["messaging_provider"] == {"id": provider.id, "type": provider.type, "name": provider.name}
+
+    bare = ChannelSerializer(ExperimentChannelFactory.create()).data
+    assert bare["messaging_provider"] is None
 
 
 @pytest.mark.django_db()

@@ -55,13 +55,25 @@ class AssistantSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "assistant_id", "instructions", "builtin_tools", "tools", "temperature", "top_p"]
 
 
+class ProviderSerializer(serializers.Serializer):
+    """Minimal provider reference — A plain ``Serializer`` (not ``ModelSerializer``) so it works for
+    any provider model (Llm/Voice/Messaging/Auth/Trace) via duck typing. Serializing ``None``
+    yields ``None`` when nested; standalone call sites must guard for ``None`` themselves."""
+
+    id = serializers.IntegerField()
+    type = serializers.CharField()
+    name = serializers.CharField()
+
+
 class ChannelSerializer(serializers.ModelSerializer):
-    """Allowlist ``platform`` + ``name`` only. ``extra_data`` (freeform auth material) is excluded
-    wholesale (resolved Q8); ``messaging_provider`` is embedded separately by the builder."""
+    """Allowlist ``platform`` + ``name`` + embedded ``messaging_provider`` ref. ``extra_data``
+    (freeform auth material) is excluded wholesale (resolved Q8)."""
+
+    messaging_provider = ProviderSerializer(allow_null=True)
 
     class Meta:
         model = ExperimentChannel
-        fields = ["platform", "name"]
+        fields = ["platform", "name", "messaging_provider"]
 
 
 def serialize_custom_action(action: CustomAction) -> dict:
@@ -77,16 +89,8 @@ def serialize_custom_action(action: CustomAction) -> dict:
         "server_url": action.server_url,
         "allowed_operations": list(action.allowed_operations or []),
         "api_schema": {"paths": paths},
-        "auth_provider": provider_ref(action.auth_provider),
+        "auth_provider": ProviderSerializer(action.auth_provider).data if action.auth_provider else None,
     }
-
-
-def provider_ref(provider) -> dict | None:
-    """Minimal provider reference — ``{id, type, name}``. The encrypted ``config`` is never read,
-    so it cannot leak (ADR-0027). Works for any provider model (Llm/Voice/Messaging/Auth/Trace)."""
-    if provider is None:
-        return None
-    return {"id": provider.id, "type": provider.type, "name": provider.name}
 
 
 def flatten_llm(provider, model) -> dict | None:
