@@ -40,7 +40,11 @@ def test_payload_top_level_shape(chatbot_with_llm_node):
     assert "neural" in payload["voice"]
     # nothing else configured -> null / empty members
     assert payload["trace_provider"] is None
-    assert payload["channels"] == []
+    # the team-global web + API channels are always present
+    assert [(c["platform"], c["name"]) for c in payload["channels"]] == [
+        ("web", f"{experiment.team.slug}-web-channel"),
+        ("api", f"{experiment.team.slug}-api-channel"),
+    ]
     assert payload["events"] == {"static_triggers": [], "timeout_triggers": []}
 
 
@@ -70,7 +74,11 @@ def test_channels_come_from_working_version():
     version = experiment.create_new_version()
 
     payload = build_inspect_payload(version)
-    assert [c["name"] for c in payload["channels"]] == ["working-telegram"]
+    assert [c["name"] for c in payload["channels"]] == [
+        "working-telegram",
+        f"{experiment.team.slug}-web-channel",
+        f"{experiment.team.slug}-api-channel",
+    ]
 
 
 @pytest.mark.django_db()

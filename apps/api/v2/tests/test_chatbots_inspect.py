@@ -255,7 +255,12 @@ def test_no_secrets_in_response(inspect_bot):
 
 @pytest.mark.django_db()
 def test_channel_allowlisted(inspect_bot):
-    assert _get(inspect_bot)["channels"] == [{"platform": "telegram", "name": "Support TG", "messaging_provider": None}]
+    team_slug = inspect_bot.experiment.team.slug
+    assert _get(inspect_bot)["channels"] == [
+        {"platform": "telegram", "name": "Support TG", "messaging_provider": None},
+        {"platform": "web", "name": f"{team_slug}-web-channel", "messaging_provider": None},
+        {"platform": "api", "name": f"{team_slug}-api-channel", "messaging_provider": None},
+    ]
 
 
 # ── Cross-team isolation ─────────────────────────────────────────────────────────────────────────
@@ -516,7 +521,9 @@ def test_full_response_body():
                     "type": messaging_provider.type,
                     "name": "Twilio Prod",
                 },
-            }
+            },
+            {"platform": "web", "name": f"{team.slug}-web-channel", "messaging_provider": None},
+            {"platform": "api", "name": f"{team.slug}-api-channel", "messaging_provider": None},
         ],
         "pipeline": {
             "id": pipeline.id,

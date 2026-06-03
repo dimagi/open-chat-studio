@@ -97,9 +97,15 @@ def _serialize_or_none(serializer_cls, instance):
 def _serialize_channels(experiment) -> list[dict]:
     # Channels are only ever linked to the working version, so resolve the family head regardless
     # of which version is being inspected.
-    channels = ExperimentChannel.objects.filter(experiment_id=experiment.get_working_version_id()).select_related(
-        "messaging_provider"
+    channels = list(
+        ExperimentChannel.objects.filter(experiment_id=experiment.get_working_version_id()).select_related(
+            "messaging_provider"
+        )
     )
+    # The web and API channels are team-global (linked to no experiment); every chatbot is
+    # reachable through them.
+    channels.append(ExperimentChannel.objects.get_team_web_channel(experiment.team))
+    channels.append(ExperimentChannel.objects.get_team_api_channel(experiment.team))
     return ChannelSerializer(channels, many=True).data
 
 
