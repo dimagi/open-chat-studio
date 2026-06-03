@@ -121,6 +121,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
+    create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
 
