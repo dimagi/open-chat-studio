@@ -121,6 +121,9 @@ class NodeWalkResult:
 
 @dataclasses.dataclass
 class PipelineWalk:
+    id: int
+    name: str
+    version_number: int
     graph: dict
     nodes: list[NodeWalkResult]
     resource_refs: dict[str, set[int]]  # resource_kind -> ids to batch-load
@@ -259,6 +262,9 @@ def walk_pipeline(pipeline) -> PipelineWalk:
     for result in results:
         accumulate_refs(result.refs, resource_refs)
     return PipelineWalk(
+        id=pipeline.id,
+        name=pipeline.name,
+        version_number=pipeline.version_number,
         graph=graph_digest(node_list, pipeline.data),
         nodes=results,
         resource_refs=resource_refs,
