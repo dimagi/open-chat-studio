@@ -52,8 +52,6 @@ def resolve_inspect_version(family, version_param: str | None):
             return resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
         return resolve_chatbot_version(family, VersionSelectionRule.SPECIFIC, version_number=int(version_param))
     except (ValueError, NoPublishedVersion, VersionNotFound) as err:
-        # int() ValueError (non-numeric) and the resolver's not-found errors both mean "no such
-        # version" to the caller.
         raise InspectVersionError(str(err)) from err
 
 

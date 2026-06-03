@@ -41,7 +41,6 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     lookup_url_kwarg = "id"
 
     def get_queryset(self):
-        # Only the working (draft) version family heads are exposed at the top level.
         return Experiment.objects.filter(team=self.request.team).filter(working_version__isnull=True)
 
     @extend_schema(
