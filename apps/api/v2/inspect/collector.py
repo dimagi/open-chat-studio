@@ -88,7 +88,8 @@ class InspectCollector:
     def _get(self, kind: str, resource_id) -> object | None:
         if resource_id is None:
             return None
-        return self._objects.get(kind, {}).get(resource_id)
+        # pipeline.params contains string ids whereas self._objects has int ids.
+        return self._objects.get(kind, {}).get(int(resource_id))
 
     def inline_refs(self, refs: dict[str, object]) -> dict:
         """Render a walker's ``refs`` map (payload_key -> ref) into inline serialized objects."""
