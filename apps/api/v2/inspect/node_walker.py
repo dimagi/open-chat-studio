@@ -37,48 +37,16 @@ OPTIONS_SOURCE_RESOURCES: dict[OptionsSource, tuple[str, str, bool]] = {
     OptionsSource.collection: ("media_collection", COLLECTION, False),
     OptionsSource.collection_index: ("indexed_collections", COLLECTION, True),
     # Forward-compat: these enum values exist but no current node field uses them as an
-    # options_source (voice is signalled by the voice_widget widget below). Classified so the
+    # options_source (voice is signalled by the voice_widget widget in ``walk_node``). Classified so the
     # completeness guard stays green and a future field using them embeds the right resource.
     OptionsSource.voice_provider_id: ("voice", VOICE_PROVIDER, False),
     OptionsSource.synthetic_voice_id: ("voice", SYNTHETIC_VOICE, False),
 }
 
-# ``OptionsSource`` values that are explicitly NOT resource references (tool enums, autocomplete
-# variable hints, jinja editors) — their fields stay verbatim in ``params``.
-OPTIONS_SOURCE_NON_RESOURCES: set[OptionsSource] = {
-    OptionsSource.agent_tools,
-    OptionsSource.built_in_tools,
-    OptionsSource.built_in_tools_config,
-    OptionsSource.mcp_tools,
-    OptionsSource.jinja_node,
-    OptionsSource.text_editor_autocomplete_vars_llm_node,
-    OptionsSource.text_editor_autocomplete_vars_router_node,
-}
-
-# Widget signals carry the reference when there is no options_source. ``llm_provider_model`` marks
-# the LLM provider/model pair; ``voice_widget`` marks the synthetic-voice field.
-WIDGET_RESOURCES: set[Widgets] = {Widgets.llm_provider_model, Widgets.voice_widget}
-
-# Every other widget is presentational and not, on its own, a resource signal. Enumerated
-# explicitly so a newly added widget trips the completeness guard.
-WIDGET_NON_RESOURCES: set[Widgets] = {
-    Widgets.expandable_text,
-    Widgets.code,
-    Widgets.toggle,
-    Widgets.select,
-    Widgets.float,
-    Widgets.range,
-    Widgets.multiselect,
-    Widgets.searchable_multiselect,
-    Widgets.none,
-    Widgets.history,
-    Widgets.keywords,
-    Widgets.history_mode,
-    Widgets.built_in_tools,
-    Widgets.key_value_pairs,
-    Widgets.text_editor,
-    Widgets.jinja_template,
-}
+# Widget signals carry the reference when there is no options_source: ``llm_provider_model`` marks
+# the LLM provider/model pair; ``voice_widget`` marks the synthetic-voice field (handled in
+# ``walk_node``). Non-resource signals are enumerated in ``tests/test_completeness_guard.py``,
+# which asserts every ``OptionsSource`` and ``Widgets`` value is classified one way or the other.
 
 # Field names that pair with the ``llm_provider_model`` widget (mixins.LLMResponseMixin). The
 # widget sits on ``llm_provider_id``; ``llm_provider_model_id`` carries no signal of its own.
