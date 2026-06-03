@@ -531,3 +531,32 @@ class TestCollectionSnapshots:
 
         assert response.status_code == 200
         assert b"Create snapshot" in response.content
+
+    def test_snapshots_section_shown_for_working_index(self, team, client):
+        collection = CollectionFactory.create(is_index=True, team=team)
+        client.force_login(team.members.first())
+        url = reverse("documents:single_collection_home", args=[team.slug, collection.id])
+
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"Create snapshot" in response.content
+
+    def test_snapshots_section_hidden_for_media_collection(self, team, client):
+        collection = CollectionFactory.create(is_index=False, team=team)
+        client.force_login(team.members.first())
+        url = reverse("documents:single_collection_home", args=[team.slug, collection.id])
+
+        response = client.get(url)
+
+        assert b"Create snapshot" not in response.content
+
+    def test_snapshots_section_hidden_on_version_page(self, team, client):
+        collection = CollectionFactory.create(is_index=True, team=team)
+        version = collection.create_new_version()
+        client.force_login(team.members.first())
+        url = reverse("documents:single_collection_home", args=[team.slug, version.id])
+
+        response = client.get(url)
+
+        assert b"Create snapshot" not in response.content
