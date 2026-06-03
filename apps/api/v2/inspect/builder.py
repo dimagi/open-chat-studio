@@ -9,7 +9,7 @@ the response root *is* the chatbot, rendered entirely by the response serializer
 import dataclasses
 
 from apps.api.v2.inspect.collector import InspectCollector
-from apps.api.v2.inspect.events import EventsWalk, walk_events
+from apps.api.v2.inspect.events import ActionWalk, EventsWalk, TriggerWalk, walk_events
 from apps.api.v2.inspect.node_walker import NodeWalkResult, PipelineWalk, walk_pipeline
 from apps.api.v2.inspect.serializers import VoicePair
 from apps.channels.models import ExperimentChannel
@@ -116,16 +116,18 @@ def _resolve_node(node: NodeWalkResult, collector: InspectCollector) -> dict:
 
 
 def _resolve_events(events_walk: EventsWalk, collector: InspectCollector) -> dict:
-    def resolve_action(action) -> dict:
-        resolved = {"type": action.type, "params": action.params}
-        if action.pipeline is not None:
-            resolved["pipeline"] = _resolve_pipeline(action.pipeline, collector)
-        return resolved
-
-    def resolve_trigger(trigger) -> dict:
-        return {"id": trigger.id, **trigger.fields, "action": resolve_action(trigger.action)}
-
     return {
-        "static_triggers": [resolve_trigger(t) for t in events_walk.static_triggers],
-        "timeout_triggers": [resolve_trigger(t) for t in events_walk.timeout_triggers],
+        "static_triggers": [_resolve_trigger(t, collector) for t in events_walk.static_triggers],
+        "timeout_triggers": [_resolve_trigger(t, collector) for t in events_walk.timeout_triggers],
     }
+
+
+def _resolve_trigger(trigger: TriggerWalk, collector: InspectCollector) -> dict:
+    return {"id": trigger.id, **trigger.fields, "action": _resolve_action(trigger.action, collector)}
+
+
+def _resolve_action(action: ActionWalk, collector: InspectCollector) -> dict:
+    resolved: dict = {"type": action.type, "params": action.params}
+    if action.pipeline is not None:
+        resolved["pipeline"] = _resolve_pipeline(action.pipeline, collector)
+    return resolved

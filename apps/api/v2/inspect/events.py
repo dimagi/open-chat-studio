@@ -10,7 +10,7 @@ does not recurse, since a pipeline carries no triggers of its own.
 
 import dataclasses
 
-from apps.api.v2.inspect.node_walker import PipelineWalk, ResourceRefMap, walk_pipeline
+from apps.api.v2.inspect.node_walker import PipelineWalk, ResourceRefMap, merge_refs, walk_pipeline
 from apps.events.models import EventActionType
 
 # Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3). The cadence lives directly
@@ -39,11 +39,6 @@ class EventsWalk:
     resource_refs: ResourceRefMap
 
 
-def _merge_refs(into: ResourceRefMap, more: ResourceRefMap) -> None:
-    for kind, ids in more.items():
-        into.setdefault(kind, set()).update(ids)
-
-
 def walk_action(action, team, resource_refs: ResourceRefMap) -> ActionWalk:
     """Walk a single :class:`~apps.events.models.EventAction` into an ``ActionWalk``.
 
@@ -63,7 +58,7 @@ def walk_action(action, team, resource_refs: ResourceRefMap) -> ActionWalk:
             pipeline = Pipeline.objects.filter(team=team, id=pipeline_id).first()
             if pipeline is not None:
                 pipeline_walk = walk_pipeline(pipeline)
-                _merge_refs(resource_refs, pipeline_walk.resource_refs)
+                merge_refs(resource_refs, pipeline_walk.resource_refs)
         return ActionWalk(type=action_type, params=params, pipeline=pipeline_walk)
 
     if action_type == EventActionType.SCHEDULETRIGGER:
@@ -78,30 +73,30 @@ def walk_events(experiment) -> EventsWalk:
     included but flagged via ``is_active`` so a verifier can assert a trigger is *not* armed."""
     team = experiment.team
     resource_refs: ResourceRefMap = {}
-
-    static = []
-    for trigger in experiment.static_triggers.filter(is_archived=False).select_related("action"):
-        static.append(
-            TriggerWalk(
-                id=trigger.id,
-                fields={"type": trigger.type, "is_active": trigger.is_active},
-                action=walk_action(trigger.action, team, resource_refs),
-            )
-        )
-
-    timeout = []
-    for trigger in experiment.timeout_triggers.filter(is_archived=False).select_related("action"):
-        timeout.append(
-            TriggerWalk(
-                id=trigger.id,
-                fields={
-                    "delay_seconds": trigger.delay,
-                    "total_num_triggers": trigger.total_num_triggers,
-                    "trigger_from_first_message": trigger.trigger_from_first_message,
-                    "is_active": trigger.is_active,
-                },
-                action=walk_action(trigger.action, team, resource_refs),
-            )
-        )
-
+    static = _walk_triggers(experiment.static_triggers, _static_trigger_fields, team, resource_refs)
+    timeout = _walk_triggers(experiment.timeout_triggers, _timeout_trigger_fields, team, resource_refs)
     return EventsWalk(static_triggers=static, timeout_triggers=timeout, resource_refs=resource_refs)
+
+
+def _walk_triggers(triggers, fields_for, team, resource_refs: ResourceRefMap) -> list[TriggerWalk]:
+    return [
+        TriggerWalk(
+            id=trigger.id,
+            fields=fields_for(trigger),
+            action=walk_action(trigger.action, team, resource_refs),
+        )
+        for trigger in triggers.filter(is_archived=False).select_related("action")
+    ]
+
+
+def _static_trigger_fields(trigger) -> dict:
+    return {"type": trigger.type, "is_active": trigger.is_active}
+
+
+def _timeout_trigger_fields(trigger) -> dict:
+    return {
+        "delay_seconds": trigger.delay,
+        "total_num_triggers": trigger.total_num_triggers,
+        "trigger_from_first_message": trigger.trigger_from_first_message,
+        "is_active": trigger.is_active,
+    }

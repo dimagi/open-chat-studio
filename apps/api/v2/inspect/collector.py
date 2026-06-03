@@ -20,6 +20,7 @@ from apps.api.v2.inspect.node_walker import (
     ResourceRefMap,
     SingleRef,
     VoiceRef,
+    merge_refs,
 )
 from apps.api.v2.inspect.serializers import CustomActionSelection, ProviderModelPair, VoicePair
 from apps.assistants.models import OpenAiAssistant
@@ -42,9 +43,9 @@ class InspectCollector:
         (e.g. from the top-level pipeline walk and the events walk)."""
         merged: ResourceRefMap = {}
         for ref_map in resource_ref_maps:
-            for kind, ids in ref_map.items():
-                merged.setdefault(kind, set()).update(i for i in ids if i is not None)
+            merge_refs(merged, ref_map)
         for kind, ids in merged.items():
+            ids.discard(None)
             queryset = self._queryset(kind, ids)
             self._objects[kind] = {obj.id: obj for obj in queryset} if queryset is not None else {}
         return self

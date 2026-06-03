@@ -274,6 +274,12 @@ def accumulate_refs(refs: dict[str, Ref], into: ResourceRefMap) -> None:
             assert_never(ref)
 
 
+def merge_refs(into: ResourceRefMap, more: ResourceRefMap) -> None:
+    """Merge one ``resource_kind -> ids`` accumulator map into another."""
+    for kind, ids in more.items():
+        into.setdefault(kind, set()).update(ids)
+
+
 def graph_digest(node_list, pipeline_data: dict | None) -> dict:
     """Topology only: nodes as ``{flow_id, type, label}`` (from DB columns), edges with positions
     stripped and handle keys normalised."""
