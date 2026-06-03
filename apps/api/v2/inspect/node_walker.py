@@ -256,7 +256,8 @@ def graph_digest(node_list, pipeline_data: dict | None) -> dict:
 def walk_pipeline(pipeline) -> PipelineWalk:
     """Walk every node of ``pipeline`` once, producing the graph digest, per-node detail, and the
     accumulated ``resource_kind -> ids`` map for the collector to batch-load."""
-    node_list = list(pipeline.node_set.all())
+    # Order by id (creation order) so the serialized node list is deterministic.
+    node_list = list(pipeline.node_set.order_by("id"))
     results = [walk_node(node) for node in node_list]
     resource_refs: dict[str, set[int]] = {}
     for result in results:

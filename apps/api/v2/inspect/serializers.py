@@ -68,7 +68,8 @@ def serialize_custom_action(action: CustomAction) -> dict:
     """Custom action with its OpenAPI schema reduced to a path digest (resolved Q7 — size, not
     secrecy) and its auth provider as ``{id, type, name}`` only (config excluded, ADR-0027)."""
     schema = action.api_schema or {}
-    paths = list(schema.get("paths", {}).keys()) if isinstance(schema, dict) else []
+    # Sorted for a deterministic digest (the underlying paths dict has no meaningful order).
+    paths = sorted(schema.get("paths", {}).keys()) if isinstance(schema, dict) else []
     return {
         "id": action.id,
         "name": action.name,
