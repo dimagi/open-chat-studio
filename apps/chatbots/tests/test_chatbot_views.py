@@ -10,6 +10,7 @@ from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.annotations.models import Tag
 from apps.chatbots.tables import ChatbotSessionsTable
@@ -663,3 +664,42 @@ def test_session_table_session_query_uses_limit(team_with_users):
         "Session list ran an unbounded SELECT on experiments_experimentsession (no LIMIT) — "
         "pagination is not being applied at the SQL level. Session selects captured:\n" + "\n\n".join(session_selects)
     )
+
+
+@pytest.mark.django_db()
+@override_flag("flag_chat_widget", active=True)
+def test_web_chat_page_binds_widget_to_session(client):
+    """With the chat widget flag active, the chat page must pass the URL session to the
+    widget via the session-id attribute (and not enable widget-local persistence)."""
+    session = ExperimentSessionFactory.create(experiment__pre_survey=None)
+    participant = Participant.objects.create(team=session.team, identifier="test@test.com", platform="web")
+    session.participant = participant
+    session.save()
+
+    # run the consent flow to obtain the signed session-access cookie
+    # (no pre-survey, so this redirects straight to the chat page)
+    response = client.post(
+        reverse(
+            "experiments:start_session_from_invite",
+            args=[session.team.slug, session.experiment.public_id, session.external_id],
+        ),
+        data={
+            "consent_agreement": "on",
+            "experiment_id": session.experiment.id,
+            "participant_id": participant.id,
+        },
+    )
+    assert response.status_code == 302
+
+    chat_url = reverse(
+        "chatbots:chatbot_chat",
+        args=[session.team.slug, session.experiment.public_id, session.external_id],
+    )
+    assert response.url == chat_url
+
+    response = client.get(chat_url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "<open-chat-studio-widget" in content
+    assert f'session-id="{session.external_id}"' in content
+    assert "persistent-session" not in content
