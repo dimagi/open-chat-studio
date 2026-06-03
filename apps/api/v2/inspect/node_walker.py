@@ -226,18 +226,18 @@ def accumulate_refs(refs: dict[str, object], into: dict[str, set[int]]) -> None:
     """Merge a node/event's refs into the ``resource_kind -> ids`` batch-load accumulator."""
     for ref in refs.values():
         if isinstance(ref, SingleRef):
-            if ref.id is not None:
+            if ref.id:
                 into.setdefault(ref.kind, set()).add(int(ref.id))
         elif isinstance(ref, ListRef):
             for rid in ref.ids:
                 into.setdefault(ref.kind, set()).add(int(rid))
         elif isinstance(ref, LlmRef):
-            if ref.provider_id is not None:
+            if ref.provider_id:
                 into.setdefault(LLM_PROVIDER, set()).add(int(ref.provider_id))
-            if ref.model_id is not None:
+            if ref.model_id:
                 into.setdefault(LLM_PROVIDER_MODEL, set()).add(int(ref.model_id))
         elif isinstance(ref, VoiceRef):
-            if ref.synthetic_voice_id is not None:
+            if ref.synthetic_voice_id:
                 into.setdefault(SYNTHETIC_VOICE, set()).add(int(ref.synthetic_voice_id))
 
 

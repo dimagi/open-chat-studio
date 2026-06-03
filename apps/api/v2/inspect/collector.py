@@ -86,7 +86,7 @@ class InspectCollector:
         return None
 
     def _get(self, kind: str, resource_id) -> object | None:
-        if resource_id is None:
+        if not resource_id:
             return None
         # pipeline.params contains string ids whereas self._objects has int ids.
         return self._objects.get(kind, {}).get(int(resource_id))
