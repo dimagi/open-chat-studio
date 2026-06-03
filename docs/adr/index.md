@@ -50,3 +50,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0028](0028-inspect-authorization-team-scoped.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inspect authorizes on chatbot view + team scope, not per-resource permissions |
 | [0029](0029-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
 | [0030](0030-email-channel-allowed-domains-global-setting.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Gate the email channel with a global allowed-domains setting |
+| [0031](0031-collection-content-is-live-shared-resource.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Collection content is a live shared resource |

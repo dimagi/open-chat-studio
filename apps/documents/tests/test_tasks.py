@@ -16,6 +16,7 @@ from apps.documents.tasks import (
     create_collection_zip_task,
     index_collection_files_task,
     migrate_vector_stores,
+    sync_all_document_sources_task,
 )
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
@@ -422,6 +423,32 @@ def test_create_collection_zip_task_celery_retries_on_zip_creation_error(progres
 
 
 @pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source_task")
+def test_auto_sync_excludes_versioned_collections(mock_sync_task):
+    """ADR-0031: snapshots and legacy frozen copies must never auto-sync."""
+    working_index = CollectionFactory.create(is_index=True)
+    working_source = DocumentSourceFactory.create(
+        collection=working_index, source_type="github", auto_sync_enabled=True
+    )
+
+    snapshot_index = CollectionFactory.create(
+        is_index=True,
+        working_version=working_index,
+        team=working_index.team,
+        # Reuse providers: EmbeddingProviderModel has unique(team, name, type), so a second
+        # factory-default instance on the same team would violate that constraint.
+        llm_provider=working_index.llm_provider,
+        embedding_provider_model=working_index.embedding_provider_model,
+    )
+    DocumentSourceFactory.create(collection=snapshot_index, source_type="github", auto_sync_enabled=True)
+
+    sync_all_document_sources_task()
+
+    dispatched_ids = set(mock_sync_task.map.call_args.args[0])
+    assert dispatched_ids == {working_source.id}
+
+
+@pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
 def test_create_collection_zip_task_integrity_error_does_not_retry(progress_recorder_mock):
     """ZipIntegrityError is not retried — task fails immediately on size mismatch."""
@@ -443,5 +470,3 @@ def test_create_collection_zip_task_integrity_error_does_not_retry(progress_reco
                 create_collection_zip_task(collection.id, team.id)
 
     retry_mock.assert_not_called()
-
-
