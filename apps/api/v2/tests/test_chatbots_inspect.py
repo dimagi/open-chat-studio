@@ -170,7 +170,7 @@ def test_acceptance_1_identity(inspect_bot):
     payload = _get(inspect_bot)
     assert payload["id"] == str(inspect_bot.experiment.public_id)
     assert payload["name"] == inspect_bot.experiment.name
-    assert payload["is_working_version"] is True
+    assert payload["is_unreleased"] is True
     assert payload["version_number"] == inspect_bot.experiment.version_number
 
 
@@ -288,11 +288,11 @@ def test_version_default_and_specific(inspect_bot):
     client = _client(inspect_bot.experiment)
     url = _inspect_url(inspect_bot.experiment)
 
-    assert client.get(url).json()["is_working_version"] is True
+    assert client.get(url).json()["is_unreleased"] is True
 
     specific = client.get(f"{url}?version={version.version_number}").json()
     assert specific["version_number"] == version.version_number
-    assert specific["is_working_version"] is False
+    assert specific["is_unreleased"] is False
 
     assert client.get(f"{url}?version=default").json()["version_number"] == version.version_number
 
@@ -476,8 +476,8 @@ def test_full_response_body():
         "name": "Support Bot",
         "description": "Customer support bot",
         "version_number": experiment.version_number,
-        "is_working_version": True,
-        "is_default_version": False,
+        "is_unreleased": True,
+        "is_published_version": False,
         "version_description": "",
         "team_slug": team.slug,
         "settings": {

@@ -30,7 +30,7 @@ def test_payload_top_level_shape(chatbot_with_llm_node):
 
     assert payload["id"] == str(experiment.public_id)
     assert payload["name"] == experiment.name
-    assert payload["is_working_version"] is True
+    assert payload["is_unreleased"] is True
     assert payload["team_slug"] == experiment.team.slug
     # settings is a flat block of non-secret experiment fields
     assert "seed_message" in payload["settings"]
