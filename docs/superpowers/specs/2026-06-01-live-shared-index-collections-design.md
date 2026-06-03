@@ -5,6 +5,10 @@ issue: https://github.com/dimagi/open-chat-studio/issues/2123
 
 # Live shared index collections
 
+> **Scope note (post-design):** this doc covers the original *index*-collection work.
+> Media collections (`collection_id`) were subsequently brought under the same rule;
+> the canonical, generalised decision is [ADR-0031](../../adr/0031-collection-content-is-live-shared-resource.md).
+
 ## Problem
 
 Document sources update index collections on a schedule, but those updates only
