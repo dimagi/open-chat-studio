@@ -8,7 +8,12 @@ from apps.annotations.models import Tag
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.trace.filters import TraceFilter
 from apps.trace.models import Trace, TraceStatus
-from apps.utils.factories.experiment import ChatFactory, ExperimentFactory, ParticipantFactory
+from apps.utils.factories.experiment import (
+    ChatFactory,
+    ExperimentFactory,
+    ExperimentSessionFactory,
+    ParticipantFactory,
+)
 from apps.utils.factories.traces import TraceFactory
 from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -96,6 +101,21 @@ class TestTraceFilter:
 
         value = json.dumps(["other1", "other2"])
         result = self._create_filter_and_apply(queryset, "participant", Operators.ANY_OF, value)
+        assert trace not in result
+
+    def test_session_id_filter_equals(self, team, experiment, participant):
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, participant=participant)
+        trace = TraceFactory.create(team=team, experiment=experiment, participant=participant, session=session)
+        queryset = Trace.objects.filter(team=team)
+
+        # Matching session external ID (case-insensitive)
+        result = self._create_filter_and_apply(queryset, "session_id", Operators.EQUALS, str(session.external_id))
+        assert trace in result
+
+        # Non-matching session external ID
+        result = self._create_filter_and_apply(
+            queryset, "session_id", Operators.EQUALS, "00000000-0000-0000-0000-000000000000"
+        )
         assert trace not in result
 
     def test_remote_id_filter_any_of(self, trace, team):
