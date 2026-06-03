@@ -7,6 +7,7 @@ const mockSendMessage = jest.fn();
 const mockPollTask = jest.fn();
 const mockStartMessagePolling = jest.fn();
 const mockStopMessagePolling = jest.fn();
+const mockFetchAllMessages = jest.fn();
 
 // Mock the ChatSessionService module
 jest.mock('../../services/chat-session-service', () => {
@@ -17,6 +18,7 @@ jest.mock('../../services/chat-session-service', () => {
       pollTask: mockPollTask,
       startMessagePolling: mockStartMessagePolling,
       stopMessagePolling: mockStopMessagePolling,
+      fetchAllMessages: mockFetchAllMessages,
     })),
   };
 });
@@ -533,5 +535,122 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
         html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true" persistent-session="true"></open-chat-studio-widget>',
       }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('ocs-chat bound session (session-id prop)', () => {
+  const history = [
+    { created_at: '2026-01-01T00:00:01Z', role: 'user', content: 'Hi', attachments: [] },
+    { created_at: '2026-01-01T00:00:02Z', role: 'assistant', content: 'Hello!', attachments: [] },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockStartSession.mockResolvedValue({ session_id: 'unexpected-new-session' });
+    mockSendMessage.mockResolvedValue({ status: 'processing', task_id: 'test-task-id' });
+    mockPollTask.mockReturnValue({ cancel: jest.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    mockFetchAllMessages.mockResolvedValue(history);
+    global.fetch = setupFetchMock();
+
+    // localStorage holds a DIFFERENT persisted session to prove the prop wins
+    const localStorageMock = {
+      getItem: jest.fn((key: string) => {
+        if (key === 'ocs-chat-session-test-bot') return 'stale-local-session';
+        if (key === 'ocs-chat-messages-test-bot') return JSON.stringify([]);
+        if (key === 'ocs-chat-activity-test-bot') return new Date().toISOString();
+        return null;
+      }),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+      clear: jest.fn(),
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+    });
+
+    Object.defineProperty(window, 'crypto', {
+      value: {
+        getRandomValues: jest.fn((arr: Uint8Array) => {
+          for (let i = 0; i < arr.length; i++) {
+            arr[i] = Math.floor(Math.random() * 256);
+          }
+          return arr;
+        }),
+      },
+      writable: true,
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    jest.restoreAllMocks();
+  });
+
+  async function newBoundPage() {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" session-id="server-session" persistent-session="true"></open-chat-studio-widget>',
+    });
+    // Force chatService creation now (before setTimeout fires) so we can spy on it.
+    // componentDidLoad has already registered setTimeout(0) but it has not fired yet.
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'fetchAllMessages').mockImplementation(mockFetchAllMessages);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
+    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
+    await page.waitForChanges();
+    // componentDidLoad defers history loading via setTimeout(0)
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+    return page;
+  }
+
+  it('uses the session-id prop over a persisted localStorage session', async () => {
+    const page = await newBoundPage();
+
+    expect(page.rootInstance.activeSessionId).toBe('server-session');
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  it('loads full message history and starts polling for the bound session', async () => {
+    const page = await newBoundPage();
+
+    expect(mockFetchAllMessages).toHaveBeenCalledWith('server-session');
+    expect(page.rootInstance.messages).toEqual(history);
+    expect(mockStartMessagePolling).toHaveBeenCalledWith('server-session', expect.anything());
+  });
+
+  it('does not persist session data to localStorage while bound', async () => {
+    const page = await newBoundPage();
+
+    await page.rootInstance.sendMessage('New message');
+    await page.waitForChanges();
+
+    const setItemKeys = (window.localStorage.setItem as jest.Mock).mock.calls.map(call => call[0]);
+    expect(setItemKeys).not.toContain('ocs-chat-session-test-bot');
+    expect(setItemKeys).not.toContain('ocs-chat-messages-test-bot');
+    expect(setItemKeys).not.toContain('ocs-chat-activity-test-bot');
+  });
+
+  it('sends messages to the bound session without starting a new one', async () => {
+    const page = await newBoundPage();
+
+    await page.rootInstance.sendMessage('New message');
+    await page.waitForChanges();
+
+    expect(mockStartSession).not.toHaveBeenCalled();
+    expect(mockSendMessage).toHaveBeenCalledWith('server-session', expect.anything());
+  });
+
+  it('stays bound to the host session when the session is cleared', async () => {
+    const page = await newBoundPage();
+
+    await page.rootInstance.clearSession();
+    await page.waitForChanges();
+
+    expect(page.rootInstance.activeSessionId).toBe('server-session');
   });
 });

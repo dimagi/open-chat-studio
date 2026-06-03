@@ -210,6 +210,14 @@ export class OcsChat {
    */
   @Prop() versionNumber?: number;
 
+  /**
+   * The ID of an existing chat session to connect to. When provided, the widget
+   * is bound to that session: local session persistence is disabled and the
+   * message history is loaded from the server. Intended for host pages that
+   * create the session server-side (e.g. the OCS web chat page).
+   */
+  @Prop() sessionId?: string;
+
   @State() error: string = '';
   @State() messages: ChatMessage[] = [];
   @State() activeSessionId?: string;
@@ -274,8 +282,11 @@ export class OcsChat {
 
     await this.initializeTranslations();
 
-    // Always try to load existing session if localStorage is available
-    if (this.persistentSession && this.isLocalStorageAvailable()) {
+    if (this.isSessionBound()) {
+      // Bound to an externally-managed session: the host page is the source of truth.
+      this.activeSessionId = this.sessionId;
+    } else if (this.persistentSession && this.isLocalStorageAvailable()) {
+      // Always try to load existing session if localStorage is available
       const { sessionId, messages } = this.loadSessionFromStorage();
       if (sessionId && messages) {
         this.activeSessionId = sessionId;
@@ -316,7 +327,11 @@ export class OcsChat {
 
       // Resume polling for existing session (don't auto-start new sessions)
       if (this.visible && this.activeSessionId) {
-        this.startMessagePolling();
+        if (this.isSessionBound()) {
+          void this.loadBoundSessionHistory();
+        } else {
+          this.startMessagePolling();
+        }
       }
     }, 0);
 
@@ -473,6 +488,24 @@ export class OcsChat {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  /**
+   * Load the full message history for a session provided via the `session-id`
+   * prop, then begin regular polling.
+   */
+  private async loadBoundSessionHistory(): Promise<void> {
+    const epoch = this.sessionEpoch;
+    try {
+      const messages = await this.getChatService().fetchAllMessages(this.activeSessionId);
+      if (epoch !== this.sessionEpoch) return;
+      this.messages = messages;
+      this.scrollToBottom(true);
+    } catch (error) {
+      if (epoch !== this.sessionEpoch) return;
+      console.warn('Failed to load chat history:', error);
+    }
+    this.startMessagePolling();
   }
 
   private async uploadFiles(): Promise<number[]> {
@@ -1384,7 +1417,7 @@ export class OcsChat {
   }
 
   private saveSessionToStorage(): void {
-    if (!this.persistentSession) {
+    if (!this.persistentSession || this.isSessionBound()) {
       return;
     }
     const keys = this.getStorageKeys();
@@ -1513,6 +1546,10 @@ export class OcsChat {
     return this.mode === 'kiosk';
   }
 
+  private isSessionBound(): boolean {
+    return !!this.sessionId;
+  }
+
   private isLocalStorageAvailable(): boolean {
     try {
       localStorage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
@@ -1543,7 +1580,9 @@ export class OcsChat {
   private async clearSession(): Promise<void> {
     this.sessionEpoch += 1;
     this.clearSessionStorage();
-    this.activeSessionId = undefined;
+    // A session provided by the host page (session-id prop) cannot be cleared;
+    // stay bound to it. Unbound widgets start a new session on the next message.
+    this.activeSessionId = this.sessionId;
     this.messages = [];
     this.isTyping = false;
     this.currentPollTaskId = '';
