@@ -80,6 +80,10 @@ export namespace Components {
          */
         "position": 'left' | 'center' | 'right';
         /**
+          * The ID of an existing chat session to connect to. When provided, the widget is bound to that session: local session persistence is disabled and the message history is loaded from the server. Intended for host pages that create the session server-side (e.g. the OCS web chat page).
+         */
+        "sessionId"?: string;
+        /**
           * Whether to show the launcher button. Set to false to hide the button and open the chat window programmatically via the `visible` property.
           * @default true
          */
@@ -198,6 +202,10 @@ declare namespace LocalJSX {
           * @default 'right'
          */
         "position"?: 'left' | 'center' | 'right';
+        /**
+          * The ID of an existing chat session to connect to. When provided, the widget is bound to that session: local session persistence is disabled and the message history is loaded from the server. Intended for host pages that create the session server-side (e.g. the OCS web chat page).
+         */
+        "sessionId"?: string;
         /**
           * Whether to show the launcher button. Set to false to hide the button and open the chat window programmatically via the `visible` property.
           * @default true
