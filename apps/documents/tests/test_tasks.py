@@ -13,6 +13,7 @@ from django.utils import timezone
 from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import CollectionFile, FileStatus
 from apps.documents.tasks import (
+    async_create_collection_version,
     create_collection_zip_task,
     index_collection_files_task,
     migrate_vector_stores,
@@ -470,3 +471,17 @@ def test_create_collection_zip_task_integrity_error_does_not_retry(progress_reco
                 create_collection_zip_task(collection.id, team.id)
 
     retry_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_async_create_collection_version_creates_snapshot():
+    collection = CollectionFactory.create(is_index=True)
+    assert not collection.versions.exists()
+
+    async_create_collection_version(collection.id)
+
+    collection.refresh_from_db()
+    snapshots = collection.versions.all()
+    assert snapshots.count() == 1
+    assert snapshots.first().is_a_version
+    assert collection.create_version_task_id == ""

@@ -14,6 +14,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 from django.utils.text import slugify
+from field_audit.models import AuditAction
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
@@ -28,6 +29,7 @@ from apps.documents.models import (
 from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
+from apps.teams.utils import current_team
 from apps.utils.celery import TaskbadgerTaskWrapper
 
 logger = get_task_logger("ocs.documents")
@@ -214,6 +216,16 @@ def sync_all_document_sources_task():
     ).values_list("id", flat=True)
 
     sync_document_source_task.map(auto_sources).delay()
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def async_create_collection_version(self, collection_id: int):
+    try:
+        collection = Collection.objects.get(id=collection_id)
+        with current_team(collection.team):
+            collection.create_new_version()
+    finally:
+        Collection.objects.filter(id=collection_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
 
 @shared_task(
