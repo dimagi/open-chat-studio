@@ -109,6 +109,11 @@ def _serialize_channels(experiment) -> list[dict]:
     return ChannelSerializer(channels, many=True).data
 
 
+def _node_render_order(node) -> int:
+    """Pin the start node first and the end node last; everything else keeps creation order."""
+    return {"StartNode": 0, "EndNode": 2}.get(node.type, 1)
+
+
 def _render_pipeline(walk: PipelineWalk | None, collector: InspectCollector) -> dict | None:
     if walk is None:
         return None
@@ -125,7 +130,7 @@ def _render_pipeline(walk: PipelineWalk | None, collector: InspectCollector) -> 
                 "params": node.params,
                 **collector.inline_refs(node.refs),
             }
-            for node in walk.nodes
+            for node in sorted(walk.nodes, key=_node_render_order)
         ],
     }
 

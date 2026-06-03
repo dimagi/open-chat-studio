@@ -66,6 +66,15 @@ def test_pipeline_node_embeds_flattened_llm(chatbot_with_llm_node):
 
 
 @pytest.mark.django_db()
+def test_pipeline_nodes_render_start_first_end_last(chatbot_with_llm_node):
+    # The LLM node was created after the default start/end nodes, so creation order alone would
+    # put it last — the renderer must still pin StartNode first and EndNode last.
+    payload = build_inspect_payload(chatbot_with_llm_node)
+    node_types = [n["type"] for n in payload["pipeline"]["nodes"]]
+    assert node_types == ["StartNode", "LLMResponseWithPrompt", "EndNode"]
+
+
+@pytest.mark.django_db()
 def test_channels_come_from_working_version():
     """Channels are only ever linked to the working version, so every inspected version
     must surface the working version's channels."""
