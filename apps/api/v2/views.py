@@ -42,7 +42,11 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     lookup_url_kwarg = "id"
 
     def get_queryset(self):
-        return Experiment.objects.filter(team=self.request.team).filter(working_version__isnull=True)
+        return (
+            Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
+            .select_related("team")
+            .prefetch_related("versions")
+        )
 
     @extend_schema(
         operation_id="chatbot_inspect",
