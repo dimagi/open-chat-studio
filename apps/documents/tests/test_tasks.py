@@ -425,7 +425,7 @@ def test_create_collection_zip_task_celery_retries_on_zip_creation_error(progres
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.sync_document_source_task")
 def test_auto_sync_excludes_versioned_collections(mock_sync_task):
-    """ADR-0019: snapshots and legacy frozen copies must never auto-sync."""
+    """ADR-0031: snapshots and legacy frozen copies must never auto-sync."""
     working_index = CollectionFactory.create(is_index=True)
     working_source = DocumentSourceFactory.create(
         collection=working_index, source_type="github", auto_sync_enabled=True

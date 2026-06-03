@@ -57,6 +57,7 @@ class ChannelBase(ABC):
     voice_replies_supported: ClassVar[bool] = False
     supports_multimedia: ClassVar[bool] = False
     supported_message_types: ClassVar[tuple[str, ...]] = ()
+    attachment_hydration_stage_class: ClassVar[type[AttachmentHydrationStage]] = AttachmentHydrationStage
 
     def __init__(
         self,
@@ -125,7 +126,7 @@ class ChannelBase(ABC):
                 ConsentCheckStage(),
                 SessionResolutionStage(),
                 SessionActivationStage(),
-                AttachmentHydrationStage(),
+                self.attachment_hydration_stage_class(),
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),

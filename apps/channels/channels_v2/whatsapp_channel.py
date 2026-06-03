@@ -8,7 +8,9 @@ from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.channels_v2.stages.core import AttachmentHydrationStage
 from apps.channels.models import ChannelPlatform
+from apps.files.models import File, FilePurpose
 from apps.service_providers.models import MessagingProviderType
 
 if TYPE_CHECKING:
@@ -16,7 +18,6 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.experiments.models import Experiment, ExperimentSession
-    from apps.files.models import File
     from apps.service_providers.messaging_service import MessagingService
     from apps.service_providers.speech_service import SynthesizedAudio
 
@@ -98,12 +99,12 @@ class WhatsappCallbacks(ChannelCallbacks):
 
     def on_submit_input_to_llm(self, recipient: str) -> None:
         # noqa: PLC0415 - circular: datamodels imports chat.channels
-        from apps.channels.datamodels import MetaCloudAPIMessage  # noqa: PLC0415
+        from apps.channels.datamodels import WhatsAppMessage  # noqa: PLC0415
 
         if self._ctx is None:
             return
         message = self._ctx.message
-        if not isinstance(message, MetaCloudAPIMessage) or not message.whatsapp_message_id:
+        if not isinstance(message, WhatsAppMessage) or not message.whatsapp_message_id:
             return
         try:
             self._service.send_typing_indicator(
@@ -114,12 +115,83 @@ class WhatsappCallbacks(ChannelCallbacks):
             logger.exception("Failed to send typing indicator")
 
 
+class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
+    """Download, persist, and hydrate inbound WhatsApp media attachments
+    (images, documents, and other non-voice media).
+
+    should_run fires only when the message references downloadable media —
+    WhatsAppMessage.parse sets attachment_mime_type on every parsed message
+    (including text), so the mime type alone isn't a reliable gate.
+    _get_files() downloads the media via the messaging service and persists
+    the bytes as a MESSAGE_MEDIA File. The base class then handles
+    ChatAttachment linkage and Attachment construction. Size and
+    content-type policing is the upstream provider's responsibility —
+    Meta already caps what reaches us.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        if not ctx.experiment_session or not ctx.message:
+            return False
+        if ctx.message.attachments:
+            return False
+        if not ctx.message.attachment_mime_type:
+            return False
+        return bool(getattr(ctx.message, "media_url", None) or getattr(ctx.message, "media_id", None))
+
+    def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
+        # messaging_provider is nullable on ExperimentChannel; a WhatsApp channel
+        # without a provider can't fetch media, so skip rather than AttributeError.
+        messaging_provider = ctx.experiment_channel.messaging_provider
+        if messaging_provider is None:
+            logger.warning("WhatsApp channel has no messaging provider; cannot download inbound media")
+            return []
+        messaging_service = messaging_provider.get_messaging_service()
+
+        try:
+            media = messaging_service.get_inbound_media(ctx.message)
+        except Exception:
+            logger.exception("Failed to download WhatsApp inbound media")
+            return []
+
+        if media is None:
+            return []
+
+        raw_bytes, content_type = media
+        filename = self._resolve_filename(ctx, content_type)
+
+        try:
+            file = File.create(
+                filename=filename,
+                file_obj=BytesIO(raw_bytes),
+                team_id=ctx.experiment.team_id,
+                purpose=FilePurpose.MESSAGE_MEDIA,
+                content_type=content_type,
+            )
+        except Exception:
+            logger.exception("Failed to persist WhatsApp inbound media")
+            return []
+
+        return [file]
+
+    @staticmethod
+    def _resolve_filename(ctx: MessageProcessingContext, content_type: str) -> str:
+        """Prefer the provider-supplied filename (documents). Fall back to a
+        family-based name when the provider doesn't send one (e.g. images)."""
+        provided = getattr(ctx.message, "attachment_filename", None)
+        if provided:
+            return provided
+        family = content_type.split("/", 1)[0] if "/" in content_type else "attachment"
+        return family or "attachment"
+
+
 class WhatsappChannel(ChannelBase):
     """WhatsApp channel supporting Twilio, TurnIO, and Meta Cloud API providers.
 
     Capabilities (voice, multimedia, supported message types) are determined
     at runtime from the messaging service, since they vary by provider.
     """
+
+    attachment_hydration_stage_class = WhatsappAttachmentHydrationStage
 
     def __init__(
         self,

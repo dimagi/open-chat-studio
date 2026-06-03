@@ -1,4 +1,4 @@
-# ADR-0019: Index collection content is a live shared resource
+# ADR-0031: Index collection content is a live shared resource
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 

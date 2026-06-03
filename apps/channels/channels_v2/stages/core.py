@@ -13,7 +13,7 @@ from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
-from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -674,10 +674,28 @@ class AttachmentHydrationStage(ProcessingStage):
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        files = File.objects.filter(
-            id__in=ctx.message.attachment_file_ids,
-            team_id=ctx.experiment.team_id,
+        files = self._get_files(ctx)
+        if not files:
+            return
+        # Link the files to the session's Chat so the experiments:download_file
+        # view's join (File → ChatAttachment → Chat → ExperimentSession) resolves
+        # when an LLM provider fetches the download_link (or a user clicks it).
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(
+            chat=ctx.experiment_session.chat,
+            tool_type="ocs_attachments",
         )
+        chat_attachment.files.add(*files)
         ctx.message.attachments = [
             Attachment.from_file(f, type="ocs_attachments", session_id=ctx.experiment_session.id) for f in files
         ]
+
+    def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
+        """Return the Files to hydrate. Default impl resolves pre-persisted Files
+        by ``ctx.message.attachment_file_ids``. Subclasses can override to acquire
+        files differently (e.g. download from a remote channel)."""
+        return list(
+            File.objects.filter(
+                id__in=ctx.message.attachment_file_ids,
+                team_id=ctx.experiment.team_id,
+            )
+        )

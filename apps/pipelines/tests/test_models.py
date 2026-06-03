@@ -94,7 +94,7 @@ class TestVersioningNodes:
         pipeline.create_new_version()
 
         if is_index:
-            # ADR-0019: index collections are live shared resources. Publishing keeps the working
+            # ADR-0031: index collections are live shared resources. Publishing keeps the working
             # id verbatim and does NOT create a collection version.
             assert not collection.versions.exists()
             assert node.versions.first().params[param_name] == [collection.id]
@@ -141,7 +141,7 @@ class TestVersioningNodes:
             },
         )
 
-        # First versioning - media + source material version; the index stays live (ADR-0019).
+        # First versioning - media + source material version; the index stays live (ADR-0031).
         pipeline_version = pipeline.create_new_version()
         collection_version = collection.latest_version
         source_material_version = source_material.latest_version
@@ -161,7 +161,7 @@ class TestVersioningNodes:
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
 
     def test_published_node_resolves_live_index(self):
-        """A bot published after ADR-0019 references the live working index, not a frozen copy."""
+        """A bot published after ADR-0031 references the live working index, not a frozen copy."""
         node_type = LLMResponseWithPrompt.__name__
         collection_index = CollectionFactory.create(is_index=True)
         pipeline = PipelineFactory.create()
@@ -179,7 +179,7 @@ class TestVersioningNodes:
         assert resolved[0].is_working_version
 
     def test_index_content_change_does_not_mark_node_dirty(self):
-        """ADR-0019: index content drift must not flag a published bot as having unpublished changes."""
+        """ADR-0031: index content drift must not flag a published bot as having unpublished changes."""
         node_type = LLMResponseWithPrompt.__name__
         collection_index = CollectionFactory.create(is_index=True)
         pipeline = PipelineFactory.create()
@@ -247,7 +247,7 @@ class TestArchivingNodes:
 
         assert assistant.is_archived is False
         assert collection.is_archived is False
-        # ADR-0019: the index is live and never versioned per bot, so the working index is untouched
+        # ADR-0031: the index is live and never versioned per bot, so the working index is untouched
         # and no index version exists to archive.
         assert collection_index.is_archived is False
         assert not collection_index.versions.exists()
@@ -258,7 +258,7 @@ class TestArchivingNodes:
 
     def test_archive_legacy_frozen_index_version(self):
         """
-        LEGACY data: a pre-ADR-0019 node may reference both the live working index id and a
+        LEGACY data: a pre-ADR-0031 node may reference both the live working index id and a
         frozen index version id in collection_index_ids. Archiving the pipeline must archive the
         frozen copy (is_a_version=True) while leaving the live working index (is_a_version=False)
         untouched. Including both ids makes the is_a_version guard load-bearing: dropping the guard

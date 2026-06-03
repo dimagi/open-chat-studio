@@ -8,12 +8,12 @@ import pytest
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage
+from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
-from apps.service_providers.exceptions import AudioConversionError
+from apps.service_providers.exceptions import MessageMediaError
 from apps.service_providers.messaging_service import MetaCloudAPIService, TwilioService
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -134,7 +134,7 @@ class TestTurnWhatsappMessageParsing:
 
     def test_audio_message_type_maps_to_voice(self):
         """WhatsApp sends 'audio' as the message type, which should map to MESSAGE_TYPES.VOICE."""
-        message = TurnWhatsappMessage.parse(turnio_messages.audio_message())
+        message = WhatsAppMessage.parse(turnio_messages.audio_message())
         assert message.content_type == MESSAGE_TYPES.VOICE
         assert message.media_id == "1215194677037265"
 
@@ -155,7 +155,7 @@ class TestTurnWhatsappMessageParsing:
                 }
             ],
         }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = WhatsAppMessage.parse(message_data)
         assert message.content_type == MESSAGE_TYPES.VOICE
 
     def test_text_message_type_maps_to_text(self):
@@ -171,7 +171,7 @@ class TestTurnWhatsappMessageParsing:
                 }
             ],
         }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = WhatsAppMessage.parse(message_data)
         assert message.content_type == MESSAGE_TYPES.TEXT
 
 
@@ -205,12 +205,12 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, audio_download_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="123",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
         with patch("apps.service_providers.messaging_service.audio.convert_audio") as mock_convert:
@@ -238,7 +238,7 @@ class TestMetaCloudAPIServiceAudio:
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_non_audio(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if the downloaded content is not audio."""
+        """Should raise MessageMediaError if the downloaded content is not audio."""
         media_url_response = httpx.Response(
             200,
             json={"url": "https://example.com/media"},
@@ -252,20 +252,20 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, non_audio_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="456",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError):
+        with pytest.raises(MessageMediaError):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_http_error(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if the media download fails."""
+        """Should raise MessageMediaError if the media download fails."""
         media_url_response = httpx.Response(
             200,
             json={"url": "https://example.com/media"},
@@ -277,35 +277,35 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, error_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="789",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError):
+        with pytest.raises(MessageMediaError):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_media_url_http_error(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if resolving the media URL fails."""
+        """Should raise MessageMediaError if resolving the media URL fails."""
         error_response = httpx.Response(
             404,
             request=httpx.Request("GET", "https://graph.facebook.com/v25.0/bad_id"),
         )
         mock_get.side_effect = [error_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="bad_id",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError, match="Unable to resolve media URL"):
+        with pytest.raises(MessageMediaError, match="Unable to resolve media URL"):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.post")

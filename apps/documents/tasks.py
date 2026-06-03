@@ -210,7 +210,7 @@ def sync_all_document_sources_task():
     auto_sources = DocumentSource.objects.filter(
         auto_sync_enabled=True,
         collection__is_index=True,  # Only sync indexed collections
-        collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0019)
+        collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
     ).values_list("id", flat=True)
 
     sync_document_source_task.map(auto_sources).delay()

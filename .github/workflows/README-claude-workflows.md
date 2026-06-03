@@ -1,6 +1,6 @@
 # Maintaining Claude Code Agent Workflows
 
-For engineers responsible for extending, debugging, or operating the Claude workflows. For day-to-day usage, see [docs/developer_guides/igor.md](../../docs/developer_guides/igor.md).
+For engineers responsible for extending, debugging, or operating the Claude workflows. For day-to-day usage, see [docs/developer_guides/claude_code_agent.md](../../docs/developer_guides/claude_code_agent.md).
 
 ## Setup
 

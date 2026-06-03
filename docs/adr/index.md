@@ -38,4 +38,16 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0016](0016-authoritative-annotation-for-multi-reviewer-consensus.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Authoritative annotation for multi-reviewer consensus |
 | [0017](0017-eager-aggregation-of-submitted-annotations.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Eager per-submission aggregation into a per-queue record |
 | [0018](0018-scope-team-querysets-by-fk-not-slug-join.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Scope team querysets by FK identity, not slug join |
-| [0019](0019-index-content-is-live-shared-resource.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Index collection content is a live shared resource |
+| [0019](0019-poll-source-experiments-to-auto-populate-eval-datasets.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Poll source experiments to auto-populate evaluation datasets |
+| [0020](0020-delta-evaluation-runs-scoped-to-appended-messages.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Delta evaluation runs scoped to newly appended messages |
+| [0021](0021-invest-in-api-surface-not-readonly-role.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Invest in API surface, not a read-only role |
+| [0022](0022-url-path-api-versioning.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | URL-path API versioning, v1 frozen / v2 new |
+| [0023](0023-rename-experiment-to-chatbot-in-v2.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Rename experiment to chatbot in the v2 API |
+| [0024](0024-inspect-denormalized-readonly-projection.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | inspect as a denormalized read-only projection |
+| [0025](0025-inline-nested-resource-tree.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inline nested resource tree for the inspect payload |
+| [0026](0026-identify-resources-by-primary-key.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Identify v2-exposed resources by database primary key |
+| [0027](0027-secrets-exclusion-via-allowlist-serializers.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Secrets exclusion via per-resource allowlist serializers |
+| [0028](0028-inspect-authorization-team-scoped.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inspect authorizes on chatbot view + team scope, not per-resource permissions |
+| [0029](0029-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
+| [0030](0030-email-channel-allowed-domains-global-setting.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Gate the email channel with a global allowed-domains setting |
+| [0031](0031-index-content-is-live-shared-resource.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Index collection content is a live shared resource |

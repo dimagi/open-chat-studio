@@ -25,7 +25,7 @@ jobs:
         run: prek auto-update
 
       - name: Create PR if hooks changed
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "Update pre-commit hooks"
           title: "Update pre-commit hooks"

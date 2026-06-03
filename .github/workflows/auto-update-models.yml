@@ -119,7 +119,7 @@ jobs:
 
       - name: Upload matched models payload
         if: steps.fetch.outputs.has_models == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: matched-models
           path: matched_models.json
@@ -167,7 +167,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download matched models payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: matched-models
 

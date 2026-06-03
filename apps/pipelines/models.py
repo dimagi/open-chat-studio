@@ -534,7 +534,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 for collection_id in collection_index_ids:
                     try:
                         collection = Collection.objects.get(id=collection_id)
-                        # ADR-0019: index collections are live shared resources. Only archive
+                        # ADR-0031: index collections are live shared resources. Only archive
                         # frozen per-bot versions (legacy data); never the live working index.
                         if collection.is_a_version:
                             collection.archive()
