@@ -100,9 +100,10 @@ class TestVersioningNodes:
             assert node.versions.first().params[param_name] == [collection.id]
             assert node.versions.last().params[param_name] == [collection.id]
         else:
-            # Media collections still version per published bot.
-            assert node.versions.first().params[param_name] == str(collection.versions.first().id)
-            assert node.versions.last().params[param_name] == str(collection.versions.first().id)
+            # ADR-0031: media collections are also live shared resources — not versioned per bot.
+            assert not collection.versions.exists()
+            assert node.versions.first().params[param_name] == str(collection.id)
+            assert node.versions.last().params[param_name] == str(collection.id)
 
     def test_version_llm_with_prompt_node_with_source_material(self):
         node_type = LLMResponseWithPrompt.__name__
@@ -141,22 +142,22 @@ class TestVersioningNodes:
             },
         )
 
-        # First versioning - media + source material version; the index stays live (ADR-0031).
+        # First versioning - only source material versions; collections stay live (ADR-0031).
         pipeline_version = pipeline.create_new_version()
-        collection_version = collection.latest_version
         source_material_version = source_material.latest_version
 
         node_version = pipeline_version.node_set.get(type=node_type)
-        assert node_version.params["collection_id"] == str(collection_version.id)
+        assert node_version.params["collection_id"] == str(collection.id)
         assert node_version.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version.params["source_material_id"] == str(source_material_version.id)
+        assert not collection.versions.exists()
         assert not collection_index.versions.exists()
 
-        # Second versioning - reuse existing media/source-material versions; index still live.
+        # Second versioning - reuse source-material version; collections still live.
         pipeline_version_2 = pipeline.create_new_version()
 
         node_version_2 = pipeline_version_2.node_set.get(type=node_type)
-        assert node_version_2.params["collection_id"] == str(collection_version.id)
+        assert node_version_2.params["collection_id"] == str(collection.id)
         assert node_version_2.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
 
@@ -234,7 +235,6 @@ class TestArchivingNodes:
         pipeline.create_new_version()
 
         assistant_version = assistant.versions.first()
-        collection_version = collection.versions.first()
 
         pipeline.archive()
 
@@ -243,18 +243,17 @@ class TestArchivingNodes:
         collection.refresh_from_db()
         collection_index.refresh_from_db()
         assistant_version.refresh_from_db()
-        collection_version.refresh_from_db()
 
         assert assistant.is_archived is False
+        # ADR-0031: media + index collections are live shared resources — never versioned per bot,
+        # so the working collections are untouched and no collection versions exist.
         assert collection.is_archived is False
-        # ADR-0031: the index is live and never versioned per bot, so the working index is untouched
-        # and no index version exists to archive.
+        assert not collection.versions.exists()
         assert collection_index.is_archived is False
         assert not collection_index.versions.exists()
 
-        # Per-bot versioned dependencies are archived
+        # Assistants are still versioned per bot and get archived.
         assert assistant_version.is_archived is True
-        assert collection_version.is_archived is True
 
     def test_archive_legacy_frozen_index_version(self):
         """

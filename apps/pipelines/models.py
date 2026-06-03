@@ -380,7 +380,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
         from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
         from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: nodes.nodes→models
             AssistantNode,
             LLMResponseWithPrompt,
@@ -402,7 +401,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         if not is_copy and self.type == LLMResponseWithPrompt.__name__:
             _set_versioned_param_value(new_version, "source_material_id", SourceMaterial)
-            _set_versioned_param_value(new_version, "collection_id", Collection)
 
         if pipeline is not None:
             new_version.pipeline = pipeline
@@ -509,13 +507,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
         from apps.pipelines.nodes import nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
+        # AssistantNode versions its assistant here. LLMResponseWithPrompt's collection params
+        # (media + index) are handled in the is_a_version-guarded block below; source_material is
+        # versioned in create_new_version but archival of its versions is still a TODO.
         model_param_specs = {
             nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
-            nodes.LLMResponseWithPrompt.__name__: [
-                ModelParamSpec(param_name="collection_id", model_cls=Collection),
-                # TODO: Custom actions needed
-                # TODO: Source material needed
-            ],
         }
 
         for spec in model_param_specs.get(self.type, []):
@@ -528,20 +524,22 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                         f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
                     )
 
-        # Handle list parameters separately (e.g., collection_index_ids)
+        # ADR-0031: collections (single media + index list) are live shared resources. Only archive
+        # frozen per-bot versions (legacy data); never the live working collection.
         if self.type == nodes.LLMResponseWithPrompt.__name__:
-            if collection_index_ids := self.params.get("collection_index_ids"):
-                for collection_id in collection_index_ids:
-                    try:
-                        collection = Collection.objects.get(id=collection_id)
-                        # ADR-0031: index collections are live shared resources. Only archive
-                        # frozen per-bot versions (legacy data); never the live working index.
-                        if collection.is_a_version:
-                            collection.archive()
-                    except ObjectDoesNotExist:
-                        versioning_logger.exception(
-                            f"Failed to archive collection_index_ids with id {collection_id}: not found"
-                        )
+            related_collection_ids = []
+            if media_collection_id := self.params.get("collection_id"):
+                related_collection_ids.append(media_collection_id)
+            related_collection_ids.extend(self.params.get("collection_index_ids") or [])
+            for related_collection_id in related_collection_ids:
+                try:
+                    collection = Collection.objects.get(id=related_collection_id)
+                    if collection.is_a_version:
+                        collection.archive()
+                except ObjectDoesNotExist:
+                    versioning_logger.exception(
+                        f"Failed to archive collection with id {related_collection_id}: not found"
+                    )
 
 
 class PipelineEventInputs(models.TextChoices):
