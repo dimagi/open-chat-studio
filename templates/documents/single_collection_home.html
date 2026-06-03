@@ -161,6 +161,9 @@
            hx-include="#search-input">
         <span class="loading loading-spinner"></span>
       </div>
+      {% if not read_only and collection.is_index %}
+        {% include "documents/_collection_snapshots.html" %}
+      {% endif %}
     </div>
   </div>
 {% endblock app %}
