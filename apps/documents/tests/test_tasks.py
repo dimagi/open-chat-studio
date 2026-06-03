@@ -485,3 +485,15 @@ def test_async_create_collection_version_creates_snapshot():
     assert snapshots.count() == 1
     assert snapshots.first().is_a_version
     assert collection.create_version_task_id == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.create_new_version", side_effect=RuntimeError("boom"))
+def test_async_create_collection_version_clears_task_id_on_failure(create_new_version_mock):
+    collection = CollectionFactory.create(is_index=True, create_version_task_id="in-flight")
+
+    with pytest.raises(RuntimeError):
+        async_create_collection_version(collection.id)
+
+    collection.refresh_from_db()
+    assert collection.create_version_task_id == ""
