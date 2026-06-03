@@ -80,6 +80,7 @@ export class ChatSessionService {
   private readonly taskPollingMaxAttempts: number;
   private readonly messagePollingIntervalMs: number;
   private messagePollingTimer?: ReturnType<typeof setInterval>;
+  private static readonly MAX_HISTORY_PAGES = 40;
 
   constructor(options: ChatSessionServiceOptions) {
     this.apiBaseUrl = options.apiBaseUrl;
@@ -215,6 +216,32 @@ export class ChatSessionService {
     }
 
     return response.json() as Promise<ChatPollResponse>;
+  }
+
+  /**
+   * Fetch the complete message history for a session by paging through the
+   * poll endpoint until no more messages remain.
+   */
+  async fetchAllMessages(sessionId: string): Promise<ChatMessage[]> {
+    const allMessages: ChatMessage[] = [];
+    let since: string | undefined;
+    let hasMore = true;
+
+    for (let page = 0; hasMore && page < ChatSessionService.MAX_HISTORY_PAGES; page++) {
+      const data = await this.fetchMessages(sessionId, since);
+      allMessages.push(...data.messages);
+      hasMore = data.has_more && data.messages.length > 0;
+      // The server returns pages in ascending created_at order and `since` is
+      // exclusive (created_at > since), so the last message's timestamp is the
+      // next page cursor.
+      since = data.messages.at(-1)?.created_at;
+    }
+
+    if (hasMore) {
+      console.warn('Chat history truncated after', ChatSessionService.MAX_HISTORY_PAGES, 'pages');
+    }
+
+    return allMessages;
   }
 
   startMessagePolling(sessionId: string, callbacks: MessagePollingCallbacks): MessagePollingHandle {
