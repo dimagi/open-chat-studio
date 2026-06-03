@@ -196,6 +196,21 @@ class TestVersioningNodes:
         node.refresh_from_db()
         assert not node.compare_with_latest()
 
+    def test_media_content_change_does_not_mark_node_dirty(self):
+        """ADR-0031: media collection content drift must not flag a published bot as dirty."""
+        node_type = LLMResponseWithPrompt.__name__
+        media_collection = CollectionFactory.create(is_index=False)
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(media_collection.id)})
+        pipeline.create_new_version()
+
+        # Simulate a manual edit adding a file to the working media collection.
+        file = FileFactory.create(team=media_collection.team)
+        CollectionFile.objects.create(file=file, collection=media_collection, document_source=None)
+
+        node.refresh_from_db()
+        assert not node.compare_with_latest()
+
 
 @pytest.mark.django_db()
 class TestArchivingNodes:
@@ -289,6 +304,32 @@ class TestArchivingNodes:
         assert frozen_index.is_archived is True
         # The live working index is protected by the is_a_version guard
         assert collection_index.is_archived is False
+
+    def test_archive_legacy_frozen_media_version(self):
+        """
+        LEGACY data: a pre-ADR-0031 node may reference a frozen media collection version in
+        collection_id. Archiving the pipeline must archive that frozen copy (is_a_version=True)
+        while leaving a live working media collection (referenced by another node) untouched.
+        The working-media node makes the is_a_version guard load-bearing: dropping the guard would
+        wrongly archive the working media and fail this test.
+        """
+        node_type = LLMResponseWithPrompt.__name__
+        working_media = CollectionFactory.create(is_index=False)
+        frozen_media = working_media.create_new_version()
+        assert frozen_media.is_a_version, "pre-condition: frozen_media must be a version"
+
+        pipeline = PipelineFactory.create()
+        # Node A references the live working media id; Node B references the frozen version id.
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(working_media.id)})
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(frozen_media.id)})
+
+        pipeline.create_new_version()
+        pipeline.archive()
+
+        working_media.refresh_from_db()
+        frozen_media.refresh_from_db()
+        assert frozen_media.is_archived is True
+        assert working_media.is_archived is False
 
 
 class TestPipeline:
