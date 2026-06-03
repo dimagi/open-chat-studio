@@ -309,9 +309,10 @@ def test_unknown_version_404(inspect_bot):
 
 
 # ── Full response body ───────────────────────────────────────────────────────────────────────────
-@pytest.mark.django_db()
-def test_full_response_body():
-    """A fully-populated bot whose response has no null fields — exercises every serializer."""
+def _full_bot():
+    """A fully-populated bot whose response has no null fields — exercises every serializer.
+
+    Pipeline node params store ids as strings, mirroring what the React FE persists."""
     team = TeamWithUsersFactory.create()
 
     llm_provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai")
@@ -379,14 +380,15 @@ def test_full_response_body():
                         "id": "llm",
                         "type": "LLMResponseWithPrompt",
                         "label": "Answer",
+                        # the react FE persists ids as strings
                         "params": {
-                            "llm_provider_id": llm_provider.id,
-                            "llm_provider_model_id": llm_model.id,
-                            "source_material_id": source.id,
-                            "collection_id": media_collection.id,
-                            "collection_index_ids": [index_collection.id],
+                            "llm_provider_id": str(llm_provider.id),
+                            "llm_provider_model_id": str(llm_model.id),
+                            "source_material_id": str(source.id),
+                            "collection_id": str(media_collection.id),
+                            "collection_index_ids": [str(index_collection.id)],
                             "custom_actions": [f"{action.id}:complete_session"],
-                            "synthetic_voice_id": synthetic_voice.id,
+                            "synthetic_voice_id": str(synthetic_voice.id),
                             "prompt": "Answer the user",
                         },
                     },
@@ -397,7 +399,7 @@ def test_full_response_body():
                         "id": "assist",
                         "type": "AssistantNode",
                         "label": "Assistant",
-                        "params": {"assistant_id": assistant.id, "citations_enabled": True},
+                        "params": {"assistant_id": str(assistant.id), "citations_enabled": True},
                     },
                 },
             ],
@@ -446,45 +448,48 @@ def test_full_response_body():
             action_type=EventActionType.SEND_MESSAGE_TO_BOT, params={"message_to_bot": "Still there?"}
         ),
     )
+    return SimpleNamespace(
+        team=team,
+        experiment=experiment,
+        pipeline=pipeline,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        voice_provider=voice_provider,
+        trace_provider=trace_provider,
+        auth_provider=auth_provider,
+        messaging_provider=messaging_provider,
+        synthetic_voice=synthetic_voice,
+        consent=consent,
+        pre_survey=pre_survey,
+        post_survey=post_survey,
+        source=source,
+        media_collection=media_collection,
+        media_file=media_file,
+        index_collection=index_collection,
+        index_file=index_file,
+        action=action,
+        assistant=assistant,
+        schedule_trigger=schedule_trigger,
+        timeout_trigger=timeout_trigger,
+    )
 
-    media_file_dict = {
-        "id": media_file.id,
-        "name": "guide.pdf",
-        "content_type": "application/pdf",
-        "content_size": 50321,
-        "external_source": "",
-        "external_id": "",
-        "purpose": "collection",
-    }
-    index_file_dict = {**media_file_dict, "id": index_file.id, "name": "policy.pdf", "content_size": 40112}
-    llm_concept = {
-        "provider_id": llm_provider.id,
-        "provider_name": "Prod OpenAI",
-        "type": "openai",
-        "model": "gpt-4o",
-        "max_token_limit": 128000,
-        "deprecated": False,
-    }
-    voice_concept = {
-        "provider_id": voice_provider.id,
-        "provider_name": "ElevenLabs Prod",
-        "type": voice_provider.type,
-        "voice_name": "Rachel",
-        "language": "English",
-        "neural": True,
-    }
 
-    payload = _client(experiment).get(_inspect_url(experiment)).json()
+@pytest.mark.django_db()
+def test_full_response_body():
+    """A fully-populated bot whose response has no null fields — exercises every serializer."""
+    bot = _full_bot()
+
+    payload = _get(bot)
 
     assert payload == {
-        "id": str(experiment.public_id),
+        "id": str(bot.experiment.public_id),
         "name": "Support Bot",
         "description": "Customer support bot",
-        "version_number": experiment.version_number,
+        "version_number": bot.experiment.version_number,
         "is_unreleased": True,
         "is_published_version": False,
         "version_description": "",
-        "team_slug": team.slug,
+        "team_slug": bot.team.slug,
         "settings": {
             "seed_message": "Welcome",
             "conversational_consent_enabled": False,
@@ -496,39 +501,51 @@ def test_full_response_body():
             "participant_allowlist": ["+27123"],
         },
         "consent_form": {
-            "id": consent.id,
+            "id": bot.consent.id,
             "name": "Default consent",
             "consent_text": "Do you agree?",
             "capture_identifier": True,
             "identifier_label": "Email",
             "identifier_type": "email",
         },
-        "pre_survey": {"id": pre_survey.id, "name": "Pre", "url": "https://pre", "confirmation_text": "thanks-pre"},
+        "pre_survey": {
+            "id": bot.pre_survey.id,
+            "name": "Pre",
+            "url": "https://pre",
+            "confirmation_text": "thanks-pre",
+        },
         "post_survey": {
-            "id": post_survey.id,
+            "id": bot.post_survey.id,
             "name": "Post",
             "url": "https://post",
             "confirmation_text": "thanks-post",
         },
-        "voice": voice_concept,
-        "trace_provider": {"id": trace_provider.id, "type": trace_provider.type, "name": "Langfuse Prod"},
+        "voice": {
+            "provider_id": bot.voice_provider.id,
+            "provider_name": "ElevenLabs Prod",
+            "type": bot.voice_provider.type,
+            "voice_name": "Rachel",
+            "language": "English",
+            "neural": True,
+        },
+        "trace_provider": {"id": bot.trace_provider.id, "type": bot.trace_provider.type, "name": "Langfuse Prod"},
         "channels": [
             {
                 "platform": "telegram",
                 "name": "Support TG",
                 "messaging_provider": {
-                    "id": messaging_provider.id,
-                    "type": messaging_provider.type,
+                    "id": bot.messaging_provider.id,
+                    "type": bot.messaging_provider.type,
                     "name": "Twilio Prod",
                 },
             },
-            {"platform": "web", "name": f"{team.slug}-web-channel", "messaging_provider": None},
-            {"platform": "api", "name": f"{team.slug}-api-channel", "messaging_provider": None},
+            {"platform": "web", "name": f"{bot.team.slug}-web-channel", "messaging_provider": None},
+            {"platform": "api", "name": f"{bot.team.slug}-api-channel", "messaging_provider": None},
         ],
         "pipeline": {
-            "id": pipeline.id,
+            "id": bot.pipeline.id,
             "name": "Support flow",
-            "version_number": pipeline.version_number,
+            "version_number": bot.pipeline.version_number,
             "graph": {
                 "nodes": [
                     {"flow_id": "llm", "type": "LLMResponseWithPrompt", "label": "Answer"},
@@ -542,47 +559,81 @@ def test_full_response_body():
                     "type": "LLMResponseWithPrompt",
                     "label": "Answer",
                     "params": {"prompt": "Answer the user"},
-                    "llm": llm_concept,
+                    "llm": {
+                        "provider_id": bot.llm_provider.id,
+                        "provider_name": "Prod OpenAI",
+                        "type": "openai",
+                        "model": "gpt-4o",
+                        "max_token_limit": 128000,
+                        "deprecated": False,
+                    },
                     "source_material": {
-                        "id": source.id,
+                        "id": bot.source.id,
                         "topic": "Returns",
                         "description": "Returns policy",
                         "material": "# Returns",
                     },
                     "media_collection": {
-                        "id": media_collection.id,
+                        "id": bot.media_collection.id,
                         "name": "Media docs",
-                        "files": [media_file_dict],
+                        "files": [
+                            {
+                                "id": bot.media_file.id,
+                                "name": "guide.pdf",
+                                "content_type": "application/pdf",
+                                "content_size": 50321,
+                                "external_source": "",
+                                "external_id": "",
+                                "purpose": "collection",
+                            }
+                        ],
                     },
                     "indexed_collections": [
                         {
-                            "id": index_collection.id,
+                            "id": bot.index_collection.id,
                             "name": "Policy index",
                             "embedding": {
-                                "provider_id": llm_provider.id,
+                                "provider_id": bot.llm_provider.id,
                                 "provider_name": "Prod OpenAI",
                                 "type": "openai",
                                 "model": "text-embedding-3-small",
                             },
-                            "files": [index_file_dict],
+                            "files": [
+                                {
+                                    "id": bot.index_file.id,
+                                    "name": "policy.pdf",
+                                    "content_type": "application/pdf",
+                                    "content_size": 40112,
+                                    "external_source": "",
+                                    "external_id": "",
+                                    "purpose": "collection",
+                                }
+                            ],
                         }
                     ],
                     "custom_actions": [
                         {
-                            "id": action.id,
+                            "id": bot.action.id,
                             "name": "Session Completion",
                             "description": "Custom action description",
                             "server_url": "https://api.weather.com",
                             "allowed_operations": ["weather_get"],
                             "api_schema": {"paths": ["/pollen", "/weather"]},
                             "auth_provider": {
-                                "id": auth_provider.id,
-                                "type": auth_provider.type,
+                                "id": bot.auth_provider.id,
+                                "type": bot.auth_provider.type,
                                 "name": "Partner Auth",
                             },
                         }
                     ],
-                    "voice": voice_concept,
+                    "voice": {
+                        "provider_id": bot.voice_provider.id,
+                        "provider_name": "ElevenLabs Prod",
+                        "type": bot.voice_provider.type,
+                        "voice_name": "Rachel",
+                        "language": "English",
+                        "neural": True,
+                    },
                 },
                 {
                     "flow_id": "assist",
@@ -590,7 +641,7 @@ def test_full_response_body():
                     "label": "Assistant",
                     "params": {"citations_enabled": True},
                     "assistant": {
-                        "id": assistant.id,
+                        "id": bot.assistant.id,
                         "name": "Helper",
                         "assistant_id": "asst_123",
                         "instructions": "Be helpful",
@@ -605,7 +656,7 @@ def test_full_response_body():
         "events": {
             "static_triggers": [
                 {
-                    "id": schedule_trigger.id,
+                    "id": bot.schedule_trigger.id,
                     "type": "conversation_start",
                     "is_active": True,
                     "action": {
@@ -622,7 +673,7 @@ def test_full_response_body():
             ],
             "timeout_triggers": [
                 {
-                    "id": timeout_trigger.id,
+                    "id": bot.timeout_trigger.id,
                     "delay_seconds": 86400,
                     "total_num_triggers": 1,
                     "trigger_from_first_message": False,
