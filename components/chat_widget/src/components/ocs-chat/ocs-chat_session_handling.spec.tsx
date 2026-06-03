@@ -117,7 +117,7 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     expect(mockStartSession).not.toHaveBeenCalled();
-    expect(page.rootInstance.sessionId).toBeUndefined();
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
   });
 
   it('should not automatically start a session when widget becomes visible', async () => {
@@ -134,7 +134,7 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     expect(mockStartSession).not.toHaveBeenCalled();
-    expect(page.rootInstance.sessionId).toBeUndefined();
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
   });
 
   it('should start a session when user sends first message', async () => {
@@ -146,7 +146,7 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     // Verify no session exists initially
-    expect(page.rootInstance.sessionId).toBeUndefined();
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
     expect(global.fetch).not.toHaveBeenCalled();
 
     // Simulate user sending a message
@@ -163,7 +163,7 @@ describe('ocs-chat session creation', () => {
     expect(startSessionCall).toBeDefined();
 
     // Verify session ID was set
-    expect(page.rootInstance.sessionId).toBe('test-session-id');
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
 
     // Verify the user message was added to messages
     expect(page.rootInstance.messages.length).toBeGreaterThan(0);
@@ -205,7 +205,7 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     // Verify existing session was loaded
-    expect(page.rootInstance.sessionId).toBe(existingSessionId);
+    expect(page.rootInstance.activeSessionId).toBe(existingSessionId);
     expect(page.rootInstance.messages).toEqual(existingMessages);
 
     // Verify no fetch call was made to start a new session
@@ -226,7 +226,7 @@ describe('ocs-chat session creation', () => {
     await page.rootInstance.sendMessage('Message 1');
     await page.waitForChanges();
 
-    expect(page.rootInstance.sessionId).toBe('test-session-id');
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
 
     // Now send a second message - should use existing session
     jest.clearAllMocks(); // Clear previous fetch calls
@@ -255,14 +255,14 @@ describe('ocs-chat session creation', () => {
     await page.rootInstance.sendMessage('First message');
     await page.waitForChanges();
 
-    expect(page.rootInstance.sessionId).toBe('test-session-id');
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
     expect(page.rootInstance.messages.length).toBeGreaterThan(0);
 
     // Clear the session
     await page.rootInstance.clearSession();
     await page.waitForChanges();
 
-    expect(page.rootInstance.sessionId).toBeUndefined();
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
     expect(page.rootInstance.messages).toEqual([]);
 
     // Update fetch mock to return a new session ID using helper
@@ -272,7 +272,7 @@ describe('ocs-chat session creation', () => {
     await page.rootInstance.sendMessage('New session message');
     await page.waitForChanges();
 
-    expect(page.rootInstance.sessionId).toBe('new-session-id');
+    expect(page.rootInstance.activeSessionId).toBe('new-session-id');
     expect(page.rootInstance.messages.length).toBeGreaterThan(0);
   });
 
@@ -291,14 +291,14 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     // Verify no session initially
-    expect(page.rootInstance.sessionId).toBeUndefined();
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
 
     // Click a starter question (which internally calls sendMessage)
     await page.rootInstance.handleStarterQuestionClick('Question 1');
     await page.waitForChanges();
 
     // Verify session was created
-    expect(page.rootInstance.sessionId).toBe('test-session-id');
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
 
     // Verify the question was added as a user message
     const userMessage = page.rootInstance.messages.find((m: any) => m.role === 'user');
@@ -320,7 +320,7 @@ describe('ocs-chat session creation', () => {
     await page.waitForChanges();
 
     // Verify no session exists
-    expect(page.rootInstance.sessionId).toBeUndefined();
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
 
     // Check that input area is rendered
     const inputArea = page.root?.shadowRoot?.querySelector('.input-area');
@@ -360,7 +360,7 @@ describe('ocs-chat progress message during polling', () => {
     });
 
     const component = page.rootInstance;
-    component.sessionId = 'test-session';
+    component.activeSessionId = 'test-session';
     component.isTyping = true;
     component.typingProgressMessage = 'Searching documents...';
 
@@ -377,7 +377,7 @@ describe('ocs-chat progress message during polling', () => {
     });
 
     const component = page.rootInstance;
-    component.sessionId = 'test-session';
+    component.activeSessionId = 'test-session';
     component.isTyping = true;
     component.typingProgressMessage = '';
 
@@ -395,7 +395,7 @@ describe('ocs-chat progress message during polling', () => {
     });
 
     const component = page.rootInstance;
-    component.sessionId = 'test-session';
+    component.activeSessionId = 'test-session';
     component.isTyping = true;
     component.typingProgressMessage = 'Step 1...';
 
@@ -418,7 +418,7 @@ describe('ocs-chat progress message during polling', () => {
     });
 
     const component = page.rootInstance;
-    component.sessionId = 'test-session';
+    component.activeSessionId = 'test-session';
     component.isTyping = true;
     component.typingProgressMessage = 'Working...';
 
@@ -443,7 +443,7 @@ describe('ocs-chat progress message during polling', () => {
     });
 
     const component = page.rootInstance;
-    component.sessionId = 'test-session';
+    component.activeSessionId = 'test-session';
     component.isTyping = false;
     component.typingProgressMessage = 'Should not appear';
 
@@ -507,7 +507,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
     await page.rootInstance.sendMessage('Hello');
     await page.waitForChanges();
 
-    expect(page.rootInstance.sessionId).toBe('test-session-id');
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
     expect(page.rootInstance.error).toBeFalsy();
     expect(page.rootInstance.generatedUserId).toMatch(/^ocs:\d+_.+/);
   });

@@ -212,7 +212,7 @@ export class OcsChat {
 
   @State() error: string = '';
   @State() messages: ChatMessage[] = [];
-  @State() sessionId?: string;
+  @State() activeSessionId?: string;
   @State() isLoading: boolean = false;
   @State() isTyping: boolean = false;
   @State() typingProgressMessage: string = '';
@@ -278,7 +278,7 @@ export class OcsChat {
     if (this.persistentSession && this.isLocalStorageAvailable()) {
       const { sessionId, messages } = this.loadSessionFromStorage();
       if (sessionId && messages) {
-        this.sessionId = sessionId;
+        this.activeSessionId = sessionId;
         this.messages = messages;
       }
     }
@@ -315,7 +315,7 @@ export class OcsChat {
       }
 
       // Resume polling for existing session (don't auto-start new sessions)
-      if (this.visible && this.sessionId) {
+      if (this.visible && this.activeSessionId) {
         this.startMessagePolling();
       }
     }, 0);
@@ -463,7 +463,7 @@ export class OcsChat {
 
       const data = await this.getChatService().startSession(requestBody);
       if (epoch !== this.sessionEpoch) return;
-      this.sessionId = data.session_id;
+      this.activeSessionId = data.session_id;
       this.saveSessionToStorage();
 
       this.startMessagePolling();
@@ -476,7 +476,7 @@ export class OcsChat {
   }
 
   private async uploadFiles(): Promise<number[]> {
-    if (this.selectedFiles.length === 0 || !this.sessionId || !this.allowAttachments) {
+    if (this.selectedFiles.length === 0 || !this.activeSessionId || !this.allowAttachments) {
       return [];
     }
 
@@ -484,7 +484,7 @@ export class OcsChat {
     try {
       const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
         apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
-        sessionId: this.sessionId,
+        sessionId: this.activeSessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
       });
@@ -500,14 +500,14 @@ export class OcsChat {
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
-    if (!this.sessionId) {
+    if (!this.activeSessionId) {
       // Prevent concurrent session initialization
       if (this.isLoading) {
         return;
       }
       await this.startSession();
       // Check if session started successfully
-      if (!this.sessionId) {
+      if (!this.activeSessionId) {
         return; // startSession already handled the error
       }
     }
@@ -574,7 +574,7 @@ export class OcsChat {
         requestBody.version_number = this.versionNumber;
       }
 
-      const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
+      const data = await this.getChatService().sendMessage(this.activeSessionId, requestBody);
       if (epoch !== this.sessionEpoch) return;
 
       if (data.status === 'error') {
@@ -719,7 +719,7 @@ export class OcsChat {
       }
 
       // Resume polling for existing session (don't auto-start new sessions)
-      if (this.sessionId) {
+      if (this.activeSessionId) {
         this.scrollToBottom(true);
         this.startMessagePolling();
       }
@@ -729,7 +729,7 @@ export class OcsChat {
   }
 
   private startTaskPolling(taskId: string): void {
-    if (!this.sessionId) return;
+    if (!this.activeSessionId) return;
 
     this.currentPollTaskId = taskId;
     this.isTyping = true;
@@ -739,7 +739,7 @@ export class OcsChat {
       this.taskPollingHandle.cancel();
     }
 
-    this.taskPollingHandle = this.getChatService().pollTask(this.sessionId, taskId, {
+    this.taskPollingHandle = this.getChatService().pollTask(this.activeSessionId, taskId, {
       onMessage: message => {
         this.messages = [...this.messages, message];
         this.saveSessionToStorage();
@@ -781,7 +781,7 @@ export class OcsChat {
   }
 
   private startMessagePolling(): void {
-    if (!this.sessionId || this.currentPollTaskId || !this.visible) {
+    if (!this.activeSessionId || this.currentPollTaskId || !this.visible) {
       return;
     }
 
@@ -789,7 +789,7 @@ export class OcsChat {
       return;
     }
 
-    this.messagePollingHandle = this.getChatService().startMessagePolling(this.sessionId, {
+    this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
       getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
       onMessages: messages => {
         if (messages.length === 0) return;
@@ -1389,8 +1389,8 @@ export class OcsChat {
     }
     const keys = this.getStorageKeys();
     try {
-      if (this.sessionId) {
-        localStorage.setItem(keys.sessionId, this.sessionId);
+      if (this.activeSessionId) {
+        localStorage.setItem(keys.sessionId, this.activeSessionId);
         localStorage.setItem(keys.lastActivity, new Date().toISOString());
       }
       localStorage.setItem(keys.messages, JSON.stringify(this.messages));
@@ -1543,7 +1543,7 @@ export class OcsChat {
   private async clearSession(): Promise<void> {
     this.sessionEpoch += 1;
     this.clearSessionStorage();
-    this.sessionId = undefined;
+    this.activeSessionId = undefined;
     this.messages = [];
     this.isTyping = false;
     this.currentPollTaskId = '';
@@ -1561,7 +1561,7 @@ export class OcsChat {
 
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
-    if (this.error && !this.sessionId) {
+    if (this.error && !this.activeSessionId) {
       return (
         <Host>
           <p class="error-message">{this.error}</p>
@@ -1641,7 +1641,7 @@ export class OcsChat {
             {/* Chat Content */}
             <div class="chat-content">
               {/* Loading State */}
-              {this.isLoading && !this.sessionId && (
+              {this.isLoading && !this.activeSessionId && (
                 <div class="loading-container">
                   <div class="loading-spinner"></div>
                   <span class="loading-text">{this.translationManager.get('status.starting')}</span>
