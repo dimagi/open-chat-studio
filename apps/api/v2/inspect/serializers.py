@@ -423,8 +423,10 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
     @extend_schema_field(GraphSerializer())
     def get_graph(self, pipeline) -> dict:
         # The graph digest is a topology keyed by flow_id/edges, so node order is immaterial here;
-        # the human-facing ``nodes`` list below is the one that is render-ordered.
-        return graph_digest(list(pipeline.node_set.all()), pipeline.data)
+        # the human-facing ``nodes`` list below is the one that is render-ordered. Rendered through
+        # GraphSerializer so the digest's ``flow_id`` is exposed as ``node_id`` (matching the graph
+        # node shape) rather than leaking the raw column name.
+        return GraphSerializer(graph_digest(list(pipeline.node_set.all()), pipeline.data)).data
 
     @extend_schema_field(InspectNodeSerializer(many=True))
     def get_nodes(self, pipeline) -> list:
