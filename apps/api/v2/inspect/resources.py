@@ -86,7 +86,7 @@ class ResourceFetcher:
 
         if experiment.pipeline_id:
             for node in experiment.pipeline.node_set.all():
-                fetcher._accumulate(node.type, node.params, ids)
+                fetcher._accumulate_resources_from_node(node.type, node.params, ids)
 
         for trigger in (*experiment.static_triggers.all(), *experiment.timeout_triggers.all()):
             if trigger.is_archived:
@@ -110,10 +110,10 @@ class ResourceFetcher:
             return
         self._pipelines[pipeline_id] = pipeline
         for node in pipeline.node_set.all():
-            self._accumulate(node.type, node.params, ids)
+            self._accumulate_resources_from_node(node.type, node.params, ids)
 
     @staticmethod
-    def _accumulate(node_type: str, params: dict, ids: dict[ResourceKind, set[int]]) -> None:
+    def _accumulate_resources_from_node(node_type: str, params: dict, ids: dict[ResourceKind, set[int]]) -> None:
         for kind, raw_id in iter_resource_refs(node_type, params):
             rid = _as_int(raw_id)
             if rid is not None:
