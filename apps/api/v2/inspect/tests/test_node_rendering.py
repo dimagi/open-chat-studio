@@ -7,6 +7,7 @@ not dropped when only one source field is set."""
 import dataclasses
 
 from apps.api.v2.inspect.serializers import InspectNodeSerializer
+from apps.pipelines.models import Node
 
 
 @dataclasses.dataclass
@@ -15,6 +16,10 @@ class _Node:
     type: str
     label: str
     params: dict
+
+    # The serializer asks the node which params its type declares; reuse the real model method
+    # (it only reads ``self.type``, no DB) so the stub can't drift from production.
+    has_parameter = Node.has_parameter
 
 
 class _FetcherStub:

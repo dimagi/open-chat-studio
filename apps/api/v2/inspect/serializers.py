@@ -21,7 +21,6 @@ from apps.api.v2.inspect.channels import get_channels
 from apps.api.v2.inspect.nodes import (
     RESOURCE_PARAM_FIELDS,
     graph_digest,
-    node_class_for,
     node_render_order,
 )
 from apps.api.v2.utils import parse_custom_actions
@@ -36,6 +35,10 @@ from apps.pipelines.models import Node, Pipeline
 
 if TYPE_CHECKING:
     from apps.custom_actions.schema_utils import APIOperationDetails
+
+
+# Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3).
+_CADENCE_KEYS = ("name", "frequency", "time_period", "repetitions", "prompt_text")
 
 
 @extend_schema_serializer(component_name="InspectFile")
@@ -356,12 +359,6 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
         data = super().to_representation(instance)
         return {key: value for key, value in data.items() if value is not _ABSENT}
 
-    def _declares(self, node, *param_fields: str) -> bool:
-        """True if the node TYPE declares any of these resource param fields — i.e. the key is one
-        this node carries (rendering null/[] when unset) rather than one to omit entirely."""
-        node_class = node_class_for(node.type)
-        return node_class is not None and any(field in node_class.model_fields for field in param_fields)
-
     @extend_schema_field(serializers.DictField())
     def get_params(self, node) -> dict:
         # Resource ids are surfaced under their own keys, never echoed in params (and "name" is the
@@ -370,7 +367,7 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):
-        if not self._declares(node, "llm_provider_id", "llm_provider_model_id"):
+        if not (node.has_parameter("llm_provider_id") or node.has_parameter("llm_provider_model_id")):
             return _ABSENT
         pair = ProviderModelPair.from_parts(
             self._fetcher.llm_provider(node.params.get("llm_provider_id")),
@@ -380,7 +377,7 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(FlattenedVoiceSerializer(allow_null=True))
     def get_voice(self, node):
-        if not self._declares(node, "synthetic_voice_id"):
+        if not node.has_parameter("synthetic_voice_id"):
             return _ABSENT
         voice = self._fetcher.synthetic_voice(node.params.get("synthetic_voice_id"))
         if voice is None:
@@ -389,21 +386,21 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(SourceMaterialSerializer(allow_null=True))
     def get_source_material(self, node):
-        if not self._declares(node, "source_material_id"):
+        if not node.has_parameter("source_material_id"):
             return _ABSENT
         material = self._fetcher.source_material(node.params.get("source_material_id"))
         return SourceMaterialSerializer(material).data if material is not None else None
 
     @extend_schema_field(AssistantSerializer(allow_null=True))
     def get_assistant(self, node):
-        if not self._declares(node, "assistant_id"):
+        if not node.has_parameter("assistant_id"):
             return _ABSENT
         assistant = self._fetcher.assistant(node.params.get("assistant_id"))
         return AssistantSerializer(assistant).data if assistant is not None else None
 
     @extend_schema_field(CustomActionSerializer(many=True))
     def get_custom_actions(self, node):
-        if not self._declares(node, "custom_actions"):
+        if not node.has_parameter("custom_actions"):
             return _ABSENT
         selections = []
         for action_id, operation_ids in parse_custom_actions(node.params.get("custom_actions")):
@@ -414,14 +411,14 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(MediaCollectionSerializer(allow_null=True))
     def get_media_collection(self, node):
-        if not self._declares(node, "collection_id"):
+        if not node.has_parameter("collection_id"):
             return _ABSENT
         collection = self._fetcher.collection(node.params.get("collection_id"))
         return MediaCollectionSerializer(collection).data if collection is not None else None
 
     @extend_schema_field(IndexedCollectionSerializer(many=True))
     def get_indexed_collections(self, node):
-        if not self._declares(node, "collection_index_ids"):
+        if not node.has_parameter("collection_index_ids"):
             return _ABSENT
         collections = [
             collection
@@ -455,10 +452,6 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
 
 # ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────
-# Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3).
-_CADENCE_KEYS = ("name", "frequency", "time_period", "repetitions", "prompt_text")
-
-
 class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     """An event trigger's action. ``pipeline`` is present only for ``pipeline_start`` actions
     whose (team-scoped) pipeline resolves; it is rendered from the fetcher's embedded-pipeline
