@@ -41,7 +41,7 @@ def test_inspect_component_documents_the_payload_envelope(api_schema):
 
 def test_node_component_declares_reference_keys(api_schema):
     node = api_schema["components"]["schemas"]["InspectNode"]
-    assert {"flow_id", "type", "label", "params"} <= set(node["required"])
+    assert {"node_id", "type", "label", "params"} <= set(node["required"])
     assert {
         "llm",
         "voice",

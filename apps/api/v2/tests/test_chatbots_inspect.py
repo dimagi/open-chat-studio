@@ -340,8 +340,10 @@ def test_malformed_node_param_id_does_not_crash(inspect_bot):
         params={"llm_provider_id": "abc", "source_material_id": "not-an-int"},
     )
     node = _node(_get(inspect_bot), "Malformed")
-    assert "source_material" not in node
-    assert "llm" not in node
+    # decision #5: LLMResponseWithPrompt declares these keys, so a malformed id renders null
+    # (the key is present) rather than being omitted.
+    assert node["source_material"] is None
+    assert node["llm"] is None
 
 
 # ── Inline shape / dedup ─────────────────────────────────────────────────────────────────────────
