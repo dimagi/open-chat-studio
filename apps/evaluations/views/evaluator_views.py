@@ -75,13 +75,7 @@ class EvaluatorFormsetMixin:
         self.object = self.get_object_or_none()
 
         initial_instance = self.object or Evaluator(team=request.team)
-        initial_formset = self._build_tag_rule_formset(initial_instance, data=request.POST)
-        pending_deleted_pks = _extract_pending_deleted_rule_pks(request.POST, initial_formset.prefix)
-        submitted_rule_field_names = _extract_submitted_rule_field_names(request.POST, initial_formset.prefix)
-
         form = self.get_form()
-        form.pending_deleted_rule_pks = pending_deleted_pks
-        form.submitted_rule_field_names = submitted_rule_field_names
 
         if form.is_valid():
             evaluator = form.save(commit=False)
@@ -191,51 +185,6 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Delete
         self.object = self.get_object()
         self.object.delete()
         return HttpResponse(status=200)
-
-
-def _extract_pending_deleted_rule_pks(post_data, prefix: str) -> set[int]:
-    """Return existing-rule pks that the formset POST has marked DELETE."""
-    try:
-        total = int(post_data.get(f"{prefix}-TOTAL_FORMS", 0))
-    except (TypeError, ValueError):
-        return set()
-    pks: set[int] = set()
-    for i in range(total):
-        if not post_data.get(f"{prefix}-{i}-DELETE"):
-            continue
-        raw_pk = post_data.get(f"{prefix}-{i}-id")
-        if not raw_pk:
-            continue
-        try:
-            pks.add(int(raw_pk))
-        except (TypeError, ValueError):
-            continue
-    return pks
-
-
-def _extract_submitted_rule_field_names(post_data, prefix: str) -> dict[int, str]:
-    """Return a mapping of {rule_pk: submitted_field_name} for existing rules being edited
-    (not deleted) in this submit. Used so the schema-drift check can validate the *submitted*
-    field name instead of the persisted one when the user renames a field in the same request."""
-    total_str = post_data.get(f"{prefix}-TOTAL_FORMS", "0")
-    try:
-        total = int(total_str)
-    except (TypeError, ValueError):
-        return {}
-    result: dict[int, str] = {}
-    for i in range(total):
-        if post_data.get(f"{prefix}-{i}-DELETE"):
-            continue  # being deleted — handled by pending_deleted_rule_pks
-        raw_pk = post_data.get(f"{prefix}-{i}-id")
-        if not raw_pk:
-            continue  # new rule, no existing DB row to check
-        try:
-            pk = int(raw_pk)
-        except (TypeError, ValueError):
-            continue
-        submitted_field = post_data.get(f"{prefix}-{i}-field_name", "")
-        result[pk] = submitted_field
-    return result
 
 
 def _submitted_output_schema(form, instance) -> dict:
