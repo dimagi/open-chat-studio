@@ -2,6 +2,7 @@ from datetime import datetime
 from functools import wraps
 
 from django.utils.http import http_date
+from django.utils.timezone import is_naive
 
 
 def sunset(sunset_at: datetime, successor_url: str | None = None):
@@ -11,6 +12,8 @@ def sunset(sunset_at: datetime, successor_url: str | None = None):
     docs/developer_guides/feature_deprecation.md. On public views, `@waf_allow`
     must remain the first decorator.
     """
+    if is_naive(sunset_at):
+        raise ValueError("sunset_at must be timezone-aware")
 
     def decorator(view_func):
         @wraps(view_func)

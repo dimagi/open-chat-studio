@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
 
@@ -33,3 +34,8 @@ def test_sunset_advertises_successor_url():
     view = _make_view(successor_url="https://example.com/chat/widget/")
     response = view(RequestFactory().get("/"))
     assert response.headers["Link"] == '<https://example.com/chat/widget/>; rel="successor-version"'
+
+
+def test_sunset_rejects_naive_datetime():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        sunset(datetime(2026, 9, 1))
