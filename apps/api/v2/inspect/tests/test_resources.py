@@ -6,8 +6,8 @@ from apps.api.v2.inspect.nodes import ResourceKind
 from apps.api.v2.inspect.resources import (
     ResourceFetcher,
     _as_int,
-    _parse_custom_actions,
     iter_resource_refs,
+    parse_custom_actions,
 )
 from apps.events.models import EventActionType
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -32,7 +32,7 @@ def test_as_int_coerces_and_drops_malformed():
 
 
 def test_parse_custom_actions_groups_operations_per_action():
-    assert _parse_custom_actions(["3:weather_get", "3:pollen_get", "5:x"]) == [
+    assert parse_custom_actions(["3:weather_get", "3:pollen_get", "5:x"]) == [
         (3, ["weather_get", "pollen_get"]),
         (5, ["x"]),
     ]

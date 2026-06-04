@@ -29,7 +29,7 @@ def _as_int(value) -> int | None:
         return None
 
 
-def _parse_custom_actions(value) -> list[tuple[int, list[str]]]:
+def parse_custom_actions(value) -> list[tuple[int, list[str]]]:
     """``custom_actions`` values are ``"{action_id}:{operation_id}"`` strings. Group the selected
     operation ids per custom action, preserving first-seen order."""
     selections: dict[int, list[str]] = {}
@@ -59,7 +59,7 @@ def iter_resource_refs(node_type: str, params: dict):
         elif key == "voice":
             yield ResourceKind.SYNTHETIC_VOICE, params.get("synthetic_voice_id")
         elif key == "custom_actions":
-            for action_id, _operation_ids in _parse_custom_actions(params.get("custom_actions")):
+            for action_id, _operation_ids in parse_custom_actions(params.get("custom_actions")):
                 yield ResourceKind.CUSTOM_ACTION, action_id
         elif rf.is_list:
             field = next(iter(rf.consumes))

@@ -28,7 +28,7 @@ from apps.api.v2.inspect.nodes import (
     node_class_for,
     node_render_order,
 )
-from apps.api.v2.inspect.resources import _parse_custom_actions
+from apps.api.v2.inspect.resources import parse_custom_actions
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
 from apps.custom_actions.models import CustomAction
@@ -360,7 +360,7 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
             for key in declared_resource_keys(node_class_for(node.type))
             for field in RESOURCE_FIELDS[key].consumes
         }
-        return {k: v for k, v in node.params.items() if k not in consumed and k != "name"}
+        return {k: v for k, v in (node.params or {}).items() if k not in consumed and k != "name"}
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):
@@ -390,7 +390,7 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     @extend_schema_field(CustomActionSerializer(many=True))
     def get_custom_actions(self, node) -> list:
         selections = []
-        for action_id, operation_ids in _parse_custom_actions(node.params.get("custom_actions")):
+        for action_id, operation_ids in parse_custom_actions(node.params.get("custom_actions")):
             action = self._fetcher.custom_action(action_id)
             if action is not None:
                 selections.append(CustomActionSelection(action, operation_ids))
