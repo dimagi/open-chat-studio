@@ -335,6 +335,10 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
         fields = ["node_id", "type", "label", "params", *RESOURCE_KEYS]
 
     def to_representation(self, instance):
+        # Reimplements DRF's field loop so a resource key the node TYPE does not declare is skipped
+        # *before* its method runs (no compute-then-discard, and a StartNode carries no resource
+        # keys at all). All fields here are CharField / SerializerMethodField, so the stock
+        # PKOnlyObject unwrapping path is not needed; add it here if a relational field is ever added.
         node = instance
         declared = set(declared_resource_keys(node_class_for(node.type)))
         data = OrderedDict()
@@ -418,6 +422,8 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(GraphSerializer())
     def get_graph(self, pipeline) -> dict:
+        # The graph digest is a topology keyed by flow_id/edges, so node order is immaterial here;
+        # the human-facing ``nodes`` list below is the one that is render-ordered.
         return graph_digest(list(pipeline.node_set.all()), pipeline.data)
 
     @extend_schema_field(InspectNodeSerializer(many=True))
