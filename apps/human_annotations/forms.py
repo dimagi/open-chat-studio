@@ -33,10 +33,15 @@ class AnnotationQueueForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Schema *structure* is locked once annotations exist (only the 'required'
+        # property may change), but num_reviews_required stays editable.
         self._schema_locked = self.instance.pk and self.instance.items.filter(review_count__gt=0).exists()
-        if self._schema_locked:
-            self.fields["num_reviews_required"].disabled = True
-            self.fields["num_reviews_required"].help_text = "Cannot change after annotations have started."
+
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit and "num_reviews_required" in self.changed_data:
+            instance.resync_items()
+        return instance
 
     def clean_schema(self):
         raw = self.cleaned_data["schema"]

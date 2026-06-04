@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 from django.db import models, transaction
-from django.db.models import Sum
+from django.db.models import Exists, OuterRef, Sum
 from django.urls import reverse
 from django.utils import timezone
 from pydantic import TypeAdapter
@@ -29,6 +29,24 @@ class AnnotationItemStatus(models.TextChoices):
     AWAITING_RESOLUTION = "awaiting_resolution", "Awaiting resolution"
     COMPLETED = "completed", "Completed"
     FLAGGED = "flagged", "Flagged"
+
+
+def _compute_item_status(review_count: int, required: int, has_authoritative: bool) -> str:
+    """Pure status rule shared by per-item updates and the bulk recompute.
+
+    An item is COMPLETED once it has an authoritative annotation, or when it only has a
+    single review (one reviewer can't disagree with anyone, so there is nothing to
+    resolve). With two or more reviews and no authoritative pick it is AWAITING_RESOLUTION
+    — including after ``num_reviews_required`` is lowered, since lowering the requirement
+    does not retroactively resolve a disagreement between existing reviews.
+    """
+    if review_count == 0:
+        return AnnotationItemStatus.PENDING
+    if review_count < required:
+        return AnnotationItemStatus.IN_PROGRESS
+    if has_authoritative or review_count == 1:
+        return AnnotationItemStatus.COMPLETED
+    return AnnotationItemStatus.AWAITING_RESOLUTION
 
 
 class AnnotationQueueQuerySet(models.QuerySet):
@@ -118,6 +136,53 @@ class AnnotationQueue(BaseTeamModel):
             "percent": review_percent,
         }
 
+    def resync_items(self):
+        """Re-sync items to the current ``num_reviews_required``.
+
+        Recomputes every (non-FLAGGED) item's status and, when the queue becomes
+        multi-review, clears auto-assigned authoritative flags (left over from
+        single-review submissions, identified by a null ``authoritative_set_by``)
+        so those items go through normal resolution; human-picked authoritative
+        flags are kept. If any flags were cleared, stored aggregates are
+        recomputed too, since clearing them changes aggregation. FLAGGED items are
+        left untouched, matching ``AnnotationItem.update_status``.
+        """
+        with transaction.atomic():
+            cleared = 0
+            if self.num_reviews_required > 1:
+                cleared = Annotation.objects.filter(
+                    item__queue=self,
+                    is_authoritative=True,
+                    authoritative_set_by__isnull=True,
+                ).update(is_authoritative=False, authoritative_set_at=None)
+
+            items = self.items.exclude(status=AnnotationItemStatus.FLAGGED).annotate(
+                has_authoritative=Exists(
+                    Annotation.objects.filter(
+                        item=OuterRef("pk"),
+                        status=AnnotationStatus.SUBMITTED,
+                        is_authoritative=True,
+                    )
+                )
+            )
+            to_update = []
+            for item in items:
+                new_status = _compute_item_status(item.review_count, self.num_reviews_required, item.has_authoritative)
+                if new_status != item.status:
+                    item.status = new_status
+                    to_update.append(item)
+            if to_update:
+                AnnotationItem.objects.bulk_update(to_update, ["status"])
+
+        # Clearing authoritative flags changes aggregation (authoritative vs all-submitted),
+        # so refresh stored aggregates. Run outside the transaction, like recompute_queue_aggregates.
+        if cleared:
+            from apps.human_annotations.aggregation import (  # noqa: PLC0415 - circular: aggregation imports human_annotations.models
+                compute_aggregates_for_queue,
+            )
+
+            compute_aggregates_for_queue(self)
+
 
 class AnnotationItemType(models.TextChoices):
     SESSION = "session", "Session"
@@ -194,16 +259,11 @@ class AnnotationItem(BaseTeamModel):
         if self.status == AnnotationItemStatus.FLAGGED:
             return
 
-        required = self.queue.num_reviews_required
-
-        if self.review_count == 0:
-            self.status = AnnotationItemStatus.PENDING
-        elif self.review_count < required:
-            self.status = AnnotationItemStatus.IN_PROGRESS
-        elif required == 1 or self._has_authoritative_annotation():
-            self.status = AnnotationItemStatus.COMPLETED
-        else:
-            self.status = AnnotationItemStatus.AWAITING_RESOLUTION
+        self.status = _compute_item_status(
+            self.review_count,
+            self.queue.num_reviews_required,
+            self._has_authoritative_annotation(),
+        )
 
         if save:
             self.save(update_fields=["status"])
