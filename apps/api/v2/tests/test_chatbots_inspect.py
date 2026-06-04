@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.api.v2.inspect.resources import ResourceFetcher
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
-from apps.api.v2.inspect.versioning import prefetch_inspect_target, resolve_inspect_version
+from apps.api.v2.inspect.versioning import resolve_inspect_version
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment
@@ -842,24 +842,25 @@ def _adversarial_bot():
 
 
 # Empirically derived below (Step D). The SAME number must hold for every version mode, because
-# prefetch_inspect_target re-fetches the RESOLVED target with a fixed prefetch set (issue #16) and
-# the fetcher batch-loads each kind once regardless of fan-out (issues #5/#12).
+# resolve_inspect_version resolves AND prefetches the target with a fixed prefetch set (issue #16)
+# and the fetcher batch-loads each kind once regardless of fan-out (issues #5/#12). Resolution costs
+# one query in every mode, so folding it into the measured block keeps the count constant.
 EXPECTED_RENDER_QUERIES = 13
 
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("version_param", [None, "default", "1"])
 def test_inspect_render_query_count_constant_across_versions(version_param, django_assert_num_queries):
-    """Given a resolved target, prefetch + fetch + full render is N+1-free and identical across
-    version modes. Version RESOLUTION queries are intentionally excluded (they legitimately differ
-    by mode); what must be constant is the render cost on the resolved target."""
+    """resolve (incl. prefetch) + fetch + full render is N+1-free and identical across version
+    modes. Resolution costs a single query in every mode, so the total render cost on the resolved
+    target stays constant whether reading the working draft, the default, or a specific version."""
     experiment = _adversarial_bot()
     experiment.create_new_version()  # version_number 1, published default
     family = Experiment.objects.get(pk=experiment.pk)
-    target = resolve_inspect_version(family.public_id, version_param, team=family.team)
+    team = family.team  # the view already holds request.team; read it outside the measured block
 
     with django_assert_num_queries(EXPECTED_RENDER_QUERIES):
-        prepared = prefetch_inspect_target(target)
-        fetcher = ResourceFetcher.for_experiment(prepared)
-        data = ChatbotInspectSerializer(prepared, context={"team": prepared.team, "fetcher": fetcher}).data
+        target = resolve_inspect_version(family.public_id, version_param, team=team)
+        fetcher = ResourceFetcher.for_experiment(target)
+        data = ChatbotInspectSerializer(target, context={"team": target.team, "fetcher": fetcher}).data
         json.dumps(data)  # force lazy rendering of every nested serializer

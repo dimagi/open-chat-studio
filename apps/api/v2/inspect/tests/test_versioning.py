@@ -1,12 +1,18 @@
-"""Tests for inspect target resolution and prefetch."""
+"""Tests for inspect target resolution (resolution + prefetch in one pass)."""
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from apps.api.v2.inspect.versioning import InspectVersionError, prefetch_inspect_target, resolve_inspect_version
+from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+
+# Resolution embeds the inspect prefetch set, so every mode costs one resolution query plus the
+# fixed prefetch fan-out (pipeline__node_set, static_triggers, timeout_triggers). The count is
+# constant across modes: versioned reads join through ``working_version__public_id`` rather than
+# fetching the family first, so no mode pays an extra resolution round trip.
+EXPECTED_RESOLVE_QUERIES = 4
 
 
 @pytest.mark.django_db()
@@ -16,29 +22,29 @@ def test_resolve_none_returns_working_family():
     with CaptureQueriesContext(connection) as ctx:
         resolved = resolve_inspect_version(family.public_id, None, team=team)
     assert resolved == family
-    assert len(ctx) == 1
+    assert len(ctx) == EXPECTED_RESOLVE_QUERIES
 
 
 @pytest.mark.django_db()
-def test_resolve_specific_version_returns_that_version_in_one_query():
+def test_resolve_specific_version_returns_that_version():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     version = family.create_new_version()
     team = family.team
     with CaptureQueriesContext(connection) as ctx:
         resolved = resolve_inspect_version(family.public_id, str(version.version_number), team=team)
     assert resolved.id == version.id
-    assert len(ctx) == 1
+    assert len(ctx) == EXPECTED_RESOLVE_QUERIES
 
 
 @pytest.mark.django_db()
-def test_resolve_default_version_returns_default_version_in_one_query():
+def test_resolve_default_version_returns_default_version():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     version = family.create_new_version()
     team = family.team
     with CaptureQueriesContext(connection) as ctx:
         resolved = resolve_inspect_version(family.public_id, "default", team=team)
     assert resolved.id == version.id
-    assert len(ctx) == 1
+    assert len(ctx) == EXPECTED_RESOLVE_QUERIES
 
 
 @pytest.mark.django_db()
@@ -65,11 +71,10 @@ def test_resolve_other_team_public_id_raises():
 
 
 @pytest.mark.django_db()
-def test_prefetch_inspect_target_returns_same_object_with_team_loaded():
+def test_resolved_target_has_team_loaded():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
-    prefetched = prefetch_inspect_target(family)
-    assert prefetched.id == family.id
+    resolved = resolve_inspect_version(family.public_id, None, team=family.team)
     # team is select_related, so accessing it costs no query
     with CaptureQueriesContext(connection) as ctx:
-        _ = prefetched.team.slug
+        _ = resolved.team.slug
     assert len(ctx) == 0
