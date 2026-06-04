@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'api-schema.yml'
+      - 'api-schemas/**.yml'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:

@@ -19,7 +19,7 @@ describe('ocs-chat', () => {
 
       // Ensure no messages exist yet
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -44,7 +44,7 @@ describe('ocs-chat', () => {
 
       const component = page.rootInstance as OcsChat;
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -73,7 +73,7 @@ describe('ocs-chat', () => {
       });
 
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -105,7 +105,7 @@ describe('ocs-chat', () => {
           attachments: [],
         },
       ];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -130,7 +130,7 @@ describe('ocs-chat', () => {
       });
 
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -155,7 +155,7 @@ describe('ocs-chat', () => {
 
       const component = page.rootInstance as OcsChat;
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -184,7 +184,7 @@ describe('ocs-chat', () => {
       });
 
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -216,7 +216,7 @@ describe('ocs-chat', () => {
           attachments: [],
         },
       ];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 
@@ -254,7 +254,7 @@ describe('ocs-chat', () => {
       });
 
       const component = page.rootInstance as OcsChat;
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
       await page.waitForChanges();
 
       const chatWindow = page.root?.shadowRoot?.querySelector('#ocs-chat-window');
@@ -295,7 +295,7 @@ describe('ocs-chat', () => {
         });
 
         const component = page.rootInstance as OcsChat;
-        component.sessionId = 'test-session';
+        component.activeSessionId = 'test-session';
         await page.waitForChanges();
 
         const header = page.root?.shadowRoot?.querySelector('.chat-header');
@@ -309,7 +309,7 @@ describe('ocs-chat', () => {
         });
 
         const component = page.rootInstance as OcsChat;
-        component.sessionId = 'test-session';
+        component.activeSessionId = 'test-session';
         await page.waitForChanges();
 
         const chatWindow = page.root?.shadowRoot?.querySelector('#ocs-chat-window');
@@ -337,7 +337,7 @@ describe('ocs-chat', () => {
         });
 
         const component = page.rootInstance as OcsChat;
-        component.sessionId = 'test-session';
+        component.activeSessionId = 'test-session';
         await page.waitForChanges();
 
         const chatContent = page.root?.shadowRoot?.querySelector('.chat-content');
@@ -356,7 +356,7 @@ describe('ocs-chat', () => {
         });
 
         const component = page.rootInstance as OcsChat;
-        component.sessionId = 'test-session';
+        component.activeSessionId = 'test-session';
         await page.waitForChanges();
 
         // Header should be present
@@ -378,14 +378,14 @@ describe('ocs-chat', () => {
       });
 
       const component = page.rootInstance as OcsChat;
-      component.sessionId = 'session-123';
+      component.activeSessionId = 'session-123';
       component.messages = [{ created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }];
 
       // Change chatbotId
       page.root!.setAttribute('chatbot-id', 'bot-2');
       await page.waitForChanges();
 
-      expect(component.sessionId).toBeUndefined();
+      expect(component.activeSessionId).toBeUndefined();
       expect(component.messages).toEqual([]);
       expect(component.isTyping).toBe(false);
       expect(component.currentPollTaskId).toBe('');
@@ -398,14 +398,14 @@ describe('ocs-chat', () => {
       });
 
       const component = page.rootInstance as OcsChat;
-      component.sessionId = 'session-123';
+      component.activeSessionId = 'session-123';
       component.messages = [{ created_at: new Date().toISOString(), role: 'user', content: 'Hello', attachments: [] }];
 
       // Change versionNumber
       page.root!.setAttribute('version-number', '2');
       await page.waitForChanges();
 
-      expect(component.sessionId).toBeUndefined();
+      expect(component.activeSessionId).toBeUndefined();
       expect(component.messages).toEqual([]);
       expect(component.isTyping).toBe(false);
       expect(component.currentPollTaskId).toBe('');
@@ -442,7 +442,7 @@ describe('ocs-chat', () => {
       });
 
       component.messages = [];
-      component.sessionId = 'test-session';
+      component.activeSessionId = 'test-session';
 
       await page.waitForChanges();
 

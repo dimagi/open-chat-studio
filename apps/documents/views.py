@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext as _
@@ -663,6 +663,32 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     queryset.update(status=FileStatus.PENDING)
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+
+def _render_collection_snapshots(request, collection):
+    return render(request, "documents/_collection_snapshots.html", {"collection": collection})
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection", raise_exception=True)
+def create_collection_version(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection, id=pk, team=request.team)
+    if not collection.is_index or collection.is_a_version:
+        return HttpResponseBadRequest("Only working index collections can be snapshotted.")
+    if not collection.create_version_task_id:
+        result = tasks.async_create_collection_version.delay(collection_id=collection.id)
+        collection.create_version_task_id = result.task_id
+        collection.save(update_fields=["create_version_task_id"])
+    return _render_collection_snapshots(request, collection)
+
+
+@require_http_methods(["GET"])
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def collection_snapshots(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection, id=pk, team=request.team)
+    return _render_collection_snapshots(request, collection)
 
 
 class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):

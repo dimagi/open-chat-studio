@@ -73,6 +73,7 @@ Consult these guides when working in the relevant area:
 * `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
 * `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
 * `docs/developer_guides/feature_flags.md` — when adding, using, or removing feature flags
+* `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
 * `docs/developer_guides/help_agent_evals.md` — when adding or modifying help agents or their eval tests
 
 ## Agent skills

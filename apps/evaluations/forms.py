@@ -282,9 +282,6 @@ class EvaluatorForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
-        # Set by the view before is_valid() so the schema-drift check can
-        # ignore rules the user is deleting in the same submit.
-        self.pending_deleted_rule_pks: set[int] = set()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -317,34 +314,7 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
-        self._validate_existing_tag_rules_against_schema(params)
-
         return cleaned_data
-
-    def _validate_existing_tag_rules_against_schema(self, params):
-        """Block save when an existing tag rule no longer matches the new output_schema.
-
-        Skips rules the formset is deleting in the same submit so users aren't
-        stuck having to delete the rule and update the schema in two trips.
-        Surfaces all incompatible rules at once instead of stopping at the first.
-        """
-        if not (self.instance and self.instance.pk):
-            return
-
-        output_schema = (params or {}).get("output_schema") or {}
-        rules = self.instance.tag_rules.exclude(pk__in=self.pending_deleted_rule_pks)
-        errors = []
-        for rule in rules:
-            try:
-                field_def = validate_field_in_schema(rule.field_name, output_schema)
-                validate_condition(rule.condition_type, rule.condition_value, field_def)
-            except DjangoValidationError as err:
-                errors.append(
-                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
-                    f"output schema: {err.messages[0] if err.messages else err}"
-                )
-        if errors:
-            raise forms.ValidationError(errors)
 
 
 class EvaluatorTagRuleForm(forms.ModelForm):
@@ -504,6 +474,31 @@ class BaseEvaluatorTagRuleFormSet(forms.BaseInlineFormSet):
         kwargs["team"] = self.team
         kwargs["output_schema"] = self.output_schema
         return super()._construct_form(i, **kwargs)
+
+    def clean(self):
+        """Block save when a DB rule absent from this POST is incompatible with the schema.
+
+        Rows present in the POST are validated per-row against the output_schema
+        (including deletes and renames in the same submit). Rules missing from the
+        POST entirely (stale tab, concurrent edit) would otherwise silently survive
+        a schema change that breaks them, so check them here.
+        """
+        super().clean()
+        if not (self.instance and self.instance.pk):
+            return
+        submitted_pks = {form.instance.pk for form in self.forms if form.instance.pk}
+        errors = []
+        for rule in self.instance.tag_rules.exclude(pk__in=submitted_pks):
+            try:
+                field_def = validate_field_in_schema(rule.field_name, self.output_schema)
+                validate_condition(rule.condition_type, rule.condition_value, field_def)
+            except DjangoValidationError as err:
+                errors.append(
+                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
+                    f"output schema: {err.messages[0] if err.messages else err}"
+                )
+        if errors:
+            raise forms.ValidationError(errors)
 
     @property
     def empty_form(self):

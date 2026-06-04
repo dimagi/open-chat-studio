@@ -1522,22 +1522,29 @@ class ExperimentSession(BaseTeamModel):
     @transaction.atomic()
     def ad_hoc_bot_message(
         self,
-        instruction_prompt: str,
+        instruction_prompt: str | None,
         trace_info: TraceInfo,
         fail_silently=True,
         use_experiment: Experiment | None = None,
+        message_text: str | None = None,
     ):
         """Sends a bot message to this session and returns the trace data.
-        The bot message will be crafted using `instruction_prompt` and
+
+        When ``message_text`` is provided, that text is delivered to the participant verbatim,
+        bypassing the LLM. Otherwise the bot message is crafted using ``instruction_prompt`` and
         this session's history.
 
         Parameters:
-            instruction_prompt: The instruction prompt for the LLM
+            instruction_prompt: The instruction prompt for the LLM (ignored when ``message_text`` is set)
             trace_info: Metadata for adding to the trace
             fail_silently: Exceptions will not be suppresed if this is True
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
+            message_text: A message to deliver to the participant directly, bypassing the LLM.
         """
+        if (instruction_prompt is None) == (message_text is None):
+            raise ValueError("Exactly one of instruction_prompt or message_text must be provided")
+
         trace_service = None
         try:
             with current_team(self.team):
@@ -1546,13 +1553,16 @@ class ExperimentSession(BaseTeamModel):
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
                     session=self,
-                    inputs={"input": instruction_prompt},
+                    inputs={"input": message_text if message_text is not None else instruction_prompt},
                     metadata=trace_info.metadata,
                     notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
                 ) as span:
-                    bot_message = self._bot_prompt_for_user(
-                        instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
-                    )
+                    if message_text is not None:
+                        bot_message = self._save_direct_bot_message(message_text, experiment, trace_service)
+                    else:
+                        bot_message = self._bot_prompt_for_user(
+                            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+                        )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
                     trace_metadata = trace_service.get_trace_metadata()
@@ -1564,6 +1574,23 @@ class ExperimentSession(BaseTeamModel):
                     trace_metadata = trace_service.get_trace_metadata()
                     e.trace_metadata = trace_metadata
                 raise e
+
+    def _save_direct_bot_message(self, message: str, experiment: Experiment, trace_service: TracingService) -> str:
+        """Records a direct (non-LLM) bot message in the chat history and returns it.
+
+        The message is delivered to the participant verbatim, so it is stored as an AI message
+        flagged with ``direct_to_user`` metadata and linked to the trace.
+        """
+        from apps.service_providers.llm_service.history_managers import (  # noqa: PLC0415 - circular: history_managers imports experiments.models
+            ExperimentHistoryManager,
+        )
+
+        history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
+        ai_message = history_manager.save_message_to_history(
+            message, type_=ChatMessageType.AI, message_metadata={"direct_to_user": True}
+        )
+        trace_service.set_output_message_id(ai_message.id)
+        return message
 
     def _bot_prompt_for_user(
         self,

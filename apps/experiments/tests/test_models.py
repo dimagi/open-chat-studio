@@ -445,6 +445,39 @@ class TestExperimentSession:
         trace = Trace.objects.get(session=experiment_session)
         assert trace.output_message_id == ai_message.id
 
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message_direct_delivery(self, mock_bot_prompt, from_experiment_session, experiment_session):
+        """When ``message_text`` is provided the message is delivered verbatim, bypassing the LLM,
+        but still recorded in chat history (flagged ``direct_to_user``) and linked to the trace."""
+        mock_channel = Mock()
+        from_experiment_session.return_value = mock_channel
+        message = "Your appointment is confirmed for tomorrow at 10am."
+
+        experiment_session.ad_hoc_bot_message(None, TraceInfo(name="test"), message_text=message)
+
+        # The LLM is never consulted
+        mock_bot_prompt.assert_not_called()
+        # The message is delivered to the participant verbatim
+        mock_channel.send_message_to_user.assert_called_once_with(message)
+
+        # Recorded as an AI message flagged direct_to_user and linked to the trace
+        ai_message = ChatMessage.objects.get(chat=experiment_session.chat, message_type=ChatMessageType.AI)
+        assert ai_message.content == message
+        assert ai_message.metadata.get("direct_to_user") is True
+
+        trace = Trace.objects.get(session=experiment_session)
+        assert trace.output_message_id == ai_message.id
+
+    @pytest.mark.parametrize(
+        ("instruction_prompt", "message_text"),
+        [(None, None), ("prompt", "message")],
+    )
+    def test_ad_hoc_message_requires_exactly_one_input(self, instruction_prompt, message_text, experiment_session):
+        """Neither-or-both of instruction_prompt/message_text is a programming error."""
+        with pytest.raises(ValueError, match="Exactly one of instruction_prompt or message_text"):
+            experiment_session.ad_hoc_bot_message(instruction_prompt, TraceInfo(name="test"), message_text=message_text)
+
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
         prompt = "data: {participant_data}" if participant_data_injected else "data"
