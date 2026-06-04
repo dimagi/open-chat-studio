@@ -44,6 +44,26 @@ def parse_custom_actions(value) -> list[tuple[int, list[str]]]:
     return list(selections.items())
 
 
+def _refs_for_key(key: str, rf, params: dict):
+    """Expand one declared payload key into its ``(ResourceKind, raw_id)`` refs. Splitting this out
+    keeps ``iter_resource_refs`` a thin driver over the declared keys (one dispatch per key)."""
+    if key == "llm":
+        yield ResourceKind.LLM_PROVIDER, params.get("llm_provider_id")
+        yield ResourceKind.LLM_PROVIDER_MODEL, params.get("llm_provider_model_id")
+    elif key == "voice":
+        yield ResourceKind.SYNTHETIC_VOICE, params.get("synthetic_voice_id")
+    elif key == "custom_actions":
+        for action_id, _operation_ids in parse_custom_actions(params.get("custom_actions")):
+            yield ResourceKind.CUSTOM_ACTION, action_id
+    elif rf.is_list:
+        field = next(iter(rf.consumes))
+        for raw_id in params.get(field) or []:
+            yield rf.kind, raw_id
+    else:
+        field = next(iter(rf.consumes))
+        yield rf.kind, params.get(field)
+
+
 def iter_resource_refs(node_type: str, params: dict):
     """Yield ``(ResourceKind, raw_id)`` for every resource id a node of ``node_type`` references.
 
@@ -52,22 +72,7 @@ def iter_resource_refs(node_type: str, params: dict):
     driven by which keys the node type declares (``declared_resource_keys``)."""
     params = params or {}
     for key in declared_resource_keys(node_class_for(node_type)):
-        rf = RESOURCE_FIELDS[key]
-        if key == "llm":
-            yield ResourceKind.LLM_PROVIDER, params.get("llm_provider_id")
-            yield ResourceKind.LLM_PROVIDER_MODEL, params.get("llm_provider_model_id")
-        elif key == "voice":
-            yield ResourceKind.SYNTHETIC_VOICE, params.get("synthetic_voice_id")
-        elif key == "custom_actions":
-            for action_id, _operation_ids in parse_custom_actions(params.get("custom_actions")):
-                yield ResourceKind.CUSTOM_ACTION, action_id
-        elif rf.is_list:
-            field = next(iter(rf.consumes))
-            for raw_id in params.get(field) or []:
-                yield rf.kind, raw_id
-        else:
-            field = next(iter(rf.consumes))
-            yield rf.kind, params.get(field)
+        yield from _refs_for_key(key, RESOURCE_FIELDS[key], params)
 
 
 class ResourceFetcher:
