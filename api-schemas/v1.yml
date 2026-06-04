@@ -1858,26 +1858,6 @@ components:
       - content_url
       - name
       - size
-    FlattenedEmbedding:
-      type: object
-      description: |-
-        A collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair flattened into one
-        object. Instance: :class:`ProviderModelPair`. Missing halves render their fields as null.
-      properties:
-        provider_id:
-          type: integer
-          nullable: true
-        provider_name:
-          type: string
-          nullable: true
-        type:
-          type: string
-          nullable: true
-        model:
-          type: string
-          nullable: true
-      required:
-      - type
     FlattenedLlm:
       type: object
       description: An ``(LlmProvider, LlmProviderModel)`` pair flattened into one
@@ -1900,6 +1880,26 @@ components:
           nullable: true
         deprecated:
           type: boolean
+          nullable: true
+      required:
+      - type
+    FlattenedModelProvider:
+      type: object
+      description: |-
+        A collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair flattened into one
+        object. Instance: :class:`ProviderModelPair`. Missing halves render their fields as null.
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        model:
+          type: string
           nullable: true
       required:
       - type
@@ -1948,7 +1948,7 @@ components:
           maxLength: 255
         embedding:
           allOf:
-          - $ref: '#/components/schemas/FlattenedEmbedding'
+          - $ref: '#/components/schemas/FlattenedModelProvider'
           nullable: true
           readOnly: true
         files:
