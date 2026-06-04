@@ -2047,21 +2047,21 @@ components:
     InspectGraphNode:
       type: object
       properties:
-        flow_id:
+        node_id:
           type: string
         type:
           type: string
         label:
           type: string
       required:
-      - flow_id
       - label
+      - node_id
       - type
     InspectNode:
       type: object
       description: One pipeline node with its resource references inlined (ADR-0025).
       properties:
-        flow_id:
+        node_id:
           type: string
         type:
           type: string
@@ -2091,8 +2091,8 @@ components:
           items:
             $ref: '#/components/schemas/IndexedCollection'
       required:
-      - flow_id
       - label
+      - node_id
       - params
       - type
     InspectPipeline:

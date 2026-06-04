@@ -2,6 +2,7 @@ import pytest
 
 from apps.api.v2.inspect.builder import InspectVersionError, build_inspect_context, resolve_inspect_version
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
+from apps.channels.models import ExperimentChannel
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -25,6 +26,9 @@ def chatbot_with_llm_node(db):
         label="Classify intent",
         params={"llm_provider_id": provider.id, "llm_provider_model_id": model.id, "prompt": "You are helpful"},
     )
+    # The team-global web/api channels are read (not created) by inspect; seed them explicitly.
+    ExperimentChannel.objects.get_team_web_channel(team)
+    ExperimentChannel.objects.get_team_api_channel(team)
     return ExperimentFactory.create(team=team, pipeline=pipeline)
 
 
@@ -85,6 +89,9 @@ def test_channels_come_from_working_version():
     must surface the working version's channels."""
     experiment = ExperimentFactory.create()
     ExperimentChannelFactory.create(experiment=experiment, name="working-telegram", platform="telegram")
+    # The team-global web/api channels are read (not created) by inspect; seed them explicitly.
+    ExperimentChannel.objects.get_team_web_channel(experiment.team)
+    ExperimentChannel.objects.get_team_api_channel(experiment.team)
     version = experiment.create_new_version()
 
     payload = _payload(version)

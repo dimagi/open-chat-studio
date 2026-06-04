@@ -12,7 +12,7 @@ def test_node_refs_omitted_when_absent():
     node = {"flow_id": "n1", "type": "RenderTemplate", "label": "T", "params": {"template_string": "{{ input }}"}}
     data = InspectNodeSerializer(node).data
     assert data == {
-        "flow_id": "n1",
+        "node_id": "n1",
         "type": "RenderTemplate",
         "label": "T",
         "params": {"template_string": "{{ input }}"},

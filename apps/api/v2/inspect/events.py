@@ -10,7 +10,7 @@ does not recurse, since a pipeline carries no triggers of its own.
 
 import dataclasses
 
-from apps.api.v2.inspect.node_walker import PipelineWalk, ResourceRefMap, merge_refs, walk_pipeline
+from apps.api.v2.inspect.node_walker import PipelineWalk, ResourceRefMap, _as_int, merge_refs, walk_pipeline
 from apps.events.models import EventActionType
 
 # Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3). The cadence lives directly
@@ -52,13 +52,14 @@ def walk_action(action, team, resource_refs: ResourceRefMap) -> ActionWalk:
     if action_type == EventActionType.PIPELINE_START:
         from apps.pipelines.models import Pipeline  # noqa: PLC0415 - avoid import cycle at module load
 
-        pipeline_id = params.pop("pipeline_id", None)
-        pipeline_walk = None
-        if pipeline_id is not None:
-            pipeline = Pipeline.objects.filter(team=team, id=pipeline_id).first()
-            if pipeline is not None:
-                pipeline_walk = walk_pipeline(pipeline)
-                merge_refs(resource_refs, pipeline_walk.resource_refs)
+        # pipeline_id originates in event-action JSON, so coerce defensively (a malformed value
+        # yields None, skipping the lookup) and resolve in a single team-scoped query.
+        pipeline_id = _as_int(params.pop("pipeline_id", None))
+        pipeline = Pipeline.objects.filter(team=team, id=pipeline_id).first() if pipeline_id else None
+        if pipeline is None:
+            return ActionWalk(type=action_type, params=params)
+        pipeline_walk = walk_pipeline(pipeline)
+        merge_refs(resource_refs, pipeline_walk.resource_refs)
         return ActionWalk(type=action_type, params=params, pipeline=pipeline_walk)
 
     if action_type == EventActionType.SCHEDULETRIGGER:

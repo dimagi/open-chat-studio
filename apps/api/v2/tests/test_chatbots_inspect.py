@@ -2,8 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 from django.urls import reverse
+from field_audit.models import AuditAction
 from rest_framework.test import APIClient
 
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
 from apps.files.models import File
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -96,6 +98,9 @@ def inspect_bot(db):
     channel = ExperimentChannelFactory.create(
         team=team, experiment=experiment, name="Support TG", extra_data={"bot_token": CHANNEL_SECRET}
     )
+    # Seed the team-global web/api channels; inspect now reads them rather than get_or_create-ing.
+    ExperimentChannel.objects.get_team_web_channel(team)
+    ExperimentChannel.objects.get_team_api_channel(team)
     timeout = TimeoutTriggerFactory.create(
         experiment=experiment,
         delay=86400,
@@ -282,6 +287,23 @@ def test_no_secrets_in_response(inspect_bot):
 
 
 @pytest.mark.django_db()
+def test_inspect_does_not_create_team_channels(inspect_bot):
+    """GET inspect must be side-effect free: it reads team web/api channels read-only and must not
+    get_or_create them (regression for the non-idempotent GET flagged in review)."""
+    team = inspect_bot.experiment.team
+    ExperimentChannel.objects.filter(team=team, platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).delete(
+        audit_action=AuditAction.AUDIT
+    )
+
+    channels = _get(inspect_bot)["channels"]
+
+    assert [c["platform"] for c in channels] == ["telegram"]
+    assert not ExperimentChannel.objects.filter(
+        team=team, platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]
+    ).exists()
+
+
+@pytest.mark.django_db()
 def test_channel_allowlisted(inspect_bot):
     team_slug = inspect_bot.experiment.team.slug
     assert _get(inspect_bot)["channels"] == [
@@ -304,6 +326,22 @@ def test_cross_team_resource_not_embedded(inspect_bot):
     )
     # A cross-team collection id resolves to absent rather than leaking another team's resource.
     assert _node(_get(inspect_bot), "Leaky")["indexed_collections"] == []
+
+
+@pytest.mark.django_db()
+def test_malformed_node_param_id_does_not_crash(inspect_bot):
+    """Non-numeric ids in node params (ids originate in untrusted JSON) resolve to absent rather
+    than 500-ing the whole inspect build."""
+    NodeFactory.create(
+        pipeline=inspect_bot.experiment.pipeline,
+        flow_id="malformed-1",
+        type="LLMResponseWithPrompt",
+        label="Malformed",
+        params={"llm_provider_id": "abc", "source_material_id": "not-an-int"},
+    )
+    node = _node(_get(inspect_bot), "Malformed")
+    assert "source_material" not in node
+    assert "llm" not in node
 
 
 # ── Inline shape / dedup ─────────────────────────────────────────────────────────────────────────
@@ -454,6 +492,9 @@ def _full_bot():
     ExperimentChannelFactory.create(
         team=team, experiment=experiment, name="Support TG", messaging_provider=messaging_provider
     )
+    # Seed the team-global web/api channels; inspect now reads them rather than get_or_create-ing.
+    ExperimentChannel.objects.get_team_web_channel(team)
+    ExperimentChannel.objects.get_team_api_channel(team)
     schedule_trigger = StaticTriggerFactory.create(
         experiment=experiment,
         type="conversation_start",
@@ -576,14 +617,14 @@ def test_full_response_body():
             "version_number": bot.pipeline.version_number,
             "graph": {
                 "nodes": [
-                    {"flow_id": "llm", "type": "LLMResponseWithPrompt", "label": "Answer"},
-                    {"flow_id": "assist", "type": "AssistantNode", "label": "Assistant"},
+                    {"node_id": "llm", "type": "LLMResponseWithPrompt", "label": "Answer"},
+                    {"node_id": "assist", "type": "AssistantNode", "label": "Assistant"},
                 ],
                 "edges": [{"source": "llm", "target": "assist", "source_handle": "output", "target_handle": "input"}],
             },
             "nodes": [
                 {
-                    "flow_id": "llm",
+                    "node_id": "llm",
                     "type": "LLMResponseWithPrompt",
                     "label": "Answer",
                     "params": {"prompt": "Answer the user"},
@@ -664,7 +705,7 @@ def test_full_response_body():
                     },
                 },
                 {
-                    "flow_id": "assist",
+                    "node_id": "assist",
                     "type": "AssistantNode",
                     "label": "Assistant",
                     "params": {"citations_enabled": True},

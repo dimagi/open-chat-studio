@@ -20,6 +20,7 @@ from apps.api.v2.inspect.node_walker import (
     ResourceRefMap,
     SingleRef,
     VoiceRef,
+    _as_int,
     merge_refs,
 )
 from apps.api.v2.inspect.serializers import CustomActionSelection, ProviderModelPair, VoicePair
@@ -81,10 +82,12 @@ class InspectCollector:
         assert_never(kind)
 
     def _get(self, kind: ResourceKind, resource_id) -> object | None:
-        if not resource_id:
+        # pipeline.params contains string ids whereas self._objects has int ids. Ids originate in
+        # untrusted node-param JSON, so a malformed value resolves to absent rather than crashing.
+        rid = _as_int(resource_id)
+        if rid is None:
             return None
-        # pipeline.params contains string ids whereas self._objects has int ids.
-        return self._objects.get(kind, {}).get(int(resource_id))
+        return self._objects.get(kind, {}).get(rid)
 
     def resolve_refs(self, refs: dict[str, Ref]) -> dict:
         """Resolve a walker's ``refs`` map (payload_key -> ref) to loaded instances / pairs.

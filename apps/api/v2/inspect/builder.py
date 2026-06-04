@@ -12,7 +12,7 @@ from apps.api.v2.inspect.collector import InspectCollector
 from apps.api.v2.inspect.events import ActionWalk, EventsWalk, TriggerWalk, walk_events
 from apps.api.v2.inspect.node_walker import NodeWalkResult, PipelineWalk, walk_pipeline
 from apps.api.v2.inspect.serializers import VoicePair
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.version_resolver import (
     NoPublishedVersion,
     VersionNotFound,
@@ -85,9 +85,17 @@ def _collect_channels(experiment: Experiment) -> list[ExperimentChannel]:
         )
     )
     # The web and API channels are team-global (linked to no experiment); every chatbot is
-    # reachable through them.
-    channels.append(ExperimentChannel.objects.get_team_web_channel(experiment.team))
-    channels.append(ExperimentChannel.objects.get_team_api_channel(experiment.team))
+    # reachable through them. Look them up read-only — the manager's get_team_*_channel helpers
+    # use get_or_create, which would make this GET-only inspect flow write rows as a side effect.
+    # A team that has never exercised these channels simply has them omitted from the payload.
+    team = experiment.team
+    for platform, name in (
+        (ChannelPlatform.WEB, f"{team.slug}-web-channel"),
+        (ChannelPlatform.API, f"{team.slug}-api-channel"),
+    ):
+        channel = ExperimentChannel.objects.filter(team=team, platform=platform, name=name).first()
+        if channel is not None:
+            channels.append(channel)
     return channels
 
 

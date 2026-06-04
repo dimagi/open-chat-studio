@@ -177,17 +177,20 @@ def _parse_custom_actions(value) -> list[tuple[int, list[str]]]:
     return list(selections.items())
 
 
+def _as_int(value) -> int | None:
+    """Coerce a (possibly malformed) node-param id to ``int``, or ``None`` if it can't be.
+
+    Ids originate in untrusted node-parameter JSON (see module docstring), so a non-numeric value
+    (e.g. ``"abc"``) must be ignored rather than crash the whole inspect build."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _coerce_int_list(value) -> list[int]:
     items = value if isinstance(value, list) else [value]
-    out: list[int] = []
-    for item in items:
-        if item is None:
-            continue
-        try:
-            out.append(int(item))
-        except (TypeError, ValueError):
-            continue
-    return out
+    return [coerced for item in items if (coerced := _as_int(item)) is not None]
 
 
 def walk_node(node) -> NodeWalkResult:
@@ -251,27 +254,32 @@ def accumulate_refs(refs: dict[str, Ref], into: ResourceRefMap) -> None:
         # }
     """
     for ref in refs.values():
-        if isinstance(ref, SingleRef):
-            if ref.id:
-                into.setdefault(ref.kind, set()).add(int(ref.id))
-        elif isinstance(ref, ListRef):
-            for rid in ref.ids:
-                into.setdefault(ref.kind, set()).add(int(rid))
-        elif isinstance(ref, CustomActionsRef):
-            for action_id, _operation_ids in ref.selections:
-                into.setdefault(ResourceKind.CUSTOM_ACTION, set()).add(int(action_id))
-        elif isinstance(ref, LlmRef):
-            if ref.provider_id:
-                into.setdefault(ResourceKind.LLM_PROVIDER, set()).add(int(ref.provider_id))
-            if ref.model_id:
-                into.setdefault(ResourceKind.LLM_PROVIDER_MODEL, set()).add(int(ref.model_id))
-        elif isinstance(ref, VoiceRef):
-            if ref.synthetic_voice_id:
-                into.setdefault(ResourceKind.SYNTHETIC_VOICE, set()).add(int(ref.synthetic_voice_id))
-        else:
-            # Exhaustiveness guard: adding a member to the ``Ref`` union without handling it here
-            # is a type error (and raises at runtime) instead of silently dropping the reference.
-            assert_never(ref)
+        for kind, raw_id in _ref_ids(ref):
+            # Malformed/absent ids (None, "", "abc") are dropped rather than crashing the build.
+            rid = _as_int(raw_id)
+            if rid is not None:
+                into.setdefault(kind, set()).add(rid)
+
+
+def _ref_ids(ref: Ref):
+    """Yield every ``(resource_kind, raw_id)`` a ref carries, leaving id coercion to the caller."""
+    if isinstance(ref, SingleRef):
+        yield ref.kind, ref.id
+    elif isinstance(ref, ListRef):
+        for rid in ref.ids:
+            yield ref.kind, rid
+    elif isinstance(ref, CustomActionsRef):
+        for action_id, _operation_ids in ref.selections:
+            yield ResourceKind.CUSTOM_ACTION, action_id
+    elif isinstance(ref, LlmRef):
+        yield ResourceKind.LLM_PROVIDER, ref.provider_id
+        yield ResourceKind.LLM_PROVIDER_MODEL, ref.model_id
+    elif isinstance(ref, VoiceRef):
+        yield ResourceKind.SYNTHETIC_VOICE, ref.synthetic_voice_id
+    else:
+        # Exhaustiveness guard: adding a member to the ``Ref`` union without handling it here
+        # is a type error (and raises at runtime) instead of silently dropping the reference.
+        assert_never(ref)
 
 
 def merge_refs(into: ResourceRefMap, more: ResourceRefMap) -> None:
