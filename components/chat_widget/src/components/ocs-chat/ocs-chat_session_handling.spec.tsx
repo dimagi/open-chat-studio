@@ -646,13 +646,39 @@ describe('ocs-chat bound session (session-id prop)', () => {
     expect(mockSendMessage).toHaveBeenCalledWith('server-session', expect.anything());
   });
 
-  it('stays bound to the host session when the session is cleared', async () => {
+  it('stays bound to the host session and reloads history when the session is cleared', async () => {
     const page = await newBoundPage();
+    expect(mockFetchAllMessages).toHaveBeenCalledTimes(1);
 
     await page.rootInstance.clearSession();
+    await new Promise(resolve => setTimeout(resolve, 0));
     await page.waitForChanges();
 
     expect(page.rootInstance.activeSessionId).toBe('server-session');
+    // The host-owned session cannot be cleared: its history is reloaded.
+    expect(mockFetchAllMessages).toHaveBeenCalledTimes(2);
+    expect(page.rootInstance.messages).toEqual(history);
+  });
+
+  it('loads history when a hidden bound widget becomes visible', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" session-id="server-session" visible="false"></open-chat-studio-widget>',
+    });
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'fetchAllMessages').mockImplementation(mockFetchAllMessages);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    await page.waitForChanges();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mockFetchAllMessages).not.toHaveBeenCalled();
+
+    page.rootInstance.visible = true;
+    await page.waitForChanges();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+
+    expect(mockFetchAllMessages).toHaveBeenCalledWith('server-session');
+    expect(page.rootInstance.messages).toEqual(history);
   });
 
   it('preserves messages sent while the history is still loading', async () => {

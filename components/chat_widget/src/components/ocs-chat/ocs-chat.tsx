@@ -759,7 +759,12 @@ export class OcsChat {
       // Resume polling for existing session (don't auto-start new sessions)
       if (this.activeSessionId) {
         this.scrollToBottom(true);
-        this.startMessagePolling();
+        if (this.isSessionBound() && this.messages.length === 0) {
+          // A bound widget that was hidden at load has not fetched its history yet.
+          void this.loadBoundSessionHistory();
+        } else {
+          this.startMessagePolling();
+        }
       }
     } else {
       this.stopMessagePolling();
@@ -1595,6 +1600,11 @@ export class OcsChat {
       this.selectedFiles = [];
     }
     this.cleanup();
+    if (this.isSessionBound()) {
+      // The host-owned session cannot be cleared: reload its history and
+      // resume polling so the widget doesn't end up in a dead state.
+      void this.loadBoundSessionHistory();
+    }
   }
 
   private toggleFullscreen(): void {
@@ -1633,8 +1643,8 @@ export class OcsChat {
                 </div>
                 <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
                 <div class="header-buttons">
-                  {/* New Chat button */}
-                  {this.messages.length > 0 && (
+                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) */}
+                  {this.messages.length > 0 && !this.isSessionBound() && (
                     <button
                       class="header-button"
                       onClick={() => this.showConfirmationDialog()}
