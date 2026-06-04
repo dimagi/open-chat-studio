@@ -4,7 +4,7 @@
 feeds ``ResourceFetcher.for_experiment``'s pre-pass, which batch-loads every kind once
 (N+1-free, team-scoped) into by-id maps. The serializers read the loaded instances via the
 accessors — pure dict lookups, never queries. Ids originate in untrusted node-param JSON, so
-``_as_int`` coercion drops malformed values (a bad id resolves to absent, never crashes).
+``as_int`` coercion drops malformed values (a bad id resolves to absent, never crashes).
 """
 
 import collections
@@ -13,12 +13,11 @@ from typing import assert_never
 from django.db.models import Q
 
 from apps.api.v2.inspect.nodes import (
-    RESOURCE_FIELDS,
-    ResourceField,
+    RESOURCE_PARAM_FIELDS,
     ResourceKind,
-    declared_resource_keys,
     node_class_for,
 )
+from apps.api.v2.utils import as_int
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
@@ -28,58 +27,20 @@ from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 
 
-def _as_int(value) -> int | None:
-    """Coerce a (possibly malformed) node-param id to ``int``, or ``None`` if it can't be."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def parse_custom_actions(value) -> list[tuple[int, list[str]]]:
-    """``custom_actions`` values are ``"{action_id}:{operation_id}"`` strings. Group the selected
-    operation ids per custom action, preserving first-seen order."""
-    selections: dict[int, list[str]] = {}
-    for entry in value or []:
-        action_part, _, operation_id = str(entry).partition(":")
-        action_id = _as_int(action_part)
-        if action_id is None:
-            continue
-        operation_ids = selections.setdefault(action_id, [])
-        if operation_id and operation_id not in operation_ids:
-            operation_ids.append(operation_id)
-    return list(selections.items())
-
-
-def _refs_for_key(key: str, rf: ResourceField, params: dict):
-    """Expand one declared payload key into its ``(ResourceKind, raw_id)`` refs. Splitting this out
-    keeps ``iter_resource_refs`` a thin driver over the declared keys (one dispatch per key)."""
-    if key == "llm":
-        yield ResourceKind.LLM_PROVIDER, params.get("llm_provider_id")
-        yield ResourceKind.LLM_PROVIDER_MODEL, params.get("llm_provider_model_id")
-    elif key == "custom_actions":
-        # Values are ``"{action_id}:{operation_id}"`` strings, not bare ids — parse before yielding.
-        for action_id, _operation_ids in parse_custom_actions(params.get("custom_actions")):
-            yield ResourceKind.CUSTOM_ACTION, action_id
-    else:
-        # Every consumed field maps to ``rf.kind``; read each one from params.
-        for field in rf.consumes:
-            if rf.is_list:
-                for raw_id in params.get(field) or []:
-                    yield rf.kind, raw_id
-            else:
-                yield rf.kind, params.get(field)
-
-
 def iter_resource_refs(node_type: str, params: dict):
     """Yield ``(ResourceKind, raw_id)`` for every resource id a node of ``node_type`` references.
 
-    The single id-collection traversal feeding ``ResourceFetcher``. The composite ``llm`` key and
-    the parsed ``custom_actions`` key are special-cased; every other key is driven by its
-    ``rf.consumes``/``rf.kind``. Which keys apply is set by ``declared_resource_keys``."""
+    The single id-collection traversal feeding ``ResourceFetcher``. Only the param fields the node
+    *type* declares are read; each kind pulls its own raw ids from the param value (see
+    ``ResourceKind.iter_raw_ids``)."""
     params = params or {}
-    for key in declared_resource_keys(node_class_for(node_type)):
-        yield from _refs_for_key(key, RESOURCE_FIELDS[key], params)
+    node_class = node_class_for(node_type)
+    declared = set(node_class.model_fields) if node_class is not None else set()
+    for field_name, kind in RESOURCE_PARAM_FIELDS.items():
+        if field_name not in declared:
+            continue
+        for raw_id in kind.iter_raw_ids(params.get(field_name)):
+            yield kind, raw_id
 
 
 class ResourceFetcher:
@@ -111,7 +72,7 @@ class ResourceFetcher:
     def _collect_embedded_pipeline(self, action, ids: dict[ResourceKind, set[int]]) -> None:
         if action.action_type != EventActionType.PIPELINE_START:
             return
-        pipeline_id = _as_int((action.params or {}).get("pipeline_id"))
+        pipeline_id = as_int((action.params or {}).get("pipeline_id"))
         if not pipeline_id or pipeline_id in self._pipelines:
             return
         pipeline = Pipeline.objects.filter(team=self.team, id=pipeline_id).prefetch_related("node_set").first()
@@ -124,7 +85,7 @@ class ResourceFetcher:
     @staticmethod
     def _accumulate_resources_from_node(node_type: str, params: dict, ids: dict[ResourceKind, set[int]]) -> None:
         for kind, raw_id in iter_resource_refs(node_type, params):
-            rid = _as_int(raw_id)
+            rid = as_int(raw_id)
             if rid is not None:
                 ids[kind].add(rid)
 
@@ -162,7 +123,7 @@ class ResourceFetcher:
         assert_never(kind)
 
     def _get(self, kind: ResourceKind, raw_id) -> object | None:
-        rid = _as_int(raw_id)
+        rid = as_int(raw_id)
         if rid is None:
             return None
         return self._objects.get(kind, {}).get(rid)
@@ -193,5 +154,5 @@ class ResourceFetcher:
         return self._get(ResourceKind.VOICE_PROVIDER, raw_id)
 
     def embedded_pipeline(self, raw_id):
-        rid = _as_int(raw_id)
+        rid = as_int(raw_id)
         return self._pipelines.get(rid) if rid is not None else None

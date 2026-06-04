@@ -3,12 +3,7 @@
 import pytest
 
 from apps.api.v2.inspect.nodes import ResourceKind
-from apps.api.v2.inspect.resources import (
-    ResourceFetcher,
-    _as_int,
-    iter_resource_refs,
-    parse_custom_actions,
-)
+from apps.api.v2.inspect.resources import ResourceFetcher, iter_resource_refs
 from apps.events.models import EventActionType
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory
@@ -23,21 +18,6 @@ from apps.utils.factories.team import TeamWithUsersFactory
 
 
 # ── pure ──────────────────────────────────────────────────────────────────────────────────────
-def test_as_int_coerces_and_drops_malformed():
-    assert _as_int("7") == 7
-    assert _as_int(7) == 7
-    assert _as_int("abc") is None
-    assert _as_int(None) is None
-    assert _as_int("") is None
-
-
-def test_parse_custom_actions_groups_operations_per_action():
-    assert parse_custom_actions(["3:weather_get", "3:pollen_get", "5:x"]) == [
-        (3, ["weather_get", "pollen_get"]),
-        (5, ["x"]),
-    ]
-
-
 def test_iter_resource_refs_llm_yields_both_halves():
     refs = set(iter_resource_refs("RouterNode", {"llm_provider_id": "2", "llm_provider_model_id": "11"}))
     assert (ResourceKind.LLM_PROVIDER, "2") in refs

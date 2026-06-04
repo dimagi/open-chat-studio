@@ -11,24 +11,20 @@ copy of the same loaded objects.
 """
 
 import dataclasses
-from collections import OrderedDict
 from functools import cached_property
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
-from rest_framework.fields import SkipField
 
 from apps.api.v2.inspect.channels import get_channels
 from apps.api.v2.inspect.nodes import (
-    RESOURCE_FIELDS,
-    RESOURCE_KEYS,
-    declared_resource_keys,
+    RESOURCE_PARAM_FIELDS,
     graph_digest,
     node_class_for,
     node_render_order,
 )
-from apps.api.v2.inspect.resources import parse_custom_actions
+from apps.api.v2.utils import parse_custom_actions
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
 from apps.custom_actions.models import CustomAction
@@ -307,14 +303,20 @@ class GraphSerializer(serializers.Serializer):
 
 
 # ── Node (ADR-0025) ──────────────────────────────────────────────────────────────────────────────
+# Returned by a resource get_* when the node TYPE doesn't declare its backing param field(s);
+# to_representation drops these so the key is omitted. Distinct from None, which renders as null.
+_ABSENT = object()
+
+
 class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     """One pipeline node with its declared resource references inlined.
 
-    The seven resource keys are declared as fields so the OpenAPI schema documents them, but
-    ``to_representation`` renders only the keys the node *type* declares (decision #5): a
-    ``StartNode`` carries no resource keys, an ``LLMResponseWithPrompt`` always carries all six of
-    its own, with ``null`` (single) / ``[]`` (list) where unset. Non-declared keys are skipped
-    *before* their method runs — no compute-then-discard."""
+    The seven resource keys are declared as fields so the OpenAPI schema documents them, but only
+    the keys the node *type* declares are rendered (decision #5): a ``StartNode`` carries no
+    resource keys, an ``LLMResponseWithPrompt`` always carries all six of its own, with ``null``
+    (single) / ``[]`` (list) where unset. Each ``get_*`` returns ``_ABSENT`` for a key its node
+    type doesn't declare, and ``to_representation`` drops those — so the declared-vs-absent rule
+    lives next to each field's fetch, not in a central key list."""
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
@@ -332,38 +334,44 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     class Meta:
         model = Node
-        fields = ["node_id", "type", "label", "params", *RESOURCE_KEYS]
+        # Explicit so the rendered shape is readable at a glance. These resource keys are render
+        # concepts owned here; their backing param fields live in RESOURCE_PARAM_FIELDS.
+        fields = [
+            "node_id",
+            "type",
+            "label",
+            "params",
+            "llm",
+            "voice",
+            "source_material",
+            "assistant",
+            "custom_actions",
+            "media_collection",
+            "indexed_collections",
+        ]
 
     def to_representation(self, instance):
-        # Reimplements DRF's field loop so a resource key the node TYPE does not declare is skipped
-        # *before* its method runs (no compute-then-discard, and a StartNode carries no resource
-        # keys at all). All fields here are CharField / SerializerMethodField, so the stock
-        # PKOnlyObject unwrapping path is not needed; add it here if a relational field is ever added.
-        node = instance
-        declared = set(declared_resource_keys(node_class_for(node.type)))
-        data = OrderedDict()
-        for field in self._readable_fields:
-            name = field.field_name
-            if name in RESOURCE_KEYS and name not in declared:
-                continue
-            try:
-                attribute = field.get_attribute(node)
-            except SkipField:
-                continue
-            data[name] = None if attribute is None else field.to_representation(attribute)
-        return data
+        # Each resource get_* yields _ABSENT when this node type doesn't declare its backing field(s);
+        # drop those so the key is omitted (vs. None -> declared-but-unset null, decision #5).
+        data = super().to_representation(instance)
+        return {key: value for key, value in data.items() if value is not _ABSENT}
+
+    def _declares(self, node, *param_fields: str) -> bool:
+        """True if the node TYPE declares any of these resource param fields — i.e. the key is one
+        this node carries (rendering null/[] when unset) rather than one to omit entirely."""
+        node_class = node_class_for(node.type)
+        return node_class is not None and any(field in node_class.model_fields for field in param_fields)
 
     @extend_schema_field(serializers.DictField())
     def get_params(self, node) -> dict:
-        consumed = {
-            field
-            for key in declared_resource_keys(node_class_for(node.type))
-            for field in RESOURCE_FIELDS[key].consumes
-        }
-        return {k: v for k, v in (node.params or {}).items() if k not in consumed and k != "name"}
+        # Resource ids are surfaced under their own keys, never echoed in params (and "name" is the
+        # node label, exposed separately) — strip every known resource field, declared or not.
+        return {k: v for k, v in (node.params or {}).items() if k not in RESOURCE_PARAM_FIELDS and k != "name"}
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):
+        if not self._declares(node, "llm_provider_id", "llm_provider_model_id"):
+            return _ABSENT
         pair = ProviderModelPair.from_parts(
             self._fetcher.llm_provider(node.params.get("llm_provider_id")),
             self._fetcher.llm_provider_model(node.params.get("llm_provider_model_id")),
@@ -372,6 +380,8 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(FlattenedVoiceSerializer(allow_null=True))
     def get_voice(self, node):
+        if not self._declares(node, "synthetic_voice_id"):
+            return _ABSENT
         voice = self._fetcher.synthetic_voice(node.params.get("synthetic_voice_id"))
         if voice is None:
             return None
@@ -379,16 +389,22 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(SourceMaterialSerializer(allow_null=True))
     def get_source_material(self, node):
+        if not self._declares(node, "source_material_id"):
+            return _ABSENT
         material = self._fetcher.source_material(node.params.get("source_material_id"))
         return SourceMaterialSerializer(material).data if material is not None else None
 
     @extend_schema_field(AssistantSerializer(allow_null=True))
     def get_assistant(self, node):
+        if not self._declares(node, "assistant_id"):
+            return _ABSENT
         assistant = self._fetcher.assistant(node.params.get("assistant_id"))
         return AssistantSerializer(assistant).data if assistant is not None else None
 
     @extend_schema_field(CustomActionSerializer(many=True))
-    def get_custom_actions(self, node) -> list:
+    def get_custom_actions(self, node):
+        if not self._declares(node, "custom_actions"):
+            return _ABSENT
         selections = []
         for action_id, operation_ids in parse_custom_actions(node.params.get("custom_actions")):
             action = self._fetcher.custom_action(action_id)
@@ -398,11 +414,15 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(MediaCollectionSerializer(allow_null=True))
     def get_media_collection(self, node):
+        if not self._declares(node, "collection_id"):
+            return _ABSENT
         collection = self._fetcher.collection(node.params.get("collection_id"))
         return MediaCollectionSerializer(collection).data if collection is not None else None
 
     @extend_schema_field(IndexedCollectionSerializer(many=True))
-    def get_indexed_collections(self, node) -> list:
+    def get_indexed_collections(self, node):
+        if not self._declares(node, "collection_index_ids"):
+            return _ABSENT
         collections = [
             collection
             for raw_id in (node.params.get("collection_index_ids") or [])

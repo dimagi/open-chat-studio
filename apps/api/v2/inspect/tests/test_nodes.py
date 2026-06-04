@@ -3,9 +3,7 @@
 from types import SimpleNamespace
 
 from apps.api.v2.inspect.nodes import (
-    RESOURCE_FIELDS,
-    ResourceKind,
-    declared_resource_keys,
+    RESOURCE_PARAM_FIELDS,
     graph_digest,
     node_class_for,
     node_render_order,
@@ -21,38 +19,16 @@ def test_node_class_for_unknown_type_is_none():
     assert node_class_for("NoSuchNode") is None
 
 
-def test_llm_response_with_prompt_declares_all_its_resource_keys():
-    keys = set(declared_resource_keys(pipeline_nodes.LLMResponseWithPrompt))
-    assert keys == {"llm", "voice", "source_material", "media_collection", "indexed_collections", "custom_actions"}
-    assert "assistant" not in keys
-
-
-def test_assistant_node_declares_only_assistant():
-    assert declared_resource_keys(pipeline_nodes.AssistantNode) == ["assistant"]
-
-
-def test_router_node_declares_only_llm():
-    assert declared_resource_keys(pipeline_nodes.RouterNode) == ["llm"]
-
-
-def test_start_node_declares_no_resource_keys():
-    assert declared_resource_keys(pipeline_nodes.StartNode) == []
-
-
-def test_declared_resource_keys_of_none_is_empty():
-    assert declared_resource_keys(None) == []
-
-
-def test_voice_declared_when_only_synthetic_voice_field_present():
-    stub = SimpleNamespace(model_fields={"synthetic_voice_id": object()})
-    assert "voice" in declared_resource_keys(stub)
-
-
-def test_resource_fields_consumes_are_real_field_sets():
-    assert RESOURCE_FIELDS["llm"].consumes == frozenset({"llm_provider_id", "llm_provider_model_id"})
-    assert RESOURCE_FIELDS["indexed_collections"].consumes == frozenset({"collection_index_ids"})
-    assert RESOURCE_FIELDS["indexed_collections"].is_list is True
-    assert RESOURCE_FIELDS["custom_actions"].kind is ResourceKind.CUSTOM_ACTION
+def test_resource_param_fields_are_real_node_fields():
+    """Every registered resource param field is an actual pydantic field on at least one node type,
+    so the flat set can't drift away from the node definitions via a typo."""
+    declared_anywhere = set()
+    for name in dir(pipeline_nodes):
+        model_fields = getattr(getattr(pipeline_nodes, name), "model_fields", None)
+        if isinstance(model_fields, dict):
+            declared_anywhere |= set(model_fields)
+    missing = RESOURCE_PARAM_FIELDS.keys() - declared_anywhere
+    assert not missing, f"RESOURCE_PARAM_FIELDS not declared on any node type: {sorted(missing)}"
 
 
 def test_node_render_order_pins_start_first_end_last():

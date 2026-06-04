@@ -5,24 +5,26 @@ a new, unclassified signal fails CI rather than silently omitting a resource fro
 payload. The classification sets live here (relocated from the deleted ``node_walker``); they are
 the reviewed source of truth for "everything else stays in params".
 
-Layer 2: every resource-bearing signal maps to a payload key that has a ``RESOURCE_FIELDS`` entry —
-a new resource field with no entry fails CI rather than silently landing in ``params``.
+Layer 2: every resource-bearing signal's backing param field(s) are registered in
+``RESOURCE_PARAM_FIELDS`` — a new resource field with no entry fails CI rather than silently
+landing in ``params``.
 """
 
-from apps.api.v2.inspect.nodes import RESOURCE_FIELDS
+from apps.api.v2.inspect.nodes import RESOURCE_PARAM_FIELDS
 from apps.pipelines.nodes.base import OptionsSource, Widgets
 
-# ``OptionsSource`` values that ARE resource references -> the inspect payload key they render under.
-OPTIONS_SOURCE_RESOURCES: dict[OptionsSource, str] = {
-    OptionsSource.source_material: "source_material",
-    OptionsSource.assistant: "assistant",
-    OptionsSource.custom_actions: "custom_actions",
-    OptionsSource.collection: "media_collection",
-    OptionsSource.collection_index: "indexed_collections",
+# ``OptionsSource`` values that ARE resource references -> the resource param field(s) they populate.
+OPTIONS_SOURCE_RESOURCES: dict[OptionsSource, tuple[str, ...]] = {
+    OptionsSource.source_material: ("source_material_id",),
+    OptionsSource.assistant: ("assistant_id",),
+    OptionsSource.custom_actions: ("custom_actions",),
+    OptionsSource.collection: ("collection_id",),
+    OptionsSource.collection_index: ("collection_index_ids",),
     # Forward-compat: no current node field uses these as an options_source (voice is signalled by
-    # the voice_widget widget), but they denote the ``voice`` key if one ever does.
-    OptionsSource.voice_provider_id: "voice",
-    OptionsSource.synthetic_voice_id: "voice",
+    # the voice_widget widget). A voice reference enters the projection via synthetic_voice_id — its
+    # provider is read off the voice's FK, so there is no separate provider param field.
+    OptionsSource.voice_provider_id: ("synthetic_voice_id",),
+    OptionsSource.synthetic_voice_id: ("synthetic_voice_id",),
 }
 
 # ``OptionsSource`` values that are explicitly NOT resource references (tool enums, autocomplete
@@ -37,10 +39,10 @@ OPTIONS_SOURCE_NON_RESOURCES: set[OptionsSource] = {
     OptionsSource.text_editor_autocomplete_vars_router_node,
 }
 
-# ``Widgets`` that carry a resource reference -> the payload key they render under.
-WIDGET_RESOURCES: dict[Widgets, str] = {
-    Widgets.llm_provider_model: "llm",
-    Widgets.voice_widget: "voice",
+# ``Widgets`` that carry a resource reference -> the resource param field(s) they populate.
+WIDGET_RESOURCES: dict[Widgets, tuple[str, ...]] = {
+    Widgets.llm_provider_model: ("llm_provider_id", "llm_provider_model_id"),
+    Widgets.voice_widget: ("synthetic_voice_id",),
 }
 
 # Every other widget is presentational and not, on its own, a resource signal.
@@ -70,7 +72,7 @@ def test_every_options_source_is_classified():
     assert not unclassified, (
         f"Unclassified OptionsSource value(s): {sorted(str(s) for s in unclassified)}. "
         "Register each in OPTIONS_SOURCE_RESOURCES or OPTIONS_SOURCE_NON_RESOURCES in this file "
-        "(and add a RESOURCE_FIELDS entry in inspect/nodes.py for resource ones)."
+        "(and add its param field(s) to RESOURCE_PARAM_FIELDS in inspect/nodes.py for resource ones)."
     )
 
 
@@ -93,12 +95,14 @@ def test_widget_classification_is_disjoint():
     assert not overlap, f"Widget value(s) classified as both resource and non-resource: {overlap}"
 
 
-def test_every_resource_signal_has_a_resource_fields_entry():
-    """Layer 2: every resource-bearing signal's payload key has a ``RESOURCE_FIELDS`` entry, so a
-    newly added resource field can't silently land in ``params``."""
-    resource_keys = set(OPTIONS_SOURCE_RESOURCES.values()) | set(WIDGET_RESOURCES.values())
-    missing = resource_keys - set(RESOURCE_FIELDS)
+def test_every_resource_signal_maps_to_a_known_param_field():
+    """Layer 2: every resource-bearing signal's backing param field(s) are registered in
+    ``RESOURCE_PARAM_FIELDS``, so a newly added resource field can't silently land in ``params``."""
+    referenced = {
+        field for fields in (*OPTIONS_SOURCE_RESOURCES.values(), *WIDGET_RESOURCES.values()) for field in fields
+    }
+    missing = referenced - RESOURCE_PARAM_FIELDS.keys()
     assert not missing, (
-        f"Resource signal payload key(s) with no RESOURCE_FIELDS entry: {sorted(missing)}. "
-        "Add each to RESOURCE_FIELDS in apps/api/v2/inspect/nodes.py."
+        f"Resource signal param field(s) with no RESOURCE_PARAM_FIELDS entry: {sorted(missing)}. "
+        "Add each to RESOURCE_PARAM_FIELDS in apps/api/v2/inspect/nodes.py."
     )

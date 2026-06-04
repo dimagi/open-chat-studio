@@ -1,14 +1,6 @@
-"""Node-type resource registry for the chatbot inspect projection (ADR-0025).
-
-This is the single source of truth for *which* node-param fields are resource references and the
-payload key they render under. It is consumed by both the id-collection traversal
-(``resources.iter_resource_refs``) and the node serializer's rendering, and is pinned by the
-two-layer completeness guard test.
-"""
-
-import dataclasses
 import enum
 
+from apps.api.v2.utils import parse_custom_actions
 from apps.pipelines.nodes import nodes as pipeline_nodes
 
 
@@ -25,48 +17,39 @@ class ResourceKind(enum.StrEnum):
     LLM_PROVIDER = "llm_provider"
     LLM_PROVIDER_MODEL = "llm_provider_model"
 
+    def iter_raw_ids(self, value):
+        """Yield the raw resource ids a node param ``value`` carries for this kind. ``CUSTOM_ACTION``
+        values are ``"{action_id}:{operation_id}"`` strings (parsed to action ids); every other kind
+        is a bare id or a list of them, sniffed from the value. Ids stay raw — coerced downstream."""
+        if self is ResourceKind.CUSTOM_ACTION:
+            for action_id, _operation_ids in parse_custom_actions(value):
+                yield action_id
+        elif isinstance(value, list):
+            yield from value
+        else:
+            yield value
 
-@dataclasses.dataclass(frozen=True)
-class ResourceField:
-    """One inspect payload key: the node-param field name(s) it consumes, the resource kind it
-    loads, and whether it renders a list. Rich enough to model composites like ``llm``, which
-    consumes two fields."""
 
-    consumes: frozenset[str]
-    kind: ResourceKind
-    is_list: bool
-
-
-# payload_key -> ResourceField. Field names are the real pydantic field names on the node classes.
-RESOURCE_FIELDS: dict[str, ResourceField] = {
-    "llm": ResourceField(
-        frozenset({"llm_provider_id", "llm_provider_model_id"}), ResourceKind.LLM_PROVIDER_MODEL, False
-    ),
-    "voice": ResourceField(frozenset({"synthetic_voice_id"}), ResourceKind.SYNTHETIC_VOICE, False),
-    "source_material": ResourceField(frozenset({"source_material_id"}), ResourceKind.SOURCE_MATERIAL, False),
-    "assistant": ResourceField(frozenset({"assistant_id"}), ResourceKind.ASSISTANT, False),
-    "custom_actions": ResourceField(frozenset({"custom_actions"}), ResourceKind.CUSTOM_ACTION, True),
-    "media_collection": ResourceField(frozenset({"collection_id"}), ResourceKind.COLLECTION, False),
-    "indexed_collections": ResourceField(frozenset({"collection_index_ids"}), ResourceKind.COLLECTION, True),
+# Each resource param field (the real pydantic field name, across all node types) -> the kind/model
+# it loads. Keys are the flat set of "which params are resources"; values are how to load each.
+# list-vs-scalar is sniffed from the value at load time; how fields group into render keys is the
+# serializer's job (e.g. ``llm`` draws from the two llm_provider* fields, both collection fields
+# share the COLLECTION kind so they batch-load as one query).
+RESOURCE_PARAM_FIELDS: dict[str, ResourceKind] = {
+    "llm_provider_id": ResourceKind.LLM_PROVIDER,
+    "llm_provider_model_id": ResourceKind.LLM_PROVIDER_MODEL,
+    "synthetic_voice_id": ResourceKind.SYNTHETIC_VOICE,
+    "source_material_id": ResourceKind.SOURCE_MATERIAL,
+    "assistant_id": ResourceKind.ASSISTANT,
+    "custom_actions": ResourceKind.CUSTOM_ACTION,
+    "collection_id": ResourceKind.COLLECTION,
+    "collection_index_ids": ResourceKind.COLLECTION,
 }
-
-# The payload keys, in render order — used by the node serializer's ``to_representation``.
-RESOURCE_KEYS = tuple(RESOURCE_FIELDS)
 
 
 def node_class_for(node_type: str):
     """Resolve a node's pydantic class from the registry, or ``None`` for an unknown type."""
     return getattr(pipeline_nodes, node_type, None)
-
-
-def declared_resource_keys(node_class) -> list[str]:
-    """Payload keys whose source field(s) the node type declares.
-
-    Declared if ANY consumed field is present (e.g. ``llm`` is declared off either of its two
-    fields). Returns keys in ``RESOURCE_FIELDS`` order. ``node_class`` may be ``None`` (unknown
-    type)."""
-    fields = set(node_class.model_fields) if node_class is not None else set()
-    return [key for key, rf in RESOURCE_FIELDS.items() if rf.consumes & fields]
 
 
 def node_render_order(node) -> int:
