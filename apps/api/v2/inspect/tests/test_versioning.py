@@ -1,4 +1,4 @@
-"""Tests for inspect target resolution (resolution + prefetch in one pass)."""
+"""Tests for resolving ``?version=`` to a chatbot version (resolving and preloading in one query)."""
 
 import pytest
 from django.db import connection

@@ -3,7 +3,7 @@
 
 
 def as_int(value) -> int | None:
-    """Coerce a (possibly malformed) param id to ``int``, or ``None`` if it can't be."""
+    """Convert a value to an int, returning None if it can't be (e.g. a malformed id from JSON)."""
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -11,8 +11,11 @@ def as_int(value) -> int | None:
 
 
 def parse_custom_actions(value) -> list[tuple[int, list[str]]]:
-    """``custom_actions`` values are ``"{action_id}:{operation_id}"`` strings. Group the selected
-    operation ids per custom action, preserving first-seen order."""
+    """Group selected operation ids by custom action.
+
+    Each ``custom_actions`` entry is an ``"{action_id}:{operation_id}"`` string. Returns one entry
+    per action, with its operation ids in the order they were first seen.
+    """
     selections: dict[int, list[str]] = {}
     for entry in value or []:
         action_part, _, operation_id = str(entry).partition(":")

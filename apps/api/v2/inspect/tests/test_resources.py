@@ -1,4 +1,4 @@
-"""Unit tests for the id-collection traversal (pure) and the batch-loading fetcher (DB)."""
+"""Tests for collecting resource ids from nodes and for the batch-loading fetcher."""
 
 import pytest
 

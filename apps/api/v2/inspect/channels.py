@@ -1,9 +1,9 @@
-"""Channel collection for the inspect projection.
+"""Collect the channels to show in the inspect response.
 
-Channels are only ever linked to the working version, so we resolve the family head regardless of
-which version is being inspected. The team-global web/API channels are looked up read-only — the
-manager's ``get_team_*_channel`` helpers use ``get_or_create``, which would make this GET-only
-inspect flow write rows as a side effect.
+Channels are always attached to the working version, so we look them up there no matter which
+version is being inspected. The team-wide web and API channels are fetched read-only on purpose:
+the manager's ``get_team_*_channel`` helpers use ``get_or_create``, and inspect is a GET request,
+so creating rows here would be an unwanted side effect.
 """
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel

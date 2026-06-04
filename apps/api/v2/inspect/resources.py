@@ -1,10 +1,12 @@
-"""Team-scoped batch loader + id-collection traversal for the inspect projection (ADR-0028).
+"""Load every resource a chatbot references, up front and scoped to its team (ADR-0028).
 
-``iter_resource_refs`` is the single definition of "which node params are resources, by kind". It
-feeds ``ResourceFetcher.for_experiment``'s pre-pass, which batch-loads every kind once
-(N+1-free, team-scoped) into by-id maps. The serializers read the loaded instances via the
-accessors — pure dict lookups, never queries. Ids originate in untrusted node-param JSON, so
-``as_int`` coercion drops malformed values (a bad id resolves to absent, never crashes).
+``iter_resource_refs`` is the one place that says which node params point at resources, and what
+kind each one is. It drives ``ResourceFetcher.for_experiment``, which loads each kind in a single
+query and stores the results in by-id lookup tables. The serializers then read those loaded
+objects through the accessor methods — plain dict lookups, never further queries.
+
+Ids come from node-param JSON, which isn't trusted, so they're run through ``as_int``: a malformed
+id simply resolves to nothing rather than raising.
 """
 
 import collections
@@ -28,11 +30,11 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel, VoicePr
 
 
 def iter_resource_refs(node_type: str, params: dict):
-    """Yield ``(ResourceKind, raw_id)`` for every resource id a node of ``node_type`` references.
+    """Yield ``(ResourceKind, raw_id)`` for every resource a node of ``node_type`` references.
 
-    The single id-collection traversal feeding ``ResourceFetcher``. Only the param fields the node
-    *type* declares are read; each kind pulls its own raw ids from the param value (see
-    ``ResourceKind.iter_raw_ids``)."""
+    Only the param fields that this node type actually declares are read. Each kind knows how to
+    pull its own ids out of the param value (see ``ResourceKind.iter_raw_ids``).
+    """
     params = params or {}
     node_class = node_class_for(node_type)
     declared = set(node_class.model_fields) if node_class is not None else set()
@@ -44,8 +46,8 @@ def iter_resource_refs(node_type: str, params: dict):
 
 
 class ResourceFetcher:
-    """Batch-loads team-scoped resources once, then serves them to the serializers as dict
-    lookups. Built from the resolved target by the view and placed in serializer context."""
+    """Loads a chatbot's resources once, scoped to its team, and hands them to the serializers as
+    dict lookups. The view builds one and puts it in the serializer context."""
 
     def __init__(self, team):
         self.team = team

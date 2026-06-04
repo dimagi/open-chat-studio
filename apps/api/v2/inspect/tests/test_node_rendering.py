@@ -1,8 +1,9 @@
-"""Map-driven node rendering with a dict-backed fetcher stub — no DB, no queries.
+"""Node rendering tests using a dict-backed fetcher stub — no database, no queries.
 
-Pins decision #5 (declared-but-unset render null/[]; non-declared keys absent) and the map-shape
-regressions (issue #15): the composite ``llm`` consumes both fields, the multi-source ``voice`` is
-not dropped when only one source field is set."""
+Covers two rules: a node renders the resource keys its type declares (``null`` or ``[]`` when
+unset) and omits the rest; and the composite keys behave correctly — ``llm`` consumes both of its
+source fields, and ``voice`` still renders when only one of its source fields is present.
+"""
 
 import dataclasses
 
@@ -23,7 +24,7 @@ class _Node:
 
 
 class _FetcherStub:
-    """Resolves ids to ``None`` (absent) unless seeded — no DB."""
+    """Resolves any id to ``None`` unless it was seeded in — no database."""
 
     def __init__(self, **maps):
         self._maps = {kind: dict(values) for kind, values in maps.items()}
@@ -82,8 +83,7 @@ def test_llm_node_declares_all_keys_with_null_and_empty_when_unset():
 
 
 def test_llm_provider_model_id_not_leaked_into_params():
-    """Regression (issue #15): the composite ``llm`` consumes BOTH mixin fields, so neither leaks
-    into ``params``."""
+    """The composite ``llm`` key consumes both of its source fields, so neither leaks into ``params``."""
     node = _Node("a", "RouterNode", "Route", {"llm_provider_id": "2", "llm_provider_model_id": "11", "keywords": ["X"]})
     data = _render(node)
     assert "llm_provider_id" not in data["params"]
@@ -92,8 +92,7 @@ def test_llm_provider_model_id_not_leaked_into_params():
 
 
 def test_voice_not_dropped_when_only_synthetic_voice_field_set():
-    """Regression (issue #15): the multi-source ``voice`` key renders even though only one of its
-    two source fields exists on the node type."""
+    """The ``voice`` key still renders when the node type has only one of its two source fields."""
 
     @dataclasses.dataclass
     class _Provider:

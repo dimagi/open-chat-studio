@@ -5,8 +5,8 @@ from apps.pipelines.nodes import nodes as pipeline_nodes
 
 
 class ResourceKind(enum.StrEnum):
-    """Resource-kind keys shared across the registry and the fetcher. ``StrEnum`` so members stay
-    interchangeable with their string values."""
+    """The kinds of resource a pipeline node can reference. A ``StrEnum``, so members double as
+    their string values."""
 
     SOURCE_MATERIAL = "source_material"
     ASSISTANT = "assistant"
@@ -18,9 +18,11 @@ class ResourceKind(enum.StrEnum):
     LLM_PROVIDER_MODEL = "llm_provider_model"
 
     def iter_raw_ids(self, value):
-        """Yield the raw resource ids a node param ``value`` carries for this kind. ``CUSTOM_ACTION``
-        values are ``"{action_id}:{operation_id}"`` strings (parsed to action ids); every other kind
-        is a bare id or a list of them, sniffed from the value. Ids stay raw — coerced downstream."""
+        """Yield the resource ids held in a node param ``value`` for this kind.
+
+        Custom-action values are ``"{action_id}:{operation_id}"`` strings, so the action ids are
+        parsed out; every other kind is a single id or a list of them.
+        """
         if self is ResourceKind.CUSTOM_ACTION:
             for action_id, _operation_ids in parse_custom_actions(value):
                 yield action_id
@@ -48,18 +50,21 @@ RESOURCE_PARAM_FIELDS: dict[str, ResourceKind] = {
 
 
 def node_class_for(node_type: str):
-    """Resolve a node's pydantic class from the registry, or ``None`` for an unknown type."""
+    """Look up a node's pydantic class by type name, or return ``None`` if the type is unknown."""
     return getattr(pipeline_nodes, node_type, None)
 
 
 def node_render_order(node) -> int:
-    """Pin the start node first and the end node last; everything else keeps creation order."""
+    """Sort key that puts the start node first and the end node last, leaving the rest in order."""
     return {"StartNode": 0, "EndNode": 2}.get(node.type, 1)
 
 
 def graph_digest(node_list, pipeline_data: dict | None) -> dict:
-    """Topology only: nodes as ``{flow_id, type, label}`` (DB columns), edges with positions
-    stripped and handle keys normalised."""
+    """Build a lightweight view of the pipeline's shape.
+
+    Returns just the nodes (each as ``{flow_id, type, label}``) and the edges between them, with
+    canvas positions removed and the edge handle keys renamed to snake_case.
+    """
     nodes = [{"flow_id": node.flow_id, "type": node.type, "label": node.label} for node in node_list]
     edges = [
         {

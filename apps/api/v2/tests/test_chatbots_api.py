@@ -27,7 +27,7 @@ def test_v2_chatbot_detail_resolves():
 
 @pytest.mark.django_db()
 def test_v2_experiments_still_404(experiment):
-    """v2 renamed the surface to /chatbots/; the old /experiments/ name must not exist in v2."""
+    """v2 uses /chatbots/; the old /experiments/ path must not exist under v2."""
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
     assert client.get("/api/v2/experiments/").status_code == 404

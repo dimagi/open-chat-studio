@@ -1,5 +1,5 @@
-"""The flattened / selection serializers render resolved instances (ADR-0025) with declared
-fields, so the OpenAPI components derived from them are exact."""
+"""The flattened serializers render their loaded objects using explicitly declared fields
+(ADR-0025), so the OpenAPI schema generated from them is accurate."""
 
 import pytest
 

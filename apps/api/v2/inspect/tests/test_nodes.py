@@ -1,4 +1,4 @@
-"""Pure unit tests for the node-type resource registry (no DB)."""
+"""Unit tests for the node-type resource registry (no database)."""
 
 from types import SimpleNamespace
 
@@ -20,8 +20,8 @@ def test_node_class_for_unknown_type_is_none():
 
 
 def test_resource_param_fields_are_real_node_fields():
-    """Every registered resource param field is an actual pydantic field on at least one node type,
-    so the flat set can't drift away from the node definitions via a typo."""
+    """Every registered resource param field is a real pydantic field on at least one node type, so
+    a typo in the registry can't go unnoticed."""
     declared_anywhere = set()
     for name in dir(pipeline_nodes):
         model_fields = getattr(getattr(pipeline_nodes, name), "model_fields", None)

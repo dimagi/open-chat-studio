@@ -1,5 +1,5 @@
-"""Regression: the documented inspect response schema must reflect the actual payload, not fall
-back to the viewset's ``ChatbotSerializer``."""
+"""The documented schema for the inspect response must match what it actually returns, rather than
+falling back to the viewset's ``ChatbotSerializer``."""
 
 import pytest
 from drf_spectacular.generators import SchemaGenerator

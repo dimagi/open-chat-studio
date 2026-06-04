@@ -72,7 +72,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     )
     @action(detail=True, methods=["get"])
     def inspect(self, request, id=None):
-        """Return a denormalized, read-only projection of the chatbot's full configuration."""
+        """Return the chatbot's full configuration as a single read-only document."""
         try:
             target = resolve_inspect_version(
                 public_id=self.kwargs[self.lookup_url_kwarg],

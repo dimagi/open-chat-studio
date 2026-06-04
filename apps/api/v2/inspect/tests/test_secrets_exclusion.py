@@ -1,4 +1,4 @@
-"""ADR-0027: every inspect serializer is an explicit allowlist; secrets never appear."""
+"""Every inspect serializer lists its fields explicitly, so secrets never appear (ADR-0027)."""
 
 import json
 

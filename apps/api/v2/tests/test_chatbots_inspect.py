@@ -48,8 +48,8 @@ CHANNEL_SECRET = "telegram-token-SECRET-xyz"
 
 @pytest.fixture()
 def inspect_bot(db):
-    """A realistic bot exercising every acceptance assertion. Returns the created objects so tests
-    can build exact expected dicts referencing their ids."""
+    """Build a realistic bot that exercises every assertion here, returning the created objects so
+    each test can build the exact expected response from their ids."""
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai", config={"api_key": LLM_SECRET})
     model = LlmProviderModelFactory.create(team=team, name="gpt-4o", max_token_limit=128000, deprecated=False)
@@ -292,8 +292,8 @@ def test_no_secrets_in_response(inspect_bot):
 
 @pytest.mark.django_db()
 def test_inspect_does_not_create_team_channels(inspect_bot):
-    """GET inspect must be side-effect free: it reads team web/api channels read-only and must not
-    get_or_create them (regression for the non-idempotent GET flagged in review)."""
+    """Inspecting must not change anything: it reads the team's web/api channels but must never
+    create them."""
     team = inspect_bot.experiment.team
     ExperimentChannel.objects.filter(team=team, platform__in=[ChannelPlatform.WEB, ChannelPlatform.API]).delete(
         audit_action=AuditAction.AUDIT
@@ -334,8 +334,8 @@ def test_cross_team_resource_not_embedded(inspect_bot):
 
 @pytest.mark.django_db()
 def test_cross_team_synthetic_voice_not_embedded(inspect_bot):
-    """SyntheticVoice is team-scoped only via its voice_provider, so the loader must apply
-    get_for_team's condition. A voice backed by another team's provider must resolve to absent."""
+    """A synthetic voice is only tied to a team through its voice provider, so a voice backed by
+    another team's provider must not resolve."""
     foreign_voice = SyntheticVoiceFactory.create(
         voice_provider=VoiceProviderFactory.create(team=TeamWithUsersFactory.create())
     )
@@ -351,8 +351,7 @@ def test_cross_team_synthetic_voice_not_embedded(inspect_bot):
 
 @pytest.mark.django_db()
 def test_malformed_node_param_id_does_not_crash(inspect_bot):
-    """Non-numeric ids in node params (ids originate in untrusted JSON) resolve to absent rather
-    than 500-ing the whole inspect build."""
+    """A non-numeric id in a node's params resolves to nothing instead of crashing the response."""
     NodeFactory.create(
         pipeline=inspect_bot.experiment.pipeline,
         flow_id="malformed-1",
@@ -399,9 +398,10 @@ def test_unknown_version_404(inspect_bot):
 
 # ── Full response body ───────────────────────────────────────────────────────────────────────────
 def _full_bot():
-    """A fully-populated bot whose response has no null fields — exercises every serializer.
+    """A fully populated bot whose response has no null fields, so every serializer runs.
 
-    Pipeline node params store ids as strings, mirroring what the React FE persists."""
+    The pipeline node params store ids as strings, matching what the React frontend saves.
+    """
     team = TeamWithUsersFactory.create()
 
     llm_provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai")
@@ -562,7 +562,7 @@ def _full_bot():
 
 @pytest.mark.django_db()
 def test_full_response_body():
-    """A fully-populated bot whose response has no null fields — exercises every serializer."""
+    """A fully populated bot whose response has no null fields, so every serializer runs."""
     bot = _full_bot()
 
     payload = _get(bot)
@@ -764,8 +764,8 @@ def test_full_response_body():
 # ── Embedded pipeline (pipeline_start) + context propagation (review issue #6) ──────────────────
 @pytest.mark.django_db()
 def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
-    """A pipeline_start trigger embeds a second pipeline whose node resolves a resource through the
-    fetcher — proving context (the fetcher) propagates into the embedded InspectPipelineSerializer."""
+    """A pipeline_start trigger embeds a second pipeline whose node needs the fetcher to resolve a
+    resource — proving the fetcher reaches the embedded pipeline serializer."""
     team = inspect_bot.experiment.team
     assistant = OpenAiAssistantFactory.create(team=team, name="Embedded Helper", assistant_id="asst_embed")
     embedded = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
@@ -794,8 +794,8 @@ def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
 
 # ── Query-count guard (review issues #5, #12, #16) ───────────────────────────────────────────────
 def _adversarial_bot():
-    """Multi-node pipeline + a pipeline_start trigger embedding a SECOND resource-bearing pipeline +
-    a resource (the LLM provider/model) shared across two nodes (proves batch dedup)."""
+    """A multi-node pipeline, a pipeline_start trigger that embeds a second pipeline with its own
+    resources, and one LLM provider/model shared by two nodes (so a shared resource loads once)."""
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, name="Shared", type="openai")
     model = LlmProviderModelFactory.create(team=team, name="gpt-4o", deprecated=False)
@@ -851,9 +851,8 @@ EXPECTED_RENDER_QUERIES = 13
 @pytest.mark.django_db()
 @pytest.mark.parametrize("version_param", [None, "default", "1"])
 def test_inspect_render_query_count_constant_across_versions(version_param, django_assert_num_queries):
-    """resolve (incl. prefetch) + fetch + full render is N+1-free and identical across version
-    modes. Resolution costs a single query in every mode, so the total render cost on the resolved
-    target stays constant whether reading the working draft, the default, or a specific version."""
+    """Resolving, fetching and rendering takes the same fixed number of queries for every version
+    mode — the working draft, the default, or a specific version number."""
     experiment = _adversarial_bot()
     experiment.create_new_version()  # version_number 1, published default
     family = Experiment.objects.get(pk=experiment.pk)

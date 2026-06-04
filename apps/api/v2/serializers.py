@@ -10,10 +10,10 @@ class ChatbotVersionSerializer(serializers.ModelSerializer):
 
 
 class ChatbotSerializer(serializers.ModelSerializer):
-    """Minimal v2 representation of a Chatbot (list/retrieve).
+    """Basic chatbot fields for the list and retrieve endpoints.
 
-    The rich, denormalized configuration lives at the ``inspect`` action, not here
-    (ADR-0024). v2 renames the external surface from ``experiment`` to ``chatbot`` (ADR-0023).
+    The full configuration is served by the ``inspect`` action instead (ADR-0024). v2 calls these
+    "chatbots" rather than "experiments" (ADR-0023).
     """
 
     url = serializers.HyperlinkedIdentityField(

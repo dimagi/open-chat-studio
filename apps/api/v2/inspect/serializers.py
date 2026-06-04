@@ -1,13 +1,12 @@
-"""Secrets-excluding serializers for the chatbot inspect projection.
+"""Serializers for the chatbot inspect response, built so they never leak secrets.
 
-Every resource is serialized through an explicit allowlist of fields — never ``__all__`` and
-never a denylist (ADR-0027). Adding a field to a model never exposes it here by default.
+Every serializer lists its fields explicitly — never ``__all__`` and never a denylist (ADR-0027) —
+so adding a field to a model never exposes it here by accident. Encrypted provider ``config``
+blobs, signed file-download URLs, and channel ``extra_data`` are all left out.
 
-Encrypted provider ``config`` blobs, signed file-storage URLs, and channel ``extra_data`` are
-excluded outright. Provider + model pairs are flattened into a single concept object
-(``llm`` / ``voice`` / ``embedding``) by the ``Flattened*`` serializers (ADR-0025); they render
-the resolved-instance pairs the collector batch-loaded once, so every reference site inlines a
-copy of the same loaded objects.
+A provider and its model are combined into one object (``llm`` / ``voice`` / ``embedding``) by the
+``Flattened*`` serializers (ADR-0025). They render the objects the fetcher already loaded, so a
+resource used in several places is simply repeated wherever it's referenced.
 """
 
 import dataclasses
@@ -43,8 +42,11 @@ _CADENCE_KEYS = ("name", "frequency", "time_period", "repetitions", "prompt_text
 
 @extend_schema_serializer(component_name="InspectFile")
 class FileSerializer(serializers.ModelSerializer):
-    """Identity-lean file view. Excludes the signed ``file`` storage URL, ``summary`` and
-    ``metadata`` (the latter two are dropped for size, not secrecy — design D8/Q6)."""
+    """A file's identifying fields only.
+
+    Leaves out the signed storage URL (a secret), plus ``summary`` and ``metadata`` (omitted to
+    keep the response small, not for secrecy).
+    """
 
     class Meta:
         model = File
@@ -64,7 +66,7 @@ class ConsentFormSerializer(serializers.ModelSerializer):
 
 
 class AssistantSerializer(serializers.ModelSerializer):
-    """``instructions`` and ``assistant_id`` are intentionally exposed (resolved Q4/Q5)."""
+    """Assistant fields. ``instructions`` and ``assistant_id`` are exposed on purpose."""
 
     class Meta:
         model = OpenAiAssistant
@@ -72,9 +74,12 @@ class AssistantSerializer(serializers.ModelSerializer):
 
 
 class ProviderSerializer(serializers.Serializer):
-    """Minimal provider reference — A plain ``Serializer`` (not ``ModelSerializer``) so it works for
-    any provider model (Llm/Voice/Messaging/Auth/Trace) via duck typing. Serializing ``None``
-    yields ``None`` when nested; standalone call sites must guard for ``None`` themselves."""
+    """A minimal reference to any provider: its id, type and name.
+
+    It's a plain ``Serializer`` rather than a ``ModelSerializer`` so the same class works for every
+    provider model (LLM, voice, messaging, auth, trace). When nested, a ``None`` provider renders as
+    ``null``; callers that use it on its own must handle ``None`` themselves.
+    """
 
     id = serializers.IntegerField()
     type = serializers.CharField()
@@ -82,8 +87,10 @@ class ProviderSerializer(serializers.Serializer):
 
 
 class ChannelSerializer(serializers.ModelSerializer):
-    """Allowlist ``platform`` + ``name`` + embedded ``messaging_provider`` ref. ``extra_data``
-    (freeform auth material) is excluded wholesale (resolved Q8)."""
+    """A channel's ``platform``, ``name`` and messaging provider.
+
+    ``extra_data`` holds free-form auth material and is excluded entirely.
+    """
 
     messaging_provider = ProviderSerializer(allow_null=True)
 
@@ -97,22 +104,24 @@ class ChannelSerializer(serializers.ModelSerializer):
 # objects only; all rendering happens in the serializer classes below.
 @dataclasses.dataclass
 class ProviderModelPair:
-    """Resolved (provider, model) pair behind a flattened ``llm`` / ``embedding`` object."""
+    """A provider paired with its model, behind a flattened ``llm`` or ``embedding`` object."""
 
     provider: object | None
     model: object | None
 
     @classmethod
     def from_parts(cls, provider, model) -> "ProviderModelPair | None":
-        """``None`` when both halves are absent, so the pair renders as JSON ``null`` rather than
-        an all-null object. The single home of the absent-pair rule for llm/embedding objects."""
+        """Build a pair, or return ``None`` when both halves are missing.
+
+        Returning ``None`` lets the field render as JSON ``null`` instead of an object full of nulls.
+        """
         if provider is None and model is None:
             return None
         return cls(provider, model)
 
     @property
     def type(self):
-        """Provider type, falling back to the model's type when the provider half is unset."""
+        """The provider's type, falling back to the model's type when there's no provider."""
         if self.provider is not None:
             return self.provider.type
         return self.model.type if self.model is not None else None
@@ -120,15 +129,14 @@ class ProviderModelPair:
 
 @dataclasses.dataclass
 class VoicePair:
-    """Resolved (voice provider, synthetic voice) pair behind a flattened ``voice`` object."""
+    """A voice provider paired with its synthetic voice, behind a flattened ``voice`` object."""
 
     provider: object | None
     voice: object | None
 
     @classmethod
     def from_parts(cls, provider, voice) -> "VoicePair | None":
-        """``None`` when both halves are absent, so the pair renders as JSON ``null`` rather than
-        an all-null object. The single home of the absent-pair rule for voice objects."""
+        """Build a pair, or return ``None`` when both halves are missing, so the field renders as null."""
         if provider is None and voice is None:
             return None
         return cls(provider, voice)
@@ -136,31 +144,37 @@ class VoicePair:
 
 @dataclasses.dataclass
 class CustomActionSelection:
-    """A reference site's custom-action selection: the action plus the selected operation ids."""
+    """A custom action together with the operation ids selected where it's used."""
 
     action: CustomAction
     operation_ids: list[str]
 
     @cached_property
     def resolved_operations(self) -> "list[APIOperationDetails]":
-        """The selected operations still present in the action's schema; a selected operation no
-        longer in the schema resolves to absent."""
+        """The selected operations that still exist in the action's schema.
+
+        Any selected operation that has since been removed from the schema is dropped.
+        """
         operations_by_id = self.action.get_operations_by_id()
         return [op for op in (operations_by_id.get(oid) for oid in self.operation_ids) if op]
 
 
 # ── Flattened / selection serializers (ADR-0025) ─────────────────────────────────────────────────
 class FlattenedProviderSerializer(serializers.Serializer):
-    """Provider half shared by the flattened pair serializers — renders ``pair.provider`` with
-    null fields when the half is absent (ADR-0025)."""
+    """The provider half shared by the flattened pair serializers.
+
+    Renders the pair's provider, or null fields when there's no provider (ADR-0025).
+    """
 
     provider_id = serializers.IntegerField(source="provider.id", default=None, allow_null=True)
     provider_name = serializers.CharField(source="provider.name", default=None, allow_null=True)
 
 
 class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
-    """A collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair flattened into one
-    object. Instance: :class:`ProviderModelPair`. Missing halves render their fields as null."""
+    """A collection's embedding provider and model, flattened into one object.
+
+    Expects a :class:`ProviderModelPair`; a missing provider or model renders its fields as null.
+    """
 
     # ``ProviderModelPair.type`` — provider type with model-type fallback.
     type = serializers.CharField(allow_null=True)
@@ -168,15 +182,17 @@ class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
 
 
 class FlattenedLlmSerializer(FlattenedModelProviderSerializer):
-    """An ``(LlmProvider, LlmProviderModel)`` pair flattened into one ``llm`` object (ADR-0025)."""
+    """An LLM provider and model, flattened into one ``llm`` object (ADR-0025)."""
 
     max_token_limit = serializers.IntegerField(source="model.max_token_limit", default=None, allow_null=True)
     deprecated = serializers.BooleanField(source="model.deprecated", default=None, allow_null=True)
 
 
 class FlattenedVoiceSerializer(FlattenedProviderSerializer):
-    """A ``(VoiceProvider, SyntheticVoice)`` pair flattened into one ``voice`` object (ADR-0025).
-    Instance: :class:`VoicePair`."""
+    """A voice provider and synthetic voice, flattened into one ``voice`` object (ADR-0025).
+
+    Expects a :class:`VoicePair`.
+    """
 
     # Unlike the llm/embedding pairs, ``type`` has no fallback to the voice half — a provider-less
     # voice renders ``type: null`` (matches the pre-refactor shape).
@@ -187,7 +203,7 @@ class FlattenedVoiceSerializer(FlattenedProviderSerializer):
 
 
 class MediaCollectionSerializer(serializers.ModelSerializer):
-    """Collection identity + files, without embedding — the media-collection shape (ADR-0025)."""
+    """A media collection: its identity and files, with no embedding details (ADR-0025)."""
 
     files = FileSerializer(many=True)
 
@@ -197,7 +213,7 @@ class MediaCollectionSerializer(serializers.ModelSerializer):
 
 
 class IndexedCollectionSerializer(MediaCollectionSerializer):
-    """An indexed/RAG collection: identity + flattened embedding pair + files (ADR-0025)."""
+    """An indexed (RAG) collection: its identity, embedding provider/model, and files (ADR-0025)."""
 
     embedding = serializers.SerializerMethodField()
 
@@ -211,16 +227,19 @@ class IndexedCollectionSerializer(MediaCollectionSerializer):
 
 
 class ApiSchemaDigestSerializer(serializers.Serializer):
-    """A custom action's OpenAPI schema reduced to the selected operations' path digest."""
+    """A custom action's OpenAPI schema reduced to just the paths of the selected operations."""
 
     paths = serializers.ListField(child=serializers.CharField())
 
 
 class CustomActionSerializer(serializers.Serializer):
-    """Custom action with ``allowed_operations`` reflecting the operations selected at the
-    reference site — never the action's full operation set — and its OpenAPI schema reduced to the
-    selected operations' path digest (resolved Q7 — size, not secrecy). Auth provider is
-    ``{id, type, name}`` only (ADR-0027). Instance: :class:`CustomActionSelection`."""
+    """A custom action as used at one reference site.
+
+    ``allowed_operations`` lists only the operations selected here, not every operation the action
+    defines, and ``api_schema`` is trimmed to just those operations' paths (to keep the response
+    small). The auth provider is reduced to ``{id, type, name}`` (ADR-0027). Expects a
+    :class:`CustomActionSelection`.
+    """
 
     id = serializers.IntegerField(source="action.id")
     name = serializers.CharField(source="action.name")
@@ -245,9 +264,11 @@ class CustomActionSerializer(serializers.Serializer):
 
 # ── Context helper ───────────────────────────────────────────────────────────────────────────────
 class _FetcherContextMixin:
-    """Inspect serializers that resolve resources read the batch-loaded ``ResourceFetcher`` from
-    context. A missing fetcher is a programming error (an inspect serializer rendered outside the
-    inspect view), so fail loud rather than papering over it."""
+    """Gives a serializer access to the ``ResourceFetcher`` in its context.
+
+    A missing fetcher means an inspect serializer is being used outside the inspect view — a
+    programming error — so we raise instead of silently returning empty data.
+    """
 
     @property
     def _fetcher(self):
@@ -262,8 +283,7 @@ class _FetcherContextMixin:
 
 # ── Settings (ADR-0024) ────────────────────────────────────────────────────────────────────────
 class InspectSettingsSerializer(serializers.Serializer):
-    """Non-secret Experiment fields surfaced under ``settings``, sourced straight off the
-    experiment instance (``source="*"`` at the parent)."""
+    """The chatbot's non-secret settings, read directly off the experiment."""
 
     seed_message = serializers.CharField(allow_blank=True)
     conversational_consent_enabled = serializers.BooleanField()
@@ -293,7 +313,7 @@ class GraphEdgeSerializer(serializers.Serializer):
 
 @extend_schema_serializer(component_name="InspectGraph")
 class GraphSerializer(serializers.Serializer):
-    """Pipeline topology digest: nodes as identity triples, edges with positions stripped."""
+    """The pipeline's shape: its nodes and the edges between them (without canvas positions)."""
 
     nodes = GraphNodeSerializer(many=True)
     edges = GraphEdgeSerializer(many=True)
@@ -306,14 +326,13 @@ _ABSENT = object()
 
 
 class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
-    """One pipeline node with its declared resource references inlined.
+    """One pipeline node, with the resources it references inlined.
 
-    The seven resource keys are declared as fields so the OpenAPI schema documents them, but only
-    the keys the node *type* declares are rendered (decision #5): a ``StartNode`` carries no
-    resource keys, an ``LLMResponseWithPrompt`` always carries all six of its own, with ``null``
-    (single) / ``[]`` (list) where unset. Each ``get_*`` returns ``_ABSENT`` for a key its node
-    type doesn't declare, and ``to_representation`` drops those — so the declared-vs-absent rule
-    lives next to each field's fetch, not in a central key list."""
+    All resource keys are declared as fields so they appear in the OpenAPI schema, but a node only
+    renders the keys its type actually uses: a ``StartNode`` shows none, while an
+    ``LLMResponseWithPrompt`` shows its own — ``null`` for an unset single value, ``[]`` for an
+    unset list. Keys the node type doesn't declare are dropped entirely.
+    """
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
@@ -447,9 +466,11 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
 # ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────
 class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSerializer):
-    """An event trigger's action. ``pipeline`` is present only for ``pipeline_start`` actions
-    whose (team-scoped) pipeline resolves; it is rendered from the fetcher's embedded-pipeline
-    cache so it costs no extra query."""
+    """The action an event trigger runs.
+
+    The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline could be found in
+    the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
+    """
 
     type = serializers.CharField(source="action_type")
     params = serializers.SerializerMethodField()
@@ -502,8 +523,7 @@ class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
 
 
 class InspectEventsSerializer(serializers.Serializer):
-    """Static + timeout triggers (archived excluded). ``source="*"`` at the parent — the instance
-    is the Experiment."""
+    """A chatbot's static and timeout triggers, excluding archived ones."""
 
     static_triggers = serializers.SerializerMethodField()
     timeout_triggers = serializers.SerializerMethodField()
@@ -521,9 +541,11 @@ class InspectEventsSerializer(serializers.Serializer):
 
 # ── Root (ADR-0024) ──────────────────────────────────────────────────────────────────────────────
 class ChatbotInspectSerializer(serializers.ModelSerializer):
-    """Denormalized, read-only projection of a chatbot's full configuration (ADR-0024). The
-    response root *is* the chatbot — there is no wrapper key. Instance: the resolved
-    :class:`~apps.experiments.models.Experiment`; requires a ``fetcher`` in context."""
+    """The whole chatbot configuration in one read-only response (ADR-0024).
+
+    The chatbot's fields sit at the top level — there's no wrapper key around them. Expects the
+    resolved :class:`~apps.experiments.models.Experiment`, and needs a ``fetcher`` in its context.
+    """
 
     id = serializers.UUIDField(source="public_id")
     is_unreleased = serializers.BooleanField(source="is_working_version")

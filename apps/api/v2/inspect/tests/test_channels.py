@@ -24,8 +24,7 @@ def test_get_channels_includes_working_version_channels_and_team_web_api():
 
 @pytest.mark.django_db()
 def test_get_channels_does_not_create_team_channels():
-    """Read-only: a team that has never exercised the web/api channels gets them omitted, not
-    created as a GET side effect."""
+    """A team that has never used its web/api channels gets them left out, not created on the fly."""
     team = TeamWithUsersFactory.create()
     experiment = ExperimentFactory.create(team=team)
     ExperimentChannelFactory.create(team=team, experiment=experiment, name="Support TG")

@@ -1,9 +1,9 @@
-"""Inspect target resolution (relocated from ``builder.py``).
+"""Turn the ``?version=`` query parameter into the chatbot version to inspect.
 
-Resolves ``?version=`` to a concrete Experiment, already loaded with the select_related /
-prefetch_related the inspect serializers and ``ResourceFetcher`` need. Resolution and prefetch
-happen in a single pass: each ``?version=`` mode filters the prefetched queryset directly, so a
-versioned read keeps the N+1-free query profile without a separate re-fetch round trip.
+The chosen version comes back already loaded with the related objects the inspect serializers and
+``ResourceFetcher`` need. Picking the version and preloading its relations happen in one query —
+each ``?version=`` mode filters the preloaded queryset directly — so no follow-up round trip is
+needed.
 """
 
 from django.db.models import Prefetch
@@ -13,15 +13,16 @@ from apps.experiments.models import Experiment
 
 
 class InspectVersionError(ValueError):
-    """The requested ``?version=`` could not be resolved (unknown number / no published version)."""
+    """Raised when ``?version=`` doesn't match a version (unknown number, or no published version)."""
 
 
 def _inspect_target_queryset():
-    """Base queryset carrying the FK/relation prefetches the inspect render needs.
+    """The base queryset, preloaded with the related objects the inspect response needs.
 
-    Triggers are prefetched unfiltered (archived exclusion happens in the serializers); the inner
-    ``select_related("action")`` lets the event/action serializers and the fetcher pre-pass read
-    each action without a per-trigger query."""
+    Triggers are loaded without filtering — archived ones are skipped later, in the serializers.
+    Each trigger's ``action`` is selected alongside it so the event serializers and the fetcher can
+    read it without an extra query per trigger.
+    """
     return Experiment.objects.select_related(
         "team",
         "consent_form",
@@ -40,17 +41,13 @@ def _inspect_target_queryset():
 
 
 def resolve_inspect_version(public_id: str, version_param: str | None, *, team) -> Experiment:
-    """Resolve the ``?version=`` query parameter to a fully-prefetched target Experiment version.
+    """Resolve ``?version=`` to the matching chatbot version, fully preloaded.
 
-    - ``None`` (omitted) -> the working (draft) family head.
+    - omitted (``None``) -> the working (draft) version.
     - ``"default"`` -> the default published version.
     - an integer string -> that specific version number.
 
-    Scoped to ``team`` so a ``public_id`` from another team resolves to nothing (404 at the view).
-    Each path resolves and prefetches in a single pass: the family head is read by ``public_id``
-    directly, and versioned reads join through ``working_version__public_id`` rather than fetching
-    the family first. The returned target is loaded with the FK/relation prefetches the inspect
-    serializers and ``ResourceFetcher`` need.
+    Scoped to ``team``, so a ``public_id`` from another team matches nothing (the view returns a 404).
     """
     base = _inspect_target_queryset()
     if version_param is None:

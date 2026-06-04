@@ -371,7 +371,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return self.params.get("name", None)
 
     def has_parameter(self, param_name: str) -> bool:
-        """True if the node TYPE declares this as a pydantic param. Unknown types declare nothing."""
+        """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
         from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         node_class = getattr(pipeline_nodes, self.type, None)
