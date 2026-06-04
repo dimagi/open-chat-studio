@@ -1,7 +1,3 @@
-"""Small pure helpers shared across the v2 API. No Django/model imports — safe to import anywhere
-(including low-level modules), so it carries no circular-import risk."""
-
-
 def as_int(value) -> int | None:
     """Convert a value to an int, returning None if it can't be (e.g. a malformed id from JSON)."""
     try:
