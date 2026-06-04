@@ -4,7 +4,7 @@ For engineers responsible for extending, debugging, or operating the Claude work
 
 ## Setup
 
-The `ANTHROPIC_API_KEY` secret must be set under **Settings > Secrets and variables > Actions** in the repository. All three Claude workflows require it.
+The `ANTHROPIC_API_KEY` secret must be set under **Settings > Secrets and variables > Actions** in the repository. All Claude workflows require it.
 
 ## Workflow files
 
@@ -13,6 +13,7 @@ The `ANTHROPIC_API_KEY` secret must be set under **Settings > Secrets and variab
 | `.github/workflows/claude.yml` | Claude Code | Issue labelled `claude`, `@claude` mention, daily schedule, manual dispatch |
 | `.github/workflows/claude-followup.yml` | Claude Followup | CI completes on any `claude/**` branch |
 | `.github/workflows/claude-dependabot.yml` | Claude Dependabot PR Review | Dependabot PR opened or updated, manual dispatch |
+| `.github/workflows/claude-code-review.yml` | Claude Code Review | PR opened, marked ready for review, or pushed to (non-Dependabot, non-draft) |
 
 ## Tool allowlist
 
@@ -23,6 +24,8 @@ For more information on `claude_args` see [GitHub for claude-code-action usage g
 ## Concurrency
 
 Runs on the same issue queue instead of cancelling each other (`cancel-in-progress: false`). If a second trigger fires while a run is in progress for the same issue, it waits. Runs for different issues execute in parallel.
+
+The code review workflow is the exception: a new push to a PR cancels any in-progress review of that PR (`cancel-in-progress: true`), since a review of stale code is wasted spend.
 
 ## Branch and label conventions
 
