@@ -102,6 +102,9 @@ nav:
       - 0029 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0029-download-whatsapp-inbound-attachments-in-hydration-stage.md
       - 0030 Gate the email channel with a global allowed-domains setting: adr/0030-email-channel-allowed-domains-global-setting.md
       - 0031 Collection content is a live shared resource: adr/0031-collection-content-is-live-shared-resource.md
+      - 0032 Tiered feature deprecation gated by a usage audit: adr/0032-tiered-feature-deprecation-by-usage-audit.md
+      - 0033 Read-only mode gates features during the deprecation window: adr/0033-read-only-mode-during-deprecation-window.md
+      - 0034 Sunset headers and 410 Gone for retired HTTP surfaces: adr/0034-sunset-headers-and-410-for-retired-http-surfaces.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md

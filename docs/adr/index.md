@@ -51,3 +51,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0029](0029-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
 | [0030](0030-email-channel-allowed-domains-global-setting.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Gate the email channel with a global allowed-domains setting |
 | [0031](0031-collection-content-is-live-shared-resource.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Collection content is a live shared resource |
+| [0032](0032-tiered-feature-deprecation-by-usage-audit.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Tiered feature deprecation gated by a usage audit |
+| [0033](0033-read-only-mode-during-deprecation-window.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Read-only mode gates features during the deprecation window |
+| [0034](0034-sunset-headers-and-410-for-retired-http-surfaces.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Sunset headers and 410 Gone for retired HTTP surfaces |
