@@ -104,6 +104,9 @@ nav:
       - 0031 Collection content is a live shared resource: adr/0031-collection-content-is-live-shared-resource.md
       - 0032 Validate Jinja templates server-side by parsing the AST: adr/0032-server-side-jinja-template-validation.md
       - 0033 Structured runtime Jinja error messages: adr/0033-structured-runtime-jinja-error-messages.md
+      - 0034 Tiered feature deprecation gated by a usage audit: adr/0034-tiered-feature-deprecation-by-usage-audit.md
+      - 0035 Read-only mode gates features during the deprecation window: adr/0035-read-only-mode-during-deprecation-window.md
+      - 0036 Sunset headers and 410 Gone for retired HTTP surfaces: adr/0036-sunset-headers-and-410-for-retired-http-surfaces.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
@@ -113,6 +116,7 @@ nav:
       - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
+      - Feature Deprecation: developer_guides/feature_deprecation.md
       - Managing LLM Models: developer_guides/managing_models.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
