@@ -33,8 +33,7 @@ After running the Stage 0 audit, delete whichever tier section below does not ap
 - [ ] Remove code (next release): UI entry points, views, URLs, forms,
       business logic. Models/columns and dormant config rows stay.
 - [ ] Schema drop (a following release): data migration cleans up dormant
-      config rows, then drops columns/tables. Migration is
-      backwards-compatible (PR template checkbox).
+      config rows, then drops columns/tables.
 - [ ] Close out: remove user docs pages (or leave a tombstone note pointing
       at the replacement); close this issue.
 
@@ -59,6 +58,6 @@ After running the Stage 0 audit, delete whichever tier section below does not ap
 - [ ] Remove code: UI entry points, views, URLs, forms, business logic.
       Models/columns stay.
 - [ ] Schema drop (a following release): data migration, then drop
-      columns/tables. Migration is backwards-compatible.
+      columns/tables.
 - [ ] Close out: remove user docs pages (or leave a tombstone note); close
       this issue.

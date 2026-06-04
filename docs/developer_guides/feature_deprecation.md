@@ -35,22 +35,6 @@ recorded on the tracking issue.
 2. **Active**: usage events within the window (sessions, messages, task runs —
    whatever "the feature did something" means for this feature).
 
-Skeleton:
-
-```python
-# Throwaway report. Run with: uv run python manage.py shell < <feature>_usage.py
-from datetime import timedelta
-
-from django.db.models import Count, Q
-from django.utils import timezone
-
-cutoff = timezone.now() - timedelta(days=90)
-
-# 1. configured: rows with the feature set up, grouped by team
-# 2. active: annotate a Count(...) filtered on activity since `cutoff`
-# Write results to CSV and attach to the tracking issue.
-```
-
 Attach the script and its output to the tracking issue (paste or gist) — do
 not commit it to the repo.
 
@@ -72,18 +56,15 @@ not usage to migrate. Anything else is **used**.
 
 There is no grace period beyond the natural gap between releases.
 
-```markdown
-- [ ] Stage 0 audit attached to this issue; zero active usage in 90 days
-- [ ] Announce: changelog entry + deprecation note in user docs naming the
-      removal release and how to object (support channel / GitHub issue)
-- [ ] Remove code (next release): UI entry points, views, URLs, forms,
-      business logic. Models/columns and dormant config rows stay.
-- [ ] Schema drop (a following release): data migration cleans up dormant
-      config rows, then drops columns/tables. Migration is
-      backwards-compatible (PR template checkbox).
-- [ ] Close out: remove user docs pages (or leave a tombstone note pointing
-      at the replacement); close this issue.
-```
+1. **Announce** — changelog entry plus a deprecation note in user docs naming
+   the removal release and how to object (support channel / GitHub issue).
+2. **Remove code** (next release) — UI entry points, views, URLs, forms,
+   business logic. Models/columns and dormant config rows stay (phase 1 of
+   the two-phase drop).
+3. **Schema drop** (a following release) — data migration cleans up dormant
+   config rows, then drops columns/tables.
+4. **Close out** — remove user docs pages (or leave a tombstone note pointing
+   at the replacement); close the tracking issue.
 
 See [Data removal and versioned models](#data-removal-and-versioned-models)
 before writing the removal PRs.
@@ -92,30 +73,21 @@ before writing the removal PRs.
 
 The removal date is **announcement + 60 days** minimum.
 
-```markdown
-- [ ] Stage 0 audit attached to this issue; affected teams listed
-- [ ] Day 0 — announce on all channels (see Comms levers):
-    - [ ] changelog entry + user docs deprecation note
-    - [ ] banner (scoped location if one exists, else global) with date range
-    - [ ] in-product notification to affected teams
-    - [ ] email to admins of affected teams listing *their* configs and the
-          removal date
-    - [ ] in-feature warning on the feature's own pages with removal date and
-          migration path
-- [ ] Same release — read-only mode (see Read-only enforcement)
-- [ ] Deprecation window (60 days): support migration; re-run the audit
-      periodically and note progress here
-- [ ] Removal checkpoint (date passed): re-run the audit. Triage each
-      remaining team: contacted/migrated, or breakage explicitly accepted by
-      the feature owner. Record the outcome here. Do not proceed until every
-      remaining team is accounted for.
-- [ ] Remove code: UI entry points, views, URLs, forms, business logic.
-      Models/columns stay.
-- [ ] Schema drop (a following release): data migration, then drop
-      columns/tables. Migration is backwards-compatible.
-- [ ] Close out: remove user docs pages (or leave a tombstone note); close
-      this issue.
-```
+1. **Announce** (day 0) — all channels at once (see
+   [Comms levers](#comms-levers)): changelog entry + user docs deprecation
+   note, a banner, an in-product notification to affected teams, email to
+   admins of affected teams listing *their* configs and the removal date, and
+   an in-feature warning on the feature's own pages with the removal date and
+   migration path.
+2. **Read-only mode** (same release as the announcement) — see
+   [Read-only enforcement](#read-only-enforcement).
+3. **Deprecation window** (60 days) — support migration; re-run the audit
+   periodically and note progress on the tracking issue.
+4. **Removal checkpoint** (date passed) — re-run the audit, then triage each
+   remaining team: contacted/migrated, or breakage explicitly accepted by the
+   feature owner, recorded on the tracking issue. Do not proceed until every
+   remaining team is accounted for.
+5. **Remove + schema drop** — same as fast path steps 2–4.
 
 The removal date is a **checkpoint, not a hard cutoff** — removal requires
 both the date passing *and* remaining usage being triaged — but a single
@@ -166,8 +138,7 @@ recoverable by reverting the PR. For versioned models (see
   version rows**. This is accepted data loss: the audit log
   (`django-field-audit`) retains the history.
 - Then drop the columns/tables.
-- Confirm the migration is backwards-compatible (PR template checkbox) and
-  audit `on_delete` behaviour before dropping FKs so cascades don't reach
+- Audit `on_delete` behaviour before dropping FKs so cascades don't reach
   version rows unexpectedly. See [Data Migrations](custom_migrations.md).
 
 ## HTTP surfaces
@@ -178,39 +149,25 @@ its users are external callers who never see in-app comms.
 **Audit** — 90-day request counts from logs/metrics, attributed to teams where
 possible (URL params, auth).
 
-**During the window** — responses gain deprecation headers:
+**During the window** — responses gain RFC 8594 deprecation headers via
+`apps.utils.decorators.sunset`:
 
 ```python
-import functools
-from datetime import datetime
+from datetime import UTC, datetime
 
-from django.utils.http import http_date
+from apps.utils.decorators import sunset
 
 
-def sunset(sunset_at: datetime, successor_url: str | None = None):
-    """Mark a view as deprecated with RFC 8594 Sunset / Deprecation headers."""
-
-    def decorator(view_func):
-        @functools.wraps(view_func)
-        def wrapper(request, *args, **kwargs):
-            response = view_func(request, *args, **kwargs)
-            response.headers["Deprecation"] = "true"
-            response.headers["Sunset"] = http_date(sunset_at.timestamp())
-            if successor_url:
-                response.headers["Link"] = f'<{successor_url}>; rel="successor-version"'
-            return response
-
-        return wrapper
-
-    return decorator
+@sunset(datetime(2026, 9, 1, tzinfo=UTC), successor_url="https://chatbots.dimagi.com/...")
+def old_view(request, ...):
+    ...
 ```
 
-This lives as a snippet here until a second consumer exists — copy it next to
-the view being deprecated. Note: on public views, `@waf_allow` must remain the
-first decorator (enforced by a pre-commit hook).
-
-If a successor URL exists, advertise it in the `Link` header (above) and in
-the endpoint's docs.
+This adds `Deprecation: true` and `Sunset: <http-date>` headers, plus a
+`Link: <successor_url>; rel="successor-version"` header when a successor URL
+is given (also mention the successor in the endpoint's docs). Note: on public
+views, `@waf_allow` must remain the first decorator (enforced by a pre-commit
+hook).
 
 **At removal** — the URL returns **`410 Gone`** with a short body pointing at
 the replacement; never a silent 404:

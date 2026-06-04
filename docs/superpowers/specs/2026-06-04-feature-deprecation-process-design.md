@@ -140,8 +140,8 @@ don't reach version rows unexpectedly. The section points at
 - **Audit from logs**: 90-day request counts; attribute to teams via URL
   params/auth where possible.
 - **During the window**: responses gain `Deprecation: true` and
-  `Sunset: <http-date>` headers via a small decorator/mixin (snippet included
-  in the guide). If a successor URL exists, advertise it with a
+  `Sunset: <http-date>` headers via the `apps.utils.decorators.sunset`
+  decorator. If a successor URL exists, advertise it with a
   `Link: <...>; rel="successor-version"` header and in docs.
 - **At removal**: the endpoint returns **`410 Gone`** with a short HTML/JSON
   body pointing at the replacement — never a silent 404. Where the replacement
@@ -155,7 +155,7 @@ don't reach version rows unexpectedly. The section points at
 
 - Executing the surveys or `/embed` deprecations (separate work; each will
   instantiate a tracking issue from the new guide).
-- New tooling or shared code (e.g. a reusable sunset-header decorator lives as
-  a snippet in the guide until a second consumer exists).
+- New tooling beyond the `sunset` decorator in `apps/utils/decorators.py`
+  (added on review feedback; originally planned as a guide snippet).
 - Deprecation policy for the public API as a whole (ADR-0022 covers API
   versioning; this guide only adds the per-endpoint sunset mechanics).
