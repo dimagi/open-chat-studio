@@ -29,8 +29,8 @@ class ResourceKind(enum.StrEnum):
 @dataclasses.dataclass(frozen=True)
 class ResourceField:
     """One inspect payload key: the node-param field name(s) it consumes, the resource kind it
-    loads, and whether it renders a list. Rich enough to model composites (``llm`` consumes two
-    fields) and multi-source keys (``voice``)."""
+    loads, and whether it renders a list. Rich enough to model composites like ``llm``, which
+    consumes two fields."""
 
     consumes: frozenset[str]
     kind: ResourceKind
@@ -42,7 +42,7 @@ RESOURCE_FIELDS: dict[str, ResourceField] = {
     "llm": ResourceField(
         frozenset({"llm_provider_id", "llm_provider_model_id"}), ResourceKind.LLM_PROVIDER_MODEL, False
     ),
-    "voice": ResourceField(frozenset({"voice_provider_id", "synthetic_voice_id"}), ResourceKind.SYNTHETIC_VOICE, False),
+    "voice": ResourceField(frozenset({"synthetic_voice_id"}), ResourceKind.SYNTHETIC_VOICE, False),
     "source_material": ResourceField(frozenset({"source_material_id"}), ResourceKind.SOURCE_MATERIAL, False),
     "assistant": ResourceField(frozenset({"assistant_id"}), ResourceKind.ASSISTANT, False),
     "custom_actions": ResourceField(frozenset({"custom_actions"}), ResourceKind.CUSTOM_ACTION, True),
@@ -51,15 +51,7 @@ RESOURCE_FIELDS: dict[str, ResourceField] = {
 }
 
 # The payload keys, in render order — used by the node serializer's ``to_representation``.
-RESOURCE_KEYS: tuple[str, ...] = (
-    "llm",
-    "voice",
-    "source_material",
-    "assistant",
-    "custom_actions",
-    "media_collection",
-    "indexed_collections",
-)
+RESOURCE_KEYS = tuple(RESOURCE_FIELDS)
 
 
 def node_class_for(node_type: str):
@@ -70,8 +62,9 @@ def node_class_for(node_type: str):
 def declared_resource_keys(node_class) -> list[str]:
     """Payload keys whose source field(s) the node type declares.
 
-    Declared iff ANY consumed field is present (models the multi-source ``voice`` case). Returns
-    keys in ``RESOURCE_FIELDS`` order. ``node_class`` may be ``None`` (unknown type)."""
+    Declared if ANY consumed field is present (e.g. ``llm`` is declared off either of its two
+    fields). Returns keys in ``RESOURCE_FIELDS`` order. ``node_class`` may be ``None`` (unknown
+    type)."""
     fields = set(node_class.model_fields) if node_class is not None else set()
     return [key for key, rf in RESOURCE_FIELDS.items() if rf.consumes & fields]
 

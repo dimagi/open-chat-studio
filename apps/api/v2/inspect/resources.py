@@ -12,12 +12,19 @@ from typing import assert_never
 
 from django.db.models import Q
 
-from apps.api.v2.inspect.nodes import RESOURCE_FIELDS, ResourceKind, declared_resource_keys, node_class_for
+from apps.api.v2.inspect.nodes import (
+    RESOURCE_FIELDS,
+    ResourceField,
+    ResourceKind,
+    declared_resource_keys,
+    node_class_for,
+)
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
 from apps.events.models import EventActionType
 from apps.experiments.models import SourceMaterial, SyntheticVoice
+from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 
 
@@ -44,32 +51,32 @@ def parse_custom_actions(value) -> list[tuple[int, list[str]]]:
     return list(selections.items())
 
 
-def _refs_for_key(key: str, rf, params: dict):
+def _refs_for_key(key: str, rf: ResourceField, params: dict):
     """Expand one declared payload key into its ``(ResourceKind, raw_id)`` refs. Splitting this out
     keeps ``iter_resource_refs`` a thin driver over the declared keys (one dispatch per key)."""
     if key == "llm":
         yield ResourceKind.LLM_PROVIDER, params.get("llm_provider_id")
         yield ResourceKind.LLM_PROVIDER_MODEL, params.get("llm_provider_model_id")
-    elif key == "voice":
-        yield ResourceKind.SYNTHETIC_VOICE, params.get("synthetic_voice_id")
     elif key == "custom_actions":
+        # Values are ``"{action_id}:{operation_id}"`` strings, not bare ids — parse before yielding.
         for action_id, _operation_ids in parse_custom_actions(params.get("custom_actions")):
             yield ResourceKind.CUSTOM_ACTION, action_id
-    elif rf.is_list:
-        field = next(iter(rf.consumes))
-        for raw_id in params.get(field) or []:
-            yield rf.kind, raw_id
     else:
-        field = next(iter(rf.consumes))
-        yield rf.kind, params.get(field)
+        # Every consumed field maps to ``rf.kind``; read each one from params.
+        for field in rf.consumes:
+            if rf.is_list:
+                for raw_id in params.get(field) or []:
+                    yield rf.kind, raw_id
+            else:
+                yield rf.kind, params.get(field)
 
 
 def iter_resource_refs(node_type: str, params: dict):
     """Yield ``(ResourceKind, raw_id)`` for every resource id a node of ``node_type`` references.
 
-    The single id-collection traversal feeding ``ResourceFetcher``. Composites (``llm``),
-    multi-source keys (``voice``) and list/parsed keys are handled per payload key; everything is
-    driven by which keys the node type declares (``declared_resource_keys``)."""
+    The single id-collection traversal feeding ``ResourceFetcher``. The composite ``llm`` key and
+    the parsed ``custom_actions`` key are special-cased; every other key is driven by its
+    ``rf.consumes``/``rf.kind``. Which keys apply is set by ``declared_resource_keys``."""
     params = params or {}
     for key in declared_resource_keys(node_class_for(node_type)):
         yield from _refs_for_key(key, RESOURCE_FIELDS[key], params)
@@ -107,9 +114,6 @@ class ResourceFetcher:
         pipeline_id = _as_int((action.params or {}).get("pipeline_id"))
         if not pipeline_id or pipeline_id in self._pipelines:
             return
-        # Imported here to avoid an import cycle at module load (pipelines -> api -> pipelines).
-        from apps.pipelines.models import Pipeline  # noqa: PLC0415
-
         pipeline = Pipeline.objects.filter(team=self.team, id=pipeline_id).prefetch_related("node_set").first()
         if pipeline is None:
             return

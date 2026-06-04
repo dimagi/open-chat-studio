@@ -44,8 +44,6 @@ def test_declared_resource_keys_of_none_is_empty():
 
 
 def test_voice_declared_when_only_synthetic_voice_field_present():
-    """The multi-source ``voice`` key is declared if ANY of its consumed fields is on the node
-    type — here only ``synthetic_voice_id`` exists, ``voice_provider_id`` never does."""
     stub = SimpleNamespace(model_fields={"synthetic_voice_id": object()})
     assert "voice" in declared_resource_keys(stub)
 
