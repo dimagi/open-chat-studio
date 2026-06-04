@@ -1,13 +1,13 @@
-# ADR-0033: Read-only mode gates features during the deprecation window
+# ADR-0035: Read-only mode gates features during the deprecation window
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-06-04</p>
-<p class="adr-meta">Extends: <a href="0032-tiered-feature-deprecation-by-usage-audit.md">ADR-0032</a></p>
+<p class="adr-meta">Extends: <a href="0034-tiered-feature-deprecation-by-usage-audit.md">ADR-0034</a></p>
 
 ## Context
 
-The full deprecation lifecycle (ADR-0032) needs a mechanism to stop new adoption of a feature during its 60-day wind-down without breaking the teams still using it. The platform has team-scoped waffle flags that could grandfather existing users, but flags carry their own lifecycle (registration, per-team enablement, retirement).
+The full deprecation lifecycle (ADR-0034) needs a mechanism to stop new adoption of a feature during its 60-day wind-down without breaking the teams still using it. The platform has team-scoped waffle flags that could grandfather existing users, but flags carry their own lifecycle (registration, per-team enablement, retirement).
 
 ## Decision
 

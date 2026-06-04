@@ -1,13 +1,13 @@
-# ADR-0034: Sunset headers and 410 Gone for retired HTTP surfaces
+# ADR-0036: Sunset headers and 410 Gone for retired HTTP surfaces
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-06-04</p>
-<p class="adr-meta">Extends: <a href="0032-tiered-feature-deprecation-by-usage-audit.md">ADR-0032</a>, <a href="0022-url-path-api-versioning.md">ADR-0022</a></p>
+<p class="adr-meta">Extends: <a href="0034-tiered-feature-deprecation-by-usage-audit.md">ADR-0034</a>, <a href="0022-url-path-api-versioning.md">ADR-0022</a></p>
 
 ## Context
 
-Deprecating a public endpoint, API route, or webhook (first case: the iframe `/embed` public-chat endpoint) differs from deprecating an in-app feature (ADR-0032): the users are external callers who never see banners, notifications, or emails. They need machine-readable warning before removal and an explanation after it.
+Deprecating a public endpoint, API route, or webhook (first case: the iframe `/embed` public-chat endpoint) differs from deprecating an in-app feature (ADR-0034): the users are external callers who never see banners, notifications, or emails. They need machine-readable warning before removal and an explanation after it.
 
 ## Decision
 

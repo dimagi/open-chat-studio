@@ -1,4 +1,4 @@
-# ADR-0032: Tiered feature deprecation gated by a usage audit
+# ADR-0034: Tiered feature deprecation gated by a usage audit
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
@@ -14,7 +14,7 @@ We will run every feature deprecation through a usage audit that routes it onto 
 
 - **Stage 0 — usage audit**: measure *configured* (teams with the feature set up) and *active* (usage events) over a 90-day lookback. A feature with zero active usage is **unused** — configured-but-dormant counts as unused, since dormant config is data to clean up, not usage to migrate.
 - **Fast path (unused)**: announce in the changelog/docs, then remove code in the next release. No grace period beyond the release gap.
-- **Full lifecycle (used)**: announce on all comms channels with a removal date at least 60 days out, put the feature into read-only mode (ADR-0033), and support migration during the window. Removal requires **both** the date passing **and** every remaining active team triaged — contacted/migrated or breakage explicitly accepted by the feature owner. The date is a checkpoint, not a hard cutoff.
+- **Full lifecycle (used)**: announce on all comms channels with a removal date at least 60 days out, put the feature into read-only mode (ADR-0035), and support migration during the window. Removal requires **both** the date passing **and** every remaining active team triaged — contacted/migrated or breakage explicitly accepted by the feature owner. The date is a checkpoint, not a hard cutoff.
 - **Two-phase drop (both paths)**: release N removes UI and business logic but keeps schema; a later release deletes config rows — including on historical version rows — then drops columns/tables. The field-audit log retains the removed values.
 
 ## Consequences
