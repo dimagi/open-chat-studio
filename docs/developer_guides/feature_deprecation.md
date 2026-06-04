@@ -158,7 +158,7 @@ from datetime import UTC, datetime
 from apps.utils.decorators import sunset
 
 
-@sunset(datetime(2026, 9, 1, tzinfo=UTC), successor_url="https://chatbots.dimagi.com/...")
+@sunset(datetime(2026, 9, 1, tzinfo=UTC), successor_url="https://openchatstudio.com/...")
 def old_view(request, ...):
     ...
 ```
