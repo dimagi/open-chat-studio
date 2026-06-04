@@ -111,6 +111,7 @@ nav:
       - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
+      - Feature Deprecation: developer_guides/feature_deprecation.md
       - Managing LLM Models: developer_guides/managing_models.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
