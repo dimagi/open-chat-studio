@@ -1498,19 +1498,23 @@ components:
       type: object
       description: |-
         Denormalized, read-only projection of a chatbot's full configuration (ADR-0024). The
-        response root *is* the chatbot — there is no wrapper key. Instance:
-        :class:`apps.api.v2.inspect.builder.InspectContext`.
+        response root *is* the chatbot — there is no wrapper key. Instance: the resolved
+        :class:`~apps.experiments.models.Experiment`; requires a ``fetcher`` in context.
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+          maxLength: 128
         description:
           type: string
           nullable: true
+          title: A longer description of the experiment.
         version_number:
           type: integer
+          maximum: 2147483647
+          minimum: 0
         is_unreleased:
           type: boolean
         is_published_version:
@@ -1537,6 +1541,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/FlattenedVoice'
           nullable: true
+          readOnly: true
         trace_provider:
           allOf:
           - $ref: '#/components/schemas/Provider'
@@ -1545,16 +1550,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Channel'
+          readOnly: true
         pipeline:
           allOf:
           - $ref: '#/components/schemas/InspectPipeline'
           nullable: true
+          readOnly: true
         events:
           $ref: '#/components/schemas/InspectEvents'
       required:
       - channels
       - consent_form
-      - description
       - events
       - id
       - is_published_version
@@ -1567,7 +1573,6 @@ components:
       - team_slug
       - trace_provider
       - version_description
-      - version_number
       - voice
     ChatbotVersion:
       type: object
@@ -1967,15 +1972,20 @@ components:
       - name
     InspectEvents:
       type: object
+      description: |-
+        Static + timeout triggers (archived excluded). ``source="*"`` at the parent — the instance
+        is the Experiment.
       properties:
         static_triggers:
           type: array
           items:
             $ref: '#/components/schemas/InspectStaticTrigger'
+          readOnly: true
         timeout_triggers:
           type: array
           items:
             $ref: '#/components/schemas/InspectTimeoutTrigger'
+          readOnly: true
       required:
       - static_triggers
       - timeout_triggers
@@ -2059,7 +2069,15 @@ components:
       - type
     InspectNode:
       type: object
-      description: One pipeline node with its resource references inlined (ADR-0025).
+      description: |-
+        One pipeline node with its declared resource references inlined.
+
+        The seven resource keys are declared as fields so the OpenAPI schema documents them, but only
+        the keys the node *type* declares are rendered (decision #5): a ``StartNode`` carries no
+        resource keys, an ``LLMResponseWithPrompt`` always carries all six of its own, with ``null``
+        (single) / ``[]`` (list) where unset. Each ``get_*`` returns ``_ABSENT`` for a key its node
+        type doesn't declare, and ``to_representation`` drops those — so the declared-vs-absent rule
+        lives next to each field's fetch, not in a central key list.
       properties:
         node_id:
           type: string
@@ -2070,57 +2088,88 @@ components:
         params:
           type: object
           additionalProperties: {}
+          readOnly: true
           description: The node's non-resource configuration, verbatim; keys vary
             by node type.
         llm:
-          $ref: '#/components/schemas/FlattenedLlm'
+          allOf:
+          - $ref: '#/components/schemas/FlattenedLlm'
+          nullable: true
+          readOnly: true
         voice:
-          $ref: '#/components/schemas/FlattenedVoice'
+          allOf:
+          - $ref: '#/components/schemas/FlattenedVoice'
+          nullable: true
+          readOnly: true
         source_material:
-          $ref: '#/components/schemas/SourceMaterial'
+          allOf:
+          - $ref: '#/components/schemas/SourceMaterial'
+          nullable: true
+          readOnly: true
         assistant:
-          $ref: '#/components/schemas/Assistant'
+          allOf:
+          - $ref: '#/components/schemas/Assistant'
+          nullable: true
+          readOnly: true
         custom_actions:
           type: array
           items:
             $ref: '#/components/schemas/CustomAction'
+          readOnly: true
         media_collection:
-          $ref: '#/components/schemas/MediaCollection'
+          allOf:
+          - $ref: '#/components/schemas/MediaCollection'
+          nullable: true
+          readOnly: true
         indexed_collections:
           type: array
           items:
             $ref: '#/components/schemas/IndexedCollection'
+          readOnly: true
       required:
+      - assistant
+      - custom_actions
+      - indexed_collections
       - label
+      - llm
+      - media_collection
       - node_id
       - params
+      - source_material
       - type
+      - voice
     InspectPipeline:
       type: object
       properties:
         id:
           type: integer
+          readOnly: true
         name:
           type: string
+          maxLength: 128
         version_number:
           type: integer
+          maximum: 2147483647
+          minimum: 0
         graph:
-          $ref: '#/components/schemas/InspectGraph'
+          allOf:
+          - $ref: '#/components/schemas/InspectGraph'
+          readOnly: true
         nodes:
           type: array
           items:
             $ref: '#/components/schemas/InspectNode'
+          readOnly: true
       required:
       - graph
       - id
       - name
       - nodes
-      - version_number
     InspectSettings:
       type: object
       description: |-
-        Non-secret Experiment fields surfaced under ``settings``. Sourced straight off the
-        experiment instance.
+        Non-secret Experiment fields surfaced under ``settings``, sourced straight off the
+        experiment instance (``source="*"`` at the parent).
       properties:
         seed_message:
           type: string
@@ -2154,8 +2203,9 @@ components:
       properties:
         id:
           type: integer
+          readOnly: true
         type:
-          type: string
+          $ref: '#/components/schemas/TypeEnum'
         is_active:
           type: boolean
         action:
@@ -2163,19 +2213,24 @@ components:
       required:
       - action
       - id
-      - is_active
       - type
     InspectTimeoutTrigger:
       type: object
       properties:
         id:
           type: integer
+          readOnly: true
         delay_seconds:
           type: integer
         total_num_triggers:
           type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: The number of times to trigger the action
         trigger_from_first_message:
           type: boolean
+          description: When enabled, the timeout delay is calculated from the first
+            message in the conversation rather than the most recent.
         is_active:
           type: boolean
         action:
@@ -2184,25 +2239,26 @@ components:
       - action
       - delay_seconds
       - id
-      - is_active
-      - total_num_triggers
-      - trigger_from_first_message
     InspectTriggerAction:
       type: object
       description: |-
         An event trigger's action. ``pipeline`` is present only for ``pipeline_start`` actions
-        whose (team-scoped) pipeline resolves.
+        whose (team-scoped) pipeline resolves; it is rendered from the fetcher's embedded-pipeline
+        cache so it costs no extra query.
       properties:
         type:
           type: string
         params:
           type: object
           additionalProperties: {}
-          description: Action parameters; keys vary by action type.
+          readOnly: true
         pipeline:
-          $ref: '#/components/schemas/InspectPipeline'
+          allOf:
+          - $ref: '#/components/schemas/InspectPipeline'
+          readOnly: true
       required:
       - params
+      - pipeline
       - type
     MediaCollection:
       type: object
@@ -2658,6 +2714,32 @@ components:
       - session_id
       - team
       - url
+    TypeEnum:
+      enum:
+      - conversation_end
+      - conversation_ended_by_user
+      - conversation_ended_by_bot
+      - conversation_ended_via_api
+      - conversation_ended_by_event
+      - conversation_ended_manually
+      - last_timeout
+      - conversation_start
+      - new_human_message
+      - new_bot_message
+      - participant_joined
+      type: string
+      description: |-
+        * `conversation_end` - The conversation has ended (by any means)
+        * `conversation_ended_by_user` - The conversation is ended by the participant
+        * `conversation_ended_by_bot` - The conversation is ended by the bot
+        * `conversation_ended_via_api` - The conversation is ended via the API
+        * `conversation_ended_by_event` - The conversation is ended by an event
+        * `conversation_ended_manually` - The conversation is manually ended by an admin
+        * `last_timeout` - The last timeout occurs
+        * `conversation_start` - A new conversation is started
+        * `new_human_message` - A new human message is received
+        * `new_bot_message` - A new bot message is received
+        * `participant_joined` - A new participant joined the experiment
     UploadedFile:
       type: object
       properties:
