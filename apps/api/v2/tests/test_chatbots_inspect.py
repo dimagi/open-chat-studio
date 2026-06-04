@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -5,8 +6,12 @@ from django.urls import reverse
 from field_audit.models import AuditAction
 from rest_framework.test import APIClient
 
+from apps.api.v2.inspect.resources import ResourceFetcher
+from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
+from apps.api.v2.inspect.versioning import prefetch_inspect_target, resolve_inspect_version
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
+from apps.experiments.models import Experiment
 from apps.files.models import File
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -756,3 +761,107 @@ def test_full_response_body():
             ],
         },
     }
+
+
+# ── Embedded pipeline (pipeline_start) + context propagation (review issue #6) ──────────────────
+@pytest.mark.django_db()
+def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
+    """A pipeline_start trigger embeds a second pipeline whose node resolves a resource through the
+    fetcher — proving context (the fetcher) propagates into the embedded InspectPipelineSerializer."""
+    team = inspect_bot.experiment.team
+    assistant = OpenAiAssistantFactory.create(team=team, name="Embedded Helper", assistant_id="asst_embed")
+    embedded = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
+    NodeFactory.create(
+        pipeline=embedded,
+        flow_id="emb-1",
+        type="AssistantNode",
+        label="Embedded",
+        params={"assistant_id": str(assistant.id)},
+    )
+    StaticTriggerFactory.create(
+        experiment=inspect_bot.experiment,
+        type="conversation_start",
+        action=EventActionFactory.create(
+            action_type=EventActionType.PIPELINE_START, params={"pipeline_id": str(embedded.id)}
+        ),
+    )
+
+    payload = _get(inspect_bot)
+
+    action = next(t["action"] for t in payload["events"]["static_triggers"] if t["action"]["type"] == "pipeline_start")
+    assert "pipeline_id" not in action["params"]
+    embedded_node = next(n for n in action["pipeline"]["nodes"] if n["label"] == "Embedded")
+    assert embedded_node["assistant"]["assistant_id"] == "asst_embed"
+
+
+# ── Query-count guard (review issues #5, #12, #16) ───────────────────────────────────────────────
+def _adversarial_bot():
+    """Multi-node pipeline + a pipeline_start trigger embedding a SECOND resource-bearing pipeline +
+    a resource (the LLM provider/model) shared across two nodes (proves batch dedup)."""
+    team = TeamWithUsersFactory.create()
+    provider = LlmProviderFactory.create(team=team, name="Shared", type="openai")
+    model = LlmProviderModelFactory.create(team=team, name="gpt-4o", deprecated=False)
+    source = SourceMaterialFactory.create(team=team)
+    assistant = OpenAiAssistantFactory.create(team=team)
+
+    pipeline = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
+    NodeFactory.create(
+        pipeline=pipeline,
+        flow_id="n1",
+        type="LLMResponseWithPrompt",
+        label="A",
+        params={
+            "llm_provider_id": str(provider.id),
+            "llm_provider_model_id": str(model.id),
+            "source_material_id": str(source.id),
+        },
+    )
+    NodeFactory.create(
+        pipeline=pipeline,
+        flow_id="n2",
+        type="RouterNode",
+        label="B",
+        params={"llm_provider_id": str(provider.id), "llm_provider_model_id": str(model.id), "keywords": ["X"]},
+    )
+    experiment = ExperimentFactory.create(team=team, pipeline=pipeline)
+
+    embedded = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
+    NodeFactory.create(
+        pipeline=embedded,
+        flow_id="e1",
+        type="AssistantNode",
+        label="Embedded",
+        params={"assistant_id": str(assistant.id)},
+    )
+    StaticTriggerFactory.create(
+        experiment=experiment,
+        type="conversation_start",
+        action=EventActionFactory.create(
+            action_type=EventActionType.PIPELINE_START, params={"pipeline_id": str(embedded.id)}
+        ),
+    )
+    return experiment
+
+
+# Empirically derived below (Step D). The SAME number must hold for every version mode, because
+# prefetch_inspect_target re-fetches the RESOLVED target with a fixed prefetch set (issue #16) and
+# the fetcher batch-loads each kind once regardless of fan-out (issues #5/#12).
+EXPECTED_RENDER_QUERIES = 13
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("version_param", [None, "default", "1"])
+def test_inspect_render_query_count_constant_across_versions(version_param, django_assert_num_queries):
+    """Given a resolved target, prefetch + fetch + full render is N+1-free and identical across
+    version modes. Version RESOLUTION queries are intentionally excluded (they legitimately differ
+    by mode); what must be constant is the render cost on the resolved target."""
+    experiment = _adversarial_bot()
+    experiment.create_new_version()  # version_number 1, published default
+    family = Experiment.objects.get(pk=experiment.pk)
+    target = resolve_inspect_version(family, version_param)
+
+    with django_assert_num_queries(EXPECTED_RENDER_QUERIES):
+        prepared = prefetch_inspect_target(target)
+        fetcher = ResourceFetcher.for_experiment(prepared)
+        data = ChatbotInspectSerializer(prepared, context={"team": prepared.team, "fetcher": fetcher}).data
+        json.dumps(data)  # force lazy rendering of every nested serializer
