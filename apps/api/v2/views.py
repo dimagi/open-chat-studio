@@ -73,9 +73,12 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     @action(detail=True, methods=["get"])
     def inspect(self, request, id=None):
         """Return a denormalized, read-only projection of the chatbot's full configuration."""
-        family = self.get_object()
         try:
-            target = resolve_inspect_version(family, request.query_params.get("version"))
+            target = resolve_inspect_version(
+                public_id=self.kwargs[self.lookup_url_kwarg],
+                version_param=request.query_params.get("version"),
+                team=request.team,
+            )
         except InspectVersionError as err:
             raise NotFound("Requested chatbot version was not found.") from err
         target = prefetch_inspect_target(target)

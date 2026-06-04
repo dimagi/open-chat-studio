@@ -8,12 +8,6 @@ N+1-free query profile.
 
 from django.db.models import Prefetch
 
-from apps.chatbots.version_resolver import (
-    NoPublishedVersion,
-    VersionNotFound,
-    VersionSelectionRule,
-    resolve_chatbot_version,
-)
 from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
 
@@ -22,21 +16,35 @@ class InspectVersionError(ValueError):
     """The requested ``?version=`` could not be resolved (unknown number / no published version)."""
 
 
-def resolve_inspect_version(family, version_param: str | None):
+def resolve_inspect_version(public_id: str, version_param: str | None, *, team):
     """Resolve the ``?version=`` query parameter to a target Experiment version.
 
     - ``None`` (omitted) -> the working (draft) family head.
     - ``"default"`` -> the default published version.
     - an integer string -> that specific version number.
+
+    Scoped to ``team`` so a ``public_id`` from another team resolves to nothing (404 at the view).
+    Each path resolves in a single query: the family head is read by ``public_id`` directly, and
+    versioned reads join through ``working_version__public_id`` rather than fetching the family first.
     """
     if version_param is None:
-        return family
-    try:
-        if version_param == "default":
-            return resolve_chatbot_version(family, VersionSelectionRule.LATEST_PUBLISHED)
-        return resolve_chatbot_version(family, VersionSelectionRule.SPECIFIC, version_number=int(version_param))
-    except (ValueError, NoPublishedVersion, VersionNotFound) as err:
-        raise InspectVersionError(str(err)) from err
+        target = Experiment.objects.filter(public_id=public_id, team=team).first()
+    elif version_param == "default":
+        target = Experiment.objects.filter(
+            working_version__public_id=public_id, team=team, is_default_version=True
+        ).first()
+    else:
+        try:
+            version_number = int(version_param)
+        except ValueError as err:
+            raise InspectVersionError(f"Invalid version: {version_param!r}") from err
+        target = Experiment.objects.filter(
+            working_version__public_id=public_id, team=team, version_number=version_number
+        ).first()
+
+    if target:
+        return target
+    raise InspectVersionError("Version not found")
 
 
 def prefetch_inspect_target(target: Experiment) -> Experiment:

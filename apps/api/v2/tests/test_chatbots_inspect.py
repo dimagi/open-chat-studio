@@ -875,7 +875,7 @@ def test_inspect_render_query_count_constant_across_versions(version_param, djan
     experiment = _adversarial_bot()
     experiment.create_new_version()  # version_number 1, published default
     family = Experiment.objects.get(pk=experiment.pk)
-    target = resolve_inspect_version(family, version_param)
+    target = resolve_inspect_version(family.public_id, version_param, team=family.team)
 
     with django_assert_num_queries(EXPECTED_RENDER_QUERIES):
         prepared = prefetch_inspect_target(target)

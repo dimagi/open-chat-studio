@@ -12,29 +12,56 @@ from apps.utils.factories.team import TeamWithUsersFactory
 @pytest.mark.django_db()
 def test_resolve_none_returns_working_family():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
-    assert resolve_inspect_version(family, None) == family
+    team = family.team
+    with CaptureQueriesContext(connection) as ctx:
+        resolved = resolve_inspect_version(family.public_id, None, team=team)
+    assert resolved == family
+    assert len(ctx) == 1
 
 
 @pytest.mark.django_db()
-def test_resolve_specific_and_default():
+def test_resolve_specific_version_returns_that_version_in_one_query():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     version = family.create_new_version()
-    assert resolve_inspect_version(family, str(version.version_number)).id == version.id
-    assert resolve_inspect_version(family, "default").id == version.id
+    team = family.team
+    with CaptureQueriesContext(connection) as ctx:
+        resolved = resolve_inspect_version(family.public_id, str(version.version_number), team=team)
+    assert resolved.id == version.id
+    assert len(ctx) == 1
+
+
+@pytest.mark.django_db()
+def test_resolve_default_version_returns_default_version_in_one_query():
+    family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    version = family.create_new_version()
+    team = family.team
+    with CaptureQueriesContext(connection) as ctx:
+        resolved = resolve_inspect_version(family.public_id, "default", team=team)
+    assert resolved.id == version.id
+    assert len(ctx) == 1
 
 
 @pytest.mark.django_db()
 def test_resolve_unknown_version_raises_inspect_version_error():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     with pytest.raises(InspectVersionError):
-        resolve_inspect_version(family, "999")
+        resolve_inspect_version(family.public_id, "999", team=family.team)
 
 
 @pytest.mark.django_db()
 def test_resolve_non_numeric_version_raises():
     family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     with pytest.raises(InspectVersionError):
-        resolve_inspect_version(family, "not-a-number")
+        resolve_inspect_version(family.public_id, "not-a-number", team=family.team)
+
+
+@pytest.mark.django_db()
+def test_resolve_other_team_public_id_raises():
+    """A public_id belonging to a different team must not resolve (404 at the view)."""
+    family = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    other_team = TeamWithUsersFactory.create()
+    with pytest.raises(InspectVersionError):
+        resolve_inspect_version(family.public_id, None, team=other_team)
 
 
 @pytest.mark.django_db()
