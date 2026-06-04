@@ -1,5 +1,5 @@
 ---
-status: active
+status: stable
 ---
 
 # Feature deprecation and removal process
