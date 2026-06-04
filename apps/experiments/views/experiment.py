@@ -52,6 +52,7 @@ from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
 )
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.decorators import (
     experiment_session_view,
     get_chat_session_access_cookie_data,
@@ -87,6 +88,7 @@ from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -111,6 +113,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @experiment_session_view()
 @require_POST
 @xframe_options_exempt
@@ -209,6 +212,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     )
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @experiment_session_view()
 @require_GET
 @xframe_options_exempt
@@ -342,11 +346,16 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     )
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @xframe_options_exempt
 @team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
-    will ALWAYS create anonymous participants."""
+    will ALWAYS create anonymous participants.
+
+    Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
+    See https://github.com/dimagi/open-chat-studio/issues/3540
+    """
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
