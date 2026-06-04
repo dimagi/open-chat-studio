@@ -5,13 +5,15 @@ usage, communicating with affected teams, gating access during the wind-down,
 and removing code and data safely.
 
 Every deprecation is tracked as a **GitHub issue** on `dimagi/open-chat-studio`.
-Create it by copying the front-matter block and the relevant checklist below.
-The issue is the single source of truth for the feature's audit results, dates,
-and stage progress.
+Create it with the **Feature deprecation** issue template
+(`.github/ISSUE_TEMPLATE/feature_deprecation.md`), which contains the
+front-matter block and both checklists — delete the tier that doesn't apply
+after the Stage 0 audit. The issue is the single source of truth for the
+feature's audit results, dates, and stage progress.
 
 ## Tracking issue front matter
 
-Copy this into the top of the tracking issue and fill it in:
+The front matter at the top of the tracking issue:
 
 ```markdown
 **Feature:** <name>
