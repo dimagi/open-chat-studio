@@ -148,3 +148,95 @@ describe('ChatSessionService.pollTask', () => {
     expect(onMessage).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ChatSessionService.fetchAllMessages', () => {
+  let service: ChatSessionService;
+
+  function historyMessage(content: string, createdAt: string) {
+    return {
+      created_at: createdAt,
+      role: 'assistant' as const,
+      content,
+      attachments: [],
+    };
+  }
+
+  beforeEach(() => {
+    service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('returns messages from a single page', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue({
+      messages: [historyMessage('a', '2026-01-01T00:00:01Z')],
+      has_more: false,
+      session_status: 'active',
+    });
+
+    const result = await service.fetchAllMessages('session-1');
+
+    expect(result.map(m => m.content)).toEqual(['a']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('session-1', undefined);
+  });
+
+  it('pages through history until has_more is false', async () => {
+    const fetchMock = jest
+      .spyOn(service, 'fetchMessages')
+      .mockResolvedValueOnce({
+        messages: [historyMessage('a', '2026-01-01T00:00:01Z'), historyMessage('b', '2026-01-01T00:00:02Z')],
+        has_more: true,
+        session_status: 'active',
+      })
+      .mockResolvedValueOnce({
+        messages: [historyMessage('c', '2026-01-01T00:00:03Z')],
+        has_more: false,
+        session_status: 'active',
+      });
+
+    const result = await service.fetchAllMessages('session-1');
+
+    expect(result.map(m => m.content)).toEqual(['a', 'b', 'c']);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'session-1', undefined);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'session-1', '2026-01-01T00:00:02Z');
+  });
+
+  it('stops paging if the server keeps reporting has_more with empty pages', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue({
+      messages: [],
+      has_more: true,
+      session_status: 'active',
+    });
+
+    const result = await service.fetchAllMessages('session-1');
+
+    expect(result).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops paging at the safety cap and warns about truncation', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const maxPages = (ChatSessionService as any).MAX_HISTORY_PAGES as number;
+    let page = 0;
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockImplementation(async () => {
+      page += 1;
+      return {
+        messages: [historyMessage(`m${page}`, `2026-01-01T00:00:${String(page).padStart(2, '0')}Z`)],
+        has_more: true,
+        session_status: 'active' as const,
+      };
+    });
+
+    const result = await service.fetchAllMessages('session-1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(maxPages);
+    expect(result).toHaveLength(maxPages);
+    expect(warnSpy).toHaveBeenCalledWith('Chat history truncated after', maxPages, 'pages');
+  });
+});

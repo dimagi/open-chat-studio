@@ -29,12 +29,12 @@
             id="public-chat-widget"
             mode="kiosk"
             chatbot-id="{{ experiment.public_id }}"
+            session-id="{{ session.external_id }}"
             api-base-url="{{ request.scheme }}://{{ request.get_host }}"
             {% if not request.user.is_anonymous %}
               user-id="{{ request.user.email }}"
               user-name="{{ request.user.get_full_name }}"
             {% endif %}
-            persistent-session="true"
           ></open-chat-studio-widget>
         </div>
       {% else %}
