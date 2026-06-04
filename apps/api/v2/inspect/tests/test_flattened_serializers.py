@@ -6,8 +6,8 @@ import pytest
 from apps.api.v2.inspect.serializers import (
     CustomActionSelection,
     CustomActionSerializer,
-    FlattenedEmbeddingSerializer,
     FlattenedLlmSerializer,
+    FlattenedModelProviderSerializer,
     FlattenedVoiceSerializer,
     IndexedCollectionSerializer,
     MediaCollectionSerializer,
@@ -82,7 +82,7 @@ def test_flattened_embedding():
     team = TeamFactory.create()
     provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai")
     model = EmbeddingProviderModelFactory.create(team=team, name="text-embedding-3-small")
-    assert FlattenedEmbeddingSerializer(ProviderModelPair(provider, model)).data == {
+    assert FlattenedModelProviderSerializer(ProviderModelPair(provider, model)).data == {
         "provider_id": provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -93,7 +93,7 @@ def test_flattened_embedding():
 @pytest.mark.django_db()
 def test_flattened_embedding_model_only_falls_back_to_model_type():
     model = EmbeddingProviderModelFactory.create(name="text-embedding-3-small")
-    data = FlattenedEmbeddingSerializer(ProviderModelPair(None, model)).data
+    data = FlattenedModelProviderSerializer(ProviderModelPair(None, model)).data
     assert data["provider_id"] is None
     assert data["type"] == model.type
     assert data["model"] == "text-embedding-3-small"

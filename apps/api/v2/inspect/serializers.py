@@ -158,7 +158,7 @@ class FlattenedProviderSerializer(serializers.Serializer):
     provider_name = serializers.CharField(source="provider.name", default=None, allow_null=True)
 
 
-class FlattenedEmbeddingSerializer(FlattenedProviderSerializer):
+class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
     """A collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair flattened into one
     object. Instance: :class:`ProviderModelPair`. Missing halves render their fields as null."""
 
@@ -167,7 +167,7 @@ class FlattenedEmbeddingSerializer(FlattenedProviderSerializer):
     model = serializers.CharField(source="model.name", default=None, allow_null=True)
 
 
-class FlattenedLlmSerializer(FlattenedEmbeddingSerializer):
+class FlattenedLlmSerializer(FlattenedModelProviderSerializer):
     """An ``(LlmProvider, LlmProviderModel)`` pair flattened into one ``llm`` object (ADR-0025)."""
 
     max_token_limit = serializers.IntegerField(source="model.max_token_limit", default=None, allow_null=True)
@@ -204,10 +204,10 @@ class IndexedCollectionSerializer(MediaCollectionSerializer):
     class Meta(MediaCollectionSerializer.Meta):
         fields = ["id", "name", "embedding", "files"]
 
-    @extend_schema_field(FlattenedEmbeddingSerializer(allow_null=True))
+    @extend_schema_field(FlattenedModelProviderSerializer(allow_null=True))
     def get_embedding(self, collection):
         pair = ProviderModelPair.from_parts(collection.llm_provider, collection.embedding_provider_model)
-        return FlattenedEmbeddingSerializer(pair).data if pair is not None else None
+        return FlattenedModelProviderSerializer(pair).data if pair is not None else None
 
 
 class ApiSchemaDigestSerializer(serializers.Serializer):

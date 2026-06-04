@@ -157,7 +157,7 @@ InspectTriggerActionSerializer
 ```
 
 The **rendering** serializers carry over essentially unchanged: `FlattenedProviderSerializer`,
-`FlattenedLlmSerializer`, `FlattenedEmbeddingSerializer`, `FlattenedVoiceSerializer`,
+`FlattenedLlmSerializer`, `FlattenedModelProviderSerializer`, `FlattenedVoiceSerializer`,
 `MediaCollectionSerializer`, `IndexedCollectionSerializer`, `CustomActionSerializer`,
 `ApiSchemaDigestSerializer`, `ProviderSerializer`, `ConsentFormSerializer`,
 `SurveySerializer`, `SourceMaterialSerializer`, `AssistantSerializer`, `FileSerializer`,
