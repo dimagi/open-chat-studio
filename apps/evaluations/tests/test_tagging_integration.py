@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
+from apps.evaluations.forms import EvaluatorTagRuleFormSet
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
@@ -345,60 +345,134 @@ class TestTransactionRollback:
         assert AppliedTag.objects.count() == 0
 
 
-# ---- EvaluatorForm schema-drift validation --------------------------------
+# ---- Formset schema-drift validation ---------------------------------------
 
 
-class TestEvaluatorFormSchemaDrift:
-    def test_rule_with_removed_field_blocks_save(self, team, message_evaluator):
-        EvaluatorTagRuleFactory.create(
+def _formset_data(rows, initial=0):
+    data = {
+        "tag_rules-TOTAL_FORMS": str(len(rows)),
+        "tag_rules-INITIAL_FORMS": str(initial),
+        "tag_rules-MIN_NUM_FORMS": "0",
+        "tag_rules-MAX_NUM_FORMS": "1000",
+    }
+    for i, row in enumerate(rows):
+        for key, value in row.items():
+            data[f"tag_rules-{i}-{key}"] = value
+    return data
+
+
+NEW_FIELD_SCHEMA = {
+    "new_field": {
+        "type": "choice",
+        "description": "d",
+        "choices": ["negative", "positive"],
+    }
+}
+
+
+class TestFormsetSchemaDrift:
+    """Schema-drift validation lives on the tag-rule formset.
+
+    Rows present in the POST are validated per-row against the (new) output_schema;
+    DB rules absent from the POST entirely (stale tab, concurrent edit) are caught
+    by the formset-level clean().
+    """
+
+    def _rule_row(self, rule, **overrides):
+        row = {
+            "id": str(rule.pk),
+            "tag_name": rule.tag.name,
+            "field_name": rule.field_name,
+            "condition_type": rule.condition_type,
+            "condition_value_single": rule.condition_value.get("value", ""),
+        }
+        row.update(overrides)
+        return row
+
+    def test_row_referencing_removed_field_blocks(self, team, message_evaluator):
+        rule = EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="sentiment")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([self._rule_row(rule)], initial=1),
+            instance=message_evaluator,
             team=team,
-            evaluator=message_evaluator,
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
+            # New schema drops "sentiment"
+            output_schema={"score": {"type": "int", "description": "d"}},
         )
-        # New output_schema drops "sentiment"
-        new_params = {
-            "llm_prompt": "prompt",
-            "llm_provider_id": 1,
-            "llm_provider_model_id": 1,
-            "output_schema": {"score": {"type": "int", "description": "d"}},
-        }
-        form_data = {
-            "name": message_evaluator.name,
-            "type": "LlmEvaluator",
-            "params": new_params,
-            "evaluation_mode": message_evaluator.evaluation_mode,
-        }
-        form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
-        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
-            assert not form.is_valid()
-        assert any("sentiment" in str(e) for e in form.errors.get("__all__", []))
+        assert not formset.is_valid()
+        assert any("sentiment" in str(e) for e in formset.forms[0].errors.values())
 
-    def test_rule_with_incompatible_type_blocks_save(self, team, message_evaluator):
-        EvaluatorTagRuleFactory.create(
+    def test_row_with_incompatible_condition_blocks(self, team, message_evaluator):
+        rule = EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="sentiment")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([self._rule_row(rule)], initial=1),
+            instance=message_evaluator,
             team=team,
-            evaluator=message_evaluator,
-            field_name="sentiment",
-            condition_type=ConditionType.EQUALS,
-            condition_value={"value": "negative"},
+            # sentiment is now an int field; equals "negative" no longer applies
+            output_schema={"sentiment": {"type": "int", "description": "d"}},
         )
-        # sentiment is now an int field; equals no longer applies
-        new_params = {
-            "llm_prompt": "prompt",
-            "llm_provider_id": 1,
-            "llm_provider_model_id": 1,
-            "output_schema": {"sentiment": {"type": "int", "description": "d"}},
-        }
-        form_data = {
-            "name": message_evaluator.name,
-            "type": "LlmEvaluator",
-            "params": new_params,
-            "evaluation_mode": message_evaluator.evaluation_mode,
-        }
-        form = EvaluatorForm(team=team, data=form_data, instance=message_evaluator)
-        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
-            assert not form.is_valid()
+        assert not formset.is_valid()
+
+    def test_renaming_field_and_updating_rule_in_same_submit_succeeds(self, team, message_evaluator):
+        """Renaming an output field and updating the tag rule's field_name in the same POST
+        should not raise a false schema-drift validation error."""
+        rule = EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="old_field")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([self._rule_row(rule, field_name="new_field")], initial=1),
+            instance=message_evaluator,
+            team=team,
+            output_schema=NEW_FIELD_SCHEMA,
+        )
+        assert formset.is_valid(), formset.errors
+
+    def test_renaming_rule_to_nonexistent_field_blocks(self, team, message_evaluator):
+        rule = EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="old_field")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([self._rule_row(rule, field_name="completely_wrong_field")], initial=1),
+            instance=message_evaluator,
+            team=team,
+            output_schema=NEW_FIELD_SCHEMA,
+        )
+        assert not formset.is_valid()
+
+    def test_deleting_incompatible_rule_in_same_submit_succeeds(self, team, message_evaluator):
+        """Deleting a stale rule together with the schema change should work in one trip."""
+        rule = EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="old_field")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([self._rule_row(rule, DELETE="on")], initial=1),
+            instance=message_evaluator,
+            team=team,
+            output_schema=NEW_FIELD_SCHEMA,
+        )
+        assert formset.is_valid(), formset.errors
+
+    def test_db_rule_absent_from_post_and_incompatible_blocks(self, team, message_evaluator):
+        """A rule that exists in the DB but isn't in the POST at all (stale tab,
+        concurrent edit) must still block an incompatible schema change."""
+        EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="sentiment")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([]),
+            instance=message_evaluator,
+            team=team,
+            output_schema={"score": {"type": "int", "description": "d"}},
+        )
+        assert not formset.is_valid()
+        assert any("sentiment" in str(e) for e in formset.non_form_errors())
+
+    def test_db_rule_absent_from_post_but_compatible_passes(self, team, message_evaluator):
+        EvaluatorTagRuleFactory.create(team=team, evaluator=message_evaluator, field_name="sentiment")
+        formset = EvaluatorTagRuleFormSet(
+            data=_formset_data([]),
+            instance=message_evaluator,
+            team=team,
+            output_schema={
+                "sentiment": {
+                    "type": "choice",
+                    "description": "d",
+                    "choices": ["negative", "positive"],
+                }
+            },
+        )
+        assert formset.is_valid(), formset.non_form_errors()
 
 
 # ---- Tag-rule formset --------------------------------------------------------
