@@ -8,8 +8,10 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import override_settings
 from django.urls import reverse
+from django.utils.http import http_date
 
 from apps.chat.channels import WebChannel
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -275,6 +277,22 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
     )
     client.post(url, data=post_data)
     assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
+def test_start_session_public_embed_returns_deprecation_headers(client):
+    """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    url = reverse(
+        "experiments:start_session_public_embed",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+    )
+    response = client.get(url)
+    assert response.status_code == 302
+    assert response.headers["Deprecation"] == "true"
+    assert response.headers["Sunset"] == http_date(EMBED_FLOW_SUNSET_AT.timestamp())
+    assert response.headers["Link"] == f'<{EMBED_FLOW_SUCCESSOR_URL}>; rel="successor-version"'
 
 
 @pytest.mark.django_db()

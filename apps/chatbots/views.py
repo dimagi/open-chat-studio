@@ -31,6 +31,7 @@ from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -62,6 +63,7 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
@@ -726,11 +728,16 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
     return _chatbot_chat_ui(request)
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @xframe_options_exempt
 @team_required
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
-    will ALWAYS create anonymous participants."""
+    will ALWAYS create anonymous participants.
+
+    Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
+    See https://github.com/dimagi/open-chat-studio/issues/3540
+    """
     try:
         chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
@@ -751,6 +758,7 @@ def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: u
     return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @xframe_options_exempt
 def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
