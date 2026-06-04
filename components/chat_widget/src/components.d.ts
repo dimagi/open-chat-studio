@@ -65,7 +65,7 @@ export namespace Components {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload. Ignored when `sessionId` is provided.
           * @default true
          */
         "persistentSession": boolean;
@@ -188,7 +188,7 @@ declare namespace LocalJSX {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+          * Whether to persist session data to local storage to allow resuming previous conversations after page reload. Ignored when `sessionId` is provided.
           * @default true
          */
         "persistentSession"?: boolean;

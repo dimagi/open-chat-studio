@@ -219,4 +219,24 @@ describe('ChatSessionService.fetchAllMessages', () => {
     expect(result).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('stops paging at the safety cap and warns about truncation', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const maxPages = (ChatSessionService as any).MAX_HISTORY_PAGES as number;
+    let page = 0;
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockImplementation(async () => {
+      page += 1;
+      return {
+        messages: [historyMessage(`m${page}`, `2026-01-01T00:00:${String(page).padStart(2, '0')}Z`)],
+        has_more: true,
+        session_status: 'active' as const,
+      };
+    });
+
+    const result = await service.fetchAllMessages('session-1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(maxPages);
+    expect(result).toHaveLength(maxPages);
+    expect(warnSpy).toHaveBeenCalledWith('Chat history truncated after', maxPages, 'pages');
+  });
 });

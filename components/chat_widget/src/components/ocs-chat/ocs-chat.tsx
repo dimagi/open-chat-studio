@@ -167,6 +167,7 @@ export class OcsChat {
   @Prop() userName?: string;
   /**
    * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+   * Ignored when `sessionId` is provided.
    */
   @Prop() persistentSession: boolean = true;
 
@@ -497,9 +498,13 @@ export class OcsChat {
   private async loadBoundSessionHistory(): Promise<void> {
     const epoch = this.sessionEpoch;
     try {
-      const messages = await this.getChatService().fetchAllMessages(this.activeSessionId);
+      const history = await this.getChatService().fetchAllMessages(this.activeSessionId);
       if (epoch !== this.sessionEpoch) return;
-      this.messages = messages;
+      // Keep messages added while the history was loading (e.g. an optimistic
+      // user message) by appending any that aren't part of the fetched history.
+      const known = new Set(history.map(m => `${m.created_at}|${m.role}|${m.content}`));
+      const pending = this.messages.filter(m => !known.has(`${m.created_at}|${m.role}|${m.content}`));
+      this.messages = [...history, ...pending];
       this.scrollToBottom(true);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;

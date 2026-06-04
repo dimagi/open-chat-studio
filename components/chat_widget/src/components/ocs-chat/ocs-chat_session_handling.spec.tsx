@@ -601,6 +601,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
     jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
     jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
     jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
+    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
     await page.waitForChanges();
     // componentDidLoad defers history loading via setTimeout(0)
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -652,5 +653,21 @@ describe('ocs-chat bound session (session-id prop)', () => {
     await page.waitForChanges();
 
     expect(page.rootInstance.activeSessionId).toBe('server-session');
+  });
+
+  it('preserves messages sent while the history is still loading', async () => {
+    let resolveHistory: (messages: typeof history) => void;
+    mockFetchAllMessages.mockReturnValueOnce(new Promise(resolve => (resolveHistory = resolve)));
+
+    const page = await newBoundPage();
+
+    // History fetch is still pending; user sends a message in the meantime.
+    await page.rootInstance.sendMessage('Sent during load');
+    resolveHistory([...history]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+
+    const contents = page.rootInstance.messages.map((m: any) => m.content);
+    expect(contents).toEqual(['Hi', 'Hello!', 'Sent during load']);
   });
 });
