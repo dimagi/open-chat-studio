@@ -11,18 +11,32 @@ copy of the same loaded objects.
 """
 
 import dataclasses
+from collections import OrderedDict
 from functools import cached_property
 from typing import TYPE_CHECKING
 
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
+from rest_framework.fields import SkipField
 
+from apps.api.v2.inspect.channels import get_channels
+from apps.api.v2.inspect.nodes import (
+    RESOURCE_FIELDS,
+    RESOURCE_KEYS,
+    declared_resource_keys,
+    graph_digest,
+    node_class_for,
+    node_render_order,
+)
+from apps.api.v2.inspect.resources import _parse_custom_actions
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ExperimentChannel
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
-from apps.experiments.models import ConsentForm, SourceMaterial, Survey
+from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
+from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
 from apps.files.models import File
+from apps.pipelines.models import Node, Pipeline
 
 if TYPE_CHECKING:
     from apps.custom_actions.schema_utils import APIOperationDetails
@@ -236,19 +250,27 @@ class CustomActionSerializer(serializers.Serializer):
         return ApiSchemaDigestSerializer({"paths": paths}).data
 
 
-# ── Envelope serializers (ADR-0024) ──────────────────────────────────────────────────────────────
-# ``ChatbotInspectSerializer`` renders the entire inspect payload from the ``InspectContext``
-# assembled by the builder, and doubles as the response schema declared on the ``chatbot_inspect``
-# action — the OpenAPI doc is derived from the same classes that render the bytes, so the two
-# cannot drift for any declared field. The only free-form leaves are node ``params`` and
-# trigger-action ``params`` (their keys vary by node / action type).
-#
-# Node reference fields are ``required=False`` and non-nullable: which keys appear depends on the
-# node type, and a reference that is unset or resolves to absent (cross-team / deleted id) is
-# omitted entirely.
+# ── Context helper ───────────────────────────────────────────────────────────────────────────────
+class _FetcherContextMixin:
+    """Inspect serializers that resolve resources read the batch-loaded ``ResourceFetcher`` from
+    context. A missing fetcher is a programming error (an inspect serializer rendered outside the
+    inspect view), so fail loud rather than papering over it."""
+
+    @property
+    def _fetcher(self):
+        try:
+            return self.context["fetcher"]
+        except KeyError:
+            raise RuntimeError(
+                f"{type(self).__name__} requires a 'fetcher' in serializer context. Render inspect "
+                "serializers via the inspect view (or pass context={'fetcher': ...})."
+            ) from None
+
+
+# ── Settings (ADR-0024) ────────────────────────────────────────────────────────────────────────
 class InspectSettingsSerializer(serializers.Serializer):
-    """Non-secret Experiment fields surfaced under ``settings``. Sourced straight off the
-    experiment instance."""
+    """Non-secret Experiment fields surfaced under ``settings``, sourced straight off the
+    experiment instance (``source="*"`` at the parent)."""
 
     seed_message = serializers.CharField(allow_blank=True)
     conversational_consent_enabled = serializers.BooleanField()
@@ -260,6 +282,7 @@ class InspectSettingsSerializer(serializers.Serializer):
     participant_allowlist = serializers.ListField(child=serializers.CharField())
 
 
+# ── Graph (topology digest) ───────────────────────────────────────────────────────────────────
 @extend_schema_serializer(component_name="InspectGraphNode")
 class GraphNodeSerializer(serializers.Serializer):
     node_id = serializers.CharField(source="flow_id")
@@ -283,79 +306,258 @@ class GraphSerializer(serializers.Serializer):
     edges = GraphEdgeSerializer(many=True)
 
 
-class InspectNodeSerializer(serializers.Serializer):
-    """One pipeline node with its resource references inlined (ADR-0025)."""
+# ── Node (ADR-0025) ──────────────────────────────────────────────────────────────────────────────
+class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
+    """One pipeline node with its declared resource references inlined.
+
+    The seven resource keys are declared as fields so the OpenAPI schema documents them, but
+    ``to_representation`` renders only the keys the node *type* declares (decision #5): a
+    ``StartNode`` carries no resource keys, an ``LLMResponseWithPrompt`` always carries all six of
+    its own, with ``null`` (single) / ``[]`` (list) where unset. Non-declared keys are skipped
+    *before* their method runs — no compute-then-discard."""
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
     label = serializers.CharField()
-    params = serializers.DictField(help_text="The node's non-resource configuration, verbatim; keys vary by node type.")
-    llm = FlattenedLlmSerializer(required=False)
-    voice = FlattenedVoiceSerializer(required=False)
-    source_material = SourceMaterialSerializer(required=False)
-    assistant = AssistantSerializer(required=False)
-    custom_actions = CustomActionSerializer(many=True, required=False)
-    media_collection = MediaCollectionSerializer(required=False)
-    indexed_collections = IndexedCollectionSerializer(many=True, required=False)
+    params = serializers.SerializerMethodField(
+        help_text="The node's non-resource configuration, verbatim; keys vary by node type."
+    )
+    llm = serializers.SerializerMethodField()
+    voice = serializers.SerializerMethodField()
+    source_material = serializers.SerializerMethodField()
+    assistant = serializers.SerializerMethodField()
+    custom_actions = serializers.SerializerMethodField()
+    media_collection = serializers.SerializerMethodField()
+    indexed_collections = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Node
+        fields = ["node_id", "type", "label", "params", *RESOURCE_KEYS]
+
+    def to_representation(self, instance):
+        node = instance
+        declared = set(declared_resource_keys(node_class_for(node.type)))
+        data = OrderedDict()
+        for field in self._readable_fields:
+            name = field.field_name
+            if name in RESOURCE_KEYS and name not in declared:
+                continue
+            try:
+                attribute = field.get_attribute(node)
+            except SkipField:
+                continue
+            data[name] = None if attribute is None else field.to_representation(attribute)
+        return data
+
+    @extend_schema_field(serializers.DictField())
+    def get_params(self, node) -> dict:
+        consumed = {
+            field
+            for key in declared_resource_keys(node_class_for(node.type))
+            for field in RESOURCE_FIELDS[key].consumes
+        }
+        return {k: v for k, v in node.params.items() if k not in consumed and k != "name"}
+
+    @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
+    def get_llm(self, node):
+        pair = ProviderModelPair.from_parts(
+            self._fetcher.llm_provider(node.params.get("llm_provider_id")),
+            self._fetcher.llm_provider_model(node.params.get("llm_provider_model_id")),
+        )
+        return FlattenedLlmSerializer(pair).data if pair is not None else None
+
+    @extend_schema_field(FlattenedVoiceSerializer(allow_null=True))
+    def get_voice(self, node):
+        voice = self._fetcher.synthetic_voice(node.params.get("synthetic_voice_id"))
+        if voice is None:
+            return None
+        return FlattenedVoiceSerializer(VoicePair(voice.voice_provider, voice)).data
+
+    @extend_schema_field(SourceMaterialSerializer(allow_null=True))
+    def get_source_material(self, node):
+        material = self._fetcher.source_material(node.params.get("source_material_id"))
+        return SourceMaterialSerializer(material).data if material is not None else None
+
+    @extend_schema_field(AssistantSerializer(allow_null=True))
+    def get_assistant(self, node):
+        assistant = self._fetcher.assistant(node.params.get("assistant_id"))
+        return AssistantSerializer(assistant).data if assistant is not None else None
+
+    @extend_schema_field(CustomActionSerializer(many=True))
+    def get_custom_actions(self, node) -> list:
+        selections = []
+        for action_id, operation_ids in _parse_custom_actions(node.params.get("custom_actions")):
+            action = self._fetcher.custom_action(action_id)
+            if action is not None:
+                selections.append(CustomActionSelection(action, operation_ids))
+        return CustomActionSerializer(selections, many=True).data
+
+    @extend_schema_field(MediaCollectionSerializer(allow_null=True))
+    def get_media_collection(self, node):
+        collection = self._fetcher.collection(node.params.get("collection_id"))
+        return MediaCollectionSerializer(collection).data if collection is not None else None
+
+    @extend_schema_field(IndexedCollectionSerializer(many=True))
+    def get_indexed_collections(self, node) -> list:
+        collections = [
+            collection
+            for raw_id in (node.params.get("collection_index_ids") or [])
+            if (collection := self._fetcher.collection(raw_id)) is not None
+        ]
+        return IndexedCollectionSerializer(collections, many=True).data
 
 
-class InspectPipelineSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-    version_number = serializers.IntegerField()
-    graph = GraphSerializer()
-    nodes = InspectNodeSerializer(many=True)
+# ── Pipeline ─────────────────────────────────────────────────────────────────────────────────────
+class InspectPipelineSerializer(serializers.ModelSerializer):
+    graph = serializers.SerializerMethodField()
+    nodes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Pipeline
+        fields = ["id", "name", "version_number", "graph", "nodes"]
+
+    @extend_schema_field(GraphSerializer())
+    def get_graph(self, pipeline) -> dict:
+        return graph_digest(list(pipeline.node_set.all()), pipeline.data)
+
+    @extend_schema_field(InspectNodeSerializer(many=True))
+    def get_nodes(self, pipeline) -> list:
+        nodes = sorted(pipeline.node_set.all(), key=lambda n: (node_render_order(n), n.id))
+        return InspectNodeSerializer(nodes, many=True, context=self.context).data
 
 
-class InspectTriggerActionSerializer(serializers.Serializer):
+# ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────
+# Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3).
+_CADENCE_KEYS = ("name", "frequency", "time_period", "repetitions", "prompt_text")
+
+
+class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     """An event trigger's action. ``pipeline`` is present only for ``pipeline_start`` actions
-    whose (team-scoped) pipeline resolves."""
+    whose (team-scoped) pipeline resolves; it is rendered from the fetcher's embedded-pipeline
+    cache so it costs no extra query."""
 
-    type = serializers.CharField()
-    params = serializers.DictField(help_text="Action parameters; keys vary by action type.")
-    pipeline = InspectPipelineSerializer(required=False)
+    type = serializers.CharField(source="action_type")
+    params = serializers.SerializerMethodField()
+    pipeline = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventAction
+        fields = ["type", "params", "pipeline"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if data.get("pipeline") is None:
+            data.pop("pipeline", None)
+        return data
+
+    @extend_schema_field(serializers.DictField())
+    def get_params(self, action) -> dict:
+        params = dict(action.params or {})
+        if action.action_type == EventActionType.SCHEDULETRIGGER:
+            return {"scheduled_message": {key: params.get(key) for key in _CADENCE_KEYS}}
+        if action.action_type == EventActionType.PIPELINE_START:
+            params.pop("pipeline_id", None)
+        return params
+
+    @extend_schema_field(InspectPipelineSerializer(required=False))
+    def get_pipeline(self, action):
+        if action.action_type != EventActionType.PIPELINE_START:
+            return None
+        pipeline = self._fetcher.embedded_pipeline((action.params or {}).get("pipeline_id"))
+        if pipeline is None:
+            return None
+        return InspectPipelineSerializer(pipeline, context=self.context).data
 
 
-class InspectStaticTriggerSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    type = serializers.CharField()
-    is_active = serializers.BooleanField()
+class InspectStaticTriggerSerializer(serializers.ModelSerializer):
     action = InspectTriggerActionSerializer()
 
+    class Meta:
+        model = StaticTrigger
+        fields = ["id", "type", "is_active", "action"]
 
-class InspectTimeoutTriggerSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    delay_seconds = serializers.IntegerField()
-    total_num_triggers = serializers.IntegerField()
-    trigger_from_first_message = serializers.BooleanField()
-    is_active = serializers.BooleanField()
+
+class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
+    delay_seconds = serializers.IntegerField(source="delay")
     action = InspectTriggerActionSerializer()
+
+    class Meta:
+        model = TimeoutTrigger
+        fields = ["id", "delay_seconds", "total_num_triggers", "trigger_from_first_message", "is_active", "action"]
 
 
 class InspectEventsSerializer(serializers.Serializer):
-    static_triggers = InspectStaticTriggerSerializer(many=True)
-    timeout_triggers = InspectTimeoutTriggerSerializer(many=True)
+    """Static + timeout triggers (archived excluded). ``source="*"`` at the parent — the instance
+    is the Experiment."""
+
+    static_triggers = serializers.SerializerMethodField()
+    timeout_triggers = serializers.SerializerMethodField()
+
+    @extend_schema_field(InspectStaticTriggerSerializer(many=True))
+    def get_static_triggers(self, experiment) -> list:
+        triggers = [t for t in experiment.static_triggers.all() if not t.is_archived]
+        return InspectStaticTriggerSerializer(triggers, many=True, context=self.context).data
+
+    @extend_schema_field(InspectTimeoutTriggerSerializer(many=True))
+    def get_timeout_triggers(self, experiment) -> list:
+        triggers = [t for t in experiment.timeout_triggers.all() if not t.is_archived]
+        return InspectTimeoutTriggerSerializer(triggers, many=True, context=self.context).data
 
 
-class ChatbotInspectSerializer(serializers.Serializer):
+# ── Root (ADR-0024) ──────────────────────────────────────────────────────────────────────────────
+class ChatbotInspectSerializer(serializers.ModelSerializer):
     """Denormalized, read-only projection of a chatbot's full configuration (ADR-0024). The
-    response root *is* the chatbot — there is no wrapper key. Instance:
-    :class:`apps.api.v2.inspect.builder.InspectContext`."""
+    response root *is* the chatbot — there is no wrapper key. Instance: the resolved
+    :class:`~apps.experiments.models.Experiment`; requires a ``fetcher`` in context."""
 
-    id = serializers.UUIDField(source="experiment.public_id")
-    name = serializers.CharField(source="experiment.name")
-    description = serializers.CharField(source="experiment.description", allow_blank=True, allow_null=True)
-    version_number = serializers.IntegerField(source="experiment.version_number")
-    is_unreleased = serializers.BooleanField(source="experiment.is_working_version")
-    is_published_version = serializers.BooleanField(source="experiment.is_default_version")
-    version_description = serializers.CharField(source="experiment.version_description", allow_blank=True)
-    team_slug = serializers.CharField(source="experiment.team.slug")
-    settings = InspectSettingsSerializer(source="experiment")
-    consent_form = ConsentFormSerializer(source="experiment.consent_form", allow_null=True)
-    pre_survey = SurveySerializer(source="experiment.pre_survey", allow_null=True)
-    post_survey = SurveySerializer(source="experiment.post_survey", allow_null=True)
-    voice = FlattenedVoiceSerializer(allow_null=True)
-    trace_provider = ProviderSerializer(source="experiment.trace_provider", allow_null=True)
-    channels = ChannelSerializer(many=True)
-    pipeline = InspectPipelineSerializer(allow_null=True)
-    events = InspectEventsSerializer()
+    id = serializers.UUIDField(source="public_id")
+    is_unreleased = serializers.BooleanField(source="is_working_version")
+    is_published_version = serializers.BooleanField(source="is_default_version")
+    version_description = serializers.CharField(allow_blank=True)
+    team_slug = serializers.CharField(source="team.slug")
+    settings = InspectSettingsSerializer(source="*")
+    consent_form = ConsentFormSerializer(allow_null=True)
+    pre_survey = SurveySerializer(allow_null=True)
+    post_survey = SurveySerializer(allow_null=True)
+    trace_provider = ProviderSerializer(allow_null=True)
+    voice = serializers.SerializerMethodField()
+    channels = serializers.SerializerMethodField()
+    pipeline = serializers.SerializerMethodField()
+    events = InspectEventsSerializer(source="*")
+
+    class Meta:
+        model = Experiment
+        fields = [
+            "id",
+            "name",
+            "description",
+            "version_number",
+            "is_unreleased",
+            "is_published_version",
+            "version_description",
+            "team_slug",
+            "settings",
+            "consent_form",
+            "pre_survey",
+            "post_survey",
+            "voice",
+            "trace_provider",
+            "channels",
+            "pipeline",
+            "events",
+        ]
+
+    @extend_schema_field(FlattenedVoiceSerializer(allow_null=True))
+    def get_voice(self, experiment):
+        pair = VoicePair.from_parts(experiment.voice_provider, experiment.synthetic_voice)
+        return FlattenedVoiceSerializer(pair).data if pair is not None else None
+
+    @extend_schema_field(ChannelSerializer(many=True))
+    def get_channels(self, experiment) -> list:
+        return ChannelSerializer(get_channels(experiment), many=True).data
+
+    @extend_schema_field(InspectPipelineSerializer(allow_null=True))
+    def get_pipeline(self, experiment):
+        if experiment.pipeline_id is None:
+            return None
+        return InspectPipelineSerializer(experiment.pipeline, context=self.context).data
