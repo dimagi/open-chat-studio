@@ -1057,8 +1057,7 @@ paths:
   /api/v2/chatbots/{id}/inspect/:
     get:
       operationId: chatbot_inspect
-      description: Return a denormalized, read-only projection of the chatbot's full
-        configuration.
+      description: Return the chatbot's full configuration as a single read-only document.
       summary: Inspect Chatbot
       parameters:
       - in: path
@@ -1199,8 +1198,8 @@ components:
       - response
     ApiSchemaDigest:
       type: object
-      description: A custom action's OpenAPI schema reduced to the selected operations'
-        path digest.
+      description: A custom action's OpenAPI schema reduced to just the paths of the
+        selected operations.
       properties:
         paths:
           type: array
@@ -1210,8 +1209,8 @@ components:
       - paths
     Assistant:
       type: object
-      description: '``instructions`` and ``assistant_id`` are intentionally exposed
-        (resolved Q4/Q5).'
+      description: Assistant fields. ``instructions`` and ``assistant_id`` are exposed
+        on purpose.
       properties:
         id:
           type: integer
@@ -1252,8 +1251,9 @@ components:
     Channel:
       type: object
       description: |-
-        Allowlist ``platform`` + ``name`` + embedded ``messaging_provider`` ref. ``extra_data``
-        (freeform auth material) is excluded wholesale (resolved Q8).
+        A channel's ``platform``, ``name`` and messaging provider.
+
+        ``extra_data`` holds free-form auth material and is excluded entirely.
       properties:
         platform:
           $ref: '#/components/schemas/PlatformEnum'
@@ -1465,10 +1465,10 @@ components:
     Chatbot:
       type: object
       description: |-
-        Minimal v2 representation of a Chatbot (list/retrieve).
+        Basic chatbot fields for the list and retrieve endpoints.
 
-        The rich, denormalized configuration lives at the ``inspect`` action, not here
-        (ADR-0024). v2 renames the external surface from ``experiment`` to ``chatbot`` (ADR-0023).
+        The full configuration is served by the ``inspect`` action instead (ADR-0024). v2 calls these
+        "chatbots" rather than "experiments" (ADR-0023).
       properties:
         id:
           type: string
@@ -1497,9 +1497,10 @@ components:
     ChatbotInspect:
       type: object
       description: |-
-        Denormalized, read-only projection of a chatbot's full configuration (ADR-0024). The
-        response root *is* the chatbot — there is no wrapper key. Instance: the resolved
-        :class:`~apps.experiments.models.Experiment`; requires a ``fetcher`` in context.
+        The whole chatbot configuration in one read-only response (ADR-0024).
+
+        The chatbot's fields sit at the top level — there's no wrapper key around them. Expects the
+        resolved :class:`~apps.experiments.models.Experiment`, and needs a ``fetcher`` in its context.
       properties:
         id:
           type: string
@@ -1636,10 +1637,12 @@ components:
     CustomAction:
       type: object
       description: |-
-        Custom action with ``allowed_operations`` reflecting the operations selected at the
-        reference site — never the action's full operation set — and its OpenAPI schema reduced to the
-        selected operations' path digest (resolved Q7 — size, not secrecy). Auth provider is
-        ``{id, type, name}`` only (ADR-0027). Instance: :class:`CustomActionSelection`.
+        A custom action as used at one reference site.
+
+        ``allowed_operations`` lists only the operations selected here, not every operation the action
+        defines, and ``api_schema`` is trimmed to just those operations' paths (to keep the response
+        small). The auth provider is reduced to ``{id, type, name}`` (ADR-0027). Expects a
+        :class:`CustomActionSelection`.
       properties:
         id:
           type: integer
@@ -1860,8 +1863,7 @@ components:
       - size
     FlattenedLlm:
       type: object
-      description: An ``(LlmProvider, LlmProviderModel)`` pair flattened into one
-        ``llm`` object (ADR-0025).
+      description: An LLM provider and model, flattened into one ``llm`` object (ADR-0025).
       properties:
         provider_id:
           type: integer
@@ -1886,8 +1888,9 @@ components:
     FlattenedModelProvider:
       type: object
       description: |-
-        A collection's embedding ``(LlmProvider, EmbeddingProviderModel)`` pair flattened into one
-        object. Instance: :class:`ProviderModelPair`. Missing halves render their fields as null.
+        A collection's embedding provider and model, flattened into one object.
+
+        Expects a :class:`ProviderModelPair`; a missing provider or model renders its fields as null.
       properties:
         provider_id:
           type: integer
@@ -1906,8 +1909,9 @@ components:
     FlattenedVoice:
       type: object
       description: |-
-        A ``(VoiceProvider, SyntheticVoice)`` pair flattened into one ``voice`` object (ADR-0025).
-        Instance: :class:`VoicePair`.
+        A voice provider and synthetic voice, flattened into one ``voice`` object (ADR-0025).
+
+        Expects a :class:`VoicePair`.
       properties:
         provider_id:
           type: integer
@@ -1937,8 +1941,8 @@ components:
         * `text` - Text
     IndexedCollection:
       type: object
-      description: 'An indexed/RAG collection: identity + flattened embedding pair
-        + files (ADR-0025).'
+      description: 'An indexed (RAG) collection: its identity, embedding provider/model,
+        and files (ADR-0025).'
       properties:
         id:
           type: integer
@@ -1962,9 +1966,7 @@ components:
       - name
     InspectEvents:
       type: object
-      description: |-
-        Static + timeout triggers (archived excluded). ``source="*"`` at the parent — the instance
-        is the Experiment.
+      description: A chatbot's static and timeout triggers, excluding archived ones.
       properties:
         static_triggers:
           type: array
@@ -1982,8 +1984,10 @@ components:
     InspectFile:
       type: object
       description: |-
-        Identity-lean file view. Excludes the signed ``file`` storage URL, ``summary`` and
-        ``metadata`` (the latter two are dropped for size, not secrecy — design D8/Q6).
+        A file's identifying fields only.
+
+        Leaves out the signed storage URL (a secret), plus ``summary`` and ``metadata`` (omitted to
+        keep the response small, not for secrecy).
       properties:
         id:
           type: integer
@@ -2012,8 +2016,8 @@ components:
       - purpose
     InspectGraph:
       type: object
-      description: 'Pipeline topology digest: nodes as identity triples, edges with
-        positions stripped.'
+      description: 'The pipeline''s shape: its nodes and the edges between them (without
+        canvas positions).'
       properties:
         nodes:
           type: array
@@ -2060,14 +2064,12 @@ components:
     InspectNode:
       type: object
       description: |-
-        One pipeline node with its declared resource references inlined.
+        One pipeline node, with the resources it references inlined.
 
-        The seven resource keys are declared as fields so the OpenAPI schema documents them, but only
-        the keys the node *type* declares are rendered (decision #5): a ``StartNode`` carries no
-        resource keys, an ``LLMResponseWithPrompt`` always carries all six of its own, with ``null``
-        (single) / ``[]`` (list) where unset. Each ``get_*`` returns ``_ABSENT`` for a key its node
-        type doesn't declare, and ``to_representation`` drops those — so the declared-vs-absent rule
-        lives next to each field's fetch, not in a central key list.
+        All resource keys are declared as fields so they appear in the OpenAPI schema, but a node only
+        renders the keys its type actually uses: a ``StartNode`` shows none, while an
+        ``LLMResponseWithPrompt`` shows its own — ``null`` for an unset single value, ``[]`` for an
+        unset list. Keys the node type doesn't declare are dropped entirely.
       properties:
         node_id:
           type: string
@@ -2157,9 +2159,7 @@ components:
       - nodes
     InspectSettings:
       type: object
-      description: |-
-        Non-secret Experiment fields surfaced under ``settings``, sourced straight off the
-        experiment instance (``source="*"`` at the parent).
+      description: The chatbot's non-secret settings, read directly off the experiment.
       properties:
         seed_message:
           type: string
@@ -2232,9 +2232,10 @@ components:
     InspectTriggerAction:
       type: object
       description: |-
-        An event trigger's action. ``pipeline`` is present only for ``pipeline_start`` actions
-        whose (team-scoped) pipeline resolves; it is rendered from the fetcher's embedded-pipeline
-        cache so it costs no extra query.
+        The action an event trigger runs.
+
+        The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline could be found in
+        the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
       properties:
         type:
           type: string
@@ -2252,8 +2253,8 @@ components:
       - type
     MediaCollection:
       type: object
-      description: Collection identity + files, without embedding — the media-collection
-        shape (ADR-0025).
+      description: 'A media collection: its identity and files, with no embedding
+        details (ADR-0025).'
       properties:
         id:
           type: integer
@@ -2537,9 +2538,11 @@ components:
     Provider:
       type: object
       description: |-
-        Minimal provider reference — A plain ``Serializer`` (not ``ModelSerializer``) so it works for
-        any provider model (Llm/Voice/Messaging/Auth/Trace) via duck typing. Serializing ``None``
-        yields ``None`` when nested; standalone call sites must guard for ``None`` themselves.
+        A minimal reference to any provider: its id, type and name.
+
+        It's a plain ``Serializer`` rather than a ``ModelSerializer`` so the same class works for every
+        provider model (LLM, voice, messaging, auth, trace). When nested, a ``None`` provider renders as
+        ``null``; callers that use it on its own must handle ``None`` themselves.
       properties:
         id:
           type: integer
