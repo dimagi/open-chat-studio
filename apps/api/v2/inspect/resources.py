@@ -147,7 +147,9 @@ class ResourceFetcher:
         if kind == ResourceKind.VOICE_PROVIDER:
             return VoiceProvider.objects.filter(team=team, id__in=ids)
         if kind == ResourceKind.SYNTHETIC_VOICE:
-            return SyntheticVoice.objects.filter(id__in=ids).select_related("voice_provider")
+            # Team-scoped only via voice_provider, plus "general" voices (voice_provider__isnull).
+            # get_for_team encodes that rule; without it cross-team voices would leak (ADR-0028).
+            return SyntheticVoice.get_for_team(team).filter(id__in=ids).select_related("voice_provider")
         assert_never(kind)
 
     def _get(self, kind: ResourceKind, raw_id) -> object | None:

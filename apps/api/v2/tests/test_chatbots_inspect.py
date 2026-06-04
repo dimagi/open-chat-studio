@@ -334,6 +334,23 @@ def test_cross_team_resource_not_embedded(inspect_bot):
 
 
 @pytest.mark.django_db()
+def test_cross_team_synthetic_voice_not_embedded(inspect_bot):
+    """SyntheticVoice is team-scoped only via its voice_provider, so the loader must apply
+    get_for_team's condition. A voice backed by another team's provider must resolve to absent."""
+    foreign_voice = SyntheticVoiceFactory.create(
+        voice_provider=VoiceProviderFactory.create(team=TeamWithUsersFactory.create())
+    )
+    NodeFactory.create(
+        pipeline=inspect_bot.experiment.pipeline,
+        flow_id="leaky-voice-1",
+        type="LLMResponseWithPrompt",
+        label="LeakyVoice",
+        params={"synthetic_voice_id": str(foreign_voice.id)},
+    )
+    assert _node(_get(inspect_bot), "LeakyVoice")["voice"] is None
+
+
+@pytest.mark.django_db()
 def test_malformed_node_param_id_does_not_crash(inspect_bot):
     """Non-numeric ids in node params (ids originate in untrusted JSON) resolve to absent rather
     than 500-ing the whole inspect build."""
