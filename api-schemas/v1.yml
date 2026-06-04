@@ -1529,14 +1529,6 @@ components:
           allOf:
           - $ref: '#/components/schemas/ConsentForm'
           nullable: true
-        pre_survey:
-          allOf:
-          - $ref: '#/components/schemas/Survey'
-          nullable: true
-        post_survey:
-          allOf:
-          - $ref: '#/components/schemas/Survey'
-          nullable: true
         voice:
           allOf:
           - $ref: '#/components/schemas/FlattenedVoice'
@@ -1567,8 +1559,6 @@ components:
       - is_unreleased
       - name
       - pipeline
-      - post_survey
-      - pre_survey
       - settings
       - team_slug
       - trace_provider
@@ -2620,25 +2610,6 @@ components:
         * `pending-review` - Awaiting final review.
         * `complete` - Complete
         * `unknown` - Unknown
-    Survey:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          maxLength: 128
-        url:
-          type: string
-          format: uri
-          maxLength: 500
-        confirmation_text:
-          type: string
-      required:
-      - id
-      - name
-      - url
     Team:
       type: object
       properties:

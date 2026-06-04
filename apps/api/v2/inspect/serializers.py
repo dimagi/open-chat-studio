@@ -29,7 +29,7 @@ from apps.channels.models import ExperimentChannel
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
-from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.models import Node, Pipeline
 
@@ -61,12 +61,6 @@ class ConsentFormSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConsentForm
         fields = ["id", "name", "consent_text", "capture_identifier", "identifier_label", "identifier_type"]
-
-
-class SurveySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Survey
-        fields = ["id", "name", "url", "confirmation_text"]
 
 
 class AssistantSerializer(serializers.ModelSerializer):
@@ -538,8 +532,6 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     team_slug = serializers.CharField(source="team.slug")
     settings = InspectSettingsSerializer(source="*")
     consent_form = ConsentFormSerializer(allow_null=True)
-    pre_survey = SurveySerializer(allow_null=True)
-    post_survey = SurveySerializer(allow_null=True)
     trace_provider = ProviderSerializer(allow_null=True)
     voice = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
@@ -559,8 +551,6 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "team_slug",
             "settings",
             "consent_form",
-            "pre_survey",
-            "post_survey",
             "voice",
             "trace_provider",
             "channels",

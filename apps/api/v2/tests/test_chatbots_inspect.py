@@ -23,7 +23,6 @@ from apps.utils.factories.experiment import (
     ConsentFormFactory,
     ExperimentFactory,
     SourceMaterialFactory,
-    SurveyFactory,
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
@@ -424,8 +423,6 @@ def _full_bot():
         identifier_label="Email",
         identifier_type="email",
     )
-    pre_survey = SurveyFactory.create(team=team, name="Pre", url="https://pre", confirmation_text="thanks-pre")
-    post_survey = SurveyFactory.create(team=team, name="Post", url="https://post", confirmation_text="thanks-post")
     source = SourceMaterialFactory.create(
         team=team, topic="Returns", description="Returns policy", material="# Returns"
     )
@@ -507,8 +504,6 @@ def _full_bot():
         seed_message="Welcome",
         participant_allowlist=["+27123"],
         consent_form=consent,
-        pre_survey=pre_survey,
-        post_survey=post_survey,
         voice_provider=voice_provider,
         synthetic_voice=synthetic_voice,
         trace_provider=trace_provider,
@@ -553,8 +548,6 @@ def _full_bot():
         messaging_provider=messaging_provider,
         synthetic_voice=synthetic_voice,
         consent=consent,
-        pre_survey=pre_survey,
-        post_survey=post_survey,
         source=source,
         media_collection=media_collection,
         media_file=media_file,
@@ -600,18 +593,6 @@ def test_full_response_body():
             "capture_identifier": True,
             "identifier_label": "Email",
             "identifier_type": "email",
-        },
-        "pre_survey": {
-            "id": bot.pre_survey.id,
-            "name": "Pre",
-            "url": "https://pre",
-            "confirmation_text": "thanks-pre",
-        },
-        "post_survey": {
-            "id": bot.post_survey.id,
-            "name": "Post",
-            "url": "https://post",
-            "confirmation_text": "thanks-post",
         },
         "voice": {
             "provider_id": bot.voice_provider.id,

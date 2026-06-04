@@ -29,8 +29,6 @@ def test_inspect_component_documents_the_payload_envelope(api_schema):
         "team_slug",
         "settings",
         "consent_form",
-        "pre_survey",
-        "post_survey",
         "voice",
         "trace_provider",
         "channels",
