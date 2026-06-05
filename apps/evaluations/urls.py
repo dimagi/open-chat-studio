@@ -28,6 +28,11 @@ urlpatterns = [
         name="evaluation_runs_home",
     ),
     path(
+        "<int:evaluation_pk>/runs/clear/",
+        evaluation_config_views.ClearEvaluationRuns.as_view(),
+        name="clear_evaluation_runs",
+    ),
+    path(
         "<int:evaluation_pk>/evaluation_runs_table",
         evaluation_config_views.EvaluationRunTableView.as_view(),
         name="evaluation_runs_table",
