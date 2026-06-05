@@ -223,7 +223,6 @@ def test_acceptance_3_rag_collection_files(inspect_bot):
                     "content_size": 40112,
                     "external_source": "",
                     "external_id": "",
-                    "purpose": inspect_bot.policy_file.purpose,
                 }
             ],
         }
@@ -659,7 +658,6 @@ def test_full_response_body():
                                 "content_size": 50321,
                                 "external_source": "",
                                 "external_id": "",
-                                "purpose": "collection",
                             }
                         ],
                     },
@@ -681,7 +679,6 @@ def test_full_response_body():
                                     "content_size": 40112,
                                     "external_source": "",
                                     "external_id": "",
-                                    "purpose": "collection",
                                 }
                             ],
                         }

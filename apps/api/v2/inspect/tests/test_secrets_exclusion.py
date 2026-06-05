@@ -69,7 +69,6 @@ def test_file_serializer_excludes_url_summary_metadata():
         "content_size",
         "external_source",
         "external_id",
-        "purpose",
     }
     blob = json.dumps(data)
     assert "secret summary" not in blob
