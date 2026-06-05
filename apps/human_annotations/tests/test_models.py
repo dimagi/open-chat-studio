@@ -1,3 +1,5 @@
+from unittest import mock
+
 import django.db
 import pytest
 from django.contrib.auth import get_user_model
@@ -337,3 +339,27 @@ def test_resync_recomputes_aggregates_after_clearing_authoritative(team):
     queue.refresh_from_db()
     # Authoritative cleared -> aggregation falls back to all submitted (5, 1) -> mean 3.
     assert queue.aggregate.aggregates["score"]["mean"] == 3
+
+
+@pytest.mark.django_db()
+def test_resync_swallows_aggregate_recompute_failure(team):
+    """A failure recomputing aggregates is logged, not raised, and the status change still commits."""
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user, num_reviews_required=1)
+    item = _make_session_item(queue, team)
+    Annotation.objects.create(item=item, team=team, reviewer=user, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.COMPLETED
+
+    # Raising above 1 clears the auto-assigned authoritative flag, which triggers the aggregate
+    # recompute — force that recompute to fail.
+    queue.num_reviews_required = 3
+    queue.save()
+    with mock.patch(
+        "apps.human_annotations.aggregation.compute_aggregates_for_queue",
+        side_effect=Exception("boom"),
+    ):
+        queue.resync_items()  # must not raise
+
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.IN_PROGRESS  # status recompute committed despite the failure

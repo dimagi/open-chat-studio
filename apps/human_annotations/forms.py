@@ -39,6 +39,9 @@ class AnnotationQueueForm(forms.ModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=commit)
+        # resync_items requires the new num_reviews_required to be persisted, so it only runs
+        # when committing. The queue edit views always save with commit=True; a commit=False
+        # caller would need to invoke instance.resync_items() itself after saving.
         if commit and "num_reviews_required" in self.changed_data:
             instance.resync_items()
         return instance

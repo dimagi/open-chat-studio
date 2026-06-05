@@ -156,12 +156,16 @@ class AnnotationQueue(BaseTeamModel):
                     authoritative_set_by__isnull=True,
                 ).update(is_authoritative=False, authoritative_set_at=None)
 
-            items = self.items.exclude(status=AnnotationItemStatus.FLAGGED).annotate(
-                has_authoritative=Exists(
-                    Annotation.objects.filter(
-                        item=OuterRef("pk"),
-                        status=AnnotationStatus.SUBMITTED,
-                        is_authoritative=True,
+            items = (
+                self.items.exclude(status=AnnotationItemStatus.FLAGGED)
+                .select_for_update()
+                .annotate(
+                    has_authoritative=Exists(
+                        Annotation.objects.filter(
+                            item=OuterRef("pk"),
+                            status=AnnotationStatus.SUBMITTED,
+                            is_authoritative=True,
+                        )
                     )
                 )
             )
@@ -181,7 +185,10 @@ class AnnotationQueue(BaseTeamModel):
                 compute_aggregates_for_queue,
             )
 
-            compute_aggregates_for_queue(self)
+            try:
+                compute_aggregates_for_queue(self)
+            except Exception:
+                logger.exception("Failed to recompute aggregates for queue %s during resync", self.id)
 
 
 class AnnotationItemType(models.TextChoices):
