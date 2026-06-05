@@ -243,6 +243,23 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
 
+    def post_save(self, channel: ExperimentChannel):
+        service = self.messaging_provider.get_messaging_service() if self.messaging_provider else None
+        if not service or not service.supports_webhook_management:
+            super().post_save(channel)
+            return
+
+        try:
+            service.set_incoming_webhook(channel.extra_data["number"], channel.webhook_url)
+        except Exception:
+            logger.exception("Error configuring webhook for channel %s", channel.id)
+            self.warning_message = (
+                "Could not configure the webhook automatically. "
+                f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+            )
+        else:
+            self.success_message = "Webhook configured automatically at Twilio."
+
     def clean(self):
         cleaned_data = super().clean()
         number = cleaned_data.get("number")
