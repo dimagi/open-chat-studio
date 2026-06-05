@@ -155,6 +155,19 @@ class AnnotationQueue(BaseTeamModel):
                     is_authoritative=True,
                     authoritative_set_by__isnull=True,
                 ).update(is_authoritative=False, authoritative_set_at=None)
+            elif self.num_reviews_required == 1:
+                # Mirror submission's auto-mark: a lone review on a single-review queue is the
+                # authoritative answer. Without this, lowering the requirement to 1 completes the
+                # item via the single-review rule but leaves it with no authoritative annotation.
+                # set_by stays null (auto-assigned) so a later raise above 1 clears it again.
+                Annotation.objects.filter(
+                    item__queue=self,
+                    item__review_count=1,
+                    status=AnnotationStatus.SUBMITTED,
+                    is_authoritative=False,
+                ).exclude(item__status=AnnotationItemStatus.FLAGGED).update(
+                    is_authoritative=True, authoritative_set_at=timezone.now()
+                )
 
             items = (
                 self.items.exclude(status=AnnotationItemStatus.FLAGGED)
