@@ -495,6 +495,7 @@ paths:
                         data:
                           name: John
                           timezone: Africa/Johannesburg
+                        connect_channel_id: null
                   summary: A participant with their chatbot data
           description: ''
     post:
@@ -549,7 +550,26 @@ paths:
       - tokenAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantDetail'
+              examples:
+                UpdateParticipantDataResponse:
+                  value:
+                    id: e172ff63-2469-419f-a828-783fc9291bc7
+                    identifier: part1
+                    name: John
+                    platform: commcare_connect
+                    remote_id: ''
+                    data:
+                    - chatbot: Support Bot
+                      chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
+                      data:
+                        name: John
+                      connect_channel_id: c64a1f7d-2f9b-4c3a-9e57-0f0c9a3a1b2d
+                  summary: Response including connect channel IDs
+          description: ''
   /api/participants/:
     get:
       operationId: list_participants_2
@@ -616,6 +636,7 @@ paths:
                         data:
                           name: John
                           timezone: Africa/Johannesburg
+                        connect_channel_id: null
                   summary: A participant with their chatbot data
           description: ''
     post:
@@ -670,7 +691,26 @@ paths:
       - tokenAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantDetail'
+              examples:
+                UpdateParticipantDataResponse:
+                  value:
+                    id: e172ff63-2469-419f-a828-783fc9291bc7
+                    identifier: part1
+                    name: John
+                    platform: commcare_connect
+                    remote_id: ''
+                    data:
+                    - chatbot: Support Bot
+                      chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
+                      data:
+                        name: John
+                      connect_channel_id: c64a1f7d-2f9b-4c3a-9e57-0f0c9a3a1b2d
+                  summary: Response including connect channel IDs
+          description: ''
   /api/sessions/:
     get:
       operationId: session_list
@@ -1644,9 +1684,16 @@ components:
           format: uuid
           readOnly: true
         data: {}
+        connect_channel_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: CommCare Connect channel ID. Only set for commcare_connect
+            participants.
       required:
       - chatbot
       - chatbot_id
+      - connect_channel_id
     ParticipantDataUpdateRequest:
       type: object
       properties:

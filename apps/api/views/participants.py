@@ -84,6 +84,7 @@ class ParticipantView(APIView):
                             "chatbot": "Support Bot",
                             "chatbot_id": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
                             "data": {"name": "John", "timezone": "Africa/Johannesburg"},
+                            "connect_channel_id": None,
                         },
                     ],
                 },
@@ -116,6 +117,7 @@ class ParticipantView(APIView):
             OpenApiExample(
                 name="CreateParticipantData",
                 summary="Create participant data for multiple experiments",
+                request_only=True,
                 value={
                     "identifier": "part1",
                     "platform": "api",
@@ -139,6 +141,7 @@ class ParticipantView(APIView):
             OpenApiExample(
                 name="UpdateParticipantSchedules",
                 summary="Update and delete participant schedules",
+                request_only=True,
                 value={
                     "identifier": "part1",
                     "platform": "api",
@@ -154,6 +157,26 @@ class ParticipantView(APIView):
                                 },
                                 {"id": "sched2", "delete": True},
                             ],
+                        },
+                    ],
+                },
+            ),
+            OpenApiExample(
+                name="UpdateParticipantDataResponse",
+                summary="Response including connect channel IDs",
+                response_only=True,
+                value={
+                    "id": "e172ff63-2469-419f-a828-783fc9291bc7",
+                    "identifier": "part1",
+                    "name": "John",
+                    "platform": "commcare_connect",
+                    "remote_id": "",
+                    "data": [
+                        {
+                            "chatbot": "Support Bot",
+                            "chatbot_id": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
+                            "data": {"name": "John"},
+                            "connect_channel_id": "c64a1f7d-2f9b-4c3a-9e57-0f0c9a3a1b2d",
                         },
                     ],
                 },
