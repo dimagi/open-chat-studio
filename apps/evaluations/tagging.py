@@ -206,3 +206,43 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
         filter_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
 
     CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q).delete()
+
+
+def remove_applied_tags_for_runs(runs) -> None:
+    """Remove every eval-applied tag across the given runs from its target object.
+
+    The inverse of `apply_rules_to_result` over whole runs: walks each run's AppliedTag
+    audit, resolves the result's target (Chat/ChatMessage) per the evaluator's mode, and
+    deletes the matching CustomTaggedItem links. Only eval-created links (those with no
+    user) are removed — tags a person added by hand are preserved.
+
+    All evaluators in a config share one evaluation_mode (enforced by form validation), so
+    every target resolves to the same content type; it's resolved once from the first target.
+
+    Must run before the runs (and their AppliedTag rows) are deleted, since it reads the
+    audit to know which tags to un-apply.
+    """
+    applied_tags = AppliedTag.objects.filter(evaluation_result__run__in=runs).select_related(
+        "evaluation_result__evaluator",
+        "evaluation_result__message__session__chat",
+        "evaluation_result__message__expected_output_chat_message",
+    )
+
+    content_type: ContentType | None = None
+    pairs: set[tuple[int, int]] = set()
+    for applied_tag in applied_tags:
+        result = applied_tag.evaluation_result
+        target = resolve_target(result.evaluator, result.message)
+        if target is None:
+            continue
+        if content_type is None:
+            content_type = ContentType.objects.get_for_model(type(target))
+        pairs.add((target.pk, applied_tag.tag_id))
+
+    if content_type is None or not pairs:
+        return
+
+    filter_q = Q()
+    for object_id, tag_id in pairs:
+        filter_q |= Q(object_id=object_id, tag_id=tag_id)
+    CustomTaggedItem.objects.filter(content_type=content_type, user__isnull=True).filter(filter_q).delete()
