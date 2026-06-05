@@ -10,9 +10,12 @@ def backfill_session_token_required(apps, schema_editor):
     conversations are not interrupted; everything older is locked down."""
     ExperimentSession = apps.get_model("experiments", "ExperimentSession")
     cutoff = timezone.now() - timedelta(hours=24)
-    recent_ids = ExperimentSession.objects.filter(
-        Q(chat__messages__created_at__gte=cutoff) | Q(created_at__gte=cutoff)
-    ).values("id")
+    recent_ids = (
+        ExperimentSession.objects.filter(Q(chat__messages__created_at__gte=cutoff) | Q(created_at__gte=cutoff))
+        .values("id")
+        .order_by()
+        .distinct()
+    )
     ExperimentSession.objects.filter(id__in=recent_ids).update(session_token_required=False)
 
 
