@@ -46,7 +46,7 @@ AUTH_SECRET = "auth-SECRET-xyz"
 CHANNEL_SECRET = "telegram-token-SECRET-xyz"
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def inspect_bot(db):
     """Build a realistic bot that exercises every assertion here, returning the created objects so
     each test can build the exact expected response from their ids."""
