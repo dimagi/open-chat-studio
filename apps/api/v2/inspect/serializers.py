@@ -25,7 +25,8 @@ from apps.api.v2.inspect.nodes import (
 )
 from apps.api.v2.utils import parse_custom_actions
 from apps.assistants.models import OpenAiAssistant
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.utils import ALL_DOMAINS
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
@@ -87,17 +88,96 @@ class ProviderSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
-class ChannelSerializer(serializers.ModelSerializer):
-    """A channel's ``platform``, ``name`` and messaging provider.
+# Sentinel returned by a conditional get_* when a serializer declares a field that doesn't apply to
+# this instance; ``to_representation`` drops these so the key is omitted entirely. Distinct from
+# None, which renders as null. Shared by ChannelSerializer and InspectNodeSerializer below.
+_ABSENT = object()
 
-    ``extra_data`` holds free-form auth material and is excluded entirely.
+
+class ChannelSerializer(serializers.ModelSerializer):
+    """A channel's ``platform``, ``name``, messaging provider and platform-specific identifier fields.
+
+    ``extra_data`` holds free-form auth material and is excluded entirely. Each platform's non-secret
+    identifying field(s) are surfaced as top-level keys, present only for the platform they belong to:
+    ``number`` (WhatsApp), ``page_id`` (Facebook), ``sureadhere_tenant_id`` (SureAdhere),
+    ``commcare_connect_bot_name`` (CommCare Connect), and ``allow_all_domains`` / ``allowed_domains``
+    (Embedded Widget). Platforms whose identifier is itself a secret (Telegram's ``bot_token``, the
+    widget's ``widget_token``) surface none.
     """
 
+    # Identifier fields are dropped by ``to_representation`` for platforms that don't use them, so the
+    # schema extension marks them optional (see ``_ConditionalRequiredSchemaMixin``).
+    CONDITIONAL_RESPONSE_KEYS = (
+        "number",
+        "page_id",
+        "sureadhere_tenant_id",
+        "commcare_connect_bot_name",
+        "allow_all_domains",
+        "allowed_domains",
+    )
+
     messaging_provider = ProviderSerializer(allow_null=True)
+    number = serializers.SerializerMethodField()
+    page_id = serializers.SerializerMethodField()
+    sureadhere_tenant_id = serializers.SerializerMethodField()
+    commcare_connect_bot_name = serializers.SerializerMethodField()
+    allow_all_domains = serializers.SerializerMethodField()
+    allowed_domains = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperimentChannel
-        fields = ["platform", "name", "messaging_provider"]
+        fields = [
+            "platform",
+            "name",
+            "messaging_provider",
+            "number",
+            "page_id",
+            "sureadhere_tenant_id",
+            "commcare_connect_bot_name",
+            "allow_all_domains",
+            "allowed_domains",
+        ]
+
+    def to_representation(self, instance):
+        # Each identifier get_* yields _ABSENT for platforms that don't use that field; drop those so
+        # the key is omitted entirely (vs. None, which would render as null).
+        data = super().to_representation(instance)
+        return {key: value for key, value in data.items() if value is not _ABSENT}
+
+    def _identifier(self, channel, platform: ChannelPlatform, key: str):
+        """The ``extra_data`` value for ``key``, or ``_ABSENT`` when the channel isn't ``platform``."""
+        if channel.platform_enum != platform:
+            return _ABSENT
+        return (channel.extra_data or {}).get(key)
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_number(self, channel):
+        return self._identifier(channel, ChannelPlatform.WHATSAPP, "number")
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_page_id(self, channel):
+        return self._identifier(channel, ChannelPlatform.FACEBOOK, "page_id")
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_sureadhere_tenant_id(self, channel):
+        return self._identifier(channel, ChannelPlatform.SUREADHERE, "sureadhere_tenant_id")
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_commcare_connect_bot_name(self, channel):
+        return self._identifier(channel, ChannelPlatform.COMMCARE_CONNECT, "commcare_connect_bot_name")
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_allow_all_domains(self, channel):
+        if channel.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return _ABSENT
+        return ALL_DOMAINS in ((channel.extra_data or {}).get("allowed_domains") or [])
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_allowed_domains(self, channel):
+        if channel.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return _ABSENT
+        domains = (channel.extra_data or {}).get("allowed_domains") or []
+        return [domain for domain in domains if domain != ALL_DOMAINS]
 
 
 # ── Resolved-instance value objects ──────────────────────────────────────────────────────────────
@@ -321,11 +401,6 @@ class GraphSerializer(serializers.Serializer):
 
 
 # ── Node (ADR-0025) ──────────────────────────────────────────────────────────────────────────────
-# Returned by a resource get_* when the node TYPE doesn't declare its backing param field(s);
-# to_representation drops these so the key is omitted. Distinct from None, which renders as null.
-_ABSENT = object()
-
-
 class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     """One pipeline node, with the resources it references inlined.
 
@@ -631,6 +706,10 @@ class _ConditionalRequiredSchemaMixin:
             if not schema["required"]:
                 del schema["required"]
         return schema
+
+
+class ChannelSchemaExtension(_ConditionalRequiredSchemaMixin, OpenApiSerializerExtension):
+    target_class = "apps.api.v2.inspect.serializers.ChannelSerializer"
 
 
 class InspectNodeSchemaExtension(_ConditionalRequiredSchemaMixin, OpenApiSerializerExtension):

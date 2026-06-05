@@ -13,6 +13,7 @@ from apps.api.v2.inspect.serializers import (
     MediaCollectionSerializer,
     ProviderSerializer,
 )
+from apps.channels.models import ChannelPlatform
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
@@ -76,11 +77,68 @@ def test_file_serializer_excludes_url_summary_metadata():
     assert "file" not in data
 
 
+# platform, name and messaging_provider are present on every channel; identifier fields are added
+# on top of these only for the platform they belong to.
+_BASE_CHANNEL_KEYS = {"platform", "name", "messaging_provider"}
+
+
 @pytest.mark.django_db()
 def test_channel_serializer_excludes_extra_data():
-    channel = ExperimentChannelFactory.create(extra_data={"bot_token": "super-secret"})
+    channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "super-secret"}
+    )
     data = ChannelSerializer(channel).data
-    assert set(data.keys()) == {"platform", "name", "messaging_provider"}
+    # The telegram identifier is its bot_token (a secret), so no identifier field is surfaced for it.
+    assert set(data.keys()) == _BASE_CHANNEL_KEYS
+    assert "super-secret" not in json.dumps(data)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("platform", "extra_data", "expected_fields"),
+    [
+        (ChannelPlatform.WHATSAPP, {"number": "+27821234567"}, {"number": "+27821234567"}),
+        (ChannelPlatform.FACEBOOK, {"page_id": "123456"}, {"page_id": "123456"}),
+        (ChannelPlatform.SUREADHERE, {"sureadhere_tenant_id": "tnt_9"}, {"sureadhere_tenant_id": "tnt_9"}),
+        (
+            ChannelPlatform.COMMCARE_CONNECT,
+            {"commcare_connect_bot_name": "my-bot"},
+            {"commcare_connect_bot_name": "my-bot"},
+        ),
+        (ChannelPlatform.TELEGRAM, {"bot_token": "secret"}, {}),
+        (ChannelPlatform.SLACK, {"slack_channel_id": "C123"}, {}),
+    ],
+)
+def test_channel_identifier_fields_per_platform(platform, extra_data, expected_fields):
+    data = ChannelSerializer(ExperimentChannelFactory.create(platform=platform, extra_data=extra_data)).data
+    assert set(data.keys()) == _BASE_CHANNEL_KEYS | set(expected_fields)
+    for key, value in expected_fields.items():
+        assert data[key] == value
+
+
+@pytest.mark.django_db()
+def test_embedded_widget_identifier_allow_all_domains():
+    channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        extra_data={"allowed_domains": ["*"], "widget_token": "super-secret"},
+    )
+    data = ChannelSerializer(channel).data
+    assert set(data.keys()) == _BASE_CHANNEL_KEYS | {"allow_all_domains", "allowed_domains"}
+    assert data["allow_all_domains"] is True
+    assert data["allowed_domains"] == []
+    # The widget_token is a secret and must never be surfaced.
+    assert "super-secret" not in json.dumps(data)
+
+
+@pytest.mark.django_db()
+def test_embedded_widget_identifier_explicit_domains():
+    channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        extra_data={"allowed_domains": ["acme.com", "foo.org"], "widget_token": "super-secret"},
+    )
+    data = ChannelSerializer(channel).data
+    assert data["allow_all_domains"] is False
+    assert data["allowed_domains"] == ["acme.com", "foo.org"]
     assert "super-secret" not in json.dumps(data)
 
 

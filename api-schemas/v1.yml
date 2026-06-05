@@ -1251,9 +1251,14 @@ components:
     Channel:
       type: object
       description: |-
-        A channel's ``platform``, ``name`` and messaging provider.
+        A channel's ``platform``, ``name``, messaging provider and platform-specific identifier fields.
 
-        ``extra_data`` holds free-form auth material and is excluded entirely.
+        ``extra_data`` holds free-form auth material and is excluded entirely. Each platform's non-secret
+        identifying field(s) are surfaced as top-level keys, present only for the platform they belong to:
+        ``number`` (WhatsApp), ``page_id`` (Facebook), ``sureadhere_tenant_id`` (SureAdhere),
+        ``commcare_connect_bot_name`` (CommCare Connect), and ``allow_all_domains`` / ``allowed_domains``
+        (Embedded Widget). Platforms whose identifier is itself a secret (Telegram's ``bot_token``, the
+        widget's ``widget_token``) surface none.
       properties:
         platform:
           $ref: '#/components/schemas/PlatformEnum'
@@ -1265,6 +1270,30 @@ components:
           allOf:
           - $ref: '#/components/schemas/Provider'
           nullable: true
+        number:
+          type: string
+          nullable: true
+          readOnly: true
+        page_id:
+          type: string
+          nullable: true
+          readOnly: true
+        sureadhere_tenant_id:
+          type: string
+          nullable: true
+          readOnly: true
+        commcare_connect_bot_name:
+          type: string
+          nullable: true
+          readOnly: true
+        allow_all_domains:
+          type: boolean
+          readOnly: true
+        allowed_domains:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - messaging_provider
       - name
