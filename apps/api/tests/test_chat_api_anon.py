@@ -16,7 +16,7 @@ def api_client():
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory.create(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
 
 
 @pytest.mark.django_db()

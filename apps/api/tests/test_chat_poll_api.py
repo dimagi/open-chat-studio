@@ -19,7 +19,7 @@ def api_client():
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory.create(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
 
 
 @pytest.fixture()
@@ -69,6 +69,7 @@ def mock_session():
     mock_sess.experiment.name = "TestBot"
     mock_sess.experiment.description = "A test bot"
     mock_sess.experiment.is_public = True
+    mock_sess.session_token_required = False
     with (
         mock.patch("apps.api.views.chat.get_experiment_session_cached", return_value=mock_sess),
         mock.patch("apps.api.permissions.get_experiment_session_cached", return_value=mock_sess),

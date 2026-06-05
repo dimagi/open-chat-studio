@@ -15,7 +15,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.authentication import EmbeddedWidgetAuthentication
-from apps.api.permissions import LegacySessionAccessPermission, WidgetDomainPermission
+from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -36,7 +36,7 @@ from apps.files.models import File
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
-SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
+SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
