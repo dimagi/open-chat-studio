@@ -465,7 +465,11 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     def get_params(self, node) -> dict:
         # Resource ids are surfaced under their own keys, never echoed in params (and "name" is the
         # node label, exposed separately) — strip every known resource field, declared or not.
-        return {k: v for k, v in (node.params or {}).items() if k not in RESOURCE_PARAM_FIELDS and k != "name"}
+        params = {k: v for k, v in (node.params or {}).items() if k not in RESOURCE_PARAM_FIELDS and k != "name"}
+        # ``max_results`` only bounds index search, so surface it under a clearer name.
+        if "max_results" in params:
+            params["max_indexed_collection_search_results"] = params.pop("max_results")
+        return params
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):

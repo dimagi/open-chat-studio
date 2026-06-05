@@ -7,6 +7,8 @@ source fields, and ``voice`` still renders when only one of its source fields is
 
 import dataclasses
 
+import pytest
+
 from apps.api.v2.inspect.serializers import InspectNodeSerializer
 from apps.pipelines.models import Node
 
@@ -80,6 +82,15 @@ def test_llm_node_declares_all_keys_with_null_and_empty_when_unset():
     assert data["custom_actions"] == []
     assert data["indexed_collections"] == []
     assert "assistant" not in data  # LLMResponseWithPrompt does not declare assistant
+
+
+@pytest.mark.parametrize(("source", "value", "renamed"), [("max_results", 20, "max_indexed_collection_search_results")])
+def test_params_renamed(source, value, renamed):
+    """Test parameter renames"""
+    data = _render(_Node("a", "LLMResponseWithPrompt", "Answer", {"prompt": "hi", source: value}))
+    params = data["params"]
+    assert source not in params
+    assert params[renamed] == 20
 
 
 def test_voice_not_dropped_when_only_synthetic_voice_field_set():
