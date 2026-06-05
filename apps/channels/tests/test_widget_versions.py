@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from unittest.mock import patch
 
+from django.template import Context, Template
+
 from apps.channels.widget_versions import (
     LATEST_VERSION,
     WidgetDeprecation,
@@ -95,3 +97,9 @@ def test_widget_script_url():
         f"https://unpkg.com/open-chat-studio-widget@{LATEST_VERSION}"
         "/dist/open-chat-studio-widget/open-chat-studio-widget.esm.js"
     )
+
+
+def test_widget_script_url_template_tag():
+    tpl = Template("{% load chat_widget_tags %}{% widget_script_url %}")
+    rendered = tpl.render(Context())
+    assert f"open-chat-studio-widget@{LATEST_VERSION}" in rendered
