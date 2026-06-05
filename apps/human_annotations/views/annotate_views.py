@@ -88,7 +88,6 @@ def _check_assignee_access(queue, user):
 def _build_annotations_context(item, user, queue):
     """Build the annotations list for display on the annotate page."""
     schema_fields = list(queue.schema.keys())
-    can_set_authoritative = user.has_perm("human_annotations.change_annotationqueue")
     return [
         {
             "annotation_id": ann.id,
@@ -99,7 +98,6 @@ def _build_annotations_context(item, user, queue):
             "is_authoritative": ann.is_authoritative,
             "authoritative_set_by": ann.authoritative_set_by,
             "authoritative_set_at": ann.authoritative_set_at,
-            "can_set_authoritative": can_set_authoritative,
         }
         for ann in item.annotations.filter(status=AnnotationStatus.SUBMITTED)
         .select_related("reviewer", "authoritative_set_by")
@@ -357,14 +355,12 @@ class UnflagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         return redirect_url
 
 
-class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+class SetAuthoritative(LoginAndTeamRequiredMixin, View):
     """Queue-admin endpoint to mark/unmark an annotation as authoritative.
 
     Enforces at-most-one-per-item at the application layer too (clears the flag
     on any sibling annotation before setting) so we never trip the partial unique constraint.
     """
-
-    permission_required = "human_annotations.change_annotationqueue"
 
     def post(self, request, team_slug: str, pk: int, item_pk: int, annotation_pk: int):
         annotation = get_object_or_404(
