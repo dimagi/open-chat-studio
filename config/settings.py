@@ -367,6 +367,8 @@ MEDIA_URL = "/media/"
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default=None)
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
 AWS_S3_REGION = env("AWS_S3_REGION", default=None)
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default=None)
+AWS_S3_USE_PATH_STYLE = env.bool("AWS_S3_USE_PATH_STYLE", default=False)
 WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default=None)
 
 USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
@@ -375,25 +377,42 @@ if USE_S3_STORAGE:
     AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
+    # S3 options for custom endpoints
+    s3_options = {
+        "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
+        "location": "resources",
+    }
+    if AWS_S3_ENDPOINT_URL:
+        s3_options["endpoint_url"] = AWS_S3_ENDPOINT_URL
+    s3_options["use_path_style"] = AWS_S3_USE_PATH_STYLE
+
     # use private storage by default
     STORAGES["default"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
-        "OPTIONS": {
-            "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
-            "location": "resources",
-        },
+        "OPTIONS": s3_options,
     }
 
     # public storge for media files e.g. user profile pictures
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
-    MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+
+    # Build MEDIA_URL based on endpoint or default AWS S3
+    if AWS_S3_ENDPOINT_URL:
+        MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_PUBLIC_STORAGE_BUCKET_NAME}/{PUBLIC_MEDIA_LOCATION}/"
+    else:
+        MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+
+    public_s3_options = {
+        "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
+        "location": PUBLIC_MEDIA_LOCATION,
+    }
+    if AWS_S3_ENDPOINT_URL:
+        public_s3_options["endpoint_url"] = AWS_S3_ENDPOINT_URL
+    public_s3_options["use_path_style"] = AWS_S3_USE_PATH_STYLE
+
     STORAGES["public"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
-        "OPTIONS": {
-            "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
-            "location": PUBLIC_MEDIA_LOCATION,
-        },
+        "OPTIONS": public_s3_options,
     }
 
 # Default primary key field type

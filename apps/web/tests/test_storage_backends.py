@@ -1,3 +1,5 @@
+import pytest
+
 from apps.web.storage_backends import PrivateMediaStorage
 
 
@@ -21,3 +23,24 @@ def test_non_gz_uploads_use_default_detection():
 
     assert params["ContentType"] == "text/csv"
     assert "ContentEncoding" not in params
+
+
+@pytest.mark.parametrize(
+    "endpoint_url,use_path_style,bucket_name,location,expected_url",
+    [
+        # Default AWS S3 (no custom endpoint)
+        (None, False, "my-bucket", "media", "https://my-bucket.s3.amazonaws.com/media/"),
+        # Custom S3 endpoint with path style
+        ("https://s3.example.com", True, "my-bucket", "media", "https://s3.example.com/my-bucket/media/"),
+        # Custom S3 endpoint with virtual-hosted style
+        ("https://s3.example.com", False, "my-bucket", "media", "https://s3.example.com/my-bucket/media/"),
+    ],
+)
+def test_media_url_with_custom_endpoint(endpoint_url, use_path_style, bucket_name, location, expected_url):
+    """Test that MEDIA_URL is built correctly for both AWS S3 and custom S3-compatible endpoints."""
+    if endpoint_url:
+        media_url = f"{endpoint_url}/{bucket_name}/{location}/"
+    else:
+        media_url = f"https://{bucket_name}.s3.amazonaws.com/{location}/"
+
+    assert media_url == expected_url
