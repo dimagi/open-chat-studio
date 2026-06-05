@@ -583,7 +583,6 @@ def test_full_response_body():
             "conversational_consent_enabled": False,
             "voice_response_behaviour": "reciprocal",
             "echo_transcript": True,
-            "use_processor_bot_voice": False,
             "debug_mode_enabled": False,
             "file_uploads_enabled": False,
             "participant_allowlist": ["+27123"],

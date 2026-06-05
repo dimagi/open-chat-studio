@@ -23,6 +23,7 @@ from apps.api.v2.inspect.nodes import (
     graph_digest,
     node_render_order,
 )
+from apps.api.v2.inspect.param_serializers import node_params_schema
 from apps.api.v2.utils import parse_custom_actions
 from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -265,8 +266,18 @@ class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
 class FlattenedLlmSerializer(FlattenedModelProviderSerializer):
     """An LLM provider and model, flattened into one ``llm`` object (ADR-0025)."""
 
-    max_token_limit = serializers.IntegerField(source="model.max_token_limit", default=None, allow_null=True)
-    deprecated = serializers.BooleanField(source="model.deprecated", default=None, allow_null=True)
+    max_token_limit = serializers.IntegerField(
+        source="model.max_token_limit",
+        default=None,
+        allow_null=True,
+        help_text="The model's maximum context window, in tokens.",
+    )
+    deprecated = serializers.BooleanField(
+        source="model.deprecated",
+        default=None,
+        allow_null=True,
+        help_text="True if this model is deprecated and should be migrated off.",
+    )
 
 
 class FlattenedVoiceSerializer(FlattenedProviderSerializer):
@@ -277,10 +288,25 @@ class FlattenedVoiceSerializer(FlattenedProviderSerializer):
 
     # Unlike the llm/embedding pairs, ``type`` has no fallback to the voice half — a provider-less
     # voice renders ``type: null`` (matches the pre-refactor shape).
-    type = serializers.CharField(source="provider.type", default=None, allow_null=True)
+    type = serializers.CharField(
+        source="provider.type",
+        default=None,
+        allow_null=True,
+        help_text="Voice provider type; null for a voice with no provider configured.",
+    )
     voice_name = serializers.CharField(source="voice.name", default=None, allow_null=True)
-    language = serializers.CharField(source="voice.language", default=None, allow_null=True)
-    neural = serializers.BooleanField(source="voice.neural", default=None, allow_null=True)
+    language = serializers.CharField(
+        source="voice.language",
+        default=None,
+        allow_null=True,
+        help_text="Voice language/locale code; empty when the voice has no explicit language set.",
+    )
+    neural = serializers.BooleanField(
+        source="voice.neural",
+        default=None,
+        allow_null=True,
+        help_text="Use the provider's neural (higher-quality) voice engine, where supported.",
+    )
 
 
 class MediaCollectionSerializer(serializers.ModelSerializer):
@@ -366,14 +392,25 @@ class _FetcherContextMixin:
 class InspectSettingsSerializer(serializers.Serializer):
     """The chatbot's non-secret settings, read directly off the experiment."""
 
-    seed_message = serializers.CharField(allow_blank=True)
+    seed_message = serializers.CharField(
+        allow_blank=True, help_text="Message used to start the conversation before the participant says anything."
+    )
     conversational_consent_enabled = serializers.BooleanField()
-    voice_response_behaviour = serializers.CharField()
-    echo_transcript = serializers.BooleanField()
-    use_processor_bot_voice = serializers.BooleanField()
+    voice_response_behaviour = serializers.CharField(
+        help_text=(
+            "When the bot replies with voice: ``always``, ``reciprocal`` (voice only when the "
+            "participant sent voice), or ``never``."
+        )
+    )
+    echo_transcript = serializers.BooleanField(
+        help_text="When the participant sends a voice message, also reply with the text the bot transcribed."
+    )
     debug_mode_enabled = serializers.BooleanField()
     file_uploads_enabled = serializers.BooleanField()
-    participant_allowlist = serializers.ListField(child=serializers.CharField())
+    participant_allowlist = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Identifiers permitted to chat; empty means no allowlist restriction.",
+    )
 
 
 # ── Graph (topology digest) ───────────────────────────────────────────────────────────────────
@@ -386,15 +423,30 @@ class GraphNodeSerializer(serializers.Serializer):
 
 @extend_schema_serializer(component_name="InspectGraphEdge")
 class GraphEdgeSerializer(serializers.Serializer):
-    source = serializers.CharField()
-    target = serializers.CharField()
-    source_handle = serializers.CharField(allow_null=True)
-    target_handle = serializers.CharField(allow_null=True)
+    source = serializers.CharField(help_text="``node_id`` the edge leaves from.")
+    target = serializers.CharField(help_text="``node_id`` the edge points to.")
+    source_handle = serializers.CharField(
+        allow_null=True,
+        help_text=(
+            "Output handle on the source node. Routers expose one handle per branch "
+            "(``output_0``, ``output_1``, …), each mapping by index to the router's ``keywords``; "
+            "most nodes have a single ``output``."
+        ),
+    )
+    target_handle = serializers.CharField(
+        allow_null=True,
+        help_text="Input handle on the target node; currently always null (nodes have one implicit input).",
+    )
 
 
 @extend_schema_serializer(component_name="InspectGraph")
 class GraphSerializer(serializers.Serializer):
-    """The pipeline's shape: its nodes and the edges between them (without canvas positions)."""
+    """The pipeline's shape: its nodes and the edges between them (without canvas positions).
+
+    This is the topology only — each node carries just ``node_id``/``type``/``label`` for drawing the
+    DAG. The sibling ``nodes`` list on the pipeline holds the same nodes in render order with their
+    full configuration.
+    """
 
     nodes = GraphNodeSerializer(many=True)
     edges = GraphEdgeSerializer(many=True)
@@ -461,7 +513,7 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
         data = super().to_representation(instance)
         return {key: value for key, value in data.items() if value is not _ABSENT}
 
-    @extend_schema_field(serializers.DictField())
+    @extend_schema_field(node_params_schema())
     def get_params(self, node) -> dict:
         # Resource ids are surfaced under their own keys, never echoed in params (and "name" is the
         # node label, exposed separately) — strip every known resource field, declared or not.
@@ -536,8 +588,12 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────────────────────────
 class InspectPipelineSerializer(serializers.ModelSerializer):
-    graph = serializers.SerializerMethodField()
-    nodes = serializers.SerializerMethodField()
+    graph = serializers.SerializerMethodField(
+        help_text="The pipeline topology (nodes as id/type/label, plus edges) for drawing the DAG."
+    )
+    nodes = serializers.SerializerMethodField(
+        help_text="The same nodes as ``graph``, in render order, each with its full configuration."
+    )
 
     class Meta:
         model = Pipeline
@@ -569,8 +625,14 @@ class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSeri
     # extension marks it optional (see ``_ConditionalRequiredSchemaMixin``).
     CONDITIONAL_RESPONSE_KEYS = ("pipeline",)
 
-    type = serializers.CharField(source="action_type")
-    params = serializers.SerializerMethodField()
+    type = serializers.CharField(
+        source="action_type",
+        help_text=(
+            "What the trigger runs: ``pipeline_start``, ``send_message_to_bot``, ``end_conversation``, "
+            "``schedule_trigger``, or ``log``."
+        ),
+    )
+    params = serializers.SerializerMethodField(help_text="Action parameters; keys depend on the action ``type``.")
     pipeline = serializers.SerializerMethodField()
 
     class Meta:
@@ -603,6 +665,12 @@ class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSeri
 
 
 class InspectStaticTriggerSerializer(serializers.ModelSerializer):
+    type = serializers.CharField(
+        help_text=(
+            "The conversation event that fires this trigger (e.g. ``conversation_start``, "
+            "``new_human_message``, ``last_timeout`` — fired after the final inactivity timeout)."
+        )
+    )
     action = InspectTriggerActionSerializer()
 
     class Meta:
@@ -611,7 +679,15 @@ class InspectStaticTriggerSerializer(serializers.ModelSerializer):
 
 
 class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
-    delay_seconds = serializers.IntegerField(source="delay")
+    delay_seconds = serializers.IntegerField(
+        source="delay", help_text="Seconds of inactivity before the trigger fires."
+    )
+    total_num_triggers = serializers.IntegerField(
+        help_text="Maximum number of times this timeout fires within a session."
+    )
+    trigger_from_first_message = serializers.BooleanField(
+        help_text="Measure the delay from the first message (true) rather than the most recent message (false)."
+    )
     action = InspectTriggerActionSerializer()
 
     class Meta:
@@ -620,7 +696,12 @@ class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
 
 
 class InspectEventsSerializer(serializers.Serializer):
-    """A chatbot's static and timeout triggers, excluding archived ones."""
+    """A chatbot's static and timeout triggers, excluding archived ones.
+
+    ``static_triggers`` fire on conversation events (start, end, a new message, …); ``timeout_triggers``
+    fire after a period of inactivity. The two overlap at the end of a conversation: a ``last_timeout``
+    static trigger fires once the final timeout has elapsed.
+    """
 
     static_triggers = serializers.SerializerMethodField()
     timeout_triggers = serializers.SerializerMethodField()
@@ -645,9 +726,17 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     """
 
     id = serializers.UUIDField(source="public_id")
-    is_unreleased = serializers.BooleanField(source="is_working_version")
-    is_published_version = serializers.BooleanField(source="is_default_version")
-    version_description = serializers.CharField(allow_blank=True)
+    is_unreleased = serializers.BooleanField(
+        source="is_working_version",
+        help_text="True for the working (draft) version that has not been released; never the published one.",
+    )
+    is_published_version = serializers.BooleanField(
+        source="is_default_version",
+        help_text="True for the version currently served to participants (the live default).",
+    )
+    version_description = serializers.CharField(
+        allow_blank=True, help_text="Free-text label for this version (e.g. 'latest'); not an enum."
+    )
     team_slug = serializers.CharField(source="team.slug")
     settings = InspectSettingsSerializer(source="*")
     consent_form = ConsentFormSerializer(allow_null=True)
