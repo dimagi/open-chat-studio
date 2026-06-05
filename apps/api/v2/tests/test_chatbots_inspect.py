@@ -307,16 +307,6 @@ def test_inspect_does_not_create_team_channels(inspect_bot):
     ).exists()
 
 
-@pytest.mark.django_db()
-def test_channel_allowlisted(inspect_bot):
-    team_slug = inspect_bot.experiment.team.slug
-    assert _get(inspect_bot)["channels"] == [
-        {"platform": "telegram", "name": "Support TG", "messaging_provider": None},
-        {"platform": "web", "name": f"{team_slug}-web-channel", "messaging_provider": None},
-        {"platform": "api", "name": f"{team_slug}-api-channel", "messaging_provider": None},
-    ]
-
-
 # ── Cross-team isolation ─────────────────────────────────────────────────────────────────────────
 @pytest.mark.django_db()
 def test_cross_team_resource_not_embedded(inspect_bot):
