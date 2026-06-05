@@ -12,7 +12,6 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
-from apps.channels import widget_versions
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -584,7 +583,6 @@ class WidgetParams(forms.Widget):
             context["widget"]["version"] = self.channel.widget_version
             context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
             context["widget"]["version_status"] = self.channel.widget_update_status
-        context["latest_widget_version"] = widget_versions.LATEST_VERSION
         context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
         context["docs_links"] = settings.DOCUMENTATION_LINKS
         return context

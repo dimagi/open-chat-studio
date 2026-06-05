@@ -194,4 +194,3 @@ def test_widget_params_context_includes_version_info(widget_channel):
     context = widget.get_context("widget_token", "", {})
     assert context["widget"]["version"] == "0.1.0"
     assert context["widget"]["version_status"] is not None
-    assert context["latest_widget_version"]
