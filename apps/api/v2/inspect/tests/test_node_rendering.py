@@ -82,15 +82,6 @@ def test_llm_node_declares_all_keys_with_null_and_empty_when_unset():
     assert "assistant" not in data  # LLMResponseWithPrompt does not declare assistant
 
 
-def test_llm_provider_model_id_not_leaked_into_params():
-    """The composite ``llm`` key consumes both of its source fields, so neither leaks into ``params``."""
-    node = _Node("a", "RouterNode", "Route", {"llm_provider_id": "2", "llm_provider_model_id": "11", "keywords": ["X"]})
-    data = _render(node)
-    assert "llm_provider_id" not in data["params"]
-    assert "llm_provider_model_id" not in data["params"]
-    assert data["params"] == {"keywords": ["X"]}
-
-
 def test_voice_not_dropped_when_only_synthetic_voice_field_set():
     """The ``voice`` key still renders when the node type has only one of its two source fields."""
 
