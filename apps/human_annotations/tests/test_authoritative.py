@@ -357,6 +357,26 @@ def test_annotate_item_page_shows_awaiting_banner(admin_client, team, second_use
 
 
 @pytest.mark.django_db()
+def test_annotate_item_page_shows_authoritative_button_for_reviewer(reviewer_client, reviewer_user, team, second_user):
+    """A reviewer (no change_annotationqueue) can POST set_authoritative, so the UI must render the button."""
+    queue = _make_queue(team, num_reviews_required=2)
+    item = _make_item(queue)
+    admin = team.members.first()
+    # Assignees are other users, so the reviewer (a non-assignee) sees the read-only annotations list.
+    queue.assignees.set([admin, second_user])
+    Annotation.objects.create(item=item, team=team, reviewer=admin, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=item, team=team, reviewer=second_user, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    url = reverse("human_annotations:annotate_item", args=[team.slug, queue.pk, item.pk])
+    response = reviewer_client.get(url)
+
+    assert response.status_code == 200
+    assert b"Mark authoritative" in response.content
+
+
+@pytest.mark.django_db()
 def test_backfill_function_marks_single_reviewer_and_downgrades_completed(team, second_user):
     """Direct test of the backfill helper. Since Django migrations have already
     run in the test DB, we exercise the helper function in isolation by setting
