@@ -13,6 +13,8 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment
 from apps.files.models import File
+from apps.teams.utils import current_team
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -47,7 +49,17 @@ CHANNEL_SECRET = "telegram-token-SECRET-xyz"
 
 
 @pytest.fixture(scope="module")
-def inspect_bot(db):
+def inspect_bot(django_db_setup, django_db_blocker):
+    """Build the bot once per module. Module-scoped fixtures can't request the function-scoped ``db``
+    fixture, so unblock DB access directly and tear the team down once the module finishes."""
+    with django_db_blocker.unblock():
+        bot = _build_inspect_bot()
+        yield bot
+        with current_team(bot.experiment.team):
+            delete_object_with_auditing_of_related_objects(bot.experiment.team)
+
+
+def _build_inspect_bot():
     """Build a realistic bot that exercises every assertion here, returning the created objects so
     each test can build the exact expected response from their ids."""
     team = TeamWithUsersFactory.create()
