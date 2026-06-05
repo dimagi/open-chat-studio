@@ -118,6 +118,7 @@ nav:
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
+      - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md
