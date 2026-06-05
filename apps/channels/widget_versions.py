@@ -1,0 +1,98 @@
+"""Single source of truth for chat widget version policy.
+
+Update LATEST_VERSION in the same PR that publishes a new widget release.
+Add a WidgetDeprecation entry to deprecate old versions. See
+docs/developer_guides/widget_versioning.md for the full process.
+"""
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from packaging.version import InvalidVersion, Version
+
+LATEST_VERSION = "0.8.0"
+
+WIDGET_DOCS_URL = "https://docs.openchatstudio.com/chat_widget/"
+
+# Widgets older than 0.5.1 (Sept 2025) do not send the x-ocs-widget-version
+# header, so a missing/unparseable version is treated as older than everything.
+MAX_VERSION_LENGTH = 32
+
+
+@dataclass(frozen=True)
+class WidgetDeprecation:
+    below_version: str  # all versions < this are deprecated
+    sunset_at: datetime  # tz-aware; RFC 8594 semantics — intent, not enforcement
+    docs_url: str = WIDGET_DOCS_URL
+
+
+DEPRECATIONS: list[WidgetDeprecation] = []
+
+
+@dataclass(frozen=True)
+class WidgetUpdateStatus:
+    level: str  # DaisyUI badge/alert level: "info" or "warning"
+    message: str
+    deprecation: WidgetDeprecation | None = None
+
+
+def widget_script_url() -> str:
+    return (
+        f"https://unpkg.com/open-chat-studio-widget@{LATEST_VERSION}"
+        "/dist/open-chat-studio-widget/open-chat-studio-widget.esm.js"
+    )
+
+
+def clean_widget_version(raw: str | None) -> str | None:
+    """Return the version string if it is a sane version, else None."""
+    if not raw or len(raw) > MAX_VERSION_LENGTH:
+        return None
+    if _parse(raw) is None:
+        return None
+    return raw
+
+
+def get_deprecation(version: str | None) -> WidgetDeprecation | None:
+    """Return the deprecation covering `version`, if any.
+
+    A missing or unparseable version is treated as older than everything.
+    When multiple deprecations match, the one with the highest bound wins.
+    """
+    parsed = _parse(version)
+    matching = [d for d in DEPRECATIONS if parsed is None or parsed < Version(d.below_version)]
+    if not matching:
+        return None
+    return max(matching, key=lambda d: Version(d.below_version))
+
+
+def is_outdated(version: str | None) -> bool:
+    """True if `version` is a known version older than LATEST_VERSION."""
+    parsed = _parse(version)
+    return parsed is not None and parsed < Version(LATEST_VERSION)
+
+
+def get_widget_update_status(version: str | None) -> WidgetUpdateStatus | None:
+    """Status for UI badges. None means no badge (current, or never reported)."""
+    if version is None:
+        return None
+    if deprecation := get_deprecation(version):
+        return WidgetUpdateStatus(
+            level="warning",
+            message=(f"Widget version {version} is deprecated — support ends {deprecation.sunset_at:%d %b %Y}."),
+            deprecation=deprecation,
+        )
+    if is_outdated(version):
+        return WidgetUpdateStatus(
+            level="info",
+            message=f"Widget {version} in use — {LATEST_VERSION} available.",
+        )
+    return None
+
+
+def _parse(version: str | None) -> Version | None:
+    if not version:
+        return None
+    try:
+        return Version(version)
+    except InvalidVersion:
+        return None
