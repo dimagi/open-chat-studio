@@ -114,7 +114,7 @@ small `versioning.py`.
 
 ### Serializer tree
 
-```
+```text
 ChatbotInspectSerializer(ModelSerializer on Experiment)
 ├── id / name / description / version_number / is_unreleased / is_published_version
 │   / version_description / team_slug            (model fields, renamed via source=)
@@ -278,7 +278,7 @@ media_collection / indexed_collections`, with `null`/`[]` where unset. It is
 by the view, then placed in serializer context. It is the collector reshaped: it
 batch-loads, it does not lazily query per field.
 
-```
+```text
 ResourceFetcher.for_experiment(target):
   1. id-collection pre-pass — iter_resource_refs() over every pipeline node AND every
      pipeline_start-embedded pipeline's nodes, yielding (kind, raw_id); _as_int drops
