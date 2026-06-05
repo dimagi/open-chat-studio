@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from telebot import TeleBot, apihelper, types
 
+from apps.channels import widget_versions
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -566,10 +567,11 @@ class CommCareConnectChannelForm(ExtraFormBase):
 class WidgetParams(forms.Widget):
     template_name = "channels/widgets/widget_params.html"
 
-    def __init__(self, experiment, widget_token):
+    def __init__(self, experiment, widget_token, channel=None):
         super().__init__()
         self.experiment = experiment
         self.widget_token = widget_token
+        self.channel = channel
 
     def format_value(self, value):
         return "" if value is None else value
@@ -578,6 +580,11 @@ class WidgetParams(forms.Widget):
         context = super().get_context(name, value, attrs)
         context["widget"]["experiment"] = self.experiment
         context["widget"]["token"] = self.widget_token
+        if self.channel:
+            context["widget"]["version"] = self.channel.widget_version
+            context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
+            context["widget"]["version_status"] = self.channel.widget_update_status
+        context["latest_widget_version"] = widget_versions.LATEST_VERSION
         context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
         context["docs_links"] = settings.DOCUMENTATION_LINKS
         return context
@@ -624,7 +631,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             if widget_token:
                 self.initial["widget_token"] = widget_token
                 self.fields["widget_token"].widget = WidgetParams(
-                    experiment=self.channel.experiment, widget_token=widget_token
+                    experiment=self.channel.experiment, widget_token=widget_token, channel=self.channel
                 )
 
         self.form_attrs = {

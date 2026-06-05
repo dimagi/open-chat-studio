@@ -30,6 +30,21 @@
           <i class="fa-solid fa-copy"></i> Copy
       </button>
     </div>
+    {% if widget.version_status %}
+      <div role="alert" class="alert alert-{{ widget.version_status.level }} mt-3">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span>
+          {{ widget.version_status.message }}
+          Replace the script tag on your site with the embed code below to upgrade.
+        </span>
+      </div>
+    {% elif widget.version %}
+      <div class="text-sm opacity-70 mt-3">
+        <i class="fa-solid fa-circle-check me-1"></i>
+        Your site last reported widget version {{ widget.version }}
+        ({{ widget.version_updated_at|date }}) — up to date.
+      </div>
+    {% endif %}
     <h3 class="card-title text-base mt-3">
       <i class="fa-solid fa-code me-1"></i>
       Embed Code

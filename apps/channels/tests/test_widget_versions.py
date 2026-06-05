@@ -6,6 +6,7 @@ from django.template import Context, Template
 from django.utils import timezone
 from field_audit.models import AuditAction, AuditEvent
 
+from apps.channels.forms import WidgetParams
 from apps.channels.models import ChannelPlatform
 from apps.channels.widget_versions import (
     LATEST_VERSION,
@@ -179,3 +180,18 @@ class TestWidgetUpdateStatusProperty:
     def test_non_widget_channel(self):
         channel = ExperimentChannelFactory()  # telegram
         assert channel.widget_update_status is None
+
+
+@pytest.mark.django_db()
+def test_widget_params_context_includes_version_info(widget_channel):
+    type(widget_channel).objects.filter(pk=widget_channel.pk).update(
+        widget_version="0.1.0",
+        widget_version_updated_at=timezone.now(),
+        audit_action=AuditAction.IGNORE,
+    )
+    widget_channel.refresh_from_db()
+    widget = WidgetParams(experiment=widget_channel.experiment, widget_token="tok", channel=widget_channel)
+    context = widget.get_context("widget_token", "", {})
+    assert context["widget"]["version"] == "0.1.0"
+    assert context["widget"]["version_status"] is not None
+    assert context["latest_widget_version"]
