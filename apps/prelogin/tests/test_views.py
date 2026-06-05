@@ -26,3 +26,10 @@ def test_platform_redirects_to_home_anchor(client):
     response = client.get(reverse("prelogin:platform"))
     assert response.status_code == 301
     assert response.url == "/#how-it-works"
+
+
+@pytest.mark.django_db()
+def test_about_page_renders(client):
+    response = client.get(reverse("prelogin:about"))
+    assert response.status_code == 200
+    assert b"Community" in response.content
