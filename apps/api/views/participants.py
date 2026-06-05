@@ -1,11 +1,13 @@
+import logging
 import uuid
 
+import httpx
 from django.db import transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,6 +21,18 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
+
+logger = logging.getLogger("ocs.api")
+
+
+class ServiceUnavailable(APIException):
+    status_code = 503
+    default_detail = "Service temporarily unavailable."
+
+
+class BadRequest(APIException):
+    status_code = 400
+    default_detail = "Bad request."
 
 
 class ParticipantView(APIView):
@@ -241,7 +255,23 @@ def _setup_connect_channels(identifier, participant_data_by_experiment_id):
 
     connect_client = CommCareConnectClient()
     for channel, participant_data in pending:
-        create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+        try:
+            create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "Failed to create CommCare Connect channel for participant %s: HTTP %s - %s",
+                identifier,
+                e.response.status_code,
+                e.response.text,
+            )
+            if e.response.status_code == 404:
+                raise NotFound("Failed to create channel: Participant not found in CommCare Connect") from e
+            elif e.response.status_code >= 500:
+                raise ServiceUnavailable("Failed to create channel: CommCare Connect service error") from e
+            raise BadRequest(f"Failed to create channel: {e.response.text}") from e
+        except httpx.HTTPError as e:
+            logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(e))
+            raise ServiceUnavailable("Failed to create channel: Unable to connect to CommCare Connect service") from e
 
 
 def _schedule_external_id(data, experiment, participant):

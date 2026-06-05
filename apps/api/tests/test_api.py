@@ -430,6 +430,53 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
 
 
 @pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+@pytest.mark.parametrize(
+    ("upstream", "expected_status"),
+    [
+        (500, 503),
+        (404, 404),
+        (400, 400),
+        ("network_error", 503),
+    ],
+)
+def test_update_participant_data_connect_channel_failure(httpx_mock, upstream, expected_status):
+    """A Connect API failure fails the request, but the participant data remains saved."""
+    url = f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/"
+    if upstream == "network_error":
+        # the client retries network errors up to 3 times
+        for _ in range(3):
+            httpx_mock.add_exception(httpx.ConnectError("connection failed"), method="POST", url=url)
+    else:
+        httpx_mock.add_response(method="POST", url=url, status_code=upstream)
+
+    team = TeamWithUsersFactory.create()
+    experiment = ExperimentFactory.create(team=team)
+    ExperimentChannelFactory.create(
+        team=team,
+        experiment=experiment,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "bot1"},
+    )
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+
+    data = {
+        "identifier": "connectid_3",
+        "platform": "commcare_connect",
+        "data": [{"experiment": str(experiment.public_id), "data": {"name": "John"}}],
+    }
+    response = client.post(reverse("api:participant-data"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == expected_status
+    assert "Failed to create channel" in response.json()["detail"]
+    # the participant data was saved despite the channel-creation failure
+    participant_data = ParticipantData.objects.get(participant__identifier="connectid_3", experiment=experiment)
+    assert participant_data.data == {"name": "John"}
+    assert "commcare_connect_channel_id" not in participant_data.system_metadata
+
+
+@pytest.mark.django_db()
 def test_register_connect_participant(client, experiment):
     """
     Test registration of a participant with a connect ID. We want to ensure that if a participant already exists with
