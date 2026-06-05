@@ -1,0 +1,272 @@
+{% extends "prelogin/base.html" %}
+{% load static %}
+
+{% block title %}Contact | Open Chat Studio{% endblock %}
+
+{% block meta %}
+<meta name="description" content="Reach out to the Open Chat Studio team to learn more, collaborate on a project, or join the open-source community.">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+<link rel="canonical" href="{{ request.build_absolute_uri }}">
+<meta property="og:title" content="Contact | Open Chat Studio">
+<meta property="og:description" content="Reach out to the Open Chat Studio team to learn more, collaborate on a project, or join the open-source community.">
+<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'prelogin/images/ocs-device-lineup.png' %}">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ContactPage",
+  "name": "Contact Open Chat Studio",
+  "description": "Get in touch with the Open Chat Studio team to schedule a walkthrough, ask about deployments, or join the community.",
+  "url": "{{ request.build_absolute_uri }}",
+  "mainEntity": {
+    "@type": "Organization",
+    "name": "Open Chat Studio by Dimagi",
+    "url": "{{ request.build_absolute_uri }}",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "sales",
+      "email": "ocs-info@dimagi.com",
+      "availableLanguage": "English"
+    },
+    "parentOrganization": {
+      "@type": "Organization",
+      "name": "Dimagi, Inc.",
+      "url": "https://dimagi.com/"
+    }
+  }
+}
+</script>
+{% endblock meta %}
+
+{% block page_styles %}
+<style>
+  :root {
+    --ocs-indigo: #16006D;
+    --ocs-indigo-deep: #2A1090;
+    --ocs-green: #8DE969;
+  }
+
+  body { background: #D6EEF2; }
+
+  /* ─────────────────────────────────────────────────────────── */
+  /*  MAIN CONTACT SECTION (matches OCS .ocs-cta-blue band)      */
+  /* ─────────────────────────────────────────────────────────── */
+  .contact-section {
+    position: relative;
+    padding: 80px 0 96px;
+    background:
+      radial-gradient(800px 360px at 0% 0%, rgba(137,210,220,0.30), transparent 65%),
+      radial-gradient(700px 320px at 100% 100%, rgba(141,233,105,0.14), transparent 65%),
+      #D6EEF2;
+    overflow: hidden;
+  }
+
+  .contact-stack {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+  @media (max-width: 600px) {
+    .contact-section { padding: 64px 0 72px; }
+    .contact-stack { gap: 32px; }
+  }
+
+  /* ── Intro (centered) ── */
+  .contact-intro { text-align: center; }
+  .contact-intro .eyebrow { display: inline-block; margin-bottom: 16px; }
+  .contact-intro h1 {
+    font-size: clamp(2.6rem, 5vw, 3.8rem);
+    font-weight: 300;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    margin: 0 0 16px;
+    color: #1A1A1A;
+  }
+  .contact-intro h1 em {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--ocs-indigo);
+  }
+  .contact-intro p {
+    font-size: 1.05rem;
+    font-weight: 300;
+    line-height: 1.7;
+    color: rgba(22,0,109,0.72);
+    margin: 0 auto;
+    max-width: 520px;
+    letter-spacing: 0.005em;
+  }
+  .contact-intro p + p { margin-top: 12px; }
+  .contact-intro p a {
+    color: var(--ocs-indigo);
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 2px solid rgba(141,233,105,0.85);
+    padding-bottom: 1px;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+  .contact-intro p a:hover {
+    color: var(--ocs-indigo-deep);
+    border-bottom-color: var(--ocs-green);
+  }
+
+  /* ── Form card ── */
+  .form-card {
+    position: relative;
+    background: #FFFFFF;
+    border: none;
+    border-radius: 22px;
+    padding: 36px;
+    box-shadow: 0 24px 56px -22px rgba(22,0,109,0.22);
+    overflow: hidden;
+  }
+  .card-eyebrow {
+    display: block;
+    align-self: stretch;
+    font-family: var(--sans, 'Work Sans', system-ui, sans-serif);
+    font-size: 0.92rem;
+    font-weight: 500;
+    text-align: center;
+    color: #FFFFFF;
+    position: relative;
+    z-index: 2;
+  }
+  .form-card .card-eyebrow {
+    margin: -36px -36px 28px;
+    padding: 14px 36px;
+    background: var(--ocs-indigo);
+  }
+  @media (max-width: 600px) {
+    .form-card { padding: 28px 22px; }
+    .form-card .card-eyebrow { margin: -28px -22px 24px; padding: 12px 22px; }
+  }
+
+  /* ── Support card ── */
+  .support-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+    align-items: center;
+    padding: 28px 32px;
+    background: #FFFFFF;
+    border-radius: 22px;
+    box-shadow: 0 18px 40px -22px rgba(22,0,109,0.18);
+    text-align: left;
+  }
+  .support-card-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .support-card .eyebrow { margin: 0; }
+  .support-card h3 {
+    font-size: 1.35rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--ocs-indigo);
+    margin: 0;
+  }
+  .support-card p {
+    font-size: 0.98rem;
+    font-weight: 400;
+    color: rgba(26,26,26,0.68);
+    line-height: 1.65;
+    margin: 0;
+  }
+  .support-card .btn {
+    white-space: nowrap;
+    background: var(--ocs-indigo);
+    color: #FFFFFF;
+    border: 1px solid var(--ocs-indigo);
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  }
+  .support-card .btn:hover {
+    background: var(--ocs-green);
+    border-color: var(--ocs-green);
+    color: var(--ocs-indigo);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px -8px rgba(22,0,109,0.45);
+  }
+  @media (max-width: 600px) {
+    .support-card { grid-template-columns: 1fr; gap: 16px; padding: 24px; }
+  }
+
+  .form-fallback {
+    padding: 24px;
+    background: rgba(137,210,220,0.18);
+    border: 1px dashed rgba(22,0,109,0.18);
+    border-radius: 8px;
+    text-align: center;
+    color: rgba(22,0,109,0.72);
+    font-size: 0.92rem;
+    line-height: 1.6;
+  }
+  .form-fallback strong { color: var(--ocs-indigo); font-weight: 600; }
+  .form-fallback a { color: var(--ocs-indigo); text-decoration: underline; }
+</style>
+{% endblock page_styles %}
+
+{% block content %}
+<!-- ───── CONTACT ───── -->
+<section id="main" class="contact-section">
+  <div class="container">
+    <div class="contact-stack">
+
+      <div class="contact-intro">
+        <h1>Let's <em>collaborate</em></h1>
+        <p>Tell us what you'd like to build, deploy, or research with Open Chat Studio, and we'll be in touch to explore how we can work together.</p>
+        <p>Fill in the form below, or email us at <a href="mailto:ocs-info@dimagi.com">ocs-info@dimagi.com</a>.</p>
+      </div>
+
+      <div class="form-card">
+        <div id="hubspot-form">
+          <div class="form-fallback" id="hubspot-form-fallback">
+            <strong>Loading form…</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="support-card">
+        <div class="support-card-content">
+          <span class="eyebrow">FOR BUILDERS</span>
+          <h3>Already building with OCS?</h3>
+          <p>Browse the docs, file issues on GitHub, or join the conversation with the developer community.</p>
+        </div>
+        <a class="btn btn-arrow" href="https://docs.openchatstudio.com/" target="_blank" rel="noopener">Open the docs</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+{% endblock content %}
+
+{% block page_scripts %}
+<script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+<script>
+  (function () {
+    function mountForm() {
+      if (typeof hbspt === 'undefined' || !hbspt.forms) return false;
+      hbspt.forms.create({
+        region: "na1",
+        portalId: "503070",
+        formId: "ab84dc67-539d-40d3-b9ac-466d8b8348bf",
+        target: "#hubspot-form",
+        onFormReady: function () {
+          var fb = document.getElementById('hubspot-form-fallback');
+          if (fb && fb.parentNode) fb.parentNode.removeChild(fb);
+        }
+      });
+      return true;
+    }
+    if (!mountForm()) {
+      var s = document.querySelector('script[src*="js.hsforms.net"]');
+      if (s) s.addEventListener('load', mountForm);
+    }
+  })();
+</script>
+{% endblock page_scripts %}

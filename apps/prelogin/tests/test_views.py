@@ -40,3 +40,10 @@ def test_applications_page_renders(client):
     response = client.get(reverse("prelogin:applications"))
     assert response.status_code == 200
     assert b"Use Cases" in response.content
+
+
+@pytest.mark.django_db()
+def test_contact_page_renders(client):
+    response = client.get(reverse("prelogin:contact"))
+    assert response.status_code == 200
+    assert b"hubspot-form" in response.content
