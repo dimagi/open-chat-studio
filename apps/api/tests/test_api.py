@@ -130,6 +130,13 @@ def test_create_and_update_participant_data(auth_method):
     url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
+    response_json = response.json()
+    assert response_json["identifier"] == identifier
+    assert response_json["platform"] == "api"
+    entries = {entry["chatbot_id"]: entry for entry in response_json["data"]}
+    assert entries[str(experiment.public_id)]["data"] == {"name": "John"}
+    assert entries[str(experiment.public_id)]["connect_channel_id"] is None
+    assert entries[str(experiment2.public_id)]["data"] == {"name": "Doe"}
 
     participant = Participant.objects.get(identifier=identifier)
     assert participant.name == ""

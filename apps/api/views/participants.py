@@ -2,12 +2,12 @@ import uuid
 
 from django.db import transaction
 from django.db.models import Prefetch
-from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
@@ -96,7 +96,7 @@ class ParticipantView(APIView):
         summary="Update Participant Data",
         tags=["Participants"],
         request=ParticipantDataUpdateRequest(),
-        responses={200: {}},
+        responses={200: ParticipantDetailSerializer},
         examples=[
             OpenApiExample(
                 name="CreateParticipantData",
@@ -199,7 +199,7 @@ def _update_participant_data(request):
     if platform == ChannelPlatform.COMMCARE_CONNECT:
         setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
 
-    return HttpResponse()
+    return Response(ParticipantDetailSerializer(participant).data)
 
 
 def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]:
