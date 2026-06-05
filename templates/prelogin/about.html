@@ -290,31 +290,3 @@
   </div>
 </section>
 {% endblock content %}
-
-{% block page_scripts %}
-<script>
-  // ── GitHub stats ──
-  fetch('https://api.github.com/repos/dimagi/open-chat-studio')
-    .then(r => r.json())
-    .then(data => {
-      const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
-      const stars = document.getElementById('gh-stars-ocs');
-      const forks = document.getElementById('gh-forks-ocs');
-      if (stars && data.stargazers_count != null) stars.textContent = fmt(data.stargazers_count) + ' stars';
-      if (forks && data.forks_count != null) forks.textContent = fmt(data.forks_count) + ' forks';
-    })
-    .catch(() => {});
-
-  // ── Jump-nav scroll spy ──
-  const jumpLinks = document.querySelectorAll('.jump-link');
-  const spySections = [...jumpLinks].map(l => document.querySelector(l.getAttribute('href')));
-  const onScroll = () => {
-    const offset = 140;
-    let active = 0;
-    spySections.forEach((s, i) => { if (s && s.getBoundingClientRect().top <= offset) active = i; });
-    jumpLinks.forEach((l, i) => l.classList.toggle('active', i === active));
-  };
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-</script>
-{% endblock page_scripts %}
