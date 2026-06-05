@@ -259,7 +259,10 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
 
     def remove_incoming_webhook(self, number: str, webhook_url: str):
         sender = self._get_whatsapp_sender(number)
-        if sender is None or (sender.webhook or {}).get("callback_url") != webhook_url:
+        if sender is None:
+            return
+        current_url = (sender.webhook or {}).get("callback_url")
+        if current_url != webhook_url:
             # never clobber a sender that has been repointed elsewhere
             return
         self._update_sender_webhook(sender, "")
