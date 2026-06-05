@@ -88,7 +88,6 @@ def _check_assignee_access(queue, user):
 def _build_annotations_context(item, user, queue):
     """Build the annotations list for display on the annotate page."""
     schema_fields = list(queue.schema.keys())
-    can_set_authoritative = user.has_perm("human_annotations.change_annotationqueue")
     return [
         {
             "annotation_id": ann.id,
@@ -99,7 +98,6 @@ def _build_annotations_context(item, user, queue):
             "is_authoritative": ann.is_authoritative,
             "authoritative_set_by": ann.authoritative_set_by,
             "authoritative_set_at": ann.authoritative_set_at,
-            "can_set_authoritative": can_set_authoritative,
         }
         for ann in item.annotations.filter(status=AnnotationStatus.SUBMITTED)
         .select_related("reviewer", "authoritative_set_by")
