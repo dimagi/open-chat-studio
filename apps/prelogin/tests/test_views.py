@@ -63,3 +63,5 @@ def test_sitemap_lists_prelogin_pages(client):
     content = response.content.decode()
     for name in ["about", "contact", "applications", "open_opportunities"]:
         assert reverse(f"prelogin:{name}") in content
+    # home reverses to "/" which trivially appears in every URL; assert via entry count instead
+    assert content.count("<url>") == 5
