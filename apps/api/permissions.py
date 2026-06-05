@@ -128,6 +128,8 @@ class SessionAccessPermission(BasePermission):
     def _user_has_session_access(self, user, session) -> bool:
         if session.participant and session.participant.user_id == user.id:
             return True
+        # Team membership is intentionally sufficient: team members may access
+        # any session in their team (matches team-scoped access elsewhere).
         return session.team.members.filter(id=user.id).exists()
 
 

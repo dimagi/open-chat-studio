@@ -102,6 +102,14 @@ def test_legacy_session_skips_token(api_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_legacy_non_public_session_denied_for_unknown_participant(api_client, experiment):
+    experiment.participant_allowlist = ["someone@example.com"]
+    experiment.save(update_fields=["participant_allowlist"])
+    legacy = ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
+    assert api_client.get(poll_url(legacy)).status_code == 403
+
+
+@pytest.mark.django_db()
 def test_participant_user_bypasses_token(api_client, session):
     user = session.participant.user
     if user is None:
