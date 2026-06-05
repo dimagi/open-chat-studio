@@ -31,7 +31,7 @@ requires proof of possession of a secret issued when the session is created
 | Default | `True` (fail closed); **opt-out**, not opt-in |
 | Existing sessions | Backfilled to `True` if inactive >24h at migration time, `False` if recently active |
 | Old widgets | Implicit opt-out at session start: `x-ocs-widget-version` header present but no `use_session_token` field |
-| Expiry | Generous global inactivity backstop (default 30 days), not encoded in the token |
+| Expiry | Generous global inactivity backstop (default 7 days), not encoded in the token |
 | Authenticated users | Bypass the token via Django session auth + session-access check |
 
 ## Token mechanics
@@ -48,7 +48,7 @@ requires proof of possession of a secret issued when the session is created
   Activity = latest `ChatMessage.created_at` (falling back to
   `session.created_at`). Polling does not count as activity, so a leaked token
   cannot keep itself alive. Window: new setting
-  `CHAT_SESSION_TOKEN_INACTIVITY_WINDOW` (timedelta, default 30 days). This is
+  `CHAT_SESSION_TOKEN_INACTIVITY_WINDOW` (timedelta, default 7 days). This is
   a generous backstop, not a tight match for the widget's persistence: the
   widget's `persistentSessionExpire` is configured by the embedding site and
   unknowable server-side, so the server window just has to comfortably exceed
