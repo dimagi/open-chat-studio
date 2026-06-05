@@ -288,6 +288,115 @@ def test_resync_lowering_requirement_completes_resolved_item(team):
 
 
 @pytest.mark.django_db()
+def test_resync_lowering_requirement_completes_only_items_with_authoritative(team):
+    """Lowering the requirement completes an item only when it has an authoritative pick.
+
+    Both items sit at IN_PROGRESS below a high requirement. After lowering it so their two
+    reviews satisfy the requirement, only the item with a human-picked authoritative
+    annotation becomes COMPLETED; the one without an authoritative pick goes to
+    AWAITING_RESOLUTION. A transition into COMPLETED requires an authoritative annotation.
+    """
+    User = get_user_model()
+    user1 = team.members.first()
+    user2 = User.objects.create(username="r2", email="r2@e.com")
+    MembershipFactory.create(team=team, user=user2)
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user1, num_reviews_required=3)
+
+    resolved = _make_session_item(queue, team)
+    unresolved = _make_session_item(queue, team)
+
+    # Two reviews each; with 3 required both sit at IN_PROGRESS.
+    resolved_ann = Annotation.objects.create(
+        item=resolved, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(item=resolved, team=team, reviewer=user2, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=unresolved, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    Annotation.objects.create(item=unresolved, team=team, reviewer=user2, data={}, status=AnnotationStatus.SUBMITTED)
+
+    # Admin resolves the first item by picking an authoritative annotation.
+    resolved_ann.is_authoritative = True
+    resolved_ann.authoritative_set_by = user1
+    resolved_ann.authoritative_set_at = timezone.now()
+    resolved_ann.save(update_fields=["is_authoritative", "authoritative_set_by", "authoritative_set_at"])
+
+    resolved.refresh_from_db()
+    unresolved.refresh_from_db()
+    assert resolved.status == AnnotationItemStatus.IN_PROGRESS  # 2 reviews < 3 required
+    assert unresolved.status == AnnotationItemStatus.IN_PROGRESS
+
+    # Lower so both items' two reviews now satisfy the requirement.
+    queue.num_reviews_required = 2
+    queue.save()
+    queue.resync_items()
+
+    resolved.refresh_from_db()
+    unresolved.refresh_from_db()
+    assert resolved.status == AnnotationItemStatus.COMPLETED  # authoritative pick -> completed
+    assert unresolved.status == AnnotationItemStatus.AWAITING_RESOLUTION  # no authoritative -> never completed
+
+
+@pytest.mark.django_db()
+def test_resync_lowering_to_single_review_auto_marks_sole_review_authoritative(team):
+    """Lowering to 1 review auto-marks an item's sole non-authoritative review as authoritative.
+
+    Mirrors a fresh single-review submission: with nothing to disagree with, the lone review is
+    the answer. The item completes *with* an authoritative annotation, never a bare
+    completed-without-authoritative state. The auto-assigned flag has no set_by, so raising the
+    requirement again would clear it.
+    """
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user, num_reviews_required=2)
+    item = _make_session_item(queue, team)
+    ann = Annotation.objects.create(item=item, team=team, reviewer=user, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    ann.refresh_from_db()
+    assert item.status == AnnotationItemStatus.IN_PROGRESS  # 1 review < 2 required
+    assert ann.is_authoritative is False  # multi-review queue: not auto-marked on submission
+
+    queue.num_reviews_required = 1
+    queue.save()
+    queue.resync_items()
+
+    ann.refresh_from_db()
+    item.refresh_from_db()
+    assert ann.is_authoritative is True  # auto-marked as the sole review
+    assert ann.authoritative_set_by is None  # auto-assigned, not human-picked
+    assert ann.authoritative_set_at is not None
+    assert item.status == AnnotationItemStatus.COMPLETED  # completed *with* an authoritative pick
+
+
+@pytest.mark.django_db()
+def test_resync_lowering_to_single_review_keeps_two_review_disagreement_awaiting(team):
+    """Lowering to 1 never guesses an authoritative pick for a two-review item.
+
+    Two submitted reviews are a potential disagreement. Dropping the requirement to 1 must not
+    auto-promote either review to authoritative — the item stays AWAITING_RESOLUTION until an
+    admin explicitly picks one.
+    """
+    User = get_user_model()
+    user1 = team.members.first()
+    user2 = User.objects.create(username="r2", email="r2@e.com")
+    MembershipFactory.create(team=team, user=user2)
+    queue = AnnotationQueue.objects.create(team=team, name="Q", schema={}, created_by=user1, num_reviews_required=2)
+    item = _make_session_item(queue, team)
+    ann1 = Annotation.objects.create(item=item, team=team, reviewer=user1, data={}, status=AnnotationStatus.SUBMITTED)
+    ann2 = Annotation.objects.create(item=item, team=team, reviewer=user2, data={}, status=AnnotationStatus.SUBMITTED)
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION
+
+    queue.num_reviews_required = 1
+    queue.save()
+    queue.resync_items()
+
+    item.refresh_from_db()
+    ann1.refresh_from_db()
+    ann2.refresh_from_db()
+    assert item.status == AnnotationItemStatus.AWAITING_RESOLUTION  # disagreement left unresolved
+    assert ann1.is_authoritative is False  # no review auto-promoted
+    assert ann2.is_authoritative is False
+
+
+@pytest.mark.django_db()
 def test_resync_does_not_touch_flagged_items(team):
     """Flagged items are left untouched by resync, matching update_status."""
     user = team.members.first()
