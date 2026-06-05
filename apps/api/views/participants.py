@@ -13,8 +13,9 @@ from rest_framework.views import APIView
 from apps.api.pagination import CursorPagination
 from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
-from apps.api.tasks import setup_connect_channels_for_bots
-from apps.channels.models import ChannelPlatform
+from apps.api.tasks import create_connect_channel_for_participant
+from apps.channels.clients.connect_client import CommCareConnectClient
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -179,7 +180,7 @@ def _update_participant_data(request):
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
-    experiment_data_map = {}
+    connect_data_by_experiment_id = {}
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
@@ -194,10 +195,10 @@ def _update_participant_data(request):
             _create_update_schedules(request, experiment, participant, schedule_data)
 
         if platform == ChannelPlatform.COMMCARE_CONNECT:
-            experiment_data_map[experiment.id] = participant_data.id
+            connect_data_by_experiment_id[experiment.id] = participant_data
 
-    if platform == ChannelPlatform.COMMCARE_CONNECT:
-        setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
+    if connect_data_by_experiment_id:
+        _setup_connect_channels(identifier, connect_data_by_experiment_id)
 
     return Response(ParticipantDetailSerializer(participant).data)
 
@@ -213,6 +214,34 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
         raise NotFound(detail=response)
 
     return experiment_map
+
+
+def _setup_connect_channels(identifier, participant_data_by_experiment_id):
+    """
+    Synchronously create Connect channels for experiments that use the ConnectMessaging channel,
+    so the channel IDs can be returned in the response.
+
+    Persists each new channel ID to ``ParticipantData.system_metadata``. Participant data that
+    already has a channel ID is skipped, as are experiments without a Connect channel.
+    """
+    channels = ExperimentChannel.objects.filter(
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        experiment_id__in=participant_data_by_experiment_id.keys(),
+    )
+    # one channel per experiment, mirroring the previous task-based implementation
+    channel_by_experiment_id = {channel.experiment_id: channel for channel in channels}
+    pending = [
+        (channel, participant_data_by_experiment_id[experiment_id])
+        for experiment_id, channel in channel_by_experiment_id.items()
+        if "commcare_connect_channel_id" not in participant_data_by_experiment_id[experiment_id].system_metadata
+    ]
+    if not pending:
+        # Don't instantiate the client unnecessarily; it raises if Connect settings are missing.
+        return
+
+    connect_client = CommCareConnectClient()
+    for channel, participant_data in pending:
+        create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
 
 
 def _schedule_external_id(data, experiment, participant):

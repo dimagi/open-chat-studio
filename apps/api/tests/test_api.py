@@ -333,9 +333,7 @@ def _setup_channel_participant(experiment, identifier, channel_platform, system_
 
 
 @pytest.mark.django_db()
-@override_settings(
-    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
-)
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
 def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     """
     Test that a connect channel is created for a participant where
@@ -410,6 +408,15 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
+
+    response_json = response.json()
+    assert response_json["identifier"] == "connectid_2"
+    channel_ids = {entry["chatbot_id"]: entry["connect_channel_id"] for entry in response_json["data"]}
+    assert channel_ids == {
+        str(experiment1.public_id): created_connect_channel_id,
+        str(experiment2.public_id): None,
+        str(experiment3.public_id): "7d6a-fdc93-4e9c",
+    }
 
     # Only one of the two experiments that the "ConnectID_2" participant belongs to has a connect messaging channel, so
     # we expect only one call to the Connect servers to have been made
