@@ -357,14 +357,12 @@ class UnflagItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         return redirect_url
 
 
-class SetAuthoritative(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+class SetAuthoritative(LoginAndTeamRequiredMixin, View):
     """Queue-admin endpoint to mark/unmark an annotation as authoritative.
 
     Enforces at-most-one-per-item at the application layer too (clears the flag
     on any sibling annotation before setting) so we never trip the partial unique constraint.
     """
-
-    permission_required = "human_annotations.change_annotationqueue"
 
     def post(self, request, team_slug: str, pk: int, item_pk: int, annotation_pk: int):
         annotation = get_object_or_404(

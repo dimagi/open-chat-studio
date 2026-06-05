@@ -260,7 +260,7 @@ def test_set_authoritative_value_false_clears(admin_client, team, second_user):
 
 
 @pytest.mark.django_db()
-def test_set_authoritative_forbidden_for_reviewer(reviewer_client, team, second_user):
+def test_set_authoritative_allowed_for_reviewer(reviewer_client, team, second_user):
     queue = _make_queue(team, num_reviews_required=2)
     item = _make_item(queue)
     user1 = team.members.first()
@@ -268,9 +268,9 @@ def test_set_authoritative_forbidden_for_reviewer(reviewer_client, team, second_
 
     response = reviewer_client.post(_set_authoritative_url(team, queue, item, ann1), {"value": "true"})
 
-    assert response.status_code == 403
+    assert response.status_code == 200
     ann1.refresh_from_db()
-    assert ann1.is_authoritative is False
+    assert ann1.is_authoritative is True
 
 
 @pytest.mark.django_db()
