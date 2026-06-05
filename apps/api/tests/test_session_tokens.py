@@ -33,6 +33,14 @@ def test_garbage_token_rejected():
     assert validate_session_token("not-a-token", "some-id") is False
 
 
+def test_none_token_rejected():
+    assert validate_session_token(None, "some-id") is False
+
+
+def test_empty_token_rejected():
+    assert validate_session_token("", "some-id") is False
+
+
 @pytest.mark.django_db()
 def test_token_for_other_session_rejected():
     session = ExperimentSessionFactory.create()

@@ -21,6 +21,8 @@ def issue_session_token(session: ExperimentSession) -> str:
 
 def validate_session_token(token: str, session_external_id: str) -> bool:
     """Check `token`'s signature and that it was issued for this session."""
+    if not token or not isinstance(token, str):
+        return False
     try:
         payload = signing.loads(token, salt=SESSION_TOKEN_SALT)
     except signing.BadSignature:
