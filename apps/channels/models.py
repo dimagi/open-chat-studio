@@ -1,13 +1,16 @@
 import uuid
+from datetime import timedelta
 from typing import Self, cast
 
 from django.conf import settings
 from django.db import models
 from django.db.models import JSONField, Q
 from django.urls import reverse
+from django.utils import timezone
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 
+from apps.channels import widget_versions
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
@@ -179,6 +182,7 @@ class ExperimentChannelObjectManager(AuditingManager):
 class ExperimentChannel(BaseTeamModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
+    WIDGET_VERSION_REFRESH_INTERVAL = timedelta(hours=24)
 
     name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -193,6 +197,10 @@ class ExperimentChannel(BaseTeamModel):
         blank=True,
         verbose_name="Messaging Provider",
     )
+    # Telemetry reported by the embedded widget; deliberately excluded from
+    # EXPERIMENT_CHANNEL_FIELDS auditing (written from the request path).
+    widget_version = models.CharField(max_length=32, null=True, blank=True)  # noqa: DJ001
+    widget_version_updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "channels_experimentchannel"
@@ -216,6 +224,34 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def platform_enum(self):
         return ChannelPlatform(self.platform)
+
+    @property
+    def widget_update_status(self) -> widget_versions.WidgetUpdateStatus | None:
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return None
+        return widget_versions.get_widget_update_status(self.widget_version)
+
+    def record_widget_version(self, raw_version: str | None) -> None:
+        """Persist the version reported by the widget (x-ocs-widget-version header).
+
+        Telemetry write: bypasses save() and auditing, throttled to one write
+        per 24h unless the version changes.
+        """
+        version = widget_versions.clean_widget_version(raw_version)
+        if version is None:
+            return
+        now = timezone.now()
+        if (
+            version == self.widget_version
+            and self.widget_version_updated_at
+            and now - self.widget_version_updated_at < self.WIDGET_VERSION_REFRESH_INTERVAL
+        ):
+            return
+        type(self).objects.filter(pk=self.pk).update(
+            widget_version=version,
+            widget_version_updated_at=now,
+            audit_action=AuditAction.IGNORE,
+        )
 
     def extra_form(self, experiment, data: dict | None = None):
         if not experiment.id == self.experiment_id:
