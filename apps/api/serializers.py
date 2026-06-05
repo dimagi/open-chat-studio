@@ -40,10 +40,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
 class ParticipantDataEntrySerializer(serializers.ModelSerializer):
     chatbot = serializers.CharField(source="experiment.name", read_only=True)
     chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
+    connect_channel_id = serializers.SerializerMethodField(
+        help_text="CommCare Connect channel ID. Only set for commcare_connect participants."
+    )
 
     class Meta:
         model = ParticipantData
-        fields = ["chatbot", "chatbot_id", "data"]
+        fields = ["chatbot", "chatbot_id", "data", "connect_channel_id"]
+
+    def get_connect_channel_id(self, obj) -> str | None:
+        return obj.system_metadata.get("commcare_connect_channel_id")
 
 
 class ParticipantDetailSerializer(serializers.ModelSerializer):

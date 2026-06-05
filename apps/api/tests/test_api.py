@@ -296,6 +296,26 @@ def test_update_participant_schedules(experiment):
     assert updated_schedules[2].next_trigger_date == trigger_date3
 
 
+@pytest.mark.django_db()
+def test_list_participants_includes_connect_channel_id(experiment):
+    participant = ParticipantFactory(team=experiment.team, platform="commcare_connect")
+    ParticipantData.objects.create(
+        team=experiment.team,
+        participant=participant,
+        experiment=experiment,
+        system_metadata={"commcare_connect_channel_id": "abc-123", "consent": True},
+    )
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    response = client.get(reverse("api:participant-data"))
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    entry = next(p for p in results if p["identifier"] == participant.identifier)
+    assert entry["data"][0]["connect_channel_id"] == "abc-123"
+
+
 def _setup_channel_participant(experiment, identifier, channel_platform, system_metadata=None):
     participant, _ = Participant.objects.get_or_create(
         team=experiment.team, identifier=identifier, platform=channel_platform
