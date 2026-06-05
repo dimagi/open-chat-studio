@@ -54,3 +54,12 @@ def test_open_opportunities_page_renders(client):
     response = client.get(reverse("prelogin:open_opportunities"))
     assert response.status_code == 200
     assert b"Expression of Interest" in response.content
+
+
+@pytest.mark.django_db()
+def test_sitemap_lists_prelogin_pages(client):
+    response = client.get("/sitemap.xml")
+    assert response.status_code == 200
+    content = response.content.decode()
+    for name in ["about", "contact", "applications", "open_opportunities"]:
+        assert reverse(f"prelogin:{name}") in content

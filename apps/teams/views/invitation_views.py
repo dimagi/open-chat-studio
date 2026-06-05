@@ -48,7 +48,7 @@ def accept_invitation(request, invitation_id: uuid.UUID):
         else:
             if invitation.is_accepted:
                 messages.error(request, _("Sorry, it looks like that invitation link has expired."))
-                return HttpResponseRedirect(reverse("web:home"))
+                return HttpResponseRedirect(reverse("prelogin:home"))
             elif user_email_matches:
                 process_invitation(invitation, request.user)
                 clear_invite_from_session(request)
