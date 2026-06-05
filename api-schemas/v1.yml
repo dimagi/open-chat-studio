@@ -2037,12 +2037,9 @@ components:
         external_id:
           type: string
           maxLength: 255
-        purpose:
-          $ref: '#/components/schemas/PurposeEnum'
       required:
       - id
       - name
-      - purpose
     InspectGraph:
       type: object
       description: 'The pipeline''s shape: its nodes and the edges between them (without
@@ -2575,20 +2572,6 @@ components:
       - id
       - name
       - type
-    PurposeEnum:
-      enum:
-      - assistant
-      - collection
-      - evaluation_dataset
-      - data_export
-      - message_media
-      type: string
-      description: |-
-        * `assistant` - Assistant
-        * `collection` - Collection
-        * `evaluation_dataset` - Evaluation Dataset
-        * `data_export` - Data Export
-        * `message_media` - Message Media
     SessionStatusEnum:
       enum:
       - active
