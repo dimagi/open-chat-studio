@@ -52,7 +52,7 @@ class FileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = File
-        fields = ["id", "name", "content_type", "content_size", "external_source", "external_id", "purpose"]
+        fields = ["id", "name", "content_type", "content_size", "external_source", "external_id"]
 
 
 class SourceMaterialSerializer(serializers.ModelSerializer):
