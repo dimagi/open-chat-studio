@@ -44,13 +44,15 @@
                   type="button"
                   hx-post="{% url 'evaluations:clear_evaluation_runs' request.team.slug config.id %}"
                   hx-trigger="confirmed"
+                  hx-disabled-elt="this"
                   onclick="alertify.confirm().setting({
                     title: 'Confirm',
                     message: 'Clear all? This removes the tags these runs applied to their targets and deletes all run history and results. This cannot be undone.',
                     transition: 'fade',
                     onok: function() { htmx.trigger('#clear-all-runs-button', 'confirmed'); },
                   }).show();">
-            <i class="fa-solid fa-eraser"></i>
+            <i class="fa-solid fa-eraser htmx-hide"></i>
+            <span class="loading loading-spinner loading-sm htmx-show"></span>
             Clear all
           </button>
         {% endif %}
