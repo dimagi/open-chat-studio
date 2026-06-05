@@ -201,3 +201,25 @@ def test_old_widget_implicitly_opts_out(api_client, experiment):
     body = response.json()
     assert body["session_token"] is None
     assert ExperimentSession.objects.get(external_id=body["session_id"]).session_token_required is False
+
+
+@pytest.mark.django_db()
+def test_authenticated_start_then_poll_without_token(api_client, experiment, team_with_users):
+    """Authenticated users rely on the auth bypass, not the returned token."""
+    user = team_with_users.members.first()
+    api_client.force_login(user)
+    response = start_session(api_client, experiment, {"participant_remote_id": user.email})
+    assert response.status_code == 201
+    body = response.json()
+    assert body["session_token"]  # token still issued
+    url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
+    assert api_client.get(url).status_code == 200  # no token header needed
+
+
+@pytest.mark.django_db()
+def test_opted_out_session_polls_anonymously(api_client, experiment):
+    response = start_session(api_client, experiment, {"use_session_token": False})
+    assert response.status_code == 201
+    body = response.json()
+    url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
+    assert api_client.get(url).status_code == 200  # legacy access, no token
