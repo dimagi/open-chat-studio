@@ -2119,17 +2119,10 @@ components:
             $ref: '#/components/schemas/IndexedCollection'
           readOnly: true
       required:
-      - assistant
-      - custom_actions
-      - indexed_collections
       - label
-      - llm
-      - media_collection
       - node_id
       - params
-      - source_material
       - type
-      - voice
     InspectPipeline:
       type: object
       properties:
@@ -2249,7 +2242,6 @@ components:
           readOnly: true
       required:
       - params
-      - pipeline
       - type
     MediaCollection:
       type: object

@@ -13,6 +13,7 @@ import dataclasses
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from drf_spectacular.extensions import OpenApiSerializerExtension
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 
@@ -334,6 +335,19 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     unset list. Keys the node type doesn't declare are dropped entirely.
     """
 
+    # The resource keys ``to_representation`` drops for node types that don't declare them: they're
+    # documented in the schema but not guaranteed present, so the schema extension marks them
+    # optional (see ``_ConditionalRequiredSchemaMixin``).
+    CONDITIONAL_RESPONSE_KEYS = (
+        "llm",
+        "voice",
+        "source_material",
+        "assistant",
+        "custom_actions",
+        "media_collection",
+        "indexed_collections",
+    )
+
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
     label = serializers.CharField()
@@ -472,6 +486,10 @@ class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSeri
     the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
     """
 
+    # ``pipeline`` is dropped by ``to_representation`` for non-pipeline_start actions, so the schema
+    # extension marks it optional (see ``_ConditionalRequiredSchemaMixin``).
+    CONDITIONAL_RESPONSE_KEYS = ("pipeline",)
+
     type = serializers.CharField(source="action_type")
     params = serializers.SerializerMethodField()
     pipeline = serializers.SerializerMethodField()
@@ -594,3 +612,30 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
         if experiment.pipeline_id is None:
             return None
         return InspectPipelineSerializer(experiment.pipeline, context=self.context).data
+
+
+# ── Schema extensions ──────────────────────────────────────────────────────────────────────────
+# Read-only fields land in a component's ``required`` list by default (drf-spectacular treats every
+# read-only field as always-present). The inspect serializers above intentionally omit some keys per
+# instance via ``to_representation``, so those keys must be optional in the schema or generated
+# clients reject valid responses (e.g. a ``StartNode`` carries none of the resource keys). These
+# extensions drop each serializer's ``CONDITIONAL_RESPONSE_KEYS`` from its generated ``required``.
+class _ConditionalRequiredSchemaMixin:
+    """Removes a serializer's ``CONDITIONAL_RESPONSE_KEYS`` from its generated ``required`` list."""
+
+    def map_serializer(self, auto_schema, direction):
+        schema = super().map_serializer(auto_schema, direction)
+        optional = set(self.target.CONDITIONAL_RESPONSE_KEYS)
+        if optional and "required" in schema:
+            schema["required"] = [name for name in schema["required"] if name not in optional]
+            if not schema["required"]:
+                del schema["required"]
+        return schema
+
+
+class InspectNodeSchemaExtension(_ConditionalRequiredSchemaMixin, OpenApiSerializerExtension):
+    target_class = "apps.api.v2.inspect.serializers.InspectNodeSerializer"
+
+
+class InspectTriggerActionSchemaExtension(_ConditionalRequiredSchemaMixin, OpenApiSerializerExtension):
+    target_class = "apps.api.v2.inspect.serializers.InspectTriggerActionSerializer"
