@@ -24,6 +24,7 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
@@ -246,6 +247,10 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
+    use_session_token = data.get("use_session_token")
+    if use_session_token is None:
+        # Pre-token widgets send the version header but not the field; treat as opt-out.
+        use_session_token = "x-ocs-widget-version" not in request.headers
 
     # Security check: Only authenticated users can specify version numbers
     if version_number is not None and not request.user.is_authenticated:
@@ -330,9 +335,17 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
+    session_token = None
+    if use_session_token:
+        session_token = issue_session_token(session)
+    else:
+        session.session_token_required = False
+        session.save(update_fields=["session_token_required"])
+
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
+        "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
     }

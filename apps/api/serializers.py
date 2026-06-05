@@ -253,10 +253,26 @@ class ChatStartSessionRequest(serializers.Serializer):
     participant_name = serializers.CharField(
         label="Paricipant Name", required=False, help_text="Optional participant name"
     )
+    use_session_token = serializers.BooleanField(
+        label="Use session token",
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Whether to protect the session with a session token (default true). When enabled, the"
+        " response includes a `session_token` which must be sent as the `X-Session-Token` header on all"
+        " subsequent requests for this session. Set to false to opt out and rely on legacy access rules.",
+    )
 
 
 class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
+    session_token = serializers.CharField(
+        label="Session token",
+        allow_null=True,
+        required=False,
+        help_text="Present when the session is token-protected. Send as the `X-Session-Token` header on all"
+        " subsequent requests for this session.",
+    )
     chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
 

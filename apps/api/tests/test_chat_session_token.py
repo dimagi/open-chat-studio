@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform
+from apps.experiments.models import ExperimentSession
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.user import UserFactory
@@ -155,3 +156,48 @@ def test_embed_key_alone_does_not_bypass_token(api_client, experiment):
         HTTP_X_SESSION_TOKEN=issue_session_token(session),
     )
     assert response.status_code == 200
+
+
+def start_session(api_client, experiment, data_extra=None, **request_kwargs):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, **(data_extra or {})}
+    return api_client.post(url, data=data, format="json", **request_kwargs)
+
+
+@pytest.mark.django_db()
+def test_start_session_issues_token_by_default(api_client, experiment):
+    response = start_session(api_client, experiment)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["session_token"]
+    session = ExperimentSession.objects.get(external_id=body["session_id"])
+    assert session.session_token_required is True
+    # the issued token grants access
+    url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
+    assert api_client.get(url, HTTP_X_SESSION_TOKEN=body["session_token"]).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_start_session_explicit_opt_out(api_client, experiment):
+    response = start_session(api_client, experiment, {"use_session_token": False})
+    body = response.json()
+    assert body["session_token"] is None
+    session = ExperimentSession.objects.get(external_id=body["session_id"])
+    assert session.session_token_required is False
+
+
+@pytest.mark.django_db()
+def test_start_session_explicit_opt_in_with_widget_header(api_client, experiment):
+    response = start_session(api_client, experiment, {"use_session_token": True}, HTTP_X_OCS_WIDGET_VERSION="0.9.0")
+    body = response.json()
+    assert body["session_token"]
+    assert ExperimentSession.objects.get(external_id=body["session_id"]).session_token_required is True
+
+
+@pytest.mark.django_db()
+def test_old_widget_implicitly_opts_out(api_client, experiment):
+    """Pre-token widgets send the version header but no use_session_token field."""
+    response = start_session(api_client, experiment, HTTP_X_OCS_WIDGET_VERSION="0.8.0")
+    body = response.json()
+    assert body["session_token"] is None
+    assert ExperimentSession.objects.get(external_id=body["session_id"]).session_token_required is False

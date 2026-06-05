@@ -1227,6 +1227,13 @@ components:
           type: string
           title: Paricipant Name
           description: Optional participant name
+        use_session_token:
+          type: boolean
+          nullable: true
+          description: Whether to protect the session with a session token (default
+            true). When enabled, the response includes a `session_token` which must
+            be sent as the `X-Session-Token` header on all subsequent requests for
+            this session. Set to false to opt out and rely on legacy access rules.
       required:
       - chatbot_id
     ChatStartSessionResponse:
@@ -1235,6 +1242,11 @@ components:
         session_id:
           type: string
           format: uuid
+        session_token:
+          type: string
+          nullable: true
+          description: Present when the session is token-protected. Send as the `X-Session-Token`
+            header on all subsequent requests for this session.
         chatbot:
           allOf:
           - $ref: '#/components/schemas/Experiment'
