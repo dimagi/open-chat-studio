@@ -29,9 +29,9 @@ requires proof of possession of a secret issued when the session is created
 | Scope | All session endpoints: `message`, `upload`, `poll`, `task-poll` |
 | Enforcement marker | New model field `ExperimentSession.session_token_required` |
 | Default | `True` (fail closed); **opt-out**, not opt-in |
-| Existing sessions | Backfilled to `False` (legacy behavior preserved) |
-| Old widgets | Implicit opt-out via `x-ocs-widget-version` header sniff at session start |
-| Expiry | Sliding inactivity window on the session (default 24h), not encoded in the token |
+| Existing sessions | Backfilled to `True` if inactive >24h at migration time, `False` if recently active |
+| Old widgets | Implicit opt-out at session start: `x-ocs-widget-version` header present but no `use_session_token` field |
+| Expiry | Generous global inactivity backstop (default 30 days), not encoded in the token |
 | Authenticated users | Bypass the token via Django session auth + session-access check |
 
 ## Token mechanics
@@ -48,11 +48,16 @@ requires proof of possession of a secret issued when the session is created
   Activity = latest `ChatMessage.created_at` (falling back to
   `session.created_at`). Polling does not count as activity, so a leaked token
   cannot keep itself alive. Window: new setting
-  `CHAT_SESSION_TOKEN_INACTIVITY_WINDOW` (timedelta, default 24 hours,
-  matching the widget's `persistentSessionExpire` default).
-- `SECRET_KEY` rotation invalidates live tokens. The widget's 403-recovery
-  path (below) degrades this to "a new conversation starts" rather than a
-  hard failure.
+  `CHAT_SESSION_TOKEN_INACTIVITY_WINDOW` (timedelta, default 30 days). This is
+  a generous backstop, not a tight match for the widget's persistence: the
+  widget's `persistentSessionExpire` is configured by the embedding site and
+  unknowable server-side, so the server window just has to comfortably exceed
+  any reasonable widget config while still ending "permanent" access.
+- `SECRET_KEY` rotation is handled by Django: `signing.loads` verifies
+  against `SECRET_KEY_FALLBACKS`, so a proper rotation keeps live tokens
+  valid. An abrupt rotation without fallbacks invalidates tokens; the
+  widget's 403-recovery path (below) degrades that to "a new conversation
+  starts" rather than a hard failure.
 
 ## Server-side changes
 
@@ -64,8 +69,17 @@ requires proof of possession of a secret issued when the session is created
   (chat API, server-rendered web chat, channel platforms), is fail-closed.
   This matters because `chat_poll_response` will return messages for *any*
   session looked up by `external_id` (e.g. Telegram sessions of public bots).
-- The migration backfills existing rows to `False` so pre-existing sessions
-  keep today's behavior. Backwards compatible.
+- The migration backfills existing rows by activity: sessions whose latest
+  message is **older than 24 hours** at migration time get `True` (their
+  transcripts are immediately protected from anonymous bearer-ID reads;
+  authenticated users retain access via the bypass), while recently-active
+  sessions get `False` so live conversations are not interrupted.
+- Known edge: the backfill ships in the server PR, before the token-aware
+  widget exists. An old widget on a site with a `persistent-session-expire`
+  longer than 24h could resume a stale (now token-required) session and hit
+  403s with no recovery logic. Default-config widgets discard sessions after
+  24h themselves, so the blast radius is sites with custom long persistence
+  resuming >24h-stale sessions. Accepted.
 
 ### Session-start flag logic (`chat_start_session`)
 
@@ -76,9 +90,10 @@ New optional request field `use_session_token` (boolean) on
   returned (explicit opt-out for API consumers that can't adopt tokens yet).
 - `true` → enforced; `session_token` in the response.
 - **absent** → enforced, **unless** the request carries an
-  `x-ocs-widget-version` header lower than the first token-aware widget
-  release, in which case it is treated as an implicit opt-out. Old embedded
-  widgets keep working without changes. Spoofing the header only lets a
+  `x-ocs-widget-version` header, in which case it is an old widget (every
+  token-aware widget release always sends the field) and is treated as an
+  implicit opt-out. Old embedded widgets keep working without changes; no
+  hardcoded version threshold is needed. Spoofing the header only lets a
   client weaken *its own new* session (today's baseline); it cannot downgrade
   an existing session. The sniff is temporary and can be removed once old
   widget usage dies off.
@@ -123,8 +138,21 @@ protection for embed-key requests).
 - On a 403 with a token error code: clear the persisted session and start a
   new one. For `session_expired`, show a brief "conversation expired" notice
   first.
-- Ships as an npm release; the Django app then bumps its pinned widget
-  version (widget changes do not reach the app until released and bumped).
+## Delivery
+
+Per the documentation and changelog policy, the widget changes ship in a
+separate PR from the server changes:
+
+1. **PR 1 — server side**: model field + backfill migration, permission
+   class, start-endpoint flag logic, setting, API docs + changelog. On its
+   own this is fully backward compatible for widgets (every current widget
+   sends the version header and so implicitly opts out); it is the breaking
+   point for header-less API consumers, documented in the changelog.
+2. **PR 2 — widget** (`components/chat_widget`): token handling, persistence,
+   `session-token` prop, 403 recovery; its own docs/changelog. Released to
+   npm.
+3. **PR 3 — version bump**: the Django app bumps its pinned widget version
+   (widget changes do not reach the app until released and bumped).
 
 ## Out of scope / future hardening
 
@@ -144,11 +172,11 @@ protection for embed-key requests).
     authenticated user (denied);
   - widget-auth (embed key) request against a token-required session without
     a token: denied;
-  - start endpoint flag logic: explicit true/false, absent with old widget
-    version header, absent with new/no header; token present in response only
-    when enforced.
-- **Migration test**: existing rows backfilled `False`; new rows default
-  `True`.
+  - start endpoint flag logic: explicit true/false, absent with widget
+    version header (implicit opt-out), absent without header (enforced);
+    token present in response only when enforced.
+- **Migration test**: backfill sets `True` for sessions inactive >24h and
+  `False` for recently-active ones; new rows default `True`.
 - **Widget jest tests**: opt-in sent on start; header included on all calls;
   localStorage round-trip including token; bound-mode `session-token` prop;
   403 token-error recovery (clear + restart, expired notice).
