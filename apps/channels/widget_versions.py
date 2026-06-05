@@ -7,7 +7,9 @@ docs/developer_guides/widget_versioning.md for the full process.
 
 from dataclasses import dataclass
 from datetime import datetime
+from functools import wraps
 
+from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
 LATEST_VERSION = "0.8.0"
@@ -87,6 +89,37 @@ def get_widget_update_status(version: str | None) -> WidgetUpdateStatus | None:
             message=f"Widget {version} in use — {LATEST_VERSION} available.",
         )
     return None
+
+
+WIDGET_VERSION_HEADER = "x-ocs-widget-version"
+
+
+def apply_widget_sunset_headers(request, response):
+    """Add RFC 8594 headers when the calling widget's version is deprecated.
+
+    Only applies when the widget version header is present: requests without
+    it (API users, authenticated sessions) are not widget traffic.
+    """
+    raw = request.headers.get(WIDGET_VERSION_HEADER)
+    if raw is None:
+        return response
+    deprecation = get_deprecation(clean_widget_version(raw))
+    if deprecation:
+        response.headers["Deprecation"] = "true"
+        response.headers["Sunset"] = http_date(deprecation.sunset_at.timestamp())
+        response.headers["Link"] = f'<{deprecation.docs_url}>; rel="successor-version"'
+    return response
+
+
+def widget_sunset_headers(view_func):
+    """View decorator form of apply_widget_sunset_headers."""
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        response = view_func(request, *args, **kwargs)
+        return apply_widget_sunset_headers(request, response)
+
+    return wrapper
 
 
 def _parse(version: str | None) -> Version | None:

@@ -28,6 +28,7 @@ from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
+from apps.channels.widget_versions import WIDGET_VERSION_HEADER, widget_sunset_headers
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
@@ -232,6 +233,7 @@ def chat_upload_file(request, session_id):
         ),
     ],
 )
+@widget_sunset_headers
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([WidgetDomainPermission])
@@ -277,6 +279,7 @@ def chat_start_session(request):
     # Check if authenticated via DRF EmbeddedWidgetAuthentication
     if isinstance(request.auth, ExperimentChannel):
         experiment_channel = request.auth
+        experiment_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
     else:
         # legacy flow
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
@@ -379,6 +382,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
         ),
     ],
 )
+@widget_sunset_headers
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
