@@ -116,7 +116,10 @@ applied to all four session endpoints:
      (`participant.user_id == request.user.id`) or a member of the session's
      team → allow (this keeps the OCS-hosted `web_chat.html` page working
      unchanged: same-origin fetch sends the session cookie; CSRF is already
-     handled by the widget).
+     handled by the widget). For the *anonymous* public web-chat routes
+     (`chatbot_chat`, `chatbot_chat_embed`, behind `flag_chat_widget`), the
+     server opts the session out of token enforcement at render time until the
+     bundled widget supports session tokens.
    - Otherwise require `X-Session-Token`: signature valid (salt + secret),
      `sid` equals the path `session_id`, inactivity window not exceeded.
      **The embed key alone no longer suffices for these sessions.**

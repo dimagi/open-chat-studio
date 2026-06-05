@@ -23,6 +23,7 @@ from waffle import flag_is_active
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
+from apps.channels.utils import delete_experiment_session_cached
 from apps.chat.channels import ChannelBase
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
@@ -771,6 +772,14 @@ def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, sessio
 
 
 def _chatbot_chat_ui(request, embedded=False):
+    session = request.experiment_session
+    if flag_is_active(request, "flag_chat_widget") and session.session_token_required:
+        # The bundled chat widget cannot send session tokens yet. Give these
+        # sessions the same implicit opt-out as other pre-token widgets.
+        # Remove once the widget supports the session-token prop.
+        session.session_token_required = False
+        session.save(update_fields=["session_token_required"])
+        delete_experiment_session_cached(session.external_id)
     chatbot_version = resolve_published_or_working(request.experiment)
     version_specific_vars = {
         "assistant": chatbot_version.get_assistant(),
@@ -784,7 +793,7 @@ def _chatbot_chat_ui(request, embedded=False):
         "chatbots/chat/web_chat.html",
         {
             "experiment": request.experiment,
-            "session": request.experiment_session,
+            "session": session,
             "active_tab": "chatbots",
             "embedded": embedded,
             **version_specific_vars,
