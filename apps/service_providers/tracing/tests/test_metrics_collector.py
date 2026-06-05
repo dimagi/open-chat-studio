@@ -64,7 +64,7 @@ class TestMetricsCollectorToolCalls:
 
 
 class TestMetricsCollectorTokens:
-    def test_accumulate_resources_from_nodes_tokens_across_calls(self):
+    def test_accumulates_tokens_across_calls(self):
         collector = MetricsCollector(start_time=time.time())
         collector.on_llm_end(_make_llm_result(100, 50))
         collector.on_llm_end(_make_llm_result(200, 100))
@@ -74,7 +74,7 @@ class TestMetricsCollectorTokens:
         assert metrics.n_completion_tokens == 150
         assert metrics.n_total_tokens == 450
 
-    def test_accumulate_resources_from_nodes_tokens_across_models(self):
+    def test_accumulates_tokens_across_models(self):
         collector = MetricsCollector(start_time=time.time())
         collector.on_llm_end(_make_llm_result(100, 50, model_name="gpt-4.1-mini"))
         collector.on_llm_end(_make_llm_result(80, 40, model_name="claude-haiku-4-5"))
