@@ -1,6 +1,7 @@
 """Tests for widget version recording and RFC 8594 sunset headers on the chat API."""
 
 from datetime import UTC, datetime
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +11,7 @@ from rest_framework.test import APIClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.widget_versions import WidgetDeprecation
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory
 
 DEPRECATION = WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 9, 1, tzinfo=UTC))
 
@@ -101,3 +103,26 @@ def test_no_sunset_headers_without_version_header(api_client, widget_channel):
         response = _start_session(api_client, widget_channel)
     assert response.status_code == 201
     assert "Deprecation" not in response.headers
+
+
+@pytest.mark.django_db()
+def test_send_message_sunset_headers_for_deprecated_version(api_client, widget_channel):
+    session = ExperimentSessionFactory.create(
+        experiment=widget_channel.experiment,
+        experiment_channel=widget_channel,
+    )
+    url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
+    with patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION]):
+        with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
+            task.delay.return_value = mock.Mock(task_id="123")
+            response = api_client.post(
+                url,
+                data={"message": "hi"},
+                format="json",
+                HTTP_X_EMBED_KEY="test_widget_token_123456789012",
+                HTTP_ORIGIN="https://example.com",
+                HTTP_X_OCS_WIDGET_VERSION="0.5.0",
+            )
+    assert response.status_code == 202
+    assert response.headers["Deprecation"] == "true"
+    assert "Sunset" in response.headers
