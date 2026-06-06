@@ -113,4 +113,4 @@ This workflow can also be triggered manually via **Actions > Claude Dependabot P
 
 ## Maintaining These Workflows
 
-For engineers responsible for extending, debugging, or operating the Claude workflows, see  see `README-claude-workflows.md` in the repository's `.github/workflows` directory.
+For engineers responsible for extending, debugging, or operating the Claude workflows, see `README-claude-workflows.md` in the repository's `.github/workflows` directory.
