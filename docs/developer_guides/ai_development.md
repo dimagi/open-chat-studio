@@ -1,6 +1,6 @@
 # AI-Assisted Development
 
-This project uses an agentic development workflow built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). Other agentic coding tools (Codex, opencode, etc.) can follow the same process.
+This project uses an agentic development workflow built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). Other agentic coding tools (Codex, OpenCode, etc.) can follow the same process.
 
 Our shared Claude workflows, commands, and configuration are maintained in the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. Refer to that repository for setup instructions and usage guidance.
 
@@ -44,7 +44,7 @@ Once the design is approved, create a detailed implementation plan. In Claude Co
 
 ### 4. Execute
 
-Work through the implementation plan. The agentic tool handles code generation, test writing, and iterating on failures. Review the output as you go — the tool is a collaborator, not an autopilot.
+Work through the implementation plan. The agentic tool can assist with code generation, test writing, and iterating on failures. Review and steer each step as you go — the tool is a collaborator, not an autopilot.
 
 ### 5. Code Review and PR
 
