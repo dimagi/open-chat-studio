@@ -1,7 +1,7 @@
 from django.db.models import Case, DateTimeField, F, When
 
 from apps.experiments.models import ExperimentSession
-from apps.pipelines.models import PipelineChatHistoryModes, PipelineEventInputs
+from apps.pipelines.models import Pipeline, PipelineChatHistoryModes, PipelineEventInputs
 from apps.pipelines.nodes.base import PipelineState
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.utils.django_db import MakeInterval
@@ -99,10 +99,6 @@ class SendMessageToBotAction(EventActionHandlerBase):
 
 class PipelineStartAction(EventActionHandlerBase):
     def invoke(self, session: ExperimentSession, action) -> str:
-        from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models → events.models → events.actions
-            Pipeline,
-        )
-
         try:
             pipeline: Pipeline = Pipeline.objects.get(id=action.params["pipeline_id"])
         except KeyError:

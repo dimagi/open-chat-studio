@@ -31,7 +31,7 @@ logger = logging.getLogger("ocs.tracing.langfuse")
 
 def get_langfuse_api_client(config: dict) -> LangfuseAPI:
     """Create a Langfuse management API client for reading trace data."""
-    from langfuse.api.client import LangfuseAPI  # noqa: PLC0415 - lazy: test mocks at source module level
+    from langfuse.api.client import LangfuseAPI  # noqa: PLC0415 - tests mock LangfuseAPI at source module
 
     return LangfuseAPI(
         base_url=config["host"],
@@ -228,7 +228,7 @@ class ClientManager:
         self._start_prune_thread()
 
     def get(self, config: dict) -> Langfuse:
-        from langfuse import Langfuse  # noqa: PLC0415 - lazy: test mocks langfuse.Langfuse at source module level
+        from langfuse import Langfuse  # noqa: PLC0415 - tests mock langfuse.Langfuse at source module
 
         public_key = config.get("public_key")
         with LangfuseResourceManager._lock:

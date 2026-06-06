@@ -22,7 +22,7 @@ from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.channels import MESSAGE_TYPES
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
@@ -1299,7 +1299,6 @@ class TestEmailAttachmentsEndToEnd:
         def fake_process_input(user_query, attachments=None, human_message=None):
             captured["attachments"] = attachments
             captured["query"] = user_query
-            from apps.chat.models import ChatMessage, ChatMessageType  # noqa: PLC0415
 
             return ChatMessage(content="ack: got the file", message_type=ChatMessageType.AI)
 

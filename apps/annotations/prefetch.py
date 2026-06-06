@@ -19,6 +19,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Prefetch
 
 from apps.annotations.models import CustomTaggedItem
+from apps.chat.models import Chat
 
 
 def chat_tagged_items_prefetch() -> Prefetch:
@@ -46,8 +47,6 @@ def attach_chat_tagged_items(rows):
     pre-populate ``row.chat``); this helper sets attributes on the related
     ``Chat`` instance, and a deferred FK would silently regress to N+1.
     """
-    from apps.chat.models import Chat  # noqa: PLC0415
-
     records = [getattr(r, "record", r) for r in rows]
     if not records:
         return records
