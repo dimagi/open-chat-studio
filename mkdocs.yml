@@ -108,6 +108,7 @@ nav:
       - 0035 Read-only mode gates features during the deprecation window: adr/0035-read-only-mode-during-deprecation-window.md
       - 0036 Sunset headers and 410 Gone for retired HTTP surfaces: adr/0036-sunset-headers-and-410-for-retired-http-surfaces.md
       - 0037 Row-multiplying list filters use EXISTS, not a blanket DISTINCT: adr/0037-row-multiplying-filters-use-exists-not-distinct.md
+      - 0038 Dataset message-clone scope is a single per-submission choice: adr/0038-dataset-message-clone-scope-is-per-submission.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
