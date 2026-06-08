@@ -436,10 +436,9 @@ def _clear_remote_webhook(channel: ExperimentChannel):
         return
     try:
         service = channel.messaging_provider.get_messaging_service()
-        extra_data = channel.extra_data or {}
-        if not service.supports_webhook_management or not extra_data.get("number"):
+        if not service.supports_webhook_management:
             return
-        service.remove_incoming_webhook(extra_data, channel.webhook_url)
+        service.remove_incoming_webhook(channel.extra_data or {}, channel.webhook_url)
     except Exception:
         log.exception("Error removing webhook for channel %s", channel.id)
 

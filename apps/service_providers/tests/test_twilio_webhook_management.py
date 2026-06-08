@@ -82,3 +82,10 @@ class TestTwilioWebhookManagement:
             service.remove_incoming_webhook({"number": "+27812345678"}, self.WEBHOOK_URL)
 
         client.messaging.v2.channels_senders.return_value.update.assert_not_called()
+
+    def test_remove_incoming_webhook_ignores_missing_number(self):
+        service, client = self._service_with_client([])
+        with patch.object(TwilioService, "client", new=client):
+            service.remove_incoming_webhook({}, self.WEBHOOK_URL)
+
+        client.messaging.v2.channels_senders.list.assert_not_called()
