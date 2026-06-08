@@ -252,6 +252,9 @@ class ExperimentChannel(BaseTeamModel):
             MessagingProviderType,
         )
 
+        if self.platform == ChannelPlatform.TELEGRAM:
+            return absolute_url(reverse("channels:new_telegram_message", args=[self.external_id]), is_secure=True)
+
         if not self.messaging_provider:
             return ""
         uri = ""

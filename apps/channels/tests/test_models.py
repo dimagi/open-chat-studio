@@ -43,9 +43,13 @@ def test_channel_webhook_url():
     turnio_provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio)
 
     # Setup channels with their respective providers
-    no_provider_channel = ExperimentChannelFactory.create()
-    twilio_channel = ExperimentChannelFactory.create(messaging_provider=twilio_provider)
-    turnio_channel = ExperimentChannelFactory.create(messaging_provider=turnio_provider)
+    no_provider_channel = ExperimentChannelFactory.create(platform=ChannelPlatform.WEB)
+    twilio_channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider
+    )
+    turnio_channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.WHATSAPP, messaging_provider=turnio_provider
+    )
 
     # Let's check out each one's webhook url
     assert not no_provider_channel.webhook_url
@@ -267,3 +271,13 @@ def test_get_webhook_manager_returns_none_for_web_channel():
     channel = ExperimentChannelFactory(platform=ChannelPlatform.WEB, messaging_provider=None, extra_data={})
 
     assert channel.get_webhook_manager() is None
+
+
+@pytest.mark.django_db()
+def test_webhook_url_for_telegram_channel():
+    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
+
+    url = channel.webhook_url
+
+    assert str(channel.external_id) in url
+    assert url.startswith("https://")
