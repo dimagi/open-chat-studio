@@ -1,5 +1,5 @@
 import uuid
-from typing import Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 from django.conf import settings
 from django.db import models
@@ -13,6 +13,9 @@ from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
 from apps.teams.models import BaseTeamModel, Flag
 from apps.web.meta import absolute_url
+
+if TYPE_CHECKING:
+    from apps.channels.webhooks import WebhookManager
 
 WEB = "web"
 TELEGRAM = "telegram"
@@ -268,6 +271,22 @@ class ExperimentChannel(BaseTeamModel):
             uri,
             is_secure=True,
         )
+
+    def get_webhook_manager(self) -> "WebhookManager | None":
+        """Return the object that manages this channel's inbound webhook, or None.
+
+        Provider-backed channels delegate to their MessagingService; Telegram uses its
+        per-channel bot token. Both satisfy the WebhookManager protocol structurally.
+        """
+        if self.messaging_provider:
+            return self.messaging_provider.get_messaging_service()
+        if self.platform == ChannelPlatform.TELEGRAM:
+            from apps.channels.webhooks import (  # noqa: PLC0415 - lazy: avoid importing telebot at module load
+                TelegramWebhookManager,
+            )
+
+            return TelegramWebhookManager()
+        return None
 
     def soft_delete(self):
         self.deleted = True
