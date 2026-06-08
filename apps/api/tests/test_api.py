@@ -23,8 +23,8 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.langchain import mock_llm
 from apps.utils.tests.clients import ApiTestClient
+from apps.utils.tests.langchain import mock_llm
 
 
 @pytest.fixture()

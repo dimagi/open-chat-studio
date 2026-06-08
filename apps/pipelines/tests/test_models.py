@@ -29,7 +29,7 @@ from apps.utils.factories.service_provider_factories import (
     LlmProviderModelFactory,
 )
 from apps.utils.factories.user import UserFactory
-from apps.utils.langchain import (
+from apps.utils.tests.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
 )

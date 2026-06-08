@@ -11,7 +11,7 @@ from apps.pipelines.nodes.history_middleware import (
     TruncateTokensHistoryMiddleware,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import FakeLlmSimpleTokenCount
+from apps.utils.tests.langchain import FakeLlmSimpleTokenCount
 
 
 @pytest.fixture()
