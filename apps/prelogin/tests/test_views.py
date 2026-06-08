@@ -46,7 +46,46 @@ def test_applications_page_renders(client):
 def test_contact_page_renders(client):
     response = client.get(reverse("prelogin:contact"))
     assert response.status_code == 200
-    assert b"hubspot-form" in response.content
+    assert b"collaborate" in response.content
+
+
+@pytest.mark.django_db()
+def test_contact_page_shows_hubspot_form_when_configured(client, settings):
+    settings.HUBSPOT_FORM_PORTAL_ID = "503070"
+    settings.HUBSPOT_FORM_ID = "ab84dc67-539d-40d3-b9ac-466d8b8348bf"
+    response = client.get(reverse("prelogin:contact"))
+    content = response.content.decode()
+    assert 'id="hubspot-form"' in content
+    assert "js.hsforms.net" in content
+    assert "503070" in content
+
+
+@pytest.mark.django_db()
+def test_contact_page_hides_hubspot_form_when_not_configured(client, settings):
+    settings.HUBSPOT_FORM_PORTAL_ID = ""
+    settings.HUBSPOT_FORM_ID = ""
+    response = client.get(reverse("prelogin:contact"))
+    content = response.content.decode()
+    assert 'id="hubspot-form"' not in content
+    assert "js.hsforms.net" not in content
+
+
+@pytest.mark.django_db()
+def test_contact_page_shows_contact_email_when_configured(client, settings):
+    settings.HUBSPOT_FORM_PORTAL_ID = ""
+    settings.HUBSPOT_FORM_ID = ""
+    settings.PRELOGIN_CONTACT_EMAIL = "hello@example.com"
+    response = client.get(reverse("prelogin:contact"))
+    assert b"mailto:hello@example.com" in response.content
+
+
+@pytest.mark.django_db()
+def test_contact_page_omits_email_when_not_configured(client, settings):
+    settings.HUBSPOT_FORM_PORTAL_ID = ""
+    settings.HUBSPOT_FORM_ID = ""
+    settings.PRELOGIN_CONTACT_EMAIL = ""
+    response = client.get(reverse("prelogin:contact"))
+    assert b"mailto:" not in response.content
 
 
 @pytest.mark.django_db()
