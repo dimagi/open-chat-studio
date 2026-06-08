@@ -120,12 +120,15 @@ class MessagingService(pydantic.BaseModel):
     supports_webhook_management: ClassVar[bool] = False
     """Whether this service can configure the inbound message webhook at the provider."""
 
-    def set_incoming_webhook(self, number: str, webhook_url: str):
-        """Point the provider's inbound message webhook for `number` at `webhook_url`."""
+    def set_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        """Point the provider's inbound message webhook at `webhook_url`.
+
+        `extra_data` is the channel's `extra_data`; each provider reads whatever fields it needs.
+        """
         raise NotImplementedError
 
-    def remove_incoming_webhook(self, number: str, webhook_url: str):
-        """Clear the provider's inbound message webhook for `number` if it points at `webhook_url`."""
+    def remove_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        """Clear the provider's inbound message webhook if it points at `webhook_url`."""
         raise NotImplementedError
 
 
@@ -251,14 +254,15 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
 
     supports_webhook_management: ClassVar[bool] = True
 
-    def set_incoming_webhook(self, number: str, webhook_url: str):
+    def set_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        number = extra_data["number"]
         sender = self._get_whatsapp_sender(number)
         if sender is None:
             raise ValueError(f"No WhatsApp sender found for {number}")
         self._update_sender_webhook(sender, webhook_url)
 
-    def remove_incoming_webhook(self, number: str, webhook_url: str):
-        sender = self._get_whatsapp_sender(number)
+    def remove_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        sender = self._get_whatsapp_sender(extra_data["number"])
         if sender is None:
             return
         current_url = (sender.webhook or {}).get("callback_url")

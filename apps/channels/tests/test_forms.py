@@ -295,7 +295,7 @@ def test_whatsapp_post_save_configures_twilio_webhook(set_incoming_webhook, mess
 
     form.post_save(channel)
 
-    set_incoming_webhook.assert_called_once_with("+12125552368", channel.webhook_url)
+    set_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
     assert form.success_message == "Webhook configured automatically at Twilio."
     assert form.warning_message == ""
 

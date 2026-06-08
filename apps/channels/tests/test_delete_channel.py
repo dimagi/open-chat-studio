@@ -44,7 +44,7 @@ def test_delete_channel_clears_remote_webhook(remove_incoming_webhook, client, t
     assert response.status_code == 200
     whatsapp_channel.refresh_from_db()
     assert whatsapp_channel.deleted
-    remove_incoming_webhook.assert_called_once_with("+12125552368", whatsapp_channel.webhook_url)
+    remove_incoming_webhook.assert_called_once_with(whatsapp_channel.extra_data, whatsapp_channel.webhook_url)
 
 
 @pytest.mark.django_db()

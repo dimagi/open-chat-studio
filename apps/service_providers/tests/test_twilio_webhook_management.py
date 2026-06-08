@@ -36,7 +36,7 @@ class TestTwilioWebhookManagement:
         sender = self._make_sender(callback_url="https://old.example.com/hook")
         service, client = self._service_with_client([sender])
         with patch.object(TwilioService, "client", new=client):
-            service.set_incoming_webhook("+27812345678", self.WEBHOOK_URL)
+            service.set_incoming_webhook({"number": "+27812345678"}, self.WEBHOOK_URL)
 
         client.messaging.v2.channels_senders.list.assert_called_once_with(channel="whatsapp")
         client.messaging.v2.channels_senders.assert_called_once_with("XE1")
@@ -55,13 +55,13 @@ class TestTwilioWebhookManagement:
     def test_set_incoming_webhook_raises_when_sender_not_found(self):
         service, client = self._service_with_client([])
         with patch.object(TwilioService, "client", new=client), pytest.raises(ValueError, match="No WhatsApp sender"):
-            service.set_incoming_webhook("+27812345678", self.WEBHOOK_URL)
+            service.set_incoming_webhook({"number": "+27812345678"}, self.WEBHOOK_URL)
 
     def test_remove_incoming_webhook_clears_matching_url(self):
         sender = self._make_sender(callback_url=self.WEBHOOK_URL)
         service, client = self._service_with_client([sender])
         with patch.object(TwilioService, "client", new=client):
-            service.remove_incoming_webhook("+27812345678", self.WEBHOOK_URL)
+            service.remove_incoming_webhook({"number": "+27812345678"}, self.WEBHOOK_URL)
 
         update_mock = client.messaging.v2.channels_senders.return_value.update
         update_mock.assert_called_once()
@@ -72,13 +72,13 @@ class TestTwilioWebhookManagement:
         sender = self._make_sender(callback_url="https://somewhere-else.example.com/hook")
         service, client = self._service_with_client([sender])
         with patch.object(TwilioService, "client", new=client):
-            service.remove_incoming_webhook("+27812345678", self.WEBHOOK_URL)
+            service.remove_incoming_webhook({"number": "+27812345678"}, self.WEBHOOK_URL)
 
         client.messaging.v2.channels_senders.return_value.update.assert_not_called()
 
     def test_remove_incoming_webhook_ignores_missing_sender(self):
         service, client = self._service_with_client([])
         with patch.object(TwilioService, "client", new=client):
-            service.remove_incoming_webhook("+27812345678", self.WEBHOOK_URL)
+            service.remove_incoming_webhook({"number": "+27812345678"}, self.WEBHOOK_URL)
 
         client.messaging.v2.channels_senders.return_value.update.assert_not_called()

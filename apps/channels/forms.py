@@ -250,7 +250,7 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             return
 
         try:
-            service.set_incoming_webhook(channel.extra_data["number"], channel.webhook_url)
+            service.set_incoming_webhook(channel.extra_data, channel.webhook_url)
         except Exception:
             logger.exception("Error configuring webhook for channel %s", channel.id)
             self.warning_message = (
