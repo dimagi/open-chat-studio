@@ -280,21 +280,28 @@ def _setup_connect_channels(identifier, participant_data_by_experiment_id):
     for channel, participant_data in pending:
         try:
             create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                "Failed to create CommCare Connect channel for participant %s: HTTP %s - %s",
-                identifier,
-                e.response.status_code,
-                e.response.text,
-            )
-            if e.response.status_code == 404:
-                raise NotFound("Failed to create channel: Participant not found in CommCare Connect") from e
-            elif e.response.status_code >= 500:
-                raise ServiceUnavailable("Failed to create channel: CommCare Connect service error") from e
-            raise BadRequest(f"Failed to create channel: {e.response.text}") from e
         except httpx.HTTPError as e:
-            logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(e))
-            raise ServiceUnavailable("Failed to create channel: Unable to connect to CommCare Connect service") from e
+            raise _connect_channel_error(e, identifier) from e
+
+
+def _connect_channel_error(error, identifier):
+    """Map a CommCare Connect client error to the DRF exception to return to the caller."""
+    if isinstance(error, httpx.HTTPStatusError):
+        status_code = error.response.status_code
+        logger.error(
+            "Failed to create CommCare Connect channel for participant %s: HTTP %s - %s",
+            identifier,
+            status_code,
+            error.response.text,
+        )
+        if status_code == 404:
+            return NotFound("Failed to create channel: Participant not found in CommCare Connect")
+        if status_code >= 500:
+            return ServiceUnavailable("Failed to create channel: CommCare Connect service error")
+        return BadRequest(f"Failed to create channel: {error.response.text}")
+
+    logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(error))
+    return ServiceUnavailable("Failed to create channel: Unable to connect to CommCare Connect service")
 
 
 def _schedule_external_id(data, experiment, participant):

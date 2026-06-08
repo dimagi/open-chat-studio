@@ -65,7 +65,7 @@ class ParticipantDetailSerializer(serializers.ModelSerializer):
         # queryset is pre-annotated via the view's get_queryset / prefetch
         qs = getattr(obj, "_prefetched_participant_data", None)
         if qs is None:
-            qs = obj.data_set.filter(team=obj.team)
+            qs = obj.data_set.filter(team=obj.team).select_related("experiment")
         return ParticipantDataEntrySerializer(qs, many=True).data
 
 
