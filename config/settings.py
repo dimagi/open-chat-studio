@@ -591,6 +591,14 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
+# Prelogin marketing pages
+# Optional contact email shown on the contact page. Leave unset to hide the email.
+PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
+# HubSpot contact form embed. Leave portal/form IDs unset to hide the form.
+HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
+HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
+HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
+
 # Sentry setup
 
 # populate this to configure sentry. should take the form: 'https://****@sentry.io/12345'

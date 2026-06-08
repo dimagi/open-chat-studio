@@ -24,13 +24,13 @@
     "@type": "Organization",
     "name": "Open Chat Studio by Dimagi",
     "url": "{{ request.build_absolute_uri }}",
-    "contactPoint": {
+    {% if contact_email %}"contactPoint": {
       "@type": "ContactPoint",
       "contactType": "sales",
-      "email": "ocs-info@dimagi.com",
+      "email": "{{ contact_email }}",
       "availableLanguage": "English"
     },
-    "parentOrganization": {
+    {% endif %}"parentOrganization": {
       "@type": "Organization",
       "name": "Dimagi, Inc.",
       "url": "https://dimagi.com/"
@@ -220,9 +220,16 @@
       <div class="contact-intro">
         <h1>Let's <em>collaborate</em></h1>
         <p>Tell us what you'd like to build, deploy, or research with Open Chat Studio, and we'll be in touch to explore how we can work together.</p>
-        <p>Fill in the form below, or email us at <a href="mailto:ocs-info@dimagi.com">ocs-info@dimagi.com</a>.</p>
+        {% if hubspot_form and contact_email %}
+        <p>Fill in the form below, or email us at <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+        {% elif hubspot_form %}
+        <p>Fill in the form below and we'll be in touch.</p>
+        {% elif contact_email %}
+        <p>Email us at <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and we'll be in touch.</p>
+        {% endif %}
       </div>
 
+      {% if hubspot_form %}
       <div class="form-card">
         <div id="hubspot-form">
           <div class="form-fallback" id="hubspot-form-fallback">
@@ -230,6 +237,14 @@
           </div>
         </div>
       </div>
+      {% elif contact_email %}
+      <div class="form-card">
+        <div class="form-fallback">
+          <strong>Email us</strong><br>
+          Drop us a line at <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and we'll be in touch.
+        </div>
+      </div>
+      {% endif %}
 
       <div class="support-card">
         <div class="support-card-content">
@@ -246,15 +261,16 @@
 {% endblock content %}
 
 {% block page_scripts %}
+{% if hubspot_form %}
 <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
 <script>
   (function () {
     function mountForm() {
       if (typeof hbspt === 'undefined' || !hbspt.forms) return false;
       hbspt.forms.create({
-        region: "na1",
-        portalId: "503070",
-        formId: "ab84dc67-539d-40d3-b9ac-466d8b8348bf",
+        region: "{{ hubspot_form.region }}",
+        portalId: "{{ hubspot_form.portal_id }}",
+        formId: "{{ hubspot_form.form_id }}",
         target: "#hubspot-form",
         onFormReady: function () {
           var fb = document.getElementById('hubspot-form-fallback');
@@ -269,4 +285,5 @@
     }
   })();
 </script>
+{% endif %}
 {% endblock page_scripts %}

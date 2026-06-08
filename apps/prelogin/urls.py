@@ -11,11 +11,7 @@ urlpatterns = [
         TemplateView.as_view(template_name="prelogin/about.html", extra_context={"active_nav": "about"}),
         name="about",
     ),
-    path(
-        "contact/",
-        TemplateView.as_view(template_name="prelogin/contact.html", extra_context={"active_nav": "contact"}),
-        name="contact",
-    ),
+    path("contact/", views.contact, name="contact"),
     path(
         "applications/",
         TemplateView.as_view(template_name="prelogin/applications.html", extra_context={"active_nav": "applications"}),
