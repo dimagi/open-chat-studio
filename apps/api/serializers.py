@@ -41,7 +41,7 @@ class ParticipantDataEntrySerializer(serializers.ModelSerializer):
     chatbot = serializers.CharField(source="experiment.name", read_only=True)
     chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
     connect_channel_id = serializers.SerializerMethodField(
-        help_text="CommCare Connect channel ID. Only set for commcare_connect participants."
+        help_text="CommCare Connect channel ID. Only set for the CommCare Connect channel."
     )
 
     class Meta:

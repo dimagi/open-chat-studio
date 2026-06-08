@@ -1688,8 +1688,8 @@ components:
           type: string
           nullable: true
           readOnly: true
-          description: CommCare Connect channel ID. Only set for commcare_connect
-            participants.
+          description: CommCare Connect channel ID. Only set for the CommCare Connect
+            channel.
       required:
       - chatbot
       - chatbot_id
