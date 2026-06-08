@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.summarization import SummarizationMiddleware
-from langchain_core.messages import BaseMessage, RemoveMessage
+from langchain_core.messages import BaseMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
@@ -13,6 +13,15 @@ from langgraph.graph.message import (
 
 from apps.chat.conversation import COMPRESSION_MARKER
 from apps.pipelines.exceptions import MessageTooLargeError
+
+
+def get_token_counter(model=None):
+    """Returns a token-counting callable for the given model, falling back to
+    langchain's approximate counter when no model is provided."""
+    if model is None:
+        return count_tokens_approximately
+    return model.get_num_tokens_from_messages
+
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.nodes import PipelineNode
@@ -134,22 +143,42 @@ class MaxHistoryLengthHistoryMiddleware(BaseNodeHistoryMiddleware):
 
 
 class MessageSizeValidationMiddleware(AgentMiddleware):
-    """Raises MessageTooLargeError before the model call if the full context exceeds the token budget.
+    """Raises MessageTooLargeError if the current user message or accumulated history
+    exceeds the model's token budget.
 
-    Runs after history compression and includes all messages in state
-    (history + current user input + any attachments).
+    Two checks run on each call: the last HumanMessage is validated individually, and
+    the total conversation history (HumanMessages + AIMessages) is validated together.
+    ToolMessages and SystemMessages are excluded from the total — tool responses are
+    transient and the token_limit already has system-prompt tokens subtracted.
     """
 
-    def __init__(self, token_limit: int):
+    def __init__(self, token_limit: int | None, token_counter):
         self._token_limit = token_limit
+        self._token_counter = token_counter
 
     def before_model(self, state, runtime):
-        if not self._token_limit:
+        if self._token_limit is None:
             return None
-        token_count = count_tokens_approximately(state["messages"])
+        all_messages = state["messages"]
+        human_messages = [m for m in all_messages if isinstance(m, HumanMessage)]
+        if not human_messages:
+            return None
+
+        # Validate the current user message individually.
+        token_count = self._token_counter([human_messages[-1]])
         if token_count > self._token_limit:
             raise MessageTooLargeError(
                 f"Your message is too large for this model. "
                 f"It uses approximately {token_count} tokens, but only {self._token_limit} tokens are available."
+            )
+
+        # Validate total history, excluding tool responses and the system prompt.
+        conversation_messages = [m for m in all_messages if not isinstance(m, (ToolMessage, SystemMessage))]
+        total_token_count = self._token_counter(conversation_messages)
+        if total_token_count > self._token_limit:
+            raise MessageTooLargeError(
+                f"The conversation history is too large for this model. "
+                f"The total context uses approximately {total_token_count} tokens, but only "
+                f"{self._token_limit} tokens are available. Please start a new conversation."
             )
         return None
