@@ -299,10 +299,10 @@ def test_elevenlabs_synthesize_voice(team_with_users):
     fake_mp3_bytes = b"\xff\xfb\x90\x00" * 100
 
     speech_service = provider.get_speech_service()
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+    with mock.patch("apps.service_providers.speech_service.ElevenLabsClient") as mock_client_cls:
         mock_client = mock_client_cls.return_value
         mock_client.text_to_speech.convert.return_value = iter([fake_mp3_bytes])
-        with mock.patch("pydub.AudioSegment") as mock_audio:
+        with mock.patch("apps.service_providers.speech_service.AudioSegment") as mock_audio:
             mock_segment = mock.Mock()
             mock_segment.__len__ = mock.Mock(return_value=2500)
             mock_audio.from_file.return_value = mock_segment
@@ -333,7 +333,7 @@ def test_elevenlabs_transcribe_audio(team_with_users):
     speech_service = provider.get_speech_service()
     mock_audio = BytesIO(b"fake audio data")
 
-    with mock.patch("elevenlabs.client.ElevenLabs") as mock_client_cls:
+    with mock.patch("apps.service_providers.speech_service.ElevenLabsClient") as mock_client_cls:
         mock_client = mock_client_cls.return_value
         mock_result = mock.Mock()
         mock_result.text = "Hello world"

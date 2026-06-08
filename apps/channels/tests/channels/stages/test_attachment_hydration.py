@@ -8,6 +8,7 @@ from apps.channels.channels_v2.whatsapp_channel import WhatsappAttachmentHydrati
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.tests.channels.conftest import make_context
 from apps.chat.models import ChatAttachment
+from apps.files.models import File
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 
@@ -235,8 +236,6 @@ class TestWhatsappAttachmentHydrationStage:
 
         self.stage.process(ctx)
 
-        from apps.files.models import File  # noqa: PLC0415
-
         assert len(msg.attachments) == 1
         file_id = msg.attachments[0].file_id
         file_obj = File.objects.get(id=file_id)
@@ -263,8 +262,6 @@ class TestWhatsappAttachmentHydrationStage:
         )
 
         self.stage.process(ctx)
-
-        from apps.files.models import File  # noqa: PLC0415
 
         file_obj = File.objects.get(id=msg.attachments[0].file_id)
         # File.create appends a content-type-derived extension when none is provided.

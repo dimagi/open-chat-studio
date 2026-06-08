@@ -15,7 +15,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession, SourceMaterial
+from apps.documents.models import Collection
+from apps.experiments.models import ExperimentSession, SourceMaterial, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -436,10 +437,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def _get_version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
-        from apps.experiments.models import (  # noqa: PLC0415 - circular: experiments.models→models
-            VersionFieldDisplayFormatters,
-        )
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         node_name = self.params.get("name", self.type)
@@ -504,7 +501,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         Archive related params that were also versioned along with this node
         """
         from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
         from apps.pipelines.nodes import nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         # AssistantNode versions its assistant here. LLMResponseWithPrompt's collection params
