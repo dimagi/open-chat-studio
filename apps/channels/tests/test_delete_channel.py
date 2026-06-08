@@ -48,6 +48,25 @@ def test_delete_channel_clears_remote_webhook(remove_incoming_webhook, client, t
 
 
 @pytest.mark.django_db()
+@patch("apps.channels.webhooks.TelegramWebhookManager.remove_incoming_webhook")
+def test_delete_telegram_channel_clears_remote_webhook(remove_incoming_webhook, client, team_with_users):
+    experiment = ExperimentFactory(team=team_with_users)
+    channel = ExperimentChannelFactory(
+        team=team_with_users,
+        experiment=experiment,
+        platform=ChannelPlatform.TELEGRAM,
+        extra_data={"bot_token": "tok"},
+    )
+
+    response = _delete_channel(client, team_with_users, channel)
+
+    assert response.status_code == 200
+    channel.refresh_from_db()
+    assert channel.deleted
+    remove_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
+
+
+@pytest.mark.django_db()
 @patch("apps.service_providers.messaging_service.TwilioService.remove_incoming_webhook")
 def test_delete_channel_succeeds_when_webhook_removal_fails(
     remove_incoming_webhook, client, team_with_users, whatsapp_channel
