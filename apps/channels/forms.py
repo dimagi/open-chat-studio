@@ -9,8 +9,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
-from django.urls import reverse
-from telebot import TeleBot, apihelper, types
+from telebot import TeleBot, apihelper
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
@@ -25,7 +24,6 @@ from apps.channels.utils import (
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
-from apps.web.meta import absolute_url
 
 logger = logging.getLogger("ocs.channels")
 
@@ -163,6 +161,29 @@ class ExtraFormBase(forms.Form):
         """Override this method to perform any additional actions after the channel has been saved"""
         pass
 
+    def configure_webhook(self, channel: ExperimentChannel):
+        """Point the channel's inbound webhook at us, via its WebhookManager.
+
+        Falls back to manual setup instructions when the channel has no manager or the
+        manager cannot configure webhooks. On failure, surfaces a warning rather than
+        raising, so channel creation still succeeds.
+        """
+        manager = channel.get_webhook_manager()
+        if not manager or not manager.supports_webhook_management:
+            if channel.webhook_url:
+                self.success_message = f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+            return
+        try:
+            manager.set_incoming_webhook(channel.extra_data, channel.webhook_url)
+        except Exception:
+            logger.exception("Error configuring webhook for channel %s", channel.id)
+            self.warning_message = (
+                "Could not configure the webhook automatically. "
+                f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+            )
+        else:
+            self.success_message = "Webhook configured automatically."
+
 
 class WebhookUrlFormBase(ExtraFormBase):
     webook_url = forms.CharField(
@@ -190,24 +211,7 @@ class TelegramChannelForm(ExtraFormBase):
     bot_token = forms.CharField(label="Bot Token", max_length=100)
 
     def post_save(self, channel: ExperimentChannel):
-        try:
-            self._set_telegram_webhook(channel)
-        except apihelper.ApiTelegramException as e:
-            logger.exception("Error setting Telegram webhook")
-            raise ExperimentChannelException("Error setting Telegram webhook") from e
-
-    def _set_telegram_webhook(self, experiment_channel: ExperimentChannel):
-        """
-        Set the webhook at Telegram to allow message forwarding to this platform
-        """
-        tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
-        if experiment_channel.deleted:
-            webhook_url = None
-        else:
-            webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
-
-        tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
-        tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
+        self.configure_webhook(channel)
 
     def clean_bot_token(self):
         """Checks the bot token by making a request to get info on the bot. If the token is invalid, an
@@ -244,21 +248,7 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
 
     def post_save(self, channel: ExperimentChannel):
-        service = self.messaging_provider.get_messaging_service() if self.messaging_provider else None
-        if not service or not service.supports_webhook_management:
-            super().post_save(channel)
-            return
-
-        try:
-            service.set_incoming_webhook(channel.extra_data, channel.webhook_url)
-        except Exception:
-            logger.exception("Error configuring webhook for channel %s", channel.id)
-            self.warning_message = (
-                "Could not configure the webhook automatically. "
-                f"Use the following URL when setting up the webhook: {channel.webhook_url}"
-            )
-        else:
-            self.success_message = "Webhook configured automatically at Twilio."
+        self.configure_webhook(channel)
 
     def clean(self):
         cleaned_data = super().clean()

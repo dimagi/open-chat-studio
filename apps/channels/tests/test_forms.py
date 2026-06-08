@@ -4,7 +4,7 @@ import httpx
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, SlackChannelForm, WhatsappChannelForm
+from apps.channels.forms import ChannelForm, SlackChannelForm, TelegramChannelForm, WhatsappChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -296,7 +296,7 @@ def test_whatsapp_post_save_configures_twilio_webhook(set_incoming_webhook, mess
     form.post_save(channel)
 
     set_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
-    assert form.success_message == "Webhook configured automatically at Twilio."
+    assert form.success_message == "Webhook configured automatically."
     assert form.warning_message == ""
 
 
@@ -341,3 +341,33 @@ def test_whatsapp_post_save_shows_manual_instructions_for_other_providers(messag
     form.post_save(channel)
 
     assert form.success_message == f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook")
+def test_telegram_post_save_configures_webhook(set_incoming_webhook, experiment):
+    channel = ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"}
+    )
+    form = TelegramChannelForm(experiment=experiment, data={"bot_token": "tok"})
+
+    form.post_save(channel)
+
+    set_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
+    assert form.success_message == "Webhook configured automatically."
+    assert form.warning_message == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook")
+def test_telegram_post_save_falls_back_to_warning_on_failure(set_incoming_webhook, experiment):
+    set_incoming_webhook.side_effect = Exception("Telegram is down")
+    channel = ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"}
+    )
+    form = TelegramChannelForm(experiment=experiment, data={"bot_token": "tok"})
+
+    form.post_save(channel)
+
+    assert channel.webhook_url in form.warning_message
+    assert form.success_message == ""
