@@ -255,7 +255,9 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
     supports_webhook_management: ClassVar[bool] = True
 
     def set_incoming_webhook(self, extra_data: dict, webhook_url: str):
-        number = extra_data["number"]
+        number = extra_data.get("number")
+        if not number:
+            return
         sender = self._get_whatsapp_sender(number)
         if sender is None:
             raise ValueError(f"No WhatsApp sender found for {number}")
