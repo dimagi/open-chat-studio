@@ -36,6 +36,15 @@ def make_pkg(root: Path, files: dict[str, str]) -> None:
         path.write_text(textwrap.dedent(content))
 
 
+def check_one_import(root: Path, import_line: str, extra_files: dict[str, str] | None = None) -> list:
+    """Build a package whose sole function makes ``import_line`` (plus any
+    ``extra_files``) and return the findings — the common single-import case."""
+    files = {"pkg/__init__.py": "", "pkg/a.py": f"def f():\n    {import_line}\n    return None\n"}
+    files.update(extra_files or {})
+    make_pkg(root, files)
+    return check_package(root / "pkg")
+
+
 class TestFindImportRoot:
     def test_top_level_package(self, tmp_path):
         make_pkg(tmp_path, {"pkg/__init__.py": ""})
@@ -185,81 +194,46 @@ class TestJustificationVerification:
     """Justified imports are verified, not trusted (claims rot)."""
 
     def test_stale_circular_claim_fails(self, tmp_path):
-        make_pkg(
-            tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": ("def f():\n    import json  # noqa: PLC0415 - circular: b imports a\n    return json\n"),
-            },
-        )
-        (finding,) = check_package(tmp_path / "pkg")
+        (finding,) = check_one_import(tmp_path, "import json  # noqa: PLC0415 - circular: b imports a")
         assert finding.verdict == "stale"
 
     def test_confirmed_circular_claim_is_justified(self, tmp_path):
-        make_pkg(
+        findings = check_one_import(
             tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": (
-                    "def f():\n    from pkg.b import g  # noqa: PLC0415 - circular: b imports a\n    return g\n"
-                ),
-                "pkg/b.py": "from pkg.a import f\ndef g():\n    return f\n",
-            },
+            "from pkg.b import g  # noqa: PLC0415 - circular: b imports a",
+            {"pkg/b.py": "from pkg.a import f\ndef g():\n    return f\n"},
         )
-        findings = {f.path.name: f.verdict for f in check_package(tmp_path / "pkg")}
-        assert findings["a.py"] == "justified"
+        assert {f.path.name: f.verdict for f in findings}["a.py"] == "justified"
 
     def test_dubious_lazy_claim_warns(self, tmp_path):
         # json is claimed lazy in a.py but imported at module level in b.py.
-        make_pkg(
-            tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": ("def f():\n    import json  # noqa: PLC0415 - lazy: heavy lib\n    return json\n"),
-                "pkg/b.py": "import json\n",
-            },
+        (finding,) = check_one_import(
+            tmp_path, "import json  # noqa: PLC0415 - lazy: heavy lib", {"pkg/b.py": "import json\n"}
         )
-        (finding,) = check_package(tmp_path / "pkg")
         assert finding.verdict == "dubious"
         assert "b.py" in finding.error
 
     def test_valid_lazy_claim_is_justified(self, tmp_path):
-        make_pkg(
-            tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": ("def f():\n    import json  # noqa: PLC0415 - lazy: heavy lib\n    return json\n"),
-            },
-        )
-        (finding,) = check_package(tmp_path / "pkg")
+        (finding,) = check_one_import(tmp_path, "import json  # noqa: PLC0415 - lazy: heavy lib")
         assert finding.verdict == "justified"
 
     def test_non_cost_claims_are_not_cross_referenced(self, tmp_path):
         # Timing/patching constraints are not falsifiable by the import index;
         # only `lazy:`-prefixed (cost) claims are.
-        make_pkg(
+        (finding,) = check_one_import(
             tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": (
-                    "def f():\n"
-                    "    import json  # noqa: PLC0415 - deferred until app registry is ready\n"
-                    "    return json\n"
-                ),
-                "pkg/b.py": "import json\n",
-            },
+            "import json  # noqa: PLC0415 - deferred until app registry is ready",
+            {"pkg/b.py": "import json\n"},
         )
-        (finding,) = check_package(tmp_path / "pkg")
         assert finding.verdict == "justified"
 
     def test_imports_in_test_files_do_not_indict_lazy_claims(self, tmp_path):
         # Module-time imports in tests/factories/management commands are not
         # production startup cost, so they cannot make a lazy claim dubious.
-        make_pkg(
+        findings = check_one_import(
             tmp_path,
+            "import json  # noqa: PLC0415 - lazy: heavy lib",
             {
-                "pkg/__init__.py": "",
-                "pkg/a.py": ("def f():\n    import json  # noqa: PLC0415 - lazy: heavy lib\n    return json\n"),
                 "pkg/tests/__init__.py": "",
                 "pkg/tests/test_a.py": "import json\n",
                 "pkg/tests/conftest.py": "import json\n",
@@ -267,37 +241,21 @@ class TestJustificationVerification:
                 "pkg/management/commands/cmd.py": "import json\n",
             },
         )
-        findings = {f.path.name: f.verdict for f in check_package(tmp_path / "pkg")}
-        assert findings["a.py"] == "justified"
+        assert {f.path.name: f.verdict for f in findings}["a.py"] == "justified"
 
     def test_stale_justification_fails_ci(self, tmp_path, capsys, monkeypatch):
-        make_pkg(
-            tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": ("def f():\n    import json  # noqa: PLC0415 - circular: b imports a\n    return json\n"),
-            },
-        )
+        check_one_import(tmp_path, "import json  # noqa: PLC0415 - circular: b imports a")
         monkeypatch.chdir(tmp_path)
         exit_code = main(["pkg"])
-        out = capsys.readouterr().out
         assert exit_code == 1
-        assert "stale" in out
+        assert "stale" in capsys.readouterr().out
 
     def test_dubious_justification_warns_but_passes_ci(self, tmp_path, capsys, monkeypatch):
-        make_pkg(
-            tmp_path,
-            {
-                "pkg/__init__.py": "",
-                "pkg/a.py": ("def f():\n    import json  # noqa: PLC0415 - lazy: heavy lib\n    return json\n"),
-                "pkg/b.py": "import json\n",
-            },
-        )
+        check_one_import(tmp_path, "import json  # noqa: PLC0415 - lazy: heavy lib", {"pkg/b.py": "import json\n"})
         monkeypatch.chdir(tmp_path)
         exit_code = main(["pkg"])
-        out = capsys.readouterr().out
         assert exit_code == 0
-        assert "WARN" in out
+        assert "WARN" in capsys.readouterr().out
 
 
 class TestLoadBannedImports:

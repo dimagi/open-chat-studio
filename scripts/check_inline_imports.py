@@ -61,6 +61,25 @@ class InlineImport:
     justification: str | None = None
 
 
+def _read_justification(node: ast.AST, lines: list[str]) -> str | None:
+    """Return the lazy-import/noqa reason on an import statement, if any."""
+    for line in lines[node.lineno - 1 : node.end_lineno]:
+        if match := LAZY_MARKER.search(line) or NOQA_REASON.search(line):
+            return match.group("reason")
+    return None
+
+
+def _absolute_import_modules(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
+    """Absolute module names an import targets (relative imports have none)."""
+    if isinstance(node, ast.Import):
+        return tuple(alias.name for alias in node.names)
+    return (node.module,) if node.level == 0 and node.module else ()
+
+
+def _is_function(node: ast.AST) -> bool:
+    return isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+
+
 def find_inline_imports(source: str) -> list[InlineImport]:
     """Return all import statements nested inside function or method bodies.
 
@@ -74,24 +93,15 @@ def find_inline_imports(source: str) -> list[InlineImport]:
     def visit(parent: ast.AST, in_function: bool) -> None:
         for node in ast.iter_child_nodes(parent):
             if in_function and isinstance(node, (ast.Import, ast.ImportFrom)):
-                justification = None
-                for line in lines[node.lineno - 1 : node.end_lineno]:
-                    if match := LAZY_MARKER.search(line) or NOQA_REASON.search(line):
-                        justification = match.group("reason")
-                        break
-                if isinstance(node, ast.Import):
-                    modules = tuple(alias.name for alias in node.names)
-                else:  # relative imports have no absolute module name
-                    modules = (node.module,) if node.level == 0 and node.module else ()
                 results.append(
                     InlineImport(
                         lineno=node.lineno,
                         statement=ast.unparse(node),
-                        modules=modules,
-                        justification=justification,
+                        modules=_absolute_import_modules(node),
+                        justification=_read_justification(node, lines),
                     )
                 )
-            visit(node, in_function or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
+            visit(node, in_function or _is_function(node))
 
     visit(tree, False)
     return results
@@ -180,6 +190,22 @@ def _is_type_checking_test(test: ast.expr) -> bool:
     )
 
 
+def _imported_names(node: ast.AST, module_package: str) -> set[str]:
+    """Dotted names a single import node binds, resolving relative imports."""
+    if isinstance(node, ast.Import):
+        return {alias.name for alias in node.names}
+    if not isinstance(node, ast.ImportFrom):
+        return set()
+    if node.level == 0 and node.module:
+        return {node.module}
+    if node.level:
+        parts = module_package.split(".")[: len(module_package.split(".")) - (node.level - 1)]
+        base = ".".join(parts + ([node.module] if node.module else []))
+        # `from . import x` may import submodule x
+        return {base, *(f"{base}.{alias.name}" for alias in node.names)}
+    return set()
+
+
 def find_module_time_imports(source: str, module_package: str) -> set[str]:
     """Return dotted names imported at module-import time.
 
@@ -198,18 +224,8 @@ def find_module_time_imports(source: str, module_package: str) -> set[str]:
                 visit(ast.Module(body=node.orelse, type_ignores=[]), in_function)
                 continue
             if not in_function:
-                if isinstance(node, ast.Import):
-                    names.update(alias.name for alias in node.names)
-                elif isinstance(node, ast.ImportFrom):
-                    if node.level == 0 and node.module:
-                        names.add(node.module)
-                    elif node.level:
-                        parts = module_package.split(".")[: len(module_package.split(".")) - (node.level - 1)]
-                        base = ".".join(parts + ([node.module] if node.module else []))
-                        names.add(base)
-                        # `from . import x` may import submodule x
-                        names.update(f"{base}.{alias.name}" for alias in node.names)
-            visit(node, in_function or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
+                names.update(_imported_names(node, module_package))
+            visit(node, in_function or _is_function(node))
 
     visit(tree, False)
     return names
@@ -443,6 +459,70 @@ def _scan_paths(package_dir: Path, files: tuple[Path, ...] | None) -> list[Path]
     return paths
 
 
+def _route_import(imp: InlineImport, ctx: "PackageContext") -> str:
+    """Decide how an inline import must be checked.
+
+    ``"justified"`` is decided immediately (config-blessed or a claim that
+    cannot be falsified). ``"empirical"`` needs a hoist test (unjustified or a
+    cycle claim). ``"lazy"`` needs the static module-time-import cross-check.
+    """
+    if is_banned_import(imp, ctx.banned_imports):
+        return "justified"  # config-blessed: ruff TID253 forces these inline
+    if imp.justification is None or claims_cycle(imp.justification):
+        return "empirical"
+    if claims_cost(imp.justification):
+        return "lazy"
+    return "justified"  # timing/patching constraints: not falsifiable, trusted
+
+
+def _classify_lazy_claims(candidates: list[Candidate], ctx: "PackageContext") -> list[Finding]:
+    """Fact-check ``lazy:`` claims: a module already imported at module-import
+    time elsewhere costs nothing extra to hoist, so the claim is dubious."""
+    if not candidates:
+        return []
+    index = module_time_import_index(ctx)
+    findings = []
+    for c in candidates:
+        hit = loaded_at_module_time(c.inline_import.modules, index)
+        if hit is None:
+            findings.append(Finding(c.path, c.inline_import, "justified"))
+            continue
+        module, importer = hit
+        rel_importer = importer.relative_to(ctx.import_root)
+        findings.append(
+            Finding(
+                c.path,
+                c.inline_import,
+                "dubious",
+                f"`{module}` is already imported at module level in {rel_importer}",
+            )
+        )
+    return findings
+
+
+def _empirical_verdict(imp: InlineImport, hoistable: bool) -> str:
+    """Verdict from a hoist test: a clean hoist means an unjustified import is
+    a ``violation`` and a (cycle-)justified one is ``stale``."""
+    if imp.justification is None:
+        return "violation" if hoistable else "legitimate"
+    return "stale" if hoistable else "justified"
+
+
+def _classify_empirical(candidates: list[Candidate], ctx: "PackageContext") -> list[Finding]:
+    """Hoist-test candidates. If the baseline import already fails, nothing is
+    proven and every candidate is inconclusive."""
+    if not candidates:
+        return []
+    baseline = _import_all_from_copy(ctx)
+    if not baseline.ok:
+        return [Finding(c.path, c.inline_import, "inconclusive", baseline.error) for c in candidates]
+    classified = classify_candidates(candidates, lambda cands: verify_hoists(ctx, cands))
+    return [
+        Finding(c.path, c.inline_import, _empirical_verdict(c.inline_import, hoistable), error)
+        for c, hoistable, error in classified
+    ]
+
+
 def check_package(
     package_dir: Path,
     exclude: tuple[str, ...] = (),
@@ -453,66 +533,55 @@ def check_package(
     ``files`` restricts which files are scanned for inline imports (e.g. the
     files changed in a PR); hoists are still verified against the whole
     top-level package, since import cycles span sub-packages.
-
-    The hoisted runs are compared against a baseline run of the unmodified
-    package in the same environment. If the baseline itself fails, the
-    empirical test proves nothing and findings are marked inconclusive.
     """
     ctx = PackageContext.resolve(package_dir, exclude)
     findings = []
-    empirical = []  # unjustified, or justified with a (testable) cycle claim
-    lazy_claimed = []
+    empirical: list[Candidate] = []  # unjustified, or a (testable) cycle claim
+    lazy_claimed: list[Candidate] = []
+    routes = {"empirical": empirical, "lazy": lazy_claimed}
     for path in _scan_paths(package_dir, files):
         if ctx.skip(path.resolve().relative_to(package_dir.resolve())):
             continue
         rel_path = str(path.resolve().relative_to(ctx.top_package))
         # utf-8-sig: tolerate files saved with a UTF-8 BOM
         for imp in find_inline_imports(path.read_text(encoding="utf-8-sig")):
-            if is_banned_import(imp, ctx.banned_imports):
-                # config-blessed: ruff TID253 forces these to stay inline
+            route = _route_import(imp, ctx)
+            if route == "justified":
                 findings.append(Finding(path, imp, "justified"))
-            elif imp.justification is None or claims_cycle(imp.justification):
-                empirical.append(Candidate(path, rel_path, imp))
-            elif claims_cost(imp.justification):
-                lazy_claimed.append(Candidate(path, rel_path, imp))
             else:
-                # timing/patching constraints: not falsifiable, trusted
-                findings.append(Finding(path, imp, "justified"))
+                routes[route].append(Candidate(path, rel_path, imp))
 
-    # Fact-check lazy/cost claims statically: a module already imported at
-    # module-import time elsewhere costs nothing extra to hoist.
-    if lazy_claimed:
-        index = module_time_import_index(ctx)
-        for c in lazy_claimed:
-            hit = loaded_at_module_time(c.inline_import.modules, index)
-            if hit is None:
-                findings.append(Finding(c.path, c.inline_import, "justified"))
-            else:
-                module, importer = hit
-                rel_importer = importer.relative_to(ctx.import_root)
-                findings.append(
-                    Finding(
-                        c.path,
-                        c.inline_import,
-                        "dubious",
-                        f"`{module}` is already imported at module level in {rel_importer}",
-                    )
-                )
-
-    # Empirically test the rest by hoisting: cycle claims must reproduce.
-    if empirical:
-        baseline = _import_all_from_copy(ctx)
-        if not baseline.ok:
-            findings += [Finding(c.path, c.inline_import, "inconclusive", baseline.error) for c in empirical]
-        else:
-            for c, hoistable, error in classify_candidates(empirical, lambda cands: verify_hoists(ctx, cands)):
-                if c.inline_import.justification is None:
-                    verdict = "violation" if hoistable else "legitimate"
-                else:
-                    verdict = "stale" if hoistable else "justified"
-                findings.append(Finding(c.path, c.inline_import, verdict, error))
+    findings += _classify_lazy_claims(lazy_claimed, ctx)
+    findings += _classify_empirical(empirical, ctx)
     findings.sort(key=lambda f: (str(f.path), f.inline_import.lineno))
     return findings
+
+
+def _format_finding(f: Finding) -> list[str]:
+    """Render a finding as output lines. Only failing/warning verdicts print;
+    legitimate and justified imports produce nothing."""
+    loc = f"{f.path}:{f.inline_import.lineno}"
+    stmt = f.inline_import.statement
+    reason = f.inline_import.justification
+    last_error = f.error.splitlines()[-1] if f.error else ""
+    if f.verdict == "violation":
+        return [
+            f"FAIL {loc}: `{stmt}` hoists cleanly",
+            "     Move it to module level, or justify it with `# noqa: PLC0415 - <reason>`.",
+        ]
+    if f.verdict == "stale":
+        return [
+            f'FAIL {loc}: `{stmt}` is justified as "{reason}" but hoists cleanly — stale justification',
+            "     Move it to module level, or correct the justification.",
+        ]
+    if f.verdict == "dubious":
+        return [f'WARN {loc}: `{stmt}` is justified as "{reason}" but {last_error}']
+    if f.verdict == "inconclusive":
+        return [
+            f"???  {loc}: `{stmt}` could not be verified; the package fails to import even without hoisting:",
+            f"     {last_error}",
+        ]
+    return []
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -545,28 +614,8 @@ def main(argv: list[str] | None = None) -> int:
     findings = check_package(args.package, exclude=tuple(args.exclude), files=files)
     counts = Counter(f.verdict for f in findings)
     for f in findings:
-        loc = f"{f.path}:{f.inline_import.lineno}"
-        last_error = f.error.splitlines()[-1] if f.error else ""
-        if f.verdict == "violation":
-            print(f"FAIL {loc}: `{f.inline_import.statement}` hoists cleanly")
-            print("     Move it to module level, or justify it with `# noqa: PLC0415 - <reason>`.")
-        elif f.verdict == "stale":
-            print(
-                f"FAIL {loc}: `{f.inline_import.statement}` is justified as"
-                f' "{f.inline_import.justification}" but hoists cleanly — stale justification'
-            )
-            print("     Move it to module level, or correct the justification.")
-        elif f.verdict == "dubious":
-            print(
-                f"WARN {loc}: `{f.inline_import.statement}` is justified as"
-                f' "{f.inline_import.justification}" but {last_error}'
-            )
-        elif f.verdict == "inconclusive":
-            print(
-                f"???  {loc}: `{f.inline_import.statement}` could not be"
-                " verified; the package fails to import even without hoisting:"
-            )
-            print(f"     {last_error}")
+        for line in _format_finding(f):
+            print(line)
     if findings:
         print(
             f"Checked {len(findings)} inline imports:"

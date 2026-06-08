@@ -123,9 +123,11 @@ jobs:
         uses: trilom/file-changes-action@v1.2.4
       - id: py_files
         name: Filter changed Python files
+        env:
+          CHANGED_FILES: ${{ steps.file_changes.outputs.files }}
         run: |
-          files=$(echo '${{ steps.file_changes.outputs.files }}' | tr ' ' '\n' | grep -E '^apps/.*\.py$' | tr '\n' ' ' || true)
-          echo "files=$files" >> $GITHUB_OUTPUT
+          files=$(printf '%s\n' "$CHANGED_FILES" | tr ' ' '\n' | grep -E '^apps/.*\.py$' | tr '\n' ' ' || true)
+          echo "files=$files" >> "$GITHUB_OUTPUT"
       - name: Set up Python
         if: steps.py_files.outputs.files != ''
         uses: actions/setup-python@v6
@@ -144,7 +146,10 @@ jobs:
         if: steps.py_files.outputs.files != ''
         env:
           SECRET_KEY: secret-test-key
-        run: uv run python scripts/check_inline_imports.py apps --files ${{ steps.py_files.outputs.files }}
+          CHANGED_FILES: ${{ steps.py_files.outputs.files }}
+        run: |
+          read -r -a files <<< "$CHANGED_FILES"
+          uv run python scripts/check_inline_imports.py apps --files "${files[@]}"
 
   check-uv-lock:
     runs-on: ubuntu-latest
