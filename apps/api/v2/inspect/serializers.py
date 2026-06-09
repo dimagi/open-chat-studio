@@ -625,19 +625,13 @@ class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSeri
     # extension marks it optional (see ``_ConditionalRequiredSchemaMixin``).
     CONDITIONAL_RESPONSE_KEYS = ("pipeline",)
 
-    type = serializers.CharField(
-        source="action_type",
-        help_text=(
-            "What the trigger runs: ``pipeline_start``, ``send_message_to_bot``, ``end_conversation``, "
-            "``schedule_trigger``, or ``log``."
-        ),
-    )
     params = serializers.SerializerMethodField(help_text="Action parameters; keys depend on the action ``type``.")
     pipeline = serializers.SerializerMethodField()
 
     class Meta:
         model = EventAction
         fields = ["type", "params", "pipeline"]
+        extra_kwargs = {"type": {"help_text": "What the trigger runs", "source": "action_type"}}
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -665,17 +659,12 @@ class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSeri
 
 
 class InspectStaticTriggerSerializer(serializers.ModelSerializer):
-    type = serializers.CharField(
-        help_text=(
-            "The conversation event that fires this trigger (e.g. ``conversation_start``, "
-            "``new_human_message``, ``last_timeout`` — fired after the final inactivity timeout)."
-        )
-    )
     action = InspectTriggerActionSerializer()
 
     class Meta:
         model = StaticTrigger
         fields = ["id", "type", "is_active", "action"]
+        extra_kwargs = {"type": {"help_text": "The conversation event that fires this trigger"}}
 
 
 class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):

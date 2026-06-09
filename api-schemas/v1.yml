@@ -2333,10 +2333,22 @@ components:
           type: integer
           readOnly: true
         type:
-          type: string
-          description: The conversation event that fires this trigger (e.g. ``conversation_start``,
-            ``new_human_message``, ``last_timeout`` — fired after the final inactivity
-            timeout).
+          allOf:
+          - $ref: '#/components/schemas/InspectStaticTriggerTypeEnum'
+          description: |-
+            The conversation event that fires this trigger
+
+            * `conversation_end` - The conversation has ended (by any means)
+            * `conversation_ended_by_user` - The conversation is ended by the participant
+            * `conversation_ended_by_bot` - The conversation is ended by the bot
+            * `conversation_ended_via_api` - The conversation is ended via the API
+            * `conversation_ended_by_event` - The conversation is ended by an event
+            * `conversation_ended_manually` - The conversation is manually ended by an admin
+            * `last_timeout` - The last timeout occurs
+            * `conversation_start` - A new conversation is started
+            * `new_human_message` - A new human message is received
+            * `new_bot_message` - A new bot message is received
+            * `participant_joined` - A new participant joined the experiment
         is_active:
           type: boolean
         action:
@@ -2345,6 +2357,32 @@ components:
       - action
       - id
       - type
+    InspectStaticTriggerTypeEnum:
+      enum:
+      - conversation_end
+      - conversation_ended_by_user
+      - conversation_ended_by_bot
+      - conversation_ended_via_api
+      - conversation_ended_by_event
+      - conversation_ended_manually
+      - last_timeout
+      - conversation_start
+      - new_human_message
+      - new_bot_message
+      - participant_joined
+      type: string
+      description: |-
+        * `conversation_end` - The conversation has ended (by any means)
+        * `conversation_ended_by_user` - The conversation is ended by the participant
+        * `conversation_ended_by_bot` - The conversation is ended by the bot
+        * `conversation_ended_via_api` - The conversation is ended via the API
+        * `conversation_ended_by_event` - The conversation is ended by an event
+        * `conversation_ended_manually` - The conversation is manually ended by an admin
+        * `last_timeout` - The last timeout occurs
+        * `conversation_start` - A new conversation is started
+        * `new_human_message` - A new human message is received
+        * `new_bot_message` - A new bot message is received
+        * `participant_joined` - A new participant joined the experiment
     InspectTimeoutTrigger:
       type: object
       properties:
@@ -2380,9 +2418,16 @@ components:
         the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
       properties:
         type:
-          type: string
-          description: 'What the trigger runs: ``pipeline_start``, ``send_message_to_bot``,
-            ``end_conversation``, ``schedule_trigger``, or ``log``.'
+          allOf:
+          - $ref: '#/components/schemas/InspectTriggerActionTypeEnum'
+          description: |-
+            What the trigger runs
+
+            * `log` - Log the last message
+            * `end_conversation` - End the conversation
+            * `send_message_to_bot` - Prompt the bot to message the user
+            * `schedule_trigger` - Trigger a schedule
+            * `pipeline_start` - Start a pipeline
         params:
           type: object
           additionalProperties: {}
@@ -2395,6 +2440,20 @@ components:
       required:
       - params
       - type
+    InspectTriggerActionTypeEnum:
+      enum:
+      - log
+      - end_conversation
+      - send_message_to_bot
+      - schedule_trigger
+      - pipeline_start
+      type: string
+      description: |-
+        * `log` - Log the last message
+        * `end_conversation` - End the conversation
+        * `send_message_to_bot` - Prompt the bot to message the user
+        * `schedule_trigger` - Trigger a schedule
+        * `pipeline_start` - Start a pipeline
     LLMResponseParams:
       type: object
       description: An LLM call with no prompt/history configuration of its own.
