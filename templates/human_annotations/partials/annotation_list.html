@@ -30,28 +30,26 @@
                   <i class="fa-solid fa-pencil"></i> Edit
                 </a>
               {% endif %}
-              {% if ann.can_set_authoritative %}
-                {% if ann.is_authoritative %}
-                  <button type="button"
-                          class="btn btn-xs btn-ghost"
-                          hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
-                          hx-vals='{"value":"false"}'
-                          hx-target="#annotate-summary"
-                          hx-swap="outerHTML"
-                          hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
-                    <i class="fa-solid fa-xmark"></i> Clear authoritative
-                  </button>
-                {% else %}
-                  <button type="button"
-                          class="btn btn-xs btn-outline btn-primary"
-                          hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
-                          hx-vals='{"value":"true"}'
-                          hx-target="#annotate-summary"
-                          hx-swap="outerHTML"
-                          hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
-                    <i class="fa-regular fa-circle-check"></i> Mark authoritative
-                  </button>
-                {% endif %}
+              {% if ann.is_authoritative %}
+                <button type="button"
+                        class="btn btn-xs btn-ghost"
+                        hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
+                        hx-vals='{"value":"false"}'
+                        hx-target="#annotate-summary"
+                        hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
+                  <i class="fa-solid fa-xmark"></i> Clear authoritative
+                </button>
+              {% else %}
+                <button type="button"
+                        class="btn btn-xs btn-outline btn-primary"
+                        hx-post="{% url 'human_annotations:set_authoritative' request.team.slug queue.pk item.pk ann.annotation_id %}"
+                        hx-vals='{"value":"true"}'
+                        hx-target="#annotate-summary"
+                        hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken":"{{ csrf_token }}"}'>
+                  <i class="fa-regular fa-circle-check"></i> Mark authoritative
+                </button>
               {% endif %}
             </div>
           </div>

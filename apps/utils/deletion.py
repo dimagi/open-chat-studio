@@ -23,7 +23,7 @@ def delete_object_with_auditing_of_related_objects(obj):
         obj: The object to delete.
     """
 
-    from field_audit.models import (  # noqa: PLC0415 - lazy: apps.py init before app registry ready
+    from field_audit.models import (  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
         AuditAction,
         AuditingManager,
     )
@@ -75,7 +75,7 @@ def _perform_updates_for_delete(updates_not_part_of_delete):
             combined_updates = reduce(or_, updates)
             _queryset_update_with_auditing(combined_updates, **{field.name: value})
         if objs:
-            from field_audit.models import AuditAction  # noqa: PLC0415 - lazy: apps.py init before app registry ready
+            from field_audit.models import AuditAction  # noqa: PLC0415 - init-order: loads before app registry
 
             model = objs[0].__class__
             objects_filter = model.objects.filter(list({obj.pk for obj in objs}))
@@ -87,8 +87,8 @@ def _queryset_update_with_auditing(queryset, **kw):
     Copied from `field_audit.models.AuditingQuerySet.update` so that it can be called with querysets
     that are not AuditingQuerySets.
     """
-    from field_audit import AuditService  # noqa: PLC0415 - lazy: apps.py init before app registry ready
-    from field_audit.models import AuditEvent  # noqa: PLC0415 - lazy: apps.py init before app registry ready
+    from field_audit import AuditService  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
+    from field_audit.models import AuditEvent  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
 
     audit_service = AuditService()
     fields_to_update = set(kw.keys())
@@ -267,7 +267,7 @@ def _get_related_pipeline_experiments_queryset(
 
 
 def get_admin_emails_with_delete_permission(team):
-    from apps.teams.models import Membership  # noqa: PLC0415 - lazy: apps.py init before app registry ready
+    from apps.teams.models import Membership  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
 
     return list(
         Membership.objects.filter(team__name=team.name, groups__permissions__codename="delete_team").values_list(

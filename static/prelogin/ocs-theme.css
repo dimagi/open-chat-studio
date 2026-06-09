@@ -1,0 +1,537 @@
+/* ============================================================
+   Open Chat Studio — shared theme overrides
+   Load AFTER each page's inline <style> so this wins via cascade.
+   Palette:
+   - Turquoise   #89D2DC  (nav, footer, hero base)
+   - Purple     #16006D  (em text, primary buttons, headers on turquoise)
+   - Green       #8DE969  (sign-in, button hover, platform-card tags, // eyebrows)
+   - Near-black  #1A1A1A  (headlines on light bg)
+   - Cream       #FBF9F4  (alternating section bg)
+   ============================================================ */
+
+:root {
+  --ocs-turquoise: #89D2DC;
+  --ocs-turquoise-deep: #6BBCD0;
+  --ocs-turquoise-pale: #D6EEF2;   /* used for soft "section break" surfaces */
+  --ocs-purple: #16006D;
+  --ocs-purple-hover: #2A1090;
+  --ocs-green: #8DE969;
+  --ocs-green-bright: #A6F082;
+  --ocs-green-text: #5A8E37;
+  --ocs-ink: #1A1A1A;
+  --ocs-cream: #ffffff;
+  /* Mostly-blue gradient with a hint of green at the end — used to bookend the page */
+  --ocs-bar-gradient: linear-gradient(90deg, #89D2DC 0%, #92D5D6 50%, #9CD8CE 100%);
+}
+
+/* ── Body & headlines ────────────────────────────────────────── */
+body { background: #fff !important; color: var(--ocs-ink) !important; }
+h1, h2, h3, h4 { color: var(--ocs-ink) !important; }
+h1 em, h2 em, h3 em {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  -webkit-text-fill-color: var(--ocs-purple) !important;
+  color: var(--ocs-purple) !important;
+  font-weight: 600 !important;
+  font-style: normal !important;
+}
+
+/* Eyebrow labels: light grey body text with a green bar marker (rendered
+   by ::before so the line is not part of the page text content).
+   On purple backgrounds the whole eyebrow flips to green via overrides below. */
+.eyebrow,
+.ds-eyebrow {
+  color: #9DA3B5 !important;
+}
+.eyebrow::before,
+.ds-eyebrow::before {
+  content: '' !important;
+  background: var(--ocs-green) !important;
+  width: 26px !important;
+  height: 1px !important;
+}
+
+/* ── Primary CTA: deep purple, hover flips to green w/ purple text ── */
+.btn-indigo {
+  background: var(--ocs-purple) !important;
+  color: #fff !important;
+  border-color: var(--ocs-purple) !important;
+  font-weight: 600 !important;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.btn-indigo:hover {
+  background: var(--ocs-green) !important;
+  border-color: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+}
+.btn-indigo:hover svg path { stroke: var(--ocs-purple) !important; }
+
+/* Applications hero buttons follow the same purple→green hover rule */
+.uc-hero-btn {
+  background: var(--ocs-purple) !important;
+  color: #fff !important;
+  border-color: var(--ocs-purple) !important;
+  font-weight: 600 !important;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.uc-hero-btn:hover {
+  background: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+  border-color: var(--ocs-green) !important;
+}
+.uc-hero-btn:hover svg path { stroke: var(--ocs-purple) !important; }
+
+/* Ghost button defaults (purple outline on light bg → green fill, purple text on hover) */
+.btn-ghost { color: var(--ocs-purple) !important; border-color: rgba(22,0,109,0.25) !important; background: transparent !important; transition: background 180ms ease, color 180ms ease, border-color 180ms ease; }
+.btn-ghost:hover { background: var(--ocs-green) !important; border-color: var(--ocs-green) !important; color: var(--ocs-purple) !important; }
+.btn-ghost:hover svg path { stroke: var(--ocs-purple) !important; }
+
+/* ── Nav: static light turquoise band ───────────────────────── */
+.nav-wrap {
+  background: var(--ocs-turquoise) !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+.nav-wrap .logo img {
+  filter: none !important;
+  opacity: 1 !important;
+  transition: filter 220ms ease, opacity 220ms ease !important;
+}
+.nav-wrap .logo:hover img,
+.nav-wrap .logo:focus-visible img {
+  filter: brightness(0) saturate(100%) invert(82%) sepia(45%) saturate(534%) hue-rotate(54deg) brightness(99%) contrast(89%) !important;
+  opacity: 1 !important;
+}
+.nav-wrap .nav-links {
+  font-family: 'Work Sans', sans-serif !important;
+  font-size: 14px !important;
+  letter-spacing: -0.005em !important;
+}
+.nav-wrap .nav-links a {
+  color: rgba(22,0,109,0.78) !important;
+  font-weight: 300 !important;
+  text-decoration: none !important;
+  padding: 6px 4px !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  transition: font-weight 120ms ease, color 120ms ease;
+}
+.nav-wrap .nav-links a:hover {
+  background: transparent !important;
+  color: var(--ocs-purple) !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+}
+.nav-wrap .nav-links a.nav-active {
+  color: var(--ocs-purple) !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  background: transparent !important;
+}
+.nav-wrap .nav-links a.nav-active:hover {
+  background: transparent !important;
+  color: var(--ocs-purple) !important;
+  font-weight: 700 !important;
+}
+.nav-wrap .nav-links a.nav-sep::before { background: rgba(22,0,109,0.18) !important; }
+.nav-wrap .btn-ghost {
+  color: var(--ocs-purple) !important;
+  border-color: rgba(22,0,109,0.35) !important;
+  background: transparent !important;
+}
+.nav-wrap .btn-ghost:hover {
+  background: var(--ocs-purple) !important;
+  border-color: var(--ocs-purple) !important;
+  color: #ffffff !important;
+}
+.nav-wrap .btn-ghost:hover svg path { stroke: #ffffff !important; }
+/* Sign-in is the lone green button in the nav */
+.nav-wrap .btn-primary {
+  background: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+  font-weight: 700 !important;
+  border: none !important;
+  transition: background 180ms ease, color 180ms ease;
+}
+.nav-wrap .btn-primary:hover {
+  background: var(--ocs-green-bright) !important;
+  color: var(--ocs-purple) !important;
+}
+.nav-wrap .nav-hamburger span { background: var(--ocs-purple) !important; }
+
+/* ── Hero (home only): subtle pale→turquoise vertical gradient ── */
+.hero-ocs.hero-home {
+  background: linear-gradient(180deg, var(--ocs-turquoise) 0%, var(--ocs-turquoise) 75%, var(--ocs-turquoise-pale) 100%) !important;
+  border-bottom: none !important;
+  position: relative;
+  overflow: hidden;
+}
+.hero-ocs.hero-home::before,
+.hero-ocs.hero-home::after {
+  background: none !important;
+  pointer-events: none;
+}
+/* Non-home heroes stay white (per page's own inline style) */
+.hero-ocs:not(.hero-home) {
+  background: #fff !important;
+  border-bottom: none !important;
+}
+.hero-ocs:not(.hero-home)::before,
+.hero-ocs:not(.hero-home)::after {
+  background: none !important;
+  pointer-events: none;
+}
+.hero-ocs h1.hero-title { color: var(--ocs-ink) !important; }
+.hero-ocs h1.hero-title em {
+  background: none !important;
+  -webkit-text-fill-color: var(--ocs-purple) !important;
+  color: var(--ocs-purple) !important;
+  font-weight: 600 !important;
+}
+.hero-ocs .hero-sub { color: rgba(22,0,109,0.75) !important; }
+.hero-ocs .eyebrow { color: #9DA3B5 !important; }
+.hero-ocs .eyebrow::before { background: #9DA3B5 !important; }
+.hero-ocs .btn-indigo {
+  background: var(--ocs-purple) !important;
+  color: #fff !important;
+  border-color: var(--ocs-purple) !important;
+  font-weight: 600 !important;
+}
+.hero-ocs .btn-indigo:hover {
+  background: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+  border-color: var(--ocs-green) !important;
+}
+.hero-ocs .btn-indigo:hover svg path { stroke: var(--ocs-purple) !important; }
+.hero-ocs .btn-ghost {
+  color: var(--ocs-purple) !important;
+  border-color: rgba(22,0,109,0.35) !important;
+}
+.hero-ocs .btn-ghost:hover {
+  background: var(--ocs-green) !important;
+  border-color: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+}
+.hero-ocs .btn-ghost:hover svg path { stroke: var(--ocs-purple) !important; }
+
+/* Applications card em (For Individuals / Frontline Workers / Ecosystem) → purple */
+.apps-panel-title em,
+.uc-panel-title em {
+  -webkit-text-fill-color: var(--ocs-purple) !important;
+  color: var(--ocs-purple) !important;
+  background: none !important;
+}
+
+/* ── Platform card: green tags ──────────────────────────────── */
+.hiw-platform { box-shadow: 0 20px 60px -16px rgba(22,0,109,0.45) !important; position: relative; overflow: hidden; }
+.hiw-platform::before {
+  content: "";
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 240px; height: 240px;
+  background: radial-gradient(circle, rgba(141,233,105,0.22) 0%, transparent 60%);
+  pointer-events: none;
+}
+.hiw-pfeat {
+  background: rgba(141,233,105,0.12) !important;
+  border: 1px solid rgba(141,233,105,0.45) !important;
+  color: var(--ocs-green) !important;
+}
+.hiw-pfeat:hover {
+  background: var(--ocs-green) !important;
+  border-color: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+  box-shadow: 0 4px 16px -4px rgba(141,233,105,0.55) !important;
+}
+
+/* ── Section backgrounds: default to white (besides nav, hero, footer) ── */
+section[style*="background:#F1ECFF"],
+section[style*="background: #F1ECFF"],
+section[style*="background:#EBF8FF"],
+section[style*="background: #EBF8FF"],
+section[style*="background:#F5F1FF"],
+section[style*="background: #F5F1FF"] {
+  background: #fff !important;
+}
+
+/* Badges and accent pills keep light blue */
+.dpg-badge,
+.doc-funder-tag {
+  background: var(--ocs-turquoise-pale) !important;
+}
+
+/* Example bot cards: light grey (neutral, not blue) */
+.bot-card {
+  background: #F4F4F5 !important;
+}
+
+/* Secondary nav: white, matching the hero above it */
+.jump-nav {
+  background: #fff !important;
+}
+
+/* Soften borders/shadows on those cards */
+.dpg-badge,
+.doc-funder-tag {
+  border-color: rgba(22,0,109,0.10) !important;
+}
+.bot-card {
+  border-color: rgba(22,0,109,0.08) !important;
+}
+.bot-card:hover {
+  box-shadow: 0 8px 32px -8px rgba(22,0,109,0.18) !important;
+}
+
+/* Previously-dark "moment" sections — now white by default with purple text
+   (covers inline-styled dark sections, .uc-dark-story, dark ds-card variants) */
+section[style*="background:#16006D"],
+section[style*="background: #16006D"],
+.uc-dark-story {
+  background: #fff !important;
+}
+
+/* Applications "Featured Story" panels — full-width, white bg
+   (cream lives on the .uc-panel-intro overview blocks for rhythm contrast).
+   The .ds-card loses its box appearance so content sits flat. */
+.uc-panel-story {
+  background: #ffffff !important;
+  padding: 96px 0 !important;
+}
+.uc-panel-story .ds-card,
+.uc-panel-story .ds-card[style*="background:#16006D"] {
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ── Dark feature break (purple bg, green accents) ──
+   Reusable section class for memorable mid-page moments.
+   Use this on a <section> instead of inline background:#16006D so the
+   "white-revert" rules below don't fire. */
+.ocs-feature-dark { background: var(--ocs-purple); padding: 112px 0; position: relative; overflow: hidden; }
+.ocs-feature-dark::before {
+  content: ""; position: absolute; top: -120px; right: -120px; width: 380px; height: 380px;
+  background: radial-gradient(circle, rgba(141,233,105,0.18) 0%, transparent 65%); pointer-events: none;
+}
+.ocs-feature-dark::after {
+  content: ""; position: absolute; bottom: -100px; left: -100px; width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(137,210,220,0.16) 0%, transparent 65%); pointer-events: none;
+}
+.ocs-feature-dark .container { position: relative; z-index: 1; }
+.ocs-feature-dark .eyebrow { color: var(--ocs-green) !important; }
+.ocs-feature-dark .eyebrow::before { background: var(--ocs-green) !important; }
+.ocs-feature-dark .section-title { color: #fff !important; }
+.ocs-feature-dark .section-title em { color: var(--ocs-green) !important; -webkit-text-fill-color: var(--ocs-green) !important; background: none !important; font-weight: 600 !important; font-style: normal !important; }
+.ocs-feature-dark .feature-dark-lead { color: rgba(255,255,255,0.80); font-size: 1.05rem; line-height: 1.8; margin: 0 0 28px; }
+.ocs-feature-dark .btn-indigo { background: #fff !important; color: var(--ocs-purple) !important; border-color: #fff !important; font-weight: 600 !important; }
+.ocs-feature-dark .btn-indigo:hover { background: var(--ocs-green) !important; color: var(--ocs-purple) !important; border-color: var(--ocs-green) !important; }
+.ocs-feature-dark .btn-indigo:hover svg path { stroke: var(--ocs-purple) !important; }
+.ocs-feature-dark .btn-indigo svg path { stroke: var(--ocs-purple) !important; }
+.ocs-feature-dark .btn-ghost { color: #fff !important; border-color: rgba(255,255,255,0.45) !important; background: transparent !important; }
+.ocs-feature-dark .btn-ghost:hover { background: var(--ocs-green) !important; border-color: var(--ocs-green) !important; color: var(--ocs-purple) !important; }
+.ocs-feature-dark .btn-ghost:hover svg path { stroke: var(--ocs-purple) !important; }
+.ocs-feature-dark .btn-ghost svg path { stroke: #fff !important; }
+.ocs-feature-dark .feature-dark-photo { width: 100%; max-width: 100%; height: 380px; border-radius: 16px; display: block; object-fit: cover; object-position: center; box-shadow: 0 24px 64px -16px rgba(0,0,0,0.45); }
+.ocs-feature-dark .feature-dark-credit { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.06em; color: rgba(255,255,255,0.55); margin: 10px 0 0; text-align: right; }
+/* "All green" variant: makes the entire .section-title green (head + em) */
+.ocs-feature-dark.ocs-feature-dark--all-green .section-title { color: var(--ocs-green) !important; }
+
+/* "How It Compares" section: deep purple bg with green-bold accents */
+section#comparison[style*="background:#16006D"],
+section#comparison[style*="background: #16006D"] {
+  background: var(--ocs-purple) !important;
+}
+section#comparison .eyebrow {
+  color: var(--ocs-green) !important;
+  font-weight: 700 !important;
+}
+section#comparison .eyebrow::before {
+  background: var(--ocs-green) !important;
+}
+section#comparison h2,
+section#comparison h2.section-title {
+  color: #fff !important;
+}
+section#comparison h2 em {
+  -webkit-text-fill-color: var(--ocs-green) !important;
+  color: var(--ocs-green) !important;
+  font-weight: 700 !important;
+  background: none !important;
+}
+section#comparison p {
+  color: rgba(255,255,255,0.78) !important;
+}
+section[style*="background:#16006D"] h2,
+section[style*="background: #16006D"] h2,
+section[style*="background:#16006D"] h3,
+section[style*="background: #16006D"] h3,
+.uc-dark-story h2,
+.uc-dark-story h3,
+.ds-card[style*="background:#16006D"] h2,
+.ds-card[style*="background:#16006D"] .ds-title {
+  color: var(--ocs-ink) !important;
+}
+section[style*="background:#16006D"] h2 em,
+section[style*="background: #16006D"] h2 em,
+section[style*="background:#16006D"] h3 em,
+.uc-dark-story h2 em,
+.uc-dark-story h3 em,
+.ds-card[style*="background:#16006D"] h2 em,
+.ds-card[style*="background:#16006D"] .ds-title em {
+  -webkit-text-fill-color: var(--ocs-purple) !important;
+  color: var(--ocs-purple) !important;
+  background: none !important;
+}
+section[style*="background:#16006D"] p,
+section[style*="background: #16006D"] p,
+.uc-dark-story p,
+.ds-card[style*="background:#16006D"] p {
+  color: rgba(22,0,109,0.70) !important;
+}
+/* Buttons inside follow universal rule: purple → green hover */
+.uc-dark-story .btn-indigo,
+.uc-dark-story .uc-hero-btn,
+.ds-card[style*="background:#16006D"] .btn-indigo,
+section[style*="background:#16006D"] .btn-indigo,
+section[style*="background: #16006D"] .btn-indigo {
+  background: var(--ocs-purple) !important;
+  color: #fff !important;
+  border-color: var(--ocs-purple) !important;
+  font-weight: 600 !important;
+}
+.uc-dark-story .btn-indigo:hover,
+.uc-dark-story .uc-hero-btn:hover,
+.ds-card[style*="background:#16006D"] .btn-indigo:hover,
+section[style*="background:#16006D"] .btn-indigo:hover,
+section[style*="background: #16006D"] .btn-indigo:hover {
+  background: var(--ocs-green) !important;
+  color: var(--ocs-purple) !important;
+  border-color: var(--ocs-green) !important;
+}
+.uc-dark-story .btn-indigo:hover svg path,
+.ds-card[style*="background:#16006D"] .btn-indigo:hover svg path,
+section[style*="background:#16006D"] .btn-indigo:hover svg path,
+section[style*="background: #16006D"] .btn-indigo:hover svg path {
+  stroke: var(--ocs-purple) !important;
+}
+/* Eyebrows on these legacy "dark" sections (now flipped to white bg) — match the new light-grey rule */
+.uc-dark-story .eyebrow,
+.ds-card[style*="background:#16006D"] .eyebrow,
+section[style*="background:#16006D"] .eyebrow,
+section[style*="background: #16006D"] .eyebrow {
+  color: #9DA3B5 !important;
+}
+.uc-dark-story .eyebrow::before,
+.ds-card[style*="background:#16006D"] .eyebrow::before,
+section[style*="background:#16006D"] .eyebrow::before,
+section[style*="background: #16006D"] .eyebrow::before {
+  background: #9DA3B5 !important;
+}
+
+/* Feature-story bullet markers — purple instead of legacy amber */
+.ds-bullets li::before {
+  background: var(--ocs-purple) !important;
+}
+
+/* ── Feature-story inner text — convert ALL white-on-dark to purple-on-light ── */
+.uc-dark-story .ds-meta,
+.uc-dark-story .ds-section-label,
+.uc-dark-story .ds-funding-label,
+.uc-dark-story .plp-item-label,
+.uc-dark-story .plp-ariadne-sub,
+.ds-card[style*="background:#16006D"] .ds-meta,
+.ds-card[style*="background:#16006D"] .ds-section-label,
+.ds-card[style*="background:#16006D"] .ds-funding-label,
+.ds-card[style*="background:#16006D"] .plp-item-label,
+.ds-card[style*="background:#16006D"] .plp-ariadne-sub {
+  color: rgba(22,0,109,0.55) !important;
+}
+
+.uc-dark-story .ds-title,
+.ds-card[style*="background:#16006D"] .ds-title {
+  color: var(--ocs-ink) !important;
+}
+
+.uc-dark-story .ds-title em,
+.ds-card[style*="background:#16006D"] .ds-title em {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  -webkit-text-fill-color: var(--ocs-purple) !important;
+  color: var(--ocs-purple) !important;
+}
+
+.uc-dark-story .ds-body,
+.uc-dark-story .ds-bullets li,
+.uc-dark-story .ds-funding-value,
+.uc-dark-story .plp-ariadne-name,
+.ds-card[style*="background:#16006D"] .ds-body,
+.ds-card[style*="background:#16006D"] .ds-bullets li,
+.ds-card[style*="background:#16006D"] .ds-funding-value,
+.ds-card[style*="background:#16006D"] .plp-ariadne-name {
+  color: rgba(22,0,109,0.72) !important;
+}
+
+/* Funding divider — was white-tinted, now subtle purple */
+.uc-dark-story .ds-funding,
+.ds-card[style*="background:#16006D"] .ds-funding {
+  border-top-color: rgba(22,0,109,0.15) !important;
+}
+
+/* Partner logos panel — was translucent white, now subtle purple-tinted on light bg */
+.uc-dark-story .partner-logos-panel,
+.ds-card[style*="background:#16006D"] .partner-logos-panel {
+  background: rgba(22,0,109,0.04) !important;
+  border-color: rgba(22,0,109,0.10) !important;
+}
+
+/* Logos: drop the white-invert filter so dark originals show on light bg */
+.uc-dark-story .ds-espen-logo,
+.uc-dark-story .plp-nih-logo,
+.ds-card[style*="background:#16006D"] .ds-espen-logo,
+.ds-card[style*="background:#16006D"] .plp-nih-logo {
+  filter: none !important;
+  opacity: 0.85 !important;
+}
+
+/* Photo credit — readable purple on a light backdrop */
+.uc-dark-story .ds-photo-credit,
+.ds-card[style*="background:#16006D"] .ds-photo-credit {
+  color: rgba(22,0,109,0.85) !important;
+  background: rgba(255,255,255,0.85) !important;
+}
+
+/* Image shadow — was almost-black, now subtle purple */
+.uc-dark-story .ds-img,
+.ds-card[style*="background:#16006D"] .ds-img {
+  box-shadow: 0 12px 36px -10px rgba(22,0,109,0.18) !important;
+}
+
+/* ── Footer: dark purple (logo color), white text ───────────── */
+footer {
+  background: var(--ocs-purple) !important;
+  border-top: none !important;
+}
+footer h2 { color: #fff !important; }
+footer a { color: rgba(255,255,255,0.75) !important; }
+footer a:hover { color: var(--ocs-green) !important; }
+footer p { color: rgba(255,255,255,0.70) !important; }
+footer .footer-brand .logo img,
+footer .logo img {
+  filter: brightness(0) invert(1) !important;
+  opacity: 0.95 !important;
+}
+footer .footer-bottom { border-top-color: rgba(255,255,255,0.15) !important; }
+footer .footer-bottom span,
+footer .footer-bottom a { color: rgba(255,255,255,0.55) !important; }
+footer .footer-bottom a:hover { color: var(--ocs-green) !important; }
+
+/* Mobile: nav-links background matches static nav */
+@media (max-width: 860px) {
+  .nav-wrap .nav-links {
+    background: var(--ocs-turquoise) !important;
+    border-top-color: rgba(22,0,109,0.20) !important;
+  }
+}

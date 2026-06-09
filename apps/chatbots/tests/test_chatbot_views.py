@@ -10,6 +10,7 @@ from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils.http import http_date
 
 from apps.annotations.models import Tag
 from apps.chatbots.tables import ChatbotSessionsTable
@@ -22,6 +23,7 @@ from apps.chatbots.views import (
     home,
 )
 from apps.events.models import StaticTriggerType
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
@@ -663,3 +665,19 @@ def test_session_table_session_query_uses_limit(team_with_users):
         "Session list ran an unbounded SELECT on experiments_experimentsession (no LIMIT) — "
         "pagination is not being applied at the SQL level. Session selects captured:\n" + "\n\n".join(session_selects)
     )
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+def test_start_chatbot_session_public_embed_returns_deprecation_headers(client):
+    """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
+    chatbot = ExperimentFactory.create()
+    url = reverse(
+        "chatbots:start_session_public_embed",
+        kwargs={"team_slug": chatbot.team.slug, "experiment_id": chatbot.public_id},
+    )
+    response = client.get(url)
+    assert response.status_code == 302
+    assert response.headers["Deprecation"] == "true"
+    assert response.headers["Sunset"] == http_date(EMBED_FLOW_SUNSET_AT.timestamp())
+    assert response.headers["Link"] == f'<{EMBED_FLOW_SUCCESSOR_URL}>; rel="successor-version"'

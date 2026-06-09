@@ -9,6 +9,7 @@ from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.channels_v2.stages.core import AttachmentHydrationStage
+from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.files.models import File, FilePurpose
 from apps.service_providers.models import MessagingProviderType
@@ -98,9 +99,6 @@ class WhatsappCallbacks(ChannelCallbacks):
         return self._service.get_message_audio(message)
 
     def on_submit_input_to_llm(self, recipient: str) -> None:
-        # noqa: PLC0415 - circular: datamodels imports chat.channels
-        from apps.channels.datamodels import WhatsAppMessage  # noqa: PLC0415
-
         if self._ctx is None:
             return
         message = self._ctx.message

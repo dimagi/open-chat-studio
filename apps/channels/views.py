@@ -416,6 +416,7 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
         experiment__id=experiment_id,
         team=request.team,
     )
+    _clear_remote_webhook(channel)
     channel.soft_delete()
     channels, available_platforms = get_channels_context(channel.experiment)
     return render(
@@ -427,6 +428,19 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
             "experiment": channel.experiment,
         },
     )
+
+
+def _clear_remote_webhook(channel: ExperimentChannel):
+    """Best-effort removal of the channel's webhook configuration at the messaging provider."""
+    if not channel.messaging_provider:
+        return
+    try:
+        service = channel.messaging_provider.get_messaging_service()
+        if not service.supports_webhook_management:
+            return
+        service.remove_incoming_webhook(channel.extra_data or {}, channel.webhook_url)
+    except Exception:
+        log.exception("Error removing webhook for channel %s", channel.id)
 
 
 @method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
