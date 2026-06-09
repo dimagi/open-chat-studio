@@ -432,10 +432,10 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
 
 def _clear_remote_webhook(channel: ExperimentChannel):
     """Best-effort removal of the channel's webhook configuration at the upstream provider."""
-    manager = channel.get_webhook_manager()
-    if not manager or not manager.supports_webhook_management:
-        return
     try:
+        manager = channel.get_webhook_manager()
+        if not manager or not manager.supports_webhook_management:
+            return
         manager.remove_incoming_webhook(channel.extra_data or {}, channel.webhook_url)
     except Exception:
         log.exception("Error removing webhook for channel %s", channel.id)

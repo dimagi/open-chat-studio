@@ -168,12 +168,12 @@ class ExtraFormBase(forms.Form):
         manager cannot configure webhooks. On failure, surfaces a warning rather than
         raising, so channel creation still succeeds.
         """
-        manager = channel.get_webhook_manager()
-        if not manager or not manager.supports_webhook_management:
-            if channel.webhook_url:
-                self.success_message = f"Use the following URL when setting up the webhook: {channel.webhook_url}"
-            return
         try:
+            manager = channel.get_webhook_manager()
+            if not manager or not manager.supports_webhook_management:
+                if channel.webhook_url:
+                    self.success_message = f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+                return
             manager.set_incoming_webhook(channel.extra_data, channel.webhook_url)
         except Exception:
             logger.exception("Error configuring webhook for channel %s", channel.id)

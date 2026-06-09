@@ -247,7 +247,7 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def webhook_url(self) -> str:
-        """The wehook URL that should be used in external services"""
+        """The webhook URL that should be used in external services"""
         from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
             MessagingProviderType,
         )
@@ -278,17 +278,19 @@ class ExperimentChannel(BaseTeamModel):
     def get_webhook_manager(self) -> "WebhookManager | None":
         """Return the object that manages this channel's inbound webhook, or None.
 
-        Provider-backed channels delegate to their MessagingService; Telegram uses its
-        per-channel bot token. Both satisfy the WebhookManager protocol structurally.
+        Telegram uses its per-channel bot token; other provider-backed channels delegate
+        to their MessagingService. Both satisfy the WebhookManager protocol structurally.
+        Telegram is checked first so it always uses the Telegram API path, regardless of
+        any messaging_provider that may be set.
         """
-        if self.messaging_provider:
-            return self.messaging_provider.get_messaging_service()
         if self.platform == ChannelPlatform.TELEGRAM:
             from apps.channels.webhooks import (  # noqa: PLC0415 - lazy: avoid importing telebot at module load
                 TelegramWebhookManager,
             )
 
             return TelegramWebhookManager()
+        if self.messaging_provider:
+            return self.messaging_provider.get_messaging_service()
         return None
 
     def soft_delete(self):

@@ -248,7 +248,7 @@ Expected: PASS (3 passed)
 ```bash
 uv run ruff check apps/channels/models.py apps/channels/tests/test_models.py --fix
 uv run ruff format apps/channels/models.py apps/channels/tests/test_models.py
-uv run ty check apps/channels/models.py
+uv run ty check apps/
 git add apps/channels/models.py apps/channels/tests/test_models.py
 git commit -m "Add ExperimentChannel.get_webhook_manager()"
 ```
@@ -288,7 +288,7 @@ In `apps/channels/models.py`, inside the `webhook_url` property, add the Telegra
 ```python
     @property
     def webhook_url(self) -> str:
-        """The wehook URL that should be used in external services"""
+        """The webhook URL that should be used in external services"""
         from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
             MessagingProviderType,
         )
@@ -467,7 +467,7 @@ Expected: PASS (all, including the updated WhatsApp assertion and the two new Te
 ```bash
 uv run ruff check apps/channels/forms.py apps/channels/tests/test_forms.py --fix
 uv run ruff format apps/channels/forms.py apps/channels/tests/test_forms.py
-uv run ty check apps/channels/forms.py
+uv run ty check apps/
 git add apps/channels/forms.py apps/channels/tests/test_forms.py
 git commit -m "Route channel webhook setup through configure_webhook"
 ```
@@ -561,7 +561,7 @@ Expected: PASS
 ```bash
 uv run ruff check apps/channels/views.py apps/channels/tests/test_delete_channel.py apps/events/tests/test_scheduled_messages.py --fix
 uv run ruff format apps/channels/views.py apps/channels/tests/test_delete_channel.py apps/events/tests/test_scheduled_messages.py
-uv run ty check apps/channels/views.py
+uv run ty check apps/
 git add apps/channels/views.py apps/channels/tests/test_delete_channel.py apps/events/tests/test_scheduled_messages.py
 git commit -m "Clear Telegram webhook on channel delete"
 ```
@@ -583,7 +583,7 @@ Expected: PASS (no regressions). If anything fails, fix before proceeding — do
 Run:
 ```bash
 uv run ruff check apps/channels/webhooks.py apps/channels/models.py apps/channels/forms.py apps/channels/views.py
-uv run ty check apps/channels/
+uv run ty check apps/
 ```
 Expected: clean.
 
