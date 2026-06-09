@@ -596,7 +596,8 @@ class ResponseFormattingStage(ProcessingStage):
             except AudioSynthesizeException:
                 # Graceful fallback to text -- not an unrecoverable error
                 logger.exception("Error generating voice response")
-                audio_synthesis_failure_notification(ctx.experiment, session=ctx.experiment_session)
+                working_experiment = ctx.experiment.get_working_version() if ctx.experiment.is_a_version else ctx.experiment
+                audio_synthesis_failure_notification(working_experiment, session=ctx.experiment_session)
                 ctx.voice_audio = None
         else:
             message, uncited_files = self._format_reference_section(message, files, ctx)

@@ -178,8 +178,9 @@ class SendingErrorHandlerStage(ProcessingStage):
 
         if isinstance(exc, MessageDeliveryFailure):
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
+            working_experiment = ctx.experiment.get_working_version() if ctx.experiment.is_a_version else ctx.experiment
             message_delivery_failure_notification(
-                ctx.experiment,
+                working_experiment,
                 session=ctx.experiment_session,
                 platform_title=ctx.experiment_channel.platform_enum.title(),
                 context=exc.context,

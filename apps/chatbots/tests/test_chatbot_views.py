@@ -136,7 +136,7 @@ def test_single_chatbot_home(client, team_with_users):
 
 
 @pytest.mark.django_db()
-def test_single_chatbot_home_version_snapshot_returns_404(client, team_with_users):
+def test_single_chatbot_home_version_snapshot_redirects_to_working_version(client, team_with_users):
     team = team_with_users
     user = team.members.first()
     user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
@@ -150,7 +150,9 @@ def test_single_chatbot_home_version_snapshot_returns_404(client, team_with_user
     url = reverse("chatbots:single_chatbot_home", args=[team.slug, snapshot.id])
     response = client.get(url)
 
-    assert response.status_code == 404
+    expected_url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    assert response.status_code == 302
+    assert response["Location"] == f"{expected_url}?version_id={snapshot.version_number}#versions"
 
 
 @pytest.mark.django_db()
