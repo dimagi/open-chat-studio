@@ -22,7 +22,9 @@ def validate_session_token(token: str, session_external_id: str) -> bool:
         return False
     try:
         payload = signing.loads(token, salt=SESSION_TOKEN_SALT)
-    except signing.BadSignature:
+    except (signing.BadSignature, ValueError):
+        # Forged tokens fail the HMAC check (BadSignature); ValueError fails
+        # closed on any decode error, keeping this a total function.
         return False
     return payload.get("sid") == str(session_external_id)
 

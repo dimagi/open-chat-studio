@@ -169,6 +169,22 @@ def chat_upload_file(request, session_id):
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 
+def _issue_or_opt_out_session_token(request, session, use_session_token):
+    """Issue a session token, or opt the session out of token enforcement.
+
+    `use_session_token` is the request preference (True/False/None). When None, a
+    pre-token widget (identified by the x-ocs-widget-version header) opts out;
+    everything else defaults to enforced. Returns the token, or None when opted out.
+    """
+    if use_session_token is None:
+        use_session_token = "x-ocs-widget-version" not in request.headers
+    if use_session_token:
+        return issue_session_token(session)
+    session.session_token_required = False
+    session.save(update_fields=["session_token_required"])
+    return None
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -247,10 +263,6 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
-    use_session_token = data.get("use_session_token")
-    if use_session_token is None:
-        # Pre-token widgets send the version header but not the field; treat as opt-out.
-        use_session_token = "x-ocs-widget-version" not in request.headers
 
     # Security check: Only authenticated users can specify version numbers
     if version_number is not None and not request.user.is_authenticated:
@@ -335,12 +347,7 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
-    session_token = None
-    if use_session_token:
-        session_token = issue_session_token(session)
-    else:
-        session.session_token_required = False
-        session.save(update_fields=["session_token_required"])
+    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"))
 
     # Prepare response data
     response_data = {
