@@ -1,14 +1,14 @@
-# ADR-0040: Fail-closed session-token enforcement rollout
+# ADR-0041: Fail-closed session-token enforcement rollout
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-06-09</p>
 
-<p class="adr-meta">Extends: <a href="0038-require-proof-of-possession-for-chat-session-access.md">ADR-0038</a></p>
+<p class="adr-meta">Extends: <a href="0039-require-proof-of-possession-for-chat-session-access.md">ADR-0039</a></p>
 
 ## Context
 
-ADR-0038 introduced token enforcement, but it has to roll out over live traffic and existing clients. The chat poll endpoint returns messages for *any* session found by `external_id` — including sessions from every creation path (chat API, server-rendered web chat, channel platforms like Telegram) — so a default that forgets to protect one path leaks transcripts. Meanwhile widgets already embedded on customer sites predate tokens and would break if enforcement were unconditional.
+ADR-0039 introduced token enforcement, but it has to roll out over live traffic and existing clients. The chat poll endpoint returns messages for *any* session found by `external_id` — including sessions from every creation path (chat API, server-rendered web chat, channel platforms like Telegram) — so a default that forgets to protect one path leaks transcripts. Meanwhile widgets already embedded on customer sites predate tokens and would break if enforcement were unconditional.
 
 ## Decision
 

@@ -30,7 +30,7 @@ python locust/get_chatbot_ids.py
 OCS_API_KEY=your-key python locust/get_chatbot_ids.py
 
 # Connect to a different instance
-OCS_API_KEY=your-key python locust/get_chatbot_ids.py --base-url https://chatbots.dimagi.com
+OCS_API_KEY=your-key python locust/get_chatbot_ids.py --base-url https://www.openchatstudio.com
 
 # Export as environment variable
 eval $(OCS_API_KEY=your-key python locust/get_chatbot_ids.py --format env)

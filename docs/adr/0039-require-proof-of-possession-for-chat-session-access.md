@@ -1,4 +1,4 @@
-# ADR-0038: Require proof of possession for chat session access
+# ADR-0039: Require proof of possession for chat session access
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
@@ -12,7 +12,7 @@ The chat API (`/api/chat/<session_id>/...`) treated the session `external_id` as
 
 We will treat the session ID as an identifier, not a credential. Access to a token-required session through any of the four session endpoints (`message`, `upload`, `poll`, `task-poll`) requires one of:
 
-- a valid session token presented in the `X-Session-Token` header (mechanics in ADR-0039), or
+- a valid session token presented in the `X-Session-Token` header (mechanics in ADR-0040), or
 - an authenticated user who **is** the session's participant (`participant.user_id == request.user.id`).
 
 A `SessionAccessPermission` enforces this, replacing the prior `LegacySessionAccessPermission`. Team membership alone does **not** grant access — only the session's own participant-user bypasses the token. Denials return HTTP 403 with a machine-readable `code`: `session_token_required`, `session_token_invalid`, or `session_expired`. `WidgetDomainPermission` is unchanged and still applies to embed-key requests.
@@ -23,7 +23,7 @@ A `SessionAccessPermission` enforces this, replacing the prior `LegacySessionAcc
 - Clients must carry a per-session secret (or be the authenticated participant), changing the contract for every session endpoint.
 - The distinct 403 codes let the widget distinguish "restart silently" from "tell the user the conversation expired".
 - The authenticated login-required web-chat page keeps working (the viewer is the participant); the anonymous public web-chat routes under the `flag_chat_widget` POC flag return 403 on poll until the bundled widget gains token support.
-- Sessions that opt out (ADR-0040) keep the historical access rules: widget-auth pass-through, public-experiment access, and participant allowlist.
+- Sessions that opt out (ADR-0041) keep the historical access rules: widget-auth pass-through, public-experiment access, and participant allowlist.
 
 ## Alternatives considered
 

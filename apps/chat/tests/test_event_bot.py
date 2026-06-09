@@ -8,7 +8,7 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.tests.langchain import build_fake_llm_service
 
 
 @pytest.fixture()

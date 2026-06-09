@@ -59,6 +59,7 @@ IGNORE_APPS = {
     "humanize",
     "messages",
     "microsoft",  # allauth
+    "prelogin",  # public marketing pages, no models
     "redis",  # heath_check.redis
     "rest_framework",
     "rest_framework_api_key",

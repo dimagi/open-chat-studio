@@ -52,7 +52,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-from apps.utils.langchain import (
+from apps.utils.tests.langchain import (
     FakeLlmEcho,
     FakeLlmService,
     FakeLlmSimpleTokenCount,

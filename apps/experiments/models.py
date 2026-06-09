@@ -663,6 +663,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
+        if self.is_a_version:
+            url = reverse(
+                "chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.working_version_id]
+            )
+            return f"{url}?version_id={self.version_number}#versions"
         return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> Experiment:

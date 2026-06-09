@@ -97,7 +97,7 @@ def delete_team(request, team_slug):
             'The "{team}" team deletion process has started. An email will be sent to {user} once it is complete.'
         ).format(team=request.team.name, user=notify_recipients_text[notify_recipients]),
     )
-    return HttpResponseRedirect(reverse("web:home"))
+    return HttpResponseRedirect(reverse("prelogin:home"))
 
 
 @require_POST

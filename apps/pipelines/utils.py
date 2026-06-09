@@ -1,5 +1,7 @@
 from django.core.cache import cache
+from langchain_core.messages.utils import count_tokens_approximately
 
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.service_providers.models import LlmProviderModel
 
 
@@ -22,12 +24,6 @@ def compute_max_char_limit(pipeline) -> int | None:
 
 
 def _compute_max_char_limit(pipeline) -> int | None:
-    from langchain_core.messages.utils import count_tokens_approximately  # noqa: PLC0415
-
-    from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - lazy: nodes.py loads heavy langchain/pydantic deps
-        LLMResponseWithPrompt,
-    )
-
     llm_nodes = list(pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__))
     if not llm_nodes:
         return None

@@ -26,6 +26,7 @@ from apps.experiments.models import AgentTools, BuiltInTools, Experiment, Source
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
@@ -339,8 +340,6 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
 
 
 def _pipeline_node_schemas():
-    from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→views
-
     schemas = []
 
     node_classes = [
