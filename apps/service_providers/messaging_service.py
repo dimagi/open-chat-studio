@@ -117,6 +117,35 @@ class MessagingService(pydantic.BaseModel):
         """Returns `number` if the number is verified to belong to the account, otherwise return `None`"""
         return number
 
+    supports_webhook_management: ClassVar[bool] = False
+    """Whether this service can configure the inbound message webhook at the provider."""
+
+    def set_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        """Point the provider's inbound message webhook at `webhook_url`.
+
+        `extra_data` is the channel's `extra_data`; each provider reads whatever fields it needs.
+        """
+        raise NotImplementedError
+
+    def remove_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        """Clear the provider's inbound message webhook if it points at `webhook_url`."""
+        raise NotImplementedError
+
+
+class TwilioSenderWebhookUpdate:
+    """Minimal request payload for the WhatsApp Senders API update call.
+
+    The SDK's generated wrapper classes serialize unset fields as JSON nulls, which
+    risks clearing the sender's existing configuration/profile. This sends only the
+    webhook field. The Senders API `update` accepts any object with a `to_dict` method.
+    """
+
+    def __init__(self, webhook: dict):
+        self.webhook = webhook
+
+    def to_dict(self):
+        return {"webhook": self.webhook}
+
 
 class HttpMediaDownloadMixin:
     """Shared inbound-media and audio handling for services whose
@@ -222,6 +251,45 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
     def _parse_addressing_params(self, platform: ChannelPlatform, from_: str, to: str):
         prefix = self.TWILIO_CHANNEL_PREFIXES[platform]
         return f"{prefix}:{from_}", f"{prefix}:{to}"
+
+    supports_webhook_management: ClassVar[bool] = True
+
+    def set_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        number = extra_data.get("number")
+        if not number:
+            return
+        sender = self._get_whatsapp_sender(number)
+        if sender is None:
+            raise ValueError(f"No WhatsApp sender found for {number}")
+        self._update_sender_webhook(sender, webhook_url)
+
+    def remove_incoming_webhook(self, extra_data: dict, webhook_url: str):
+        number = extra_data.get("number")
+        if not number:
+            return
+        sender = self._get_whatsapp_sender(number)
+        if sender is None:
+            return
+        current_url = (sender.webhook or {}).get("callback_url")
+        if current_url != webhook_url:
+            # never clobber a sender that has been repointed elsewhere
+            return
+        self._update_sender_webhook(sender, "")
+
+    def _get_whatsapp_sender(self, number: str):
+        sender_id = f"whatsapp:{number}"
+        for sender in self.client.messaging.v2.channels_senders.list(channel="whatsapp"):
+            if sender.sender_id == sender_id:
+                return sender
+        return None
+
+    def _update_sender_webhook(self, sender, callback_url: str):
+        webhook = {key: value for key, value in (sender.webhook or {}).items() if value is not None}
+        webhook["callback_url"] = callback_url
+        webhook["callback_method"] = "POST"
+        self.client.messaging.v2.channels_senders(sender.sid).update(
+            messaging_v2_channels_sender_requests_update=TwilioSenderWebhookUpdate(webhook)
+        )
 
     @backoff.on_predicate(
         backoff.constant,

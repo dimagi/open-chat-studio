@@ -16,7 +16,11 @@ class StaticViewSitemap(sitemaps.Sitemap):
     def items(self):
         # add any urls (by name) for static content you want to appear in your sitemap to this list
         return [
-            "web:home",
+            "prelogin:home",
+            "prelogin:about",
+            "prelogin:contact",
+            "prelogin:applications",
+            "prelogin:open_opportunities",
         ]
 
     def location(self, item):  # ty: ignore[invalid-method-override]

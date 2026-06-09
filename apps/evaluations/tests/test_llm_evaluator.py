@@ -17,7 +17,7 @@ from apps.utils.factories.evaluations import (
     EvaluatorFactory,
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.tests.langchain import build_fake_llm_service
 
 _VALID_PROMPTS = [
     "Evaluate this: {input.content}",

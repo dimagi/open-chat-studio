@@ -39,7 +39,7 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
-from apps.utils.langchain import dict_to_json_schema
+from apps.utils.json import dict_to_json_schema
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext

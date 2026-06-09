@@ -124,6 +124,7 @@ PROJECT_APPS = [
     "apps.data_migrations",
     "apps.oauth",
     "apps.ocs_notifications",
+    "apps.prelogin",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -577,7 +578,7 @@ PROJECT_METADATA = {
     "URL": "http://localhost:8000",
     "DESCRIPTION": gettext_lazy("Build Chatbots and deploy them to WhatsApp, Telegram, Slack and more"),
     "CONTACT_EMAIL": "devops+openchatstudio@dimagi.com",
-    "IMAGE": "https://chatbots.dimagi.com/static/images/logo.png",
+    "IMAGE": "https://www.openchatstudio.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
@@ -589,6 +590,14 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
+
+# Prelogin marketing pages
+# Optional contact email shown on the contact page. Leave unset to hide the email.
+PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
+# HubSpot contact form embed. Leave portal/form IDs unset to hide the form.
+HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
+HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
+HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
 
 # Sentry setup
 

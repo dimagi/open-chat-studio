@@ -31,7 +31,12 @@ permissions:
 
 jobs:
   review:
-    if: github.actor != 'dependabot[bot]' && !github.event.pull_request.draft
+    # Fork PRs can't get an OIDC token (GitHub omits ACTIONS_ID_TOKEN_REQUEST_URL
+    # for fork-originated pull_request events), so the review is skipped for them.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+      && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

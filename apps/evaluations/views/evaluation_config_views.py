@@ -11,13 +11,14 @@ from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
@@ -25,6 +26,7 @@ from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
+from apps.evaluations.tagging import remove_applied_tags_for_runs
 from apps.evaluations.tasks import (
     export_evaluation_bulk_results_task,
     upload_evaluation_run_results_task,
@@ -157,6 +159,22 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
         }
+
+
+class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Un-apply the tags this config's runs created, then delete all of its runs."""
+
+    permission_required = "evaluations.delete_evaluationrun"
+
+    def post(self, request, team_slug: str, evaluation_pk: int):
+        config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
+        runs = EvaluationRun.objects.filter(config=config)
+        with transaction.atomic():
+            remove_applied_tags_for_runs(runs)
+            runs.delete()
+        response = HttpResponse(status=200)
+        response["HX-Redirect"] = reverse("evaluations:evaluation_runs_home", args=[team_slug, evaluation_pk])
+        return response
 
 
 class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

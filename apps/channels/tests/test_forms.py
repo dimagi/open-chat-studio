@@ -4,7 +4,7 @@ import httpx
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, SlackChannelForm, WhatsappChannelForm
+from apps.channels.forms import ChannelForm, SlackChannelForm, TelegramChannelForm, WhatsappChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -274,3 +274,100 @@ def test_slack_channel_cross_team_keyword_conflicts(team_with_users, experiment)
         error_message = str(form.errors)
         assert "Other Team Bot" not in error_message
         assert "health" in error_message
+
+
+# WhatsApp webhook auto-configuration tests
+@pytest.mark.django_db()
+@patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
+@patch("apps.service_providers.messaging_service.TwilioService.set_incoming_webhook")
+def test_whatsapp_post_save_configures_twilio_webhook(set_incoming_webhook, messaging_provider, experiment):
+    provider = MessagingProviderFactory.create(
+        type=MessagingProviderType.twilio, config={"account_sid": "123", "auth_token": "123"}
+    )
+    messaging_provider.return_value = provider
+    channel = ExperimentChannelFactory(
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=provider,
+        extra_data={"number": "+12125552368"},
+    )
+    form = WhatsappChannelForm(experiment=experiment, data={"number": "+12125552368"})
+
+    form.post_save(channel)
+
+    set_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
+    assert form.success_message == "Webhook configured automatically."
+    assert form.warning_message == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
+@patch("apps.service_providers.messaging_service.TwilioService.set_incoming_webhook")
+def test_whatsapp_post_save_falls_back_to_manual_instructions_on_failure(
+    set_incoming_webhook, messaging_provider, experiment
+):
+    set_incoming_webhook.side_effect = ValueError("No WhatsApp sender found for +12125552368")
+    provider = MessagingProviderFactory.create(
+        type=MessagingProviderType.twilio, config={"account_sid": "123", "auth_token": "123"}
+    )
+    messaging_provider.return_value = provider
+    channel = ExperimentChannelFactory(
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=provider,
+        extra_data={"number": "+12125552368"},
+    )
+    form = WhatsappChannelForm(experiment=experiment, data={"number": "+12125552368"})
+
+    form.post_save(channel)
+
+    assert channel.webhook_url in form.warning_message
+    assert form.success_message == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.forms.ExtraFormBase.messaging_provider", new_callable=PropertyMock)
+def test_whatsapp_post_save_shows_manual_instructions_for_other_providers(messaging_provider, experiment):
+    provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio, config={"auth_token": "123"})
+    messaging_provider.return_value = provider
+    channel = ExperimentChannelFactory(
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=provider,
+        extra_data={"number": "+12125552368"},
+    )
+    form = WhatsappChannelForm(experiment=experiment, data={"number": "+12125552368"})
+
+    form.post_save(channel)
+
+    assert form.success_message == f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook")
+def test_telegram_post_save_configures_webhook(set_incoming_webhook, experiment):
+    channel = ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"}
+    )
+    form = TelegramChannelForm(experiment=experiment, data={"bot_token": "tok"})
+
+    form.post_save(channel)
+
+    set_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
+    assert form.success_message == "Webhook configured automatically."
+    assert form.warning_message == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook")
+def test_telegram_post_save_falls_back_to_warning_on_failure(set_incoming_webhook, experiment):
+    set_incoming_webhook.side_effect = Exception("Telegram is down")
+    channel = ExperimentChannelFactory(
+        experiment=experiment, platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"}
+    )
+    form = TelegramChannelForm(experiment=experiment, data={"bot_token": "tok"})
+
+    form.post_save(channel)
+
+    assert channel.webhook_url in form.warning_message
+    assert form.success_message == ""

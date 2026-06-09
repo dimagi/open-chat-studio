@@ -3,6 +3,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.webhooks import TelegramWebhookManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProviderType
@@ -42,9 +43,13 @@ def test_channel_webhook_url():
     turnio_provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio)
 
     # Setup channels with their respective providers
-    no_provider_channel = ExperimentChannelFactory.create()
-    twilio_channel = ExperimentChannelFactory.create(messaging_provider=twilio_provider)
-    turnio_channel = ExperimentChannelFactory.create(messaging_provider=turnio_provider)
+    no_provider_channel = ExperimentChannelFactory.create(platform=ChannelPlatform.WEB)
+    twilio_channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.WHATSAPP, messaging_provider=twilio_provider
+    )
+    turnio_channel = ExperimentChannelFactory.create(
+        platform=ChannelPlatform.WHATSAPP, messaging_provider=turnio_provider
+    )
 
     # Let's check out each one's webhook url
     assert not no_provider_channel.webhook_url
@@ -238,3 +243,41 @@ class TestChannelPlatform:
             else:
                 # Identifier should be unchanged for other platforms
                 assert normalized_id == "ABC"
+
+
+@pytest.mark.django_db()
+def test_get_webhook_manager_returns_telegram_manager_for_telegram():
+    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
+
+    assert isinstance(channel.get_webhook_manager(), TelegramWebhookManager)
+
+
+@pytest.mark.django_db()
+def test_get_webhook_manager_returns_service_for_provider_backed_channel():
+    provider = MessagingProviderFactory(
+        type=MessagingProviderType.twilio, config={"account_sid": "123", "auth_token": "123"}
+    )
+    channel = ExperimentChannelFactory(
+        platform=ChannelPlatform.WHATSAPP, messaging_provider=provider, extra_data={"number": "+12125552368"}
+    )
+
+    manager = channel.get_webhook_manager()
+
+    assert manager.supports_webhook_management is True
+
+
+@pytest.mark.django_db()
+def test_get_webhook_manager_returns_none_for_web_channel():
+    channel = ExperimentChannelFactory(platform=ChannelPlatform.WEB, messaging_provider=None, extra_data={})
+
+    assert channel.get_webhook_manager() is None
+
+
+@pytest.mark.django_db()
+def test_webhook_url_for_telegram_channel():
+    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
+
+    url = channel.webhook_url
+
+    assert str(channel.external_id) in url
+    assert url.startswith("https://")

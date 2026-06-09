@@ -20,6 +20,7 @@ from apps.channels.datamodels import (
     TwilioMessage,
     WhatsAppMessage,
 )
+from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import (
     FacebookMessengerChannel,
@@ -228,12 +229,11 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     retry_jitter=True,
 )
 def handle_email_message(self, email_data: dict, channel_id: int | None = None, session_id: int | None = None):
-    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415
+    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415 - tests patch EmailChannel at source module
         EmailChannel,
         EmailThreadContext,
         get_email_experiment_channel,
     )
-    from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
 
     message = EmailMessageDatamodel(**email_data)
 

@@ -16,6 +16,13 @@
 
     {% render_form_fields form "name" "description" "num_reviews_required" %}
 
+    {% if annotations_started %}
+      <div class="alert alert-warning mt-1 mb-3 text-sm">
+        <i class="fa fa-triangle-exclamation"></i>
+        <span>{% translate "Items have already been annotated. Changing the number of reviews required recalculates the status of every item; some completed items may reopen." %}</span>
+      </div>
+    {% endif %}
+
     <div class="fieldset w-full mt-4">
       <label class="label font-bold">
         <div>{% translate "Schema Fields" %}</div>
@@ -183,11 +190,46 @@
   </div>
 {% endblock form %}
 
+{% block form_actions %}
+  <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}"
+         :disabled="submitted"
+         {% if annotations_started %}x-data="reviewChangeGuard()" @click="confirmReviewChange($event)"{% endif %}>
+{% endblock form_actions %}
+
 {% block page_js %}
   {{ block.super }}
   {% if existing_schema %}{{ existing_schema|json_script:"existing-schema" }}{% endif %}
+  {% translate "Items have already been annotated. Changing the number of reviews required recalculates the status of every item, and some completed items may reopen. Continue?" as review_change_confirm_message %}
   <script>
     document.addEventListener('alpine:init', () => {
+      Alpine.data('reviewChangeGuard', () => ({
+        originalNumReviews: null,
+
+        init() {
+          const el = document.querySelector('[name="num_reviews_required"]');
+          this.originalNumReviews = el ? el.value : null;
+        },
+
+        confirmReviewChange(event) {
+          const el = document.querySelector('[name="num_reviews_required"]');
+          if (!el || el.value === this.originalNumReviews) {
+            return;
+          }
+          event.preventDefault();
+          const button = event.currentTarget;
+          alertify.confirm().setting({
+            title: 'Confirm',
+            message: "{{ review_change_confirm_message|escapejs }}",
+            transition: 'fade',
+            onok: () => {
+              // Confirmed: re-submit. Sync originalNumReviews so the re-submit doesn't re-prompt.
+              this.originalNumReviews = el.value;
+              button.form.requestSubmit(button);
+            },
+          }).show();
+        },
+      }));
+
       Alpine.data('schemaFieldBuilder', () => ({
         locked: {{ schema_locked|yesno:"true,false" }},
         fields: [],

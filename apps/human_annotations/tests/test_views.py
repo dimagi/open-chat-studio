@@ -143,8 +143,8 @@ def test_edit_queue_saves_optional_field(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
-def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queue, user):
-    """num_reviews_required should be disabled after annotations have started; schema stays editable for 'required'."""
+def test_edit_queue_schema_locked_but_num_reviews_editable_after_annotations(client, team_with_users, queue, user):
+    """After annotations start the schema builder is locked, but num_reviews_required stays editable."""
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     Annotation.objects.create(
         item=item,
@@ -159,8 +159,41 @@ def test_edit_queue_locks_fields_after_annotations(client, team_with_users, queu
     assert response.status_code == 200
     form = response.context["form"]
     assert form.fields["schema"].disabled is False
-    assert form.fields["num_reviews_required"].disabled is True
+    assert form.fields["num_reviews_required"].disabled is False
     assert response.context["schema_locked"] is True
+    assert response.context["annotations_started"] is True
+
+
+@pytest.mark.django_db()
+def test_edit_queue_change_num_reviews_recomputes_item_statuses(client, team_with_users, queue, user):
+    """Changing num_reviews_required via the edit view recomputes existing item statuses."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 4, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.COMPLETED  # queue default num_reviews_required == 1
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.post(
+        url,
+        {
+            "name": queue.name,
+            "description": queue.description,
+            "schema": json.dumps(queue.schema),
+            "num_reviews_required": 3,
+        },
+    )
+    assert response.status_code == 302
+
+    queue.refresh_from_db()
+    assert queue.num_reviews_required == 3
+    item.refresh_from_db()
+    assert item.status == AnnotationItemStatus.IN_PROGRESS
 
 
 @pytest.mark.django_db()

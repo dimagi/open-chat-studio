@@ -41,8 +41,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.tools")
 
-OCS_CITATION_PATTERN = r"<CIT\s+(?P<file_id>\d+)\s*/>"
-
 SUCCESSFUL_ATTACHMENT_MESSAGE = "* {file_id} ({name}): attached."
 
 FILE_LINK_TEXT = "Reference link: `[{name}](file:{team_slug}:{session_id}:{file_id})`"
@@ -187,7 +185,6 @@ class SearchToolConfig:
     generate_citations: bool = True
 
     def get_index(self):
-
         return Collection.objects.get(id=self.index_id)
 
 
@@ -405,7 +402,6 @@ class EndSessionTool(CustomBaseTool):
     )
 
     def action(self, *args, **kwargs):
-
         self.tool_callbacks.register_intent(Intents.END_SESSION)
         return "Your intent to end the session has been registered."
 
