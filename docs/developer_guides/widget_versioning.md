@@ -25,7 +25,12 @@ version policy lives in `apps/channels/widget_versions.py`.
    `apps/channels/widget_versions.py` with a sunset date at least 60 days out.
    Versions below `below_version` are deprecated; widgets that predate the
    version header (< 0.5.1) count as deprecated too.
-2. Add a data migration in `apps/channels/migrations/` that triggers the
+2. In the docs repo, update the chat widget changelog (published at
+   <https://docs.openchatstudio.com/chat_widget/>): tag the affected version(s)
+   as **deprecated** and note the same sunset date used in the
+   `WidgetDeprecation` entry. This is the public record customers check to see
+   whether their pinned version is still supported.
+3. Add a data migration in `apps/channels/migrations/` that triggers the
    notification on deploy (see `0027_notify_widget_deprecation_below_0_6_0.py`):
 
         from apps.data_migrations.utils.migrations import RunDataMigration
@@ -38,12 +43,16 @@ version policy lives in `apps/channels/widget_versions.py`.
    nothing needs bumping. Teams with affected channels (deprecated recorded
    version, or no recorded version but sessions in the last 90 days) get an
    in-app notification on deploy.
-3. Deploy. Deprecated widgets now receive RFC 8594 `Deprecation`/`Sunset`
+4. Deploy. Deprecated widgets now receive RFC 8594 `Deprecation`/`Sunset`
    headers on chat API responses, affected channels show a warning badge, and
    the migration sends the notifications.
-4. At sunset nothing breaks automatically — the date marks when breaking
+5. At sunset nothing breaks automatically — the date marks when breaking
    server-side changes may land. Plan any actual removal separately, following
    [feature deprecation](feature_deprecation.md).
+
+Keep the sunset date consistent across all three places — the `WidgetDeprecation`
+entry, the changelog tag, and the `Sunset` header (which is derived from the
+entry automatically).
 
 To preview who would be notified before deploying, run the command manually:
 
