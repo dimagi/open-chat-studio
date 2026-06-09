@@ -72,6 +72,7 @@ class PricingRule(BaseTeamModel):
         ]
 
     def __str__(self):
+        """Compact representation for admin / shell debugging."""
         scope = self.team.slug if self.team_id else "global"
         return f"[{scope}] {self.provider_type}/{self.model_name}/{self.service_kind} @ {self.unit_price}"
 

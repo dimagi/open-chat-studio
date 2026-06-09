@@ -28,6 +28,7 @@ class Command(BaseCommand):
     help = "Load the in-repo LLM pricing seed into PricingRule (idempotent, supersedes on change)."
 
     def add_arguments(self, parser):
+        """Register the --path override for the seed JSON location."""
         parser.add_argument(
             "--path",
             default=str(SEED_PATH),
@@ -35,6 +36,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, path: str, **options):
+        """Read the seed JSON and upsert each rule via supersession."""
         seed = json.loads(Path(path).read_text())
         stats = {"unchanged": 0, "created": 0, "superseded": 0}
         for entry in seed:

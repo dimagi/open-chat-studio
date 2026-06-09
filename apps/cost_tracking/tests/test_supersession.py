@@ -9,12 +9,24 @@ from apps.cost_tracking.services.pricing import PricingKey
 KEY = PricingKey(provider_type="openai", model_name="test-model", service_kind=ServiceKind.LLM_INPUT)
 
 
+def _key_filter(**extra) -> dict:
+    """Filter kwargs that match the exact (global, provider, model, kind) under
+    test. Used by the helpers below to avoid collisions with seed rows."""
+    return {
+        "team__isnull": True,
+        "provider_type": KEY.provider_type,
+        "model_name": KEY.model_name,
+        "service_kind": KEY.service_kind,
+        **extra,
+    }
+
+
 def _active_count():
-    return PricingRule.objects.filter(team__isnull=True, model_name=KEY.model_name, effective_to__isnull=True).count()
+    return PricingRule.objects.filter(**_key_filter(effective_to__isnull=True)).count()
 
 
 def _all_count():
-    return PricingRule.objects.filter(team__isnull=True, model_name=KEY.model_name).count()
+    return PricingRule.objects.filter(**_key_filter()).count()
 
 
 @pytest.mark.django_db()
@@ -43,10 +55,10 @@ def test_upsert_with_different_rate_supersedes():
     assert _active_count() == 1
     assert _all_count() == 2
 
-    active = PricingRule.objects.get(team__isnull=True, model_name=KEY.model_name, effective_to__isnull=True)
+    active = PricingRule.objects.get(**_key_filter(effective_to__isnull=True))
     assert active.unit_price == Decimal("0.00020")
 
-    closed = PricingRule.objects.get(team__isnull=True, model_name=KEY.model_name, effective_to__isnull=False)
+    closed = PricingRule.objects.get(**_key_filter(effective_to__isnull=False))
     assert closed.unit_price == Decimal("0.00015")
     assert closed.effective_to is not None
 
@@ -59,5 +71,5 @@ def test_supersession_respects_active_rule_unique_constraint():
         upsert_global_rule(KEY, unit_price=Decimal(price))
     assert _active_count() == 1
     assert _all_count() == 4
-    active = PricingRule.objects.get(team__isnull=True, model_name=KEY.model_name, effective_to__isnull=True)
+    active = PricingRule.objects.get(**_key_filter(effective_to__isnull=True))
     assert active.unit_price == Decimal("0.00030")

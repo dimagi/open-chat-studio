@@ -4,11 +4,12 @@ save/delete; the TTL is just a safety net.
 """
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.core.cache import cache
 from django.db.models import Q
+from django.utils import timezone
 
 from apps.cost_tracking.models import PricingRule
 
@@ -42,13 +43,25 @@ UNPRICED = ResolvedRule(unit_price=None, currency="USD", pricing_rule_id=None)
 class PricingResolver:
     CACHE_TTL_SECONDS = 24 * 60 * 60  # safety net; signals do the real invalidation
     CACHE_KEY_PREFIX = "cost_tracking:pricing"
+    # The cache key intentionally omits `at`; the cache is correct only for
+    # "active right now" lookups. Resolves with an `at` further than this
+    # window from now bypass the cache automatically so historical/future
+    # queries can't accidentally hit a stale "current" entry.
+    CACHE_AT_SKEW = timedelta(minutes=1)
 
     def resolve(self, key: PricingKey, at: datetime, use_cache: bool = True) -> ResolvedRule:
         """Resolve the active rule for `key` at `at`.
 
         Lookup order: team override -> global rule -> UNPRICED sentinel.
-        `use_cache=False` skips Redis (used by tests doing historical time-travel).
+        `use_cache=False` skips Redis explicitly; the cache is also bypassed
+        automatically if `at` is more than `CACHE_AT_SKEW` away from now,
+        since the cache stores "active now" results and can't represent
+        historical/future windows.
         """
+        if use_cache:
+            now = timezone.now()
+            if not (now - self.CACHE_AT_SKEW <= at <= now + self.CACHE_AT_SKEW):
+                use_cache = False
         if key.team_id is not None:
             team_rule = self._lookup_one(key, at, use_cache)
             if team_rule.unit_price is not None:
@@ -57,6 +70,10 @@ class PricingResolver:
 
     @classmethod
     def invalidate(cls, key: PricingKey) -> None:
+        """Drop the cached resolved-rule entry for `key`. Called from signal
+        handlers on PricingRule save/delete and from `load_ai_pricing` when
+        closing a rule via queryset `.update()` (signals don't fire there).
+        """
         cache.delete(cls._cache_key(key))
 
     def _lookup_one(self, key: PricingKey, at: datetime, use_cache: bool) -> ResolvedRule:

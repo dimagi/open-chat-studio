@@ -6,8 +6,16 @@ import pytest
 from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord
 from apps.cost_tracking.services.recorder import TraceContext, UsageEvent, record_usage_bulk
 
+_EVENT_KWARGS = {"provider_type", "model_name", "confidence", "extra"}
+
 
 def _event(qty=1000, kind=ServiceKind.LLM_INPUT, **overrides):
+    """Build a UsageEvent for the test KEY. Unknown overrides raise so typos
+    in test code fail fast instead of being silently ignored.
+    """
+    unknown = set(overrides) - _EVENT_KWARGS
+    if unknown:
+        raise TypeError(f"_event: unknown overrides {sorted(unknown)}")
     return UsageEvent(
         service_kind=kind,
         provider_type=overrides.pop("provider_type", "openai"),

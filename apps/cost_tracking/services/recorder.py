@@ -71,10 +71,15 @@ def record_usage_bulk(events: list[UsageEvent], ctx: TraceContext) -> None:
             ),
             at=now,
         )
+        # cost stays at 0 unless we have BOTH a priced rule AND a real quantity.
+        # `event.quantity` is typed as Decimal | int but we still guard against
+        # None / 0 so the future UNKNOWN-confidence path (no token count) can
+        # land here cleanly without a Decimal(None) crash.
         priced = resolved.unit_price is not None
+        has_quantity = event.quantity is not None and event.quantity != 0
         cost = (
             (Decimal(event.quantity) / _THOUSAND * resolved.unit_price).quantize(_CENT_QUANTUM)
-            if priced
+            if priced and has_quantity
             else Decimal("0")
         )
         rows.append(
