@@ -76,7 +76,7 @@ def test_send_message_requires_token(api_client, session, token):
     url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
     assert api_client.post(url, data={"message": "hi"}, format="json").status_code == 403
     with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
-        task.delay.return_value = mock.Mock(task_id="123")
+        task.delay.return_value = mock.Mock(task_id="send-msg-test-unique-456")
         response = api_client.post(url, data={"message": "hi"}, format="json", HTTP_X_SESSION_TOKEN=token)
     assert response.status_code == 202
 

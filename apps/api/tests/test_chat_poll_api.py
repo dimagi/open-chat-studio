@@ -145,40 +145,27 @@ def test_chat_poll_generic_error_returns_500(api_client, mock_session, mock_task
 
 
 @pytest.mark.django_db()
-def test_chat_poll_task_bound_to_correct_session_succeeds(api_client, mock_session, mock_task_response):
-    """Polling with a task_id bound to the current session succeeds."""
-    task_id = "bound-task-ok"
-    cache.set(f"task_session:{task_id}", TEST_SESSION_ID, 60)
+@pytest.mark.parametrize(
+    ("cache_owner", "expected_status", "task_called"),
+    [
+        pytest.param(TEST_SESSION_ID, 200, True, id="bound-to-correct-session"),
+        pytest.param(str(uuid.uuid4()), 404, False, id="bound-to-different-session"),
+        pytest.param(None, 200, True, id="no-binding-backward-compat"),
+    ],
+)
+def test_chat_poll_task_session_binding(
+    api_client, mock_session, mock_task_response, cache_owner, expected_status, task_called
+):
+    """task_id is bound to its originating session; cross-session reads return 404 (IDOR prevention).
+    A missing binding is allowed for backward compatibility with tasks dispatched before this fix.
+    """
+    task_id = str(uuid.uuid4())  # unique per run to avoid inter-test cache pollution
+    if cache_owner is not None:
+        cache.set(f"task_session:{task_id}", cache_owner, 60)
     mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
 
     url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
     response = api_client.get(url)
 
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
-def test_chat_poll_task_bound_to_different_session_returns_404(api_client, mock_session, mock_task_response):
-    """Polling session A's endpoint with a task_id bound to session B returns 404 (IDOR prevention)."""
-    other_session_id = str(uuid.uuid4())
-    task_id = "cross-session-task"
-    cache.set(f"task_session:{task_id}", other_session_id, 60)
-
-    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
-    response = api_client.get(url)
-
-    assert response.status_code == 404
-    mock_task_response.assert_not_called()
-
-
-@pytest.mark.django_db()
-def test_chat_poll_task_with_no_binding_succeeds(api_client, mock_session, mock_task_response):
-    """Tasks with no cache binding (dispatched before this fix) are allowed through for backward compatibility."""
-    task_id = "legacy-unbound-task"
-    # No cache.set — binding is absent
-    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
-
-    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
-    response = api_client.get(url)
-
-    assert response.status_code == 200
+    assert response.status_code == expected_status
+    assert mock_task_response.called == task_called
