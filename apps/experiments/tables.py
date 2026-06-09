@@ -95,7 +95,7 @@ class ExperimentVersionsTable(tables.Table):
     class Meta:
         model = Experiment
         fields = []
-        row_attrs = {"class": "text-sm"}
+        row_attrs = {"class": "text-sm", "data-version-number": lambda record: record.version_number}
         orderable = False
         empty_text = "No versions yet!"
 

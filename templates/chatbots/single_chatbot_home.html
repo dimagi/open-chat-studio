@@ -142,9 +142,9 @@
   <div class="tabs-container">
     <div role="tablist" class="tabs tabs-border flex justify-start">
       {% if perms.chat.view_chat %}
-        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
+        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" {% if not highlight_version_id %}checked{% endif %}/>
       {% endif %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" {% if highlight_version_id %}checked{% endif %}/>
       {% flag "flag_events" %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       {% endflag %}
@@ -169,8 +169,25 @@
              hx-trigger="load, version-changed"
              hx-target="this"
              hx-get="{% url 'chatbots:versions-list' request.team.slug experiment.id %}"
-             hx-swap="innerHTML">
+             hx-swap="innerHTML"
+             {% if highlight_version_id %}data-highlight-version="{{ highlight_version_id }}"{% endif %}>
         </div>
+        {% if highlight_version_id %}
+        <script>
+          (function() {
+            const container = document.getElementById('versions-table');
+            function highlightVersion() {
+              const target = parseInt(container.dataset.highlightVersion, 10);
+              const row = container.querySelector('tr[data-version-number="' + target + '"]');
+              if (row) {
+                row.classList.add('bg-base-200');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }
+            container.addEventListener('htmx:afterSwap', highlightVersion);
+          })();
+        </script>
+        {% endif %}
       </div>
     </div>
     {% flag "flag_events" %}
