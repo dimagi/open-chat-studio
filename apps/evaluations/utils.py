@@ -1,11 +1,13 @@
 import inspect
 import json
 import re
+import threading
+import uuid
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
 from django.db.models import F
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
@@ -436,6 +438,14 @@ def parse_csv_value_as_json(value):
     return value
 
 
+# Serializes dynamic Pydantic model construction. Building a model's core schema
+# (and the generic specializations downstream consumers like the OpenAI SDK derive
+# from it) is not thread-safe; concurrent builds can leave a model's serializer as a
+# MockValSer placeholder, raising "'MockValSer' object is not an instance of
+# 'SchemaSerializer'" when model_dump() is later called.
+_dynamic_model_build_lock = threading.Lock()
+
+
 def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str = "DynamicModel") -> type[BaseModel]:
     """Converts a typed schema dictionary to a Pydantic model.
 
@@ -460,7 +470,25 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
             Field(**field_def.pydantic_fields),
         )
 
-    return create_model(model_name, **pydantic_fields)
+    with _dynamic_model_build_lock:
+        # Use a unique class name so concurrently-built models with the same shape
+        # don't collide in Pydantic's generic-model cache when wrapped by downstream
+        # generics (e.g. the OpenAI SDK's ParsedResponse[...]). The JSON schema title
+        # is pinned to ``model_name`` so the schema sent to the LLM is unchanged.
+        unique_model_name = f"{model_name}_{uuid.uuid4().hex}"
+        model = create_model(
+            unique_model_name,
+            __config__=ConfigDict(title=model_name),
+            **pydantic_fields,
+        )
+        # Force the core schema / serializer to be built synchronously so it is never
+        # left as a deferred MockValSer placeholder for another thread to trip over.
+        model.model_rebuild(force=True)
+        # Touch the serializer to ensure it is materialized before the model escapes
+        # this lock.
+        _ = model.__pydantic_serializer__
+
+    return model
 
 
 def get_use_in_aggregations(field_def: dict) -> bool:
