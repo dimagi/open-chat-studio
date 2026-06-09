@@ -17,12 +17,6 @@ class InspectVersionError(ValueError):
 
 
 def _inspect_target_queryset():
-    """The base queryset, preloaded with the related objects the inspect response needs.
-
-    Triggers are loaded without filtering — archived ones are skipped later, in the serializers.
-    Each trigger's ``action`` is selected alongside it so the event serializers and the fetcher can
-    read it without an extra query per trigger.
-    """
     return Experiment.objects.select_related(
         "team",
         "consent_form",
