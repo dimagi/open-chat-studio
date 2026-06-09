@@ -198,13 +198,6 @@ class ChannelBase(ABC):
         return self._experiment_session.last_activity_at if self._experiment_session else None
 
     @property
-    def working_experiment(self) -> "Experiment":
-        """Always returns the family-head (working) Experiment, even when self.experiment is a
-        published version snapshot. Use this when building notification links so they always
-        resolve to the editable chatbot page."""
-        return self.experiment.get_working_version()
-
-    @property
     def message(self) -> BaseMessage:
         return self._message  # ty: ignore[invalid-return-type]
 
@@ -593,7 +586,7 @@ class ChannelBase(ABC):
                     self._send_text_to_user_with_notification(urls_to_append)
             except AudioSynthesizeException:
                 logger.exception("Error generating voice response")
-                audio_synthesis_failure_notification(self.working_experiment, session=self.experiment_session)
+                audio_synthesis_failure_notification(self.experiment, session=self.experiment_session)
                 self._voice_fallback_to_text(bot_message, urls_to_append)
             except ServiceWindowExpiredException:
                 logger.info("Service window expired, falling back to text message")
@@ -691,7 +684,7 @@ class ChannelBase(ABC):
                 logger.exception(e)
                 platform_title = self.experiment_channel.platform_enum.title()
                 file_delivery_failure_notification(
-                    self.working_experiment,
+                    self.experiment,
                     platform_title=platform_title,
                     content_type=file.content_type,
                     session=self.experiment_session,
@@ -754,7 +747,7 @@ class ChannelBase(ABC):
             audio_file = self.get_message_audio()
             transcript = self._transcribe_audio(audio_file)
         except Exception as e:
-            audio_transcription_failure_notification(self.working_experiment, platform=self.experiment_channel.platform)
+            audio_transcription_failure_notification(self.experiment, platform=self.experiment_channel.platform)
             raise e
 
         if self.experiment.echo_transcript:

@@ -263,10 +263,8 @@ class OCSTracer(Tracer):
 
     def _fire_trace_error_notification(self) -> None:
         trace_url = self.trace_record.get_absolute_url() if self.trace_record else None
-        # self.experiment may be a published version; notifications should always link to the
-        # working version so get_absolute_url() resolves correctly.
         trace_error_notification(
-            experiment=self.experiment.get_working_version(),
+            experiment=self.experiment,
             session=self.session,
             span_name=self.error_span_name,
             error_message=self.error_message,

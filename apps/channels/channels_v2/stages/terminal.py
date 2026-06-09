@@ -176,13 +176,10 @@ class SendingErrorHandlerStage(ProcessingStage):
             if handler(ctx, exc):
                 return
 
-        # Always notify against the working version so links in notifications resolve correctly.
-        working_experiment = ctx.experiment.get_working_version()
-
         if isinstance(exc, MessageDeliveryFailure):
             logger.exception("Message delivery failure: %s", exc, exc_info=exc.original_exc)
             message_delivery_failure_notification(
-                working_experiment,
+                ctx.experiment,
                 session=ctx.experiment_session,
                 platform_title=ctx.experiment_channel.platform_enum.title(),
                 context=exc.context,
@@ -192,7 +189,7 @@ class SendingErrorHandlerStage(ProcessingStage):
         if isinstance(exc, FileDeliveryFailure):
             logger.exception("File delivery failure: %s", exc, exc_info=exc.original_exc)
             file_delivery_failure_notification(
-                working_experiment,
+                ctx.experiment,
                 platform_title=ctx.experiment_channel.platform_enum.title(),
                 content_type=exc.file.content_type,
                 session=ctx.experiment_session,
