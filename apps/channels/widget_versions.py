@@ -40,6 +40,7 @@ DEPRECATIONS: list[WidgetDeprecation] = [
 @dataclass(frozen=True)
 class WidgetUpdateStatus:
     level: str  # DaisyUI badge/alert level: "info" or "warning"
+    icon: str  # Font Awesome icon class, e.g. "fa-triangle-exclamation"
     message: str
     deprecation: WidgetDeprecation | None = None
 
@@ -101,12 +102,14 @@ def get_widget_update_status(version: str | None) -> WidgetUpdateStatus | None:
     if deprecation := get_deprecation(version):
         return WidgetUpdateStatus(
             level="warning",
+            icon="fa-triangle-exclamation",
             message=(f"Widget version {version} is deprecated — support ends {deprecation.sunset_at:%d %b %Y}."),
             deprecation=deprecation,
         )
     if is_outdated(version):
         return WidgetUpdateStatus(
             level="info",
+            icon="fa-circle-arrow-up",
             message=f"Widget {version} in use — {LATEST_VERSION} available.",
         )
     return None

@@ -1,7 +1,7 @@
 {# Commented elements included for Tailwind processing #}
 {# <i class="fa-brands fa-telegram"></i> #}
 {# <i class="fa-brands fa-whatsapp"></i> #}
-{# <span class="badge-info badge-warning"></span> #}
+{# <i class="text-info text-warning fa-triangle-exclamation fa-circle-arrow-up"></i> #}
 {% for channel in channels %}
   <button class="btn btn-ghost btn-sm normal-case!"
           hx-get="{% url 'channels:channel_edit_dialog' request.team.slug experiment.id channel.id %}"
@@ -12,7 +12,7 @@
     {% with status=channel.widget_update_status %}
       {% if status %}
         <span class="tooltip tooltip-bottom" data-tip="{{ status.message }}">
-          <span class="badge badge-xs badge-{{ status.level }}"></span>
+          <i class="fa-solid {{ status.icon }} text-{{ status.level }}"></i>
         </span>
       {% endif %}
     {% endwith %}
