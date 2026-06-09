@@ -53,6 +53,19 @@ class TestNotifyDeprecatedWidgetVersionsCommand:
         assert kwargs["versions"] == {"0.5.0"}
 
     @patch(NOTIFY_PATCH)
+    def test_uses_most_recent_deprecation_when_multiple(self, mock_notify):
+        """An older channel is re-notified under the newest (highest-version) deprecation."""
+        _widget_channel(version="0.5.0")
+        deprecations = [
+            WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 9, 1, tzinfo=UTC)),
+            WidgetDeprecation(below_version="0.7.0", sunset_at=datetime(2026, 12, 1, tzinfo=UTC)),
+        ]
+        with patch("apps.channels.widget_versions.DEPRECATIONS", deprecations):
+            call_command("notify_deprecated_widget_versions", force=True)
+        mock_notify.assert_called_once()
+        assert mock_notify.call_args.kwargs["sunset_at"] == datetime(2026, 12, 1, tzinfo=UTC)
+
+    @patch(NOTIFY_PATCH)
     def test_skips_team_on_current_version(self, mock_notify):
         _widget_channel(version="0.8.0")
         with patch("apps.channels.widget_versions.DEPRECATIONS", FAKE_DEPRECATIONS):

@@ -56,17 +56,32 @@ def clean_widget_version(raw: str | None) -> str | None:
     return raw
 
 
-def get_deprecation(version: str | None) -> WidgetDeprecation | None:
-    """Return the deprecation covering `version`, if any.
+def latest_deprecation() -> WidgetDeprecation | None:
+    """The most recent deprecation — the one with the highest `below_version`."""
+    if not DEPRECATIONS:
+        return None
+    return max(DEPRECATIONS, key=lambda d: Version(d.below_version))
+
+
+def is_deprecated(version: str | None, deprecation: WidgetDeprecation) -> bool:
+    """Whether `version` falls under `deprecation`.
 
     A missing or unparseable version is treated as older than everything.
-    When multiple deprecations match, the one with the highest bound wins.
     """
     parsed = _parse(version)
-    matching = [d for d in DEPRECATIONS if parsed is None or parsed < Version(d.below_version)]
-    if not matching:
-        return None
-    return max(matching, key=lambda d: Version(d.below_version))
+    return parsed is None or parsed < Version(deprecation.below_version)
+
+
+def get_deprecation(version: str | None) -> WidgetDeprecation | None:
+    """The deprecation covering `version`, or None if it is still supported.
+
+    Only the most recent deprecation is considered, so deprecated widgets are
+    always told about the highest-version sunset rather than an older one.
+    """
+    deprecation = latest_deprecation()
+    if deprecation and is_deprecated(version, deprecation):
+        return deprecation
+    return None
 
 
 def is_outdated(version: str | None) -> bool:

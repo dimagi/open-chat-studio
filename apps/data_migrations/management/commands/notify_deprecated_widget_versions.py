@@ -53,6 +53,12 @@ class Command(IdempotentCommand):
         return f"Notified {len(affected_by_team)} team(s)"
 
     def _collect_affected_teams(self) -> dict:
+        # Notify under the most recent deprecation only: a channel deprecated by an
+        # earlier entry is re-notified under the newest (highest-version) one.
+        deprecation = widget_versions.latest_deprecation()
+        if deprecation is None:
+            return {}
+
         cutoff = timezone.now() - RECENT_ACTIVITY_WINDOW
         channels = ExperimentChannel.objects.filter(
             platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False
@@ -65,8 +71,7 @@ class Command(IdempotentCommand):
 
         affected_by_team = {}
         for channel in channels:
-            deprecation = widget_versions.get_deprecation(channel.widget_version)
-            if deprecation is None:
+            if not widget_versions.is_deprecated(channel.widget_version, deprecation):
                 continue
             if channel.widget_version is None and channel.id not in channels_with_recent_sessions:
                 continue
@@ -87,10 +92,6 @@ class Command(IdempotentCommand):
         )
         team_data["chatbots"][channel.experiment.name] = channel.experiment.get_absolute_url()
         team_data["versions"].add(channel.widget_version or "unknown")
-        # If multiple deprecations apply across channels, lead with the most urgent
-        if deprecation.sunset_at < team_data["sunset_at"]:
-            team_data["sunset_at"] = deprecation.sunset_at
-            team_data["docs_url"] = deprecation.docs_url
 
     def _print_details(self, affected_by_team: dict) -> None:
         for data in affected_by_team.values():

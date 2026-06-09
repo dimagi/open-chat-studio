@@ -14,12 +14,15 @@ from apps.channels.widget_versions import (
     clean_widget_version,
     get_deprecation,
     get_widget_update_status,
+    is_deprecated,
     is_outdated,
+    latest_deprecation,
     widget_script_url,
 )
 from apps.utils.factories.channels import ExperimentChannelFactory
 
 DEPRECATION = WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 9, 1, tzinfo=UTC))
+NEWER_DEPRECATION = WidgetDeprecation(below_version="0.7.0", sunset_at=datetime(2026, 12, 1, tzinfo=UTC))
 
 
 @pytest.mark.parametrize(
@@ -56,6 +59,44 @@ def test_get_deprecation_no_deprecations_configured(version):
     # DEPRECATIONS is patched empty to mimic the pre-first-deprecation state
     with patch("apps.channels.widget_versions.DEPRECATIONS", []):
         assert get_deprecation(version) is None
+
+
+@patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION, NEWER_DEPRECATION])
+@pytest.mark.parametrize(
+    "version",
+    [
+        pytest.param("0.5.0", id="below-both-bounds"),
+        pytest.param("0.6.5", id="below-newer-bound-only"),
+        pytest.param(None, id="unknown"),
+    ],
+)
+def test_get_deprecation_returns_most_recent(version):
+    # A version covered by several deprecations is reported under the highest-version one
+    assert get_deprecation(version) == NEWER_DEPRECATION
+
+
+@patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION, NEWER_DEPRECATION])
+def test_latest_deprecation_returns_highest_below_version():
+    assert latest_deprecation() == NEWER_DEPRECATION
+
+
+def test_latest_deprecation_none_when_empty():
+    with patch("apps.channels.widget_versions.DEPRECATIONS", []):
+        assert latest_deprecation() is None
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        pytest.param("0.5.0", True, id="older-than-bound"),
+        pytest.param("0.6.0", False, id="boundary-not-deprecated"),
+        pytest.param("0.8.0", False, id="newer-than-bound"),
+        pytest.param(None, True, id="unknown-is-older-than-everything"),
+        pytest.param("garbage", True, id="unparseable-treated-as-unknown"),
+    ],
+)
+def test_is_deprecated(version, expected):
+    assert is_deprecated(version, DEPRECATION) is expected
 
 
 @pytest.mark.parametrize(
