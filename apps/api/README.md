@@ -10,14 +10,14 @@ import requests
 headers = {"Accept": "application/json", "Content-Type": "application/json", "X-Api-Key": "<api-key>"}
 
 # List experiments
-response = requests.get("https://chatbots.dimagi.com/api/experiments", headers=headers)
+response = requests.get("https://www.openchatstudio.com/api/experiments", headers=headers)
 experiments = response.json()
 experiment_id = experiments[0]["id"]
 
 # Start a conversation with the experiment bot
 data = {"message": "Hi there"}
 response = requests.post(
-    f"https://chatbots.dimagi.com/channels/api/{experiment_id}/incoming_message",
+    f"https://www.openchatstudio.com/channels/api/{experiment_id}/incoming_message",
     data=data,
     headers=headers
 )
@@ -40,13 +40,13 @@ data = {
     ],
 }
 
-response = requests.post("https://chatbots.dimagi.com/api/sessions", data=data, headers=headers)
+response = requests.post("https://www.openchatstudio.com/api/sessions", data=data, headers=headers)
 session_id = response.json()["id"]
 
 # Update the session with a new message
 data = {"message": "Hi there", "session": session_id}
 response = requests.post(
-    f"https://chatbots.dimagi.com/channels/api/{experiment_id}/incoming_message",
+    f"https://www.openchatstudio.com/channels/api/{experiment_id}/incoming_message",
     data=data,
     headers=headers
 )
