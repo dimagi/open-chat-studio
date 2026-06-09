@@ -5,27 +5,31 @@ Add a WidgetDeprecation entry to deprecate old versions. See
 docs/developer_guides/widget_versioning.md for the full process.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import wraps
 
+from django.conf import settings
 from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
 LATEST_VERSION = "0.8.0"
-
-WIDGET_DOCS_URL = "https://docs.openchatstudio.com/chat_widget/"
 
 # Widgets older than 0.5.1 (Sept 2025) do not send the x-ocs-widget-version
 # header, so a missing/unparseable version is treated as older than everything.
 MAX_VERSION_LENGTH = 32
 
 
+def widget_docs_url() -> str:
+    """The published chat widget docs URL, from settings."""
+    return f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['chat_widget']}"
+
+
 @dataclass(frozen=True)
 class WidgetDeprecation:
     below_version: str  # all versions < this are deprecated
     sunset_at: datetime  # tz-aware; RFC 8594 semantics — intent, not enforcement
-    docs_url: str = WIDGET_DOCS_URL
+    docs_url: str = field(default_factory=widget_docs_url)
 
 
 DEPRECATIONS: list[WidgetDeprecation] = [
