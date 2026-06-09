@@ -94,9 +94,12 @@ class SessionAccessPermission(BasePermission):
         if not session.session_token_required:
             return self._has_legacy_access(request, session)
 
-        if request.user.is_authenticated and self._user_has_session_access(request.user, session):
+        if self._user_is_session_participant(request.user, session):
             return True
 
+        return self._token_grants_access(request, session)
+
+    def _token_grants_access(self, request, session) -> bool:
         token = request.headers.get("X-Session-Token")
         if not token:
             raise exceptions.PermissionDenied(
@@ -125,12 +128,8 @@ class SessionAccessPermission(BasePermission):
 
         return experiment.is_participant_allowed(participant_id)
 
-    def _user_has_session_access(self, user, session) -> bool:
-        if session.participant and session.participant.user_id == user.id:
-            return True
-        # Team membership is intentionally sufficient: team members may access
-        # any session in their team (matches team-scoped access elsewhere).
-        return session.team.members.filter(id=user.id).exists()
+    def _user_is_session_participant(self, user, session) -> bool:
+        return user.is_authenticated and session.participant and session.participant.user_id == user.id
 
 
 class ReadOnlyAPIKeyPermission(BasePermission):

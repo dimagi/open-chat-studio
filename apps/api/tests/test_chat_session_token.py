@@ -122,9 +122,11 @@ def test_participant_user_bypasses_token(api_client, session):
 
 
 @pytest.mark.django_db()
-def test_team_member_bypasses_token(api_client, session, team_with_users):
+def test_team_member_without_participant_denied(api_client, session, team_with_users):
+    """Team membership alone does not grant token-free access; only the session's
+    own participant-user bypasses the token."""
     api_client.force_login(team_with_users.members.first())
-    assert api_client.get(poll_url(session)).status_code == 200
+    assert api_client.get(poll_url(session)).status_code == 403
 
 
 @pytest.mark.django_db()

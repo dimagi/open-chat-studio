@@ -60,9 +60,12 @@ def test_wrong_salt_rejected():
 
 
 @pytest.mark.django_db()
-def test_session_not_expired_with_recent_message():
+def test_session_not_expired_with_recent_activity():
     session = ExperimentSessionFactory.create()
+    # The post_save signal on a human message updates last_activity_at on the DB row.
     ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+    session.refresh_from_db()
+    assert session.last_activity_at is not None
     assert session_token_expired(session) is False
 
 
@@ -70,13 +73,15 @@ def test_session_not_expired_with_recent_message():
 def test_session_expired_after_inactivity_window():
     session = ExperimentSessionFactory.create()
     ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+    session.refresh_from_db()
     with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
         assert session_token_expired(session) is True
 
 
 @pytest.mark.django_db()
-def test_session_with_no_messages_uses_created_at():
+def test_session_with_no_activity_uses_created_at():
     session = ExperimentSessionFactory.create()
+    assert session.last_activity_at is None
     assert session_token_expired(session) is False
     with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
         assert session_token_expired(session) is True

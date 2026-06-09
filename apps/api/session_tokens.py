@@ -1,8 +1,5 @@
-from datetime import datetime
-
 from django.conf import settings
 from django.core import signing
-from django.db.models import Max
 from django.utils import timezone
 
 from apps.experiments.models import ExperimentSession
@@ -33,12 +30,9 @@ def validate_session_token(token: str, session_external_id: str) -> bool:
 def session_token_expired(session: ExperimentSession) -> bool:
     """Sliding inactivity backstop: reject token access to long-inactive sessions.
 
-    Activity is the latest chat message (polling does not count, so a leaked
-    token cannot keep a session alive), falling back to session creation.
+    Activity is the session's `last_activity_at` (updated on each user message;
+    polling does not count, so a leaked token cannot keep a session alive),
+    falling back to session creation when there has been no activity yet.
     """
-    return timezone.now() - _last_activity(session) > settings.CHAT_SESSION_TOKEN_INACTIVITY_WINDOW
-
-
-def _last_activity(session: ExperimentSession) -> datetime:
-    last_message = session.chat.messages.aggregate(last=Max("created_at"))["last"]
-    return last_message or session.created_at
+    last_activity = session.last_activity_at or session.created_at
+    return timezone.now() - last_activity > settings.CHAT_SESSION_TOKEN_INACTIVITY_WINDOW

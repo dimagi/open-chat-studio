@@ -112,14 +112,16 @@ applied to all four session endpoints:
 2. `session_token_required=False` → exactly today's legacy behavior
    (widget-auth pass-through, `is_public`, participant allowlist).
 3. `session_token_required=True`:
-   - Django-session-authenticated user who is the session's participant
-     (`participant.user_id == request.user.id`) or a member of the session's
-     team → allow (this keeps the OCS-hosted `web_chat.html` page working
-     unchanged: same-origin fetch sends the session cookie; CSRF is already
-     handled by the widget). For the *anonymous* public web-chat routes
-     (`chatbot_chat`, `chatbot_chat_embed`, behind `flag_chat_widget`), the
-     server opts the session out of token enforcement at render time until the
-     bundled widget supports session tokens.
+   - Django-session-authenticated user who **is the session's participant**
+     (`participant.user_id == request.user.id`) → allow. This keeps the
+     OCS-hosted authenticated `web_chat.html` page (`chatbot_chat_session`,
+     login-required, where the viewing user is the participant) working
+     unchanged. Team membership alone does *not* grant access — only the
+     session's own participant-user bypasses the token. The anonymous public
+     web-chat routes (`chatbot_chat`, `chatbot_chat_embed`, behind the
+     `flag_chat_widget` POC flag) will return 403 on poll until the bundled
+     widget gains token support (widget PR); they are not opted out
+     server-side.
    - Otherwise require `X-Session-Token`: signature valid (salt + secret),
      `sid` equals the path `session_id`, inactivity window not exceeded.
      **The embed key alone no longer suffices for these sessions.**
