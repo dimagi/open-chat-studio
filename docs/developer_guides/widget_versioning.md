@@ -40,9 +40,9 @@ version policy lives in `apps/channels/widget_versions.py`.
         ]
 
    The command slug is fixed; Django tracks each migration's single run, so
-   nothing needs bumping. Teams with affected channels (deprecated recorded
-   version, or no recorded version but sessions in the last 90 days) get an
-   in-app notification on deploy.
+   nothing needs bumping. Teams with affected channels (running a deprecated
+   version and active in the last 90 days) get an in-app notification on deploy;
+   dormant channels are surfaced passively by the UI badge instead.
 4. Deploy. Deprecated widgets now receive RFC 8594 `Deprecation`/`Sunset`
    headers on chat API responses, affected channels show a warning badge, and
    the migration sends the notifications.

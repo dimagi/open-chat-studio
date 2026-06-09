@@ -18,7 +18,7 @@ NOTIFY_PATCH = (
 )
 
 
-def _widget_channel(version=None, **kwargs):
+def _widget_channel(version=None, recent_session=False, **kwargs):
     channel = ExperimentChannelFactory(
         platform=ChannelPlatform.EMBEDDED_WIDGET,
         extra_data={"widget_token": "tok", "allowed_domains": ["example.com"]},
@@ -31,6 +31,8 @@ def _widget_channel(version=None, **kwargs):
             audit_action=AuditAction.IGNORE,
         )
         channel.refresh_from_db()
+    if recent_session:
+        ExperimentSessionFactory(experiment=channel.experiment, experiment_channel=channel)
     return channel
 
 
@@ -43,7 +45,7 @@ class TestNotifyDeprecatedWidgetVersionsCommand:
 
     @patch(NOTIFY_PATCH)
     def test_notifies_team_with_deprecated_version(self, mock_notify):
-        channel = _widget_channel(version="0.5.0")
+        channel = _widget_channel(version="0.5.0", recent_session=True)
         with patch("apps.channels.widget_versions.DEPRECATIONS", FAKE_DEPRECATIONS):
             call_command("notify_deprecated_widget_versions", force=True)
         mock_notify.assert_called_once()
@@ -55,7 +57,7 @@ class TestNotifyDeprecatedWidgetVersionsCommand:
     @patch(NOTIFY_PATCH)
     def test_uses_most_recent_deprecation_when_multiple(self, mock_notify):
         """An older channel is re-notified under the newest (highest-version) deprecation."""
-        _widget_channel(version="0.5.0")
+        _widget_channel(version="0.5.0", recent_session=True)
         deprecations = [
             WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 9, 1, tzinfo=UTC)),
             WidgetDeprecation(below_version="0.7.0", sunset_at=datetime(2026, 12, 1, tzinfo=UTC)),
@@ -67,7 +69,15 @@ class TestNotifyDeprecatedWidgetVersionsCommand:
 
     @patch(NOTIFY_PATCH)
     def test_skips_team_on_current_version(self, mock_notify):
-        _widget_channel(version="0.8.0")
+        _widget_channel(version="0.8.0", recent_session=True)
+        with patch("apps.channels.widget_versions.DEPRECATIONS", FAKE_DEPRECATIONS):
+            call_command("notify_deprecated_widget_versions", force=True)
+        mock_notify.assert_not_called()
+
+    @patch(NOTIFY_PATCH)
+    def test_recorded_version_without_recent_sessions_is_skipped(self, mock_notify):
+        """A deprecated but dormant channel is not notified (surfaced via the UI badge instead)."""
+        _widget_channel(version="0.5.0")  # deprecated version, but no sessions
         with patch("apps.channels.widget_versions.DEPRECATIONS", FAKE_DEPRECATIONS):
             call_command("notify_deprecated_widget_versions", force=True)
         mock_notify.assert_not_called()
@@ -99,7 +109,7 @@ class TestNotifyDeprecatedWidgetVersionsCommand:
 
     @patch(NOTIFY_PATCH)
     def test_dry_run_does_not_notify(self, mock_notify, capsys):
-        _widget_channel(version="0.5.0")
+        _widget_channel(version="0.5.0", recent_session=True)
         # force past the run-once slug, which the deploy-time data migration marks applied
         with patch("apps.channels.widget_versions.DEPRECATIONS", FAKE_DEPRECATIONS):
             call_command("notify_deprecated_widget_versions", dry_run=True, force=True)

@@ -73,7 +73,9 @@ class Command(IdempotentCommand):
         for channel in channels:
             if not widget_versions.is_deprecated(channel.widget_version, deprecation):
                 continue
-            if channel.widget_version is None and channel.id not in channels_with_recent_sessions:
+            # Only notify about channels that are still live; a stale recorded
+            # version on a dormant channel is surfaced passively by the UI badge.
+            if channel.id not in channels_with_recent_sessions:
                 continue
             self._add_affected_channel(affected_by_team, channel, deprecation)
         return affected_by_team
