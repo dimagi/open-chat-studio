@@ -22,59 +22,52 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 DEPRECATION = WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 9, 1, tzinfo=UTC))
 
 
-class TestCleanWidgetVersion:
-    def test_valid_version(self):
-        assert clean_widget_version("0.8.0") == "0.8.0"
-
-    def test_none(self):
-        assert clean_widget_version(None) is None
-
-    def test_empty(self):
-        assert clean_widget_version("") is None
-
-    def test_garbage(self):
-        assert clean_widget_version("not-a-version") is None
-
-    def test_too_long(self):
-        assert clean_widget_version("1." * 30) is None
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("0.8.0", "0.8.0"),
+        (None, None),
+        ("", None),
+        ("not-a-version", None),
+        ("1." * 30, None),
+    ],
+)
+def test_clean_widget_version(raw, expected):
+    assert clean_widget_version(raw) == expected
 
 
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("0.5.0", DEPRECATION),  # older than the bound
+        ("0.6.0", None),  # boundary is not deprecated
+        ("0.8.0", None),  # newer than the bound
+        (None, DEPRECATION),  # unknown → older than everything
+        ("garbage", DEPRECATION),  # unparseable → treated as unknown
+    ],
+)
 @patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION])
-class TestGetDeprecation:
-    def test_older_version_is_deprecated(self):
-        assert get_deprecation("0.5.0") == DEPRECATION
-
-    def test_boundary_version_is_not_deprecated(self):
-        assert get_deprecation("0.6.0") is None
-
-    def test_newer_version_is_not_deprecated(self):
-        assert get_deprecation("0.8.0") is None
-
-    def test_unknown_version_is_treated_as_older_than_everything(self):
-        assert get_deprecation(None) == DEPRECATION
-
-    def test_unparseable_version_is_treated_as_unknown(self):
-        assert get_deprecation("garbage") == DEPRECATION
+def test_get_deprecation(version, expected):
+    assert get_deprecation(version) == expected
 
 
-class TestGetDeprecationNoDeprecations:
-    def test_no_deprecations_configured(self):
-        # DEPRECATIONS is empty in the real module until the first deprecation lands
-        with patch("apps.channels.widget_versions.DEPRECATIONS", []):
-            assert get_deprecation(None) is None
-            assert get_deprecation("0.0.1") is None
+@pytest.mark.parametrize("version", [None, "0.0.1"])
+def test_get_deprecation_no_deprecations_configured(version):
+    # DEPRECATIONS is patched empty to mimic the pre-first-deprecation state
+    with patch("apps.channels.widget_versions.DEPRECATIONS", []):
+        assert get_deprecation(version) is None
 
 
-class TestIsOutdated:
-    def test_older_is_outdated(self):
-        assert is_outdated("0.7.0") is True
-
-    def test_latest_is_not_outdated(self):
-        assert is_outdated(LATEST_VERSION) is False
-
-    def test_none_is_not_outdated(self):
-        # Unknown version: no badge, but deprecation still applies via get_deprecation
-        assert is_outdated(None) is False
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ("0.7.0", True),  # older than LATEST
+        (LATEST_VERSION, False),  # current
+        (None, False),  # unknown → no badge (deprecation still applies via get_deprecation)
+    ],
+)
+def test_is_outdated(version, expected):
+    assert is_outdated(version) is expected
 
 
 class TestGetWidgetUpdateStatus:

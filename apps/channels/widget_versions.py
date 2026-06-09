@@ -6,7 +6,7 @@ docs/developer_guides/widget_versioning.md for the full process.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import wraps
 
 from django.utils.http import http_date
@@ -28,7 +28,9 @@ class WidgetDeprecation:
     docs_url: str = WIDGET_DOCS_URL
 
 
-DEPRECATIONS: list[WidgetDeprecation] = []
+DEPRECATIONS: list[WidgetDeprecation] = [
+    WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 10, 1, tzinfo=UTC)),
+]
 
 
 @dataclass(frozen=True)

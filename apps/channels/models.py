@@ -241,17 +241,19 @@ class ExperimentChannel(BaseTeamModel):
         if version is None:
             return
         now = timezone.now()
-        if (
-            version == self.widget_version
-            and self.widget_version_updated_at
-            and now - self.widget_version_updated_at < self.WIDGET_VERSION_REFRESH_INTERVAL
-        ):
+        if self._widget_version_recently_recorded(version, now):
             return
-        type(self).objects.filter(pk=self.pk).update(
+        ExperimentChannel.objects.filter(pk=self.pk).update(
             widget_version=version,
             widget_version_updated_at=now,
             audit_action=AuditAction.IGNORE,
         )
+
+    def _widget_version_recently_recorded(self, version: str, now) -> bool:
+        """True if `version` was already recorded within the refresh interval."""
+        if version != self.widget_version or not self.widget_version_updated_at:
+            return False
+        return now - self.widget_version_updated_at < self.WIDGET_VERSION_REFRESH_INTERVAL
 
     def extra_form(self, experiment, data: dict | None = None):
         if not experiment.id == self.experiment_id:
