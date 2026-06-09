@@ -15,7 +15,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.authentication import EmbeddedWidgetAuthentication
-from apps.api.permissions import LegacySessionAccessPermission, WidgetDomainPermission
+from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -24,6 +24,7 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
@@ -36,7 +37,7 @@ from apps.files.models import File
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
-SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
+SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
@@ -166,6 +167,22 @@ def chat_upload_file(request, session_id):
         )
 
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
+
+
+def _issue_or_opt_out_session_token(request, session, use_session_token):
+    """Issue a session token, or opt the session out of token enforcement.
+
+    `use_session_token` is the request preference (True/False/None). When None, a
+    pre-token widget (identified by the x-ocs-widget-version header) opts out;
+    everything else defaults to enforced. Returns the token, or None when opted out.
+    """
+    if use_session_token is None:
+        use_session_token = "x-ocs-widget-version" not in request.headers
+    if use_session_token:
+        return issue_session_token(session)
+    session.session_token_required = False
+    session.save(update_fields=["session_token_required"])
+    return None
 
 
 @extend_schema(
@@ -330,9 +347,12 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
+    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"))
+
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
+        "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
     }

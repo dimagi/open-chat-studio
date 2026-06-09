@@ -12,6 +12,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.teams.helpers import get_team_membership_for_request
@@ -77,15 +78,45 @@ class WidgetDomainPermission(BasePermission):
         return validate_domain(origin_domain, allowed_domains)
 
 
-class LegacySessionAccessPermission(BasePermission):
-    def has_permission(self, request, view):
-        if isinstance(request.auth, ExperimentChannel):
-            # skip for requests authed with widget auth
-            return True
+class SessionAccessPermission(BasePermission):
+    """Object-capability check for chat session endpoints.
 
+    Token-required sessions demand a valid X-Session-Token (or an
+    authenticated user with rights to the session). Legacy sessions
+    (session_token_required=False) keep the historical behavior.
+    """
+
+    def has_permission(self, request, view):
         session = get_experiment_session_cached(view.kwargs.get("session_id"))
         if not session:
             return False
+
+        if not session.session_token_required:
+            return self._has_legacy_access(request, session)
+
+        if self._user_is_session_participant(request.user, session):
+            return True
+
+        return self._token_grants_access(request, session)
+
+    def _token_grants_access(self, request, session) -> bool:
+        token = request.headers.get("X-Session-Token")
+        if not token:
+            raise exceptions.PermissionDenied(
+                detail={"error": "Session token required", "code": "session_token_required"}
+            )
+        if not validate_session_token(token, session.external_id):
+            raise exceptions.PermissionDenied(
+                detail={"error": "Invalid session token", "code": "session_token_invalid"}
+            )
+        if session_token_expired(session):
+            raise exceptions.PermissionDenied(detail={"error": "Session has expired", "code": "session_expired"})
+        return True
+
+    def _has_legacy_access(self, request, session) -> bool:
+        if isinstance(request.auth, ExperimentChannel):
+            # widget-authed requests rely on the embed key + domain check
+            return True
 
         experiment = session.experiment
         if experiment.is_public:
@@ -96,6 +127,9 @@ class LegacySessionAccessPermission(BasePermission):
             return False
 
         return experiment.is_participant_allowed(participant_id)
+
+    def _user_is_session_participant(self, user, session) -> bool:
+        return user.is_authenticated and session.participant and session.participant.user_id == user.id
 
 
 class ReadOnlyAPIKeyPermission(BasePermission):

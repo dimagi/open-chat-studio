@@ -37,6 +37,7 @@ def embedded_session(embedded_widget_channel):
     return ExperimentSessionFactory.create(
         experiment=embedded_widget_channel.experiment,
         experiment_channel=embedded_widget_channel,
+        session_token_required=False,
     )
 
 
