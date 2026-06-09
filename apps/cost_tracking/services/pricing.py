@@ -54,19 +54,33 @@ class PricingResolver:
 
         Lookup order: team override -> global rule -> UNPRICED sentinel.
         `use_cache=False` skips Redis explicitly; the cache is also bypassed
-        automatically if `at` is more than `CACHE_AT_SKEW` away from now,
-        since the cache stores "active now" results and can't represent
-        historical/future windows.
+        automatically when `at` is too far from now (see `_is_near_now`).
         """
-        if use_cache:
-            now = timezone.now()
-            if not (now - self.CACHE_AT_SKEW <= at <= now + self.CACHE_AT_SKEW):
-                use_cache = False
-        if key.team_id is not None:
-            team_rule = self._lookup_one(key, at, use_cache)
-            if team_rule.unit_price is not None:
-                return team_rule
-        return self._lookup_one(replace(key, team_id=None), at, use_cache)
+        cache_ok = use_cache and self._is_near_now(at)
+        team_rule = self._maybe_team_rule(key, at, cache_ok)
+        if team_rule is not None:
+            return team_rule
+        return self._lookup_one(replace(key, team_id=None), at, cache_ok)
+
+    def _is_near_now(self, at: datetime) -> bool:
+        """The cache only stores "active right now" results. Historical or
+        future `at` queries can't be safely served from it, so we bypass.
+        """
+        now = timezone.now()
+        return now - self.CACHE_AT_SKEW <= at <= now + self.CACHE_AT_SKEW
+
+    def _maybe_team_rule(self, key: PricingKey, at: datetime, use_cache: bool) -> ResolvedRule | None:
+        """Return the team-scoped rule if one is set and matched, else None.
+
+        Returning `None` (rather than the UNPRICED sentinel) lets `resolve()`
+        cleanly distinguish "no team override exists" from "found a team
+        override that happens to be unpriced" — only the former should fall
+        through to the global lookup.
+        """
+        if key.team_id is None:
+            return None
+        rule = self._lookup_one(key, at, use_cache)
+        return rule if rule.unit_price is not None else None
 
     @classmethod
     def invalidate(cls, key: PricingKey) -> None:
