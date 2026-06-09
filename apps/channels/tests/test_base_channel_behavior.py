@@ -36,7 +36,7 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 from ...service_providers.speech_service import SynthesizedAudio
 from ...utils.factories.service_provider_factories import LlmProviderFactory

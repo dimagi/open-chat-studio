@@ -11,7 +11,7 @@ from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
 from apps.users.models import CustomUser
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 
 class TasksTest(TestCase):
