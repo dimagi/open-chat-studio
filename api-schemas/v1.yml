@@ -319,7 +319,7 @@ paths:
 
         client = OpenAI(
             api_key="your API key",
-            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}",
+            base_url=f"https://www.openchatstudio.com/api/openai/{experiment_id}",
         )
 
         completion = client.chat.completions.create(
@@ -378,7 +378,7 @@ paths:
 
         client = OpenAI(
             api_key="your API key",
-            base_url=f"https://chatbots.dimagi.com/api/openai/{experiment_id}/v{version}",
+            base_url=f"https://www.openchatstudio.com/api/openai/{experiment_id}/v{version}",
         )
 
         completion = client.chat.completions.create(

@@ -578,7 +578,7 @@ PROJECT_METADATA = {
     "URL": "http://localhost:8000",
     "DESCRIPTION": gettext_lazy("Build Chatbots and deploy them to WhatsApp, Telegram, Slack and more"),
     "CONTACT_EMAIL": "devops+openchatstudio@dimagi.com",
-    "IMAGE": "https://chatbots.dimagi.com/static/images/logo.png",
+    "IMAGE": "https://www.openchatstudio.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
