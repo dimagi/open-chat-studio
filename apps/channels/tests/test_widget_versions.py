@@ -25,11 +25,11 @@ DEPRECATION = WidgetDeprecation(below_version="0.6.0", sunset_at=datetime(2026, 
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("0.8.0", "0.8.0"),
-        (None, None),
-        ("", None),
-        ("not-a-version", None),
-        ("1." * 30, None),
+        pytest.param("0.8.0", "0.8.0", id="valid-version"),
+        pytest.param(None, None, id="none"),
+        pytest.param("", None, id="empty"),
+        pytest.param("not-a-version", None, id="garbage"),
+        pytest.param("1." * 30, None, id="too-long"),
     ],
 )
 def test_clean_widget_version(raw, expected):
@@ -39,11 +39,11 @@ def test_clean_widget_version(raw, expected):
 @pytest.mark.parametrize(
     ("version", "expected"),
     [
-        ("0.5.0", DEPRECATION),  # older than the bound
-        ("0.6.0", None),  # boundary is not deprecated
-        ("0.8.0", None),  # newer than the bound
-        (None, DEPRECATION),  # unknown → older than everything
-        ("garbage", DEPRECATION),  # unparseable → treated as unknown
+        pytest.param("0.5.0", DEPRECATION, id="older-than-bound"),
+        pytest.param("0.6.0", None, id="boundary-not-deprecated"),
+        pytest.param("0.8.0", None, id="newer-than-bound"),
+        pytest.param(None, DEPRECATION, id="unknown-is-older-than-everything"),
+        pytest.param("garbage", DEPRECATION, id="unparseable-treated-as-unknown"),
     ],
 )
 @patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION])
@@ -61,9 +61,9 @@ def test_get_deprecation_no_deprecations_configured(version):
 @pytest.mark.parametrize(
     ("version", "expected"),
     [
-        ("0.7.0", True),  # older than LATEST
-        (LATEST_VERSION, False),  # current
-        (None, False),  # unknown → no badge (deprecation still applies via get_deprecation)
+        pytest.param("0.7.0", True, id="older-than-latest"),
+        pytest.param(LATEST_VERSION, False, id="current"),
+        pytest.param(None, False, id="unknown-no-badge"),
     ],
 )
 def test_is_outdated(version, expected):
