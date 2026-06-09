@@ -1,5 +1,5 @@
 import uuid
-from typing import Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 from django.conf import settings
 from django.db import models
@@ -13,6 +13,9 @@ from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment
 from apps.teams.models import BaseTeamModel, Flag
 from apps.web.meta import absolute_url
+
+if TYPE_CHECKING:
+    from apps.channels.webhooks import WebhookManager
 
 WEB = "web"
 TELEGRAM = "telegram"
@@ -244,10 +247,13 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def webhook_url(self) -> str:
-        """The wehook URL that should be used in external services"""
+        """The webhook URL that should be used in external services"""
         from apps.service_providers.models import (  # noqa: PLC0415 - circular: service_providers.models imports channels.models
             MessagingProviderType,
         )
+
+        if self.platform == ChannelPlatform.TELEGRAM:
+            return absolute_url(reverse("channels:new_telegram_message", args=[self.external_id]), is_secure=True)
 
         if not self.messaging_provider:
             return ""
@@ -268,6 +274,24 @@ class ExperimentChannel(BaseTeamModel):
             uri,
             is_secure=True,
         )
+
+    def get_webhook_manager(self) -> "WebhookManager | None":
+        """Return the object that manages this channel's inbound webhook, or None.
+
+        Telegram uses its per-channel bot token; other provider-backed channels delegate
+        to their MessagingService. Both satisfy the WebhookManager protocol structurally.
+        Telegram is checked first so it always uses the Telegram API path, regardless of
+        any messaging_provider that may be set.
+        """
+        if self.platform == ChannelPlatform.TELEGRAM:
+            from apps.channels.webhooks import (  # noqa: PLC0415 - lazy: avoid importing telebot at module load
+                TelegramWebhookManager,
+            )
+
+            return TelegramWebhookManager()
+        if self.messaging_provider:
+            return self.messaging_provider.get_messaging_service()
+        return None
 
     def soft_delete(self):
         self.deleted = True
