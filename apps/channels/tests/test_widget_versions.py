@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -124,12 +124,21 @@ class TestGetWidgetUpdateStatus:
         assert "0.7.0" in status.message
         assert LATEST_VERSION in status.message
 
-    @patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION])
-    def test_deprecated(self):
-        status = get_widget_update_status("0.5.0")
+    def test_deprecated_before_sunset_is_warning(self):
+        future = WidgetDeprecation(below_version="0.6.0", sunset_at=timezone.now() + timedelta(days=30))
+        with patch("apps.channels.widget_versions.DEPRECATIONS", [future]):
+            status = get_widget_update_status("0.5.0")
         assert status.level == "warning"
+        assert status.icon == "fa-triangle-exclamation"
         assert "deprecated" in status.message
-        assert "2026" in status.message
+
+    def test_past_sunset_is_error(self):
+        expired = WidgetDeprecation(below_version="0.6.0", sunset_at=timezone.now() - timedelta(days=1))
+        with patch("apps.channels.widget_versions.DEPRECATIONS", [expired]):
+            status = get_widget_update_status("0.5.0")
+        assert status.level == "error"
+        assert status.icon == "fa-circle-xmark"
+        assert "unsupported" in status.message
 
 
 def test_widget_script_url():

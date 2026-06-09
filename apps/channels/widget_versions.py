@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from functools import wraps
 
 from django.conf import settings
+from django.utils import timezone
 from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
@@ -100,6 +101,13 @@ def get_widget_update_status(version: str | None) -> WidgetUpdateStatus | None:
     if version is None:
         return None
     if deprecation := get_deprecation(version):
+        if timezone.now() >= deprecation.sunset_at:
+            return WidgetUpdateStatus(
+                level="error",
+                icon="fa-circle-xmark",
+                message=f"Widget version {version} is unsupported — sunset {deprecation.sunset_at:%d %b %Y}.",
+                deprecation=deprecation,
+            )
         return WidgetUpdateStatus(
             level="warning",
             icon="fa-triangle-exclamation",

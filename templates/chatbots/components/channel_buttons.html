@@ -1,7 +1,7 @@
 {# Commented elements included for Tailwind processing #}
 {# <i class="fa-brands fa-telegram"></i> #}
 {# <i class="fa-brands fa-whatsapp"></i> #}
-{# <i class="text-info text-warning fa-triangle-exclamation fa-circle-arrow-up"></i> #}
+{# <i class="text-info text-warning text-error fa-triangle-exclamation fa-circle-arrow-up fa-circle-xmark"></i> #}
 {% for channel in channels %}
   <button class="btn btn-ghost btn-sm normal-case!"
           hx-get="{% url 'channels:channel_edit_dialog' request.team.slug experiment.id channel.id %}"
