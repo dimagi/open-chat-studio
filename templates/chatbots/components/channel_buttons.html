@@ -1,6 +1,7 @@
 {# Commented elements included for Tailwind processing #}
 {# <i class="fa-brands fa-telegram"></i> #}
 {# <i class="fa-brands fa-whatsapp"></i> #}
+{# <i class="text-info text-warning text-error fa-triangle-exclamation fa-circle-arrow-up fa-circle-xmark"></i> #}
 {% for channel in channels %}
   <button class="btn btn-ghost btn-sm normal-case!"
           hx-get="{% url 'channels:channel_edit_dialog' request.team.slug experiment.id channel.id %}"
@@ -8,6 +9,13 @@
           hx-swap="innerHTML">
     <span class="tooltip" data-tip="{{ channel.name }}"><i
         class="fa-brands fa-{{ channel.platform_enum.value }}"></i> {{ channel.platform_enum.label }}</span>
+    {% with status=channel.widget_update_status %}
+      {% if status %}
+        <span class="tooltip tooltip-bottom" data-tip="{{ status.message }}">
+          <i class="fa-solid {{ status.icon }} text-{{ status.level }}"></i>
+        </span>
+      {% endif %}
+    {% endwith %}
   </button>
 {% endfor %}
 {% if platforms %}
