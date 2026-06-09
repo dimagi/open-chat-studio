@@ -20,7 +20,11 @@ def get_channels(experiment) -> list[ExperimentChannel]:
         (ChannelPlatform.WEB, f"{team.slug}-web-channel"),
         (ChannelPlatform.API, f"{team.slug}-api-channel"),
     ):
-        channel = ExperimentChannel.objects.filter(team=team, platform=platform, name=name).first()
+        channel = (
+            ExperimentChannel.objects.filter(team=team, platform=platform, name=name)
+            .select_related("messaging_provider")
+            .first()
+        )
         if channel is not None:
             channels.append(channel)
     return channels
