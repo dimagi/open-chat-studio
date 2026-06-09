@@ -13,16 +13,19 @@ from apps.cost_tracking.services.pricing import UNPRICED, PricingKey, PricingRes
 KEY = PricingKey(provider_type="openai", model_name="test-model", service_kind=ServiceKind.LLM_INPUT)
 
 
-def _make_rule(*, team=None, unit_price="0.001", effective_from=None, effective_to=None, **kwargs):
+def _make_rule(unit_price: str = "0.001", *, team=None, window: tuple | None = None) -> PricingRule:
+    """Create a PricingRule for the test KEY. `window` is an
+    (effective_from, effective_to) tuple; None means active-since-yesterday.
+    """
+    eff_from, eff_to = window if window else (timezone.now() - timedelta(days=1), None)
     return PricingRule.objects.create(
         team=team,
-        provider_type=kwargs.pop("provider_type", KEY.provider_type),
-        model_name=kwargs.pop("model_name", KEY.model_name),
-        service_kind=kwargs.pop("service_kind", KEY.service_kind),
+        provider_type=KEY.provider_type,
+        model_name=KEY.model_name,
+        service_kind=KEY.service_kind,
         unit_price=Decimal(unit_price),
-        effective_from=effective_from or timezone.now() - timedelta(days=1),
-        effective_to=effective_to,
-        **kwargs,
+        effective_from=eff_from,
+        effective_to=eff_to,
     )
 
 
@@ -44,7 +47,16 @@ def test_global_rule_is_resolved_when_no_team_override():
 @pytest.mark.django_db()
 def test_team_override_beats_global(team):
     _make_rule(unit_price="0.00015")
-    _make_rule(team=team, unit_price="0.00005", source="manual")
+    # One-off: team-scoped + non-default source. Easier to inline than to
+    # widen the helper's signature for a single call site.
+    PricingRule.objects.create(
+        team=team,
+        provider_type=KEY.provider_type,
+        model_name=KEY.model_name,
+        service_kind=KEY.service_kind,
+        unit_price=Decimal("0.00005"),
+        source="manual",
+    )
     rule = PricingResolver().resolve(replace(KEY, team_id=team.id), at=timezone.now())
     assert rule.unit_price == Decimal("0.00005")
 
@@ -59,11 +71,7 @@ def test_falls_back_to_global_when_team_has_no_override(team):
 @pytest.mark.django_db()
 def test_expired_rule_is_ignored():
     now = timezone.now()
-    _make_rule(
-        unit_price="0.00015",
-        effective_from=now - timedelta(days=10),
-        effective_to=now - timedelta(days=5),
-    )
+    _make_rule(unit_price="0.00015", window=(now - timedelta(days=10), now - timedelta(days=5)))
     rule = PricingResolver().resolve(KEY, at=now)
     assert rule is UNPRICED
 
@@ -72,13 +80,9 @@ def test_expired_rule_is_ignored():
 def test_time_travel_picks_the_rule_active_at_that_moment():
     now = timezone.now()
     # Old rate: $0.001, in effect days 10-5 ago.
-    _make_rule(
-        unit_price="0.00100",
-        effective_from=now - timedelta(days=10),
-        effective_to=now - timedelta(days=5),
-    )
+    _make_rule(unit_price="0.00100", window=(now - timedelta(days=10), now - timedelta(days=5)))
     # Current rate: $0.0005, in effect since 5 days ago.
-    _make_rule(unit_price="0.00050", effective_from=now - timedelta(days=5))
+    _make_rule(unit_price="0.00050", window=(now - timedelta(days=5), None))
 
     historical = PricingResolver().resolve(KEY, at=now - timedelta(days=7), use_cache=False)
     assert historical.unit_price == Decimal("0.00100")
