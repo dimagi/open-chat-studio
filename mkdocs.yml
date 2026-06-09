@@ -66,6 +66,10 @@ nav:
     - User Docs: contributing/user_docs.md
   - Getting Started:
     - Overview: getting-started/index.md
+    - Local Setup: getting-started/local-setup.md
+    - Docker Setup: getting-started/docker-setup.md
+    - Common Tasks: getting-started/common-tasks.md
+    - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
     - Decisions:
@@ -114,7 +118,7 @@ nav:
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Deployment: developer_guides/deployment.md
-      - AI Development: developer_guides/ai_development.md
+      - AI-Assisted Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
