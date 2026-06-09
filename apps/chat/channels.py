@@ -202,7 +202,7 @@ class ChannelBase(ABC):
         """Always returns the family-head (working) Experiment, even when self.experiment is a
         published version snapshot. Use this when building notification links so they always
         resolve to the editable chatbot page."""
-        return self.experiment.get_working_version() if self.experiment.is_a_version else self.experiment
+        return self.experiment.get_working_version()
 
     @property
     def message(self) -> BaseMessage:
