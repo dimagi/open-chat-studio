@@ -305,12 +305,14 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
-    # This page operates on the family-head (working) Experiment. Filtering on
-    # working_version__isnull=True ensures a version snapshot's id resolves to a 404 rather than
-    # erroring downstream in resolve_published_or_working().
-    experiment = get_object_or_404(
-        Experiment.objects.get_all(), id=experiment_id, team=request.team, working_version__isnull=True
-    )
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+
+    # This page operates on the family-head (working) Experiment. If a version snapshot's id was
+    # requested (e.g. from a notification link), redirect to the working version and highlight
+    # that version in the versions tab via ?version_id=X#versions.
+    if experiment.is_a_version:
+        url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment.working_version_id])
+        return redirect(f"{url}?version_id={experiment.version_number}#versions")
 
     channels, available_platforms = get_channels_context(experiment)
 
@@ -324,6 +326,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
+        "highlight_version_id": request.GET.get("version_id"),
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
