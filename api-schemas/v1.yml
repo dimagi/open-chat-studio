@@ -1037,6 +1037,96 @@ paths:
                       channel
                   summary: Experiment cannot send messages on the specified channel
           description: ''
+  /api/v2/chatbots/:
+    get:
+      operationId: chatbot_list
+      summary: List Chatbots
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChatbotList'
+          description: ''
+  /api/v2/chatbots/{id}/:
+    get:
+      operationId: chatbot_retrieve
+      summary: Retrieve Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Chatbot'
+          description: ''
+  /api/v2/chatbots/{id}/inspect/:
+    get:
+      operationId: chatbot_inspect
+      description: Return the chatbot's full configuration as a single read-only document.
+      summary: Inspect Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: query
+        name: version
+        schema:
+          type: string
+        description: 'Which version to inspect: a version number, ''default'' for
+          the default published version, or omit for the working (draft) version.'
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotInspect'
+          description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
       operationId: new_api_message
@@ -1146,6 +1236,130 @@ components:
       required:
       - attachments
       - response
+    ApiSchemaDigest:
+      type: object
+      description: A custom action's OpenAPI schema reduced to just the paths of the
+        selected operations.
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+      required:
+      - paths
+    Assistant:
+      type: object
+      description: Assistant fields. ``instructions`` and ``assistant_id`` are exposed
+        on purpose.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        assistant_id:
+          type: string
+          maxLength: 255
+        instructions:
+          type: string
+        builtin_tools:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        tools:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        temperature:
+          type: number
+          format: double
+          maximum: 2.0
+          minimum: 0.0
+        top_p:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+      required:
+      - assistant_id
+      - id
+      - instructions
+      - name
+    AssistantNodeParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        citations_enabled:
+          type: boolean
+          description: Include cited sources in responses.
+        input_formatter:
+          type: string
+          description: Optional wrapper for the user input; use ``{input}`` as the
+            placeholder.
+    BooleanNodeParams:
+      type: object
+      properties:
+        input_equals:
+          type: string
+          description: Value the node input is compared against to pick the true/false
+            branch.
+        tag_output_message:
+          type: boolean
+          description: Tag the output message with the selected route.
+    Channel:
+      type: object
+      description: |-
+        A channel's ``platform``, ``name``, messaging provider and platform-specific identifier fields.
+
+        ``extra_data`` holds free-form auth material and is excluded entirely. Each platform's non-secret
+        identifying field(s) are surfaced as top-level keys, present only for the platform they belong to:
+        ``number`` (WhatsApp), ``page_id`` (Facebook), ``sureadhere_tenant_id`` (SureAdhere),
+        ``commcare_connect_bot_name`` (CommCare Connect), and ``allow_all_domains`` / ``allowed_domains``
+        (Embedded Widget). Platforms whose identifier is itself a secret (Telegram's ``bot_token``, the
+        widget's ``widget_token``) surface none.
+      properties:
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+        name:
+          type: string
+          description: The name of this channel
+          maxLength: 255
+        messaging_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+        number:
+          type: string
+          nullable: true
+          readOnly: true
+        page_id:
+          type: string
+          nullable: true
+          readOnly: true
+        sureadhere_tenant_id:
+          type: string
+          nullable: true
+          readOnly: true
+        commcare_connect_bot_name:
+          type: string
+          nullable: true
+          readOnly: true
+        allow_all_domains:
+          type: boolean
+          readOnly: true
+        allowed_domains:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - messaging_provider
+      - name
     ChatCompletionResponseChoices:
       type: object
       properties:
@@ -1340,6 +1554,162 @@ components:
             $ref: '#/components/schemas/UploadedFile'
       required:
       - files
+    Chatbot:
+      type: object
+      description: |-
+        Basic chatbot fields for the list and retrieve endpoints.
+
+        The full configuration is served by the ``inspect`` action instead (ADR-0024). v2 calls these
+        "chatbots" rather than "experiments" (ADR-0023).
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        url:
+          type: string
+          format: uri
+          readOnly: true
+          title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotVersion'
+      required:
+      - id
+      - name
+      - url
+      - versions
+    ChatbotInspect:
+      type: object
+      description: |-
+        The whole chatbot configuration in one read-only response (ADR-0024).
+
+        The chatbot's fields sit at the top level — there's no wrapper key around them. Expects the
+        resolved :class:`~apps.experiments.models.Experiment`, and needs a ``fetcher`` in its context.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_unreleased:
+          type: boolean
+          description: True for the working (draft) version that has not been released;
+            never the published one.
+        is_published_version:
+          type: boolean
+          description: True for the version currently served to participants (the
+            live default).
+        version_description:
+          type: string
+          description: Free-text label for this version (e.g. 'latest'); not an enum.
+        team_slug:
+          type: string
+        settings:
+          $ref: '#/components/schemas/InspectSettings'
+        consent_form:
+          allOf:
+          - $ref: '#/components/schemas/ConsentForm'
+          nullable: true
+        voice:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedVoice'
+          nullable: true
+          readOnly: true
+        trace_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Channel'
+          readOnly: true
+        pipeline:
+          allOf:
+          - $ref: '#/components/schemas/InspectPipeline'
+          nullable: true
+          readOnly: true
+        events:
+          $ref: '#/components/schemas/InspectEvents'
+      required:
+      - channels
+      - consent_form
+      - events
+      - id
+      - is_published_version
+      - is_unreleased
+      - name
+      - pipeline
+      - settings
+      - team_slug
+      - trace_provider
+      - version_description
+      - voice
+    ChatbotVersion:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_default_version:
+          type: boolean
+        version_description:
+          type: string
+      required:
+      - name
+    CodeNodeParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        code:
+          type: string
+          description: Python source defining a ``main(input, **kwargs)`` function.
+    ConsentForm:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+      required:
+      - consent_text
+      - id
+      - name
     CreateChatCompletionRequest:
       type: object
       properties:
@@ -1370,6 +1740,45 @@ components:
       - id
       - model
       - object
+    CustomAction:
+      type: object
+      description: |-
+        A custom action as used at one reference site.
+
+        ``allowed_operations`` lists only the operations selected here, not every operation the action
+        defines, and ``api_schema`` is trimmed to just those operations' paths (to keep the response
+        small). The auth provider is reduced to ``{id, type, name}`` (ADR-0027). Expects a
+        :class:`CustomActionSelection`.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        server_url:
+          type: string
+        allowed_operations:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        api_schema:
+          allOf:
+          - $ref: '#/components/schemas/ApiSchemaDigest'
+          readOnly: true
+        auth_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+      required:
+      - allowed_operations
+      - api_schema
+      - auth_provider
+      - description
+      - id
+      - name
+      - server_url
     Experiment:
       type: object
       properties:
@@ -1540,6 +1949,44 @@ components:
           type: string
       required:
       - name
+    ExtractParticipantDataParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        llm_model_parameters:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Model call parameters (e.g. ``temperature``) keyed by name.
+            Older nodes may instead carry a flat ``llm_temperature``; both feed the
+            same underlying setting.
+        data_schema:
+          type: string
+          description: JSON object mapping field name to a description of the value
+            to extract.
+        key_name:
+          type: string
+          description: Participant-data key the extracted value is stored under; blank
+            stores at the top level.
+    ExtractStructuredDataParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        llm_model_parameters:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Model call parameters (e.g. ``temperature``) keyed by name.
+            Older nodes may instead carry a flat ``llm_temperature``; both feed the
+            same underlying setting.
+        data_schema:
+          type: string
+          description: JSON object mapping field name to a description of the value
+            to extract.
     File:
       type: object
       properties:
@@ -1558,6 +2005,596 @@ components:
       - content_url
       - name
       - size
+    FlattenedLlm:
+      type: object
+      description: An LLM provider and model, flattened into one ``llm`` object (ADR-0025).
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        max_token_limit:
+          type: integer
+          nullable: true
+          description: The model's maximum context window, in tokens.
+        deprecated:
+          type: boolean
+          nullable: true
+          description: True if this model is deprecated and should be migrated off.
+      required:
+      - type
+    FlattenedModelProvider:
+      type: object
+      description: |-
+        A collection's embedding provider and model, flattened into one object.
+
+        Expects a :class:`ProviderModelPair`; a missing provider or model renders its fields as null.
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+      required:
+      - type
+    FlattenedVoice:
+      type: object
+      description: |-
+        A voice provider and synthetic voice, flattened into one ``voice`` object (ADR-0025).
+
+        Expects a :class:`VoicePair`.
+      properties:
+        provider_id:
+          type: integer
+          nullable: true
+        provider_name:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+          description: Voice provider type; null for a voice with no provider configured.
+        voice_name:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+          description: Voice language/locale code; empty when the voice has no explicit
+            language set.
+        neural:
+          type: boolean
+          nullable: true
+          description: Use the provider's neural (higher-quality) voice engine, where
+            supported.
+    IdentifierTypeEnum:
+      enum:
+      - email
+      - text
+      type: string
+      description: |-
+        * `email` - Email
+        * `text` - Text
+    IndexedCollection:
+      type: object
+      description: 'An indexed (RAG) collection: its identity, embedding provider/model,
+        and files (ADR-0025).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        embedding:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedModelProvider'
+          nullable: true
+          readOnly: true
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectFile'
+      required:
+      - embedding
+      - files
+      - id
+      - name
+    InspectEvents:
+      type: object
+      description: |-
+        A chatbot's static and timeout triggers, excluding archived ones.
+
+        ``static_triggers`` fire on conversation events (start, end, a new message, …); ``timeout_triggers``
+        fire after a period of inactivity. The two overlap at the end of a conversation: a ``last_timeout``
+        static trigger fires once the final timeout has elapsed.
+      properties:
+        static_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectStaticTrigger'
+          readOnly: true
+        timeout_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectTimeoutTrigger'
+          readOnly: true
+      required:
+      - static_triggers
+      - timeout_triggers
+    InspectFile:
+      type: object
+      description: |-
+        A file's identifying fields only.
+
+        Leaves out the signed storage URL (a secret), plus ``summary`` and ``metadata`` (omitted to
+        keep the response small, not for secrecy).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        content_type:
+          type: string
+        content_size:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        external_source:
+          type: string
+          maxLength: 255
+        external_id:
+          type: string
+          maxLength: 255
+      required:
+      - id
+      - name
+    InspectGraph:
+      type: object
+      description: |-
+        The pipeline's shape: its nodes and the edges between them (without canvas positions).
+
+        This is the topology only — each node carries just ``node_id``/``type``/``label`` for drawing the
+        DAG. The sibling ``nodes`` list on the pipeline holds the same nodes in render order with their
+        full configuration.
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectGraphNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectGraphEdge'
+      required:
+      - edges
+      - nodes
+    InspectGraphEdge:
+      type: object
+      properties:
+        source:
+          type: string
+          description: '``node_id`` the edge leaves from.'
+        target:
+          type: string
+          description: '``node_id`` the edge points to.'
+        source_handle:
+          type: string
+          nullable: true
+          description: Output handle on the source node. Routers expose one handle
+            per branch (``output_0``, ``output_1``, …), each mapping by index to the
+            router's ``keywords``; most nodes have a single ``output``.
+        target_handle:
+          type: string
+          nullable: true
+          description: Input handle on the target node; currently always null (nodes
+            have one implicit input).
+      required:
+      - source
+      - source_handle
+      - target
+      - target_handle
+    InspectGraphNode:
+      type: object
+      properties:
+        node_id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - node_id
+      - type
+    InspectNode:
+      type: object
+      description: |-
+        One pipeline node, with the resources it references inlined.
+
+        All resource keys are declared as fields so they appear in the OpenAPI schema, but a node only
+        renders the keys its type actually uses: a ``StartNode`` shows none, while an
+        ``LLMResponseWithPrompt`` shows its own — ``null`` for an unset single value, ``[]`` for an
+        unset list. Keys the node type doesn't declare are dropped entirely.
+      properties:
+        node_id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        params:
+          allOf:
+          - $ref: '#/components/schemas/InspectNodeParams'
+          readOnly: true
+          description: The node's non-resource configuration, verbatim; keys vary
+            by node type.
+        llm:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedLlm'
+          nullable: true
+          readOnly: true
+        voice:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedVoice'
+          nullable: true
+          readOnly: true
+        source_material:
+          allOf:
+          - $ref: '#/components/schemas/SourceMaterial'
+          nullable: true
+          readOnly: true
+        assistant:
+          allOf:
+          - $ref: '#/components/schemas/Assistant'
+          nullable: true
+          readOnly: true
+        custom_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomAction'
+          readOnly: true
+        media_collection:
+          allOf:
+          - $ref: '#/components/schemas/MediaCollection'
+          nullable: true
+          readOnly: true
+        indexed_collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexedCollection'
+          readOnly: true
+      required:
+      - label
+      - node_id
+      - params
+      - type
+    InspectNodeParams:
+      oneOf:
+      - $ref: '#/components/schemas/RenderTemplateParams'
+      - $ref: '#/components/schemas/CodeNodeParams'
+      - $ref: '#/components/schemas/LLMResponseParams'
+      - $ref: '#/components/schemas/LLMResponseWithPromptParams'
+      - $ref: '#/components/schemas/RouterNodeParams'
+      - $ref: '#/components/schemas/StaticRouterNodeParams'
+      - $ref: '#/components/schemas/BooleanNodeParams'
+      - $ref: '#/components/schemas/SendEmailParams'
+      - $ref: '#/components/schemas/AssistantNodeParams'
+      - $ref: '#/components/schemas/ExtractStructuredDataParams'
+      - $ref: '#/components/schemas/ExtractParticipantDataParams'
+    InspectPipeline:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        graph:
+          allOf:
+          - $ref: '#/components/schemas/InspectGraph'
+          readOnly: true
+          description: The pipeline topology (nodes as id/type/label, plus edges)
+            for drawing the DAG.
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectNode'
+          readOnly: true
+          description: The same nodes as ``graph``, in render order, each with its
+            full configuration.
+      required:
+      - graph
+      - id
+      - name
+      - nodes
+    InspectSettings:
+      type: object
+      description: The chatbot's non-secret settings, read directly off the experiment.
+      properties:
+        seed_message:
+          type: string
+          description: Message used to start the conversation before the participant
+            says anything.
+        conversational_consent_enabled:
+          type: boolean
+        voice_response_behaviour:
+          type: string
+          description: 'When the bot replies with voice: ``always``, ``reciprocal``
+            (voice only when the participant sent voice), or ``never``.'
+        echo_transcript:
+          type: boolean
+          description: When the participant sends a voice message, also reply with
+            the text the bot transcribed.
+        debug_mode_enabled:
+          type: boolean
+        file_uploads_enabled:
+          type: boolean
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+          description: Identifiers permitted to chat; empty means no allowlist restriction.
+      required:
+      - conversational_consent_enabled
+      - debug_mode_enabled
+      - echo_transcript
+      - file_uploads_enabled
+      - participant_allowlist
+      - seed_message
+      - voice_response_behaviour
+    InspectStaticTrigger:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/InspectStaticTriggerTypeEnum'
+          description: |-
+            The conversation event that fires this trigger
+
+            * `conversation_end` - The conversation has ended (by any means)
+            * `conversation_ended_by_user` - The conversation is ended by the participant
+            * `conversation_ended_by_bot` - The conversation is ended by the bot
+            * `conversation_ended_via_api` - The conversation is ended via the API
+            * `conversation_ended_by_event` - The conversation is ended by an event
+            * `conversation_ended_manually` - The conversation is manually ended by an admin
+            * `last_timeout` - The last timeout occurs
+            * `conversation_start` - A new conversation is started
+            * `new_human_message` - A new human message is received
+            * `new_bot_message` - A new bot message is received
+            * `participant_joined` - A new participant joined the experiment
+        is_active:
+          type: boolean
+        action:
+          $ref: '#/components/schemas/InspectTriggerAction'
+      required:
+      - action
+      - id
+      - type
+    InspectStaticTriggerTypeEnum:
+      enum:
+      - conversation_end
+      - conversation_ended_by_user
+      - conversation_ended_by_bot
+      - conversation_ended_via_api
+      - conversation_ended_by_event
+      - conversation_ended_manually
+      - last_timeout
+      - conversation_start
+      - new_human_message
+      - new_bot_message
+      - participant_joined
+      type: string
+      description: |-
+        * `conversation_end` - The conversation has ended (by any means)
+        * `conversation_ended_by_user` - The conversation is ended by the participant
+        * `conversation_ended_by_bot` - The conversation is ended by the bot
+        * `conversation_ended_via_api` - The conversation is ended via the API
+        * `conversation_ended_by_event` - The conversation is ended by an event
+        * `conversation_ended_manually` - The conversation is manually ended by an admin
+        * `last_timeout` - The last timeout occurs
+        * `conversation_start` - A new conversation is started
+        * `new_human_message` - A new human message is received
+        * `new_bot_message` - A new bot message is received
+        * `participant_joined` - A new participant joined the experiment
+    InspectTimeoutTrigger:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        delay_seconds:
+          type: integer
+          description: Seconds of inactivity before the trigger fires.
+        total_num_triggers:
+          type: integer
+          description: Maximum number of times this timeout fires within a session.
+        trigger_from_first_message:
+          type: boolean
+          description: Measure the delay from the first message (true) rather than
+            the most recent message (false).
+        is_active:
+          type: boolean
+        action:
+          $ref: '#/components/schemas/InspectTriggerAction'
+      required:
+      - action
+      - delay_seconds
+      - id
+      - total_num_triggers
+      - trigger_from_first_message
+    InspectTriggerAction:
+      type: object
+      description: |-
+        The action an event trigger runs.
+
+        The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline could be found in
+        the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
+      properties:
+        type:
+          allOf:
+          - $ref: '#/components/schemas/InspectTriggerActionTypeEnum'
+          description: |-
+            What the trigger runs
+
+            * `log` - Log the last message
+            * `end_conversation` - End the conversation
+            * `send_message_to_bot` - Prompt the bot to message the user
+            * `schedule_trigger` - Trigger a schedule
+            * `pipeline_start` - Start a pipeline
+        params:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          description: Action parameters; keys depend on the action ``type``.
+        pipeline:
+          allOf:
+          - $ref: '#/components/schemas/InspectPipeline'
+          readOnly: true
+      required:
+      - params
+      - type
+    InspectTriggerActionTypeEnum:
+      enum:
+      - log
+      - end_conversation
+      - send_message_to_bot
+      - schedule_trigger
+      - pipeline_start
+      type: string
+      description: |-
+        * `log` - Log the last message
+        * `end_conversation` - End the conversation
+        * `send_message_to_bot` - Prompt the bot to message the user
+        * `schedule_trigger` - Trigger a schedule
+        * `pipeline_start` - Start a pipeline
+    LLMResponseParams:
+      type: object
+      description: An LLM call with no prompt/history configuration of its own.
+      properties:
+        llm_model_parameters:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Model call parameters (e.g. ``temperature``) keyed by name.
+            Older nodes may instead carry a flat ``llm_temperature``; both feed the
+            same underlying setting.
+    LLMResponseWithPromptParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        llm_model_parameters:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Model call parameters (e.g. ``temperature``) keyed by name.
+            Older nodes may instead carry a flat ``llm_temperature``; both feed the
+            same underlying setting.
+        history_type:
+          type: string
+          description: 'Where this node''s chat history is scoped: ``global`` (whole
+            session), ``node`` (this node only), ``named`` (a shared, named history),
+            or ``none``.'
+        history_name:
+          type: string
+          nullable: true
+          description: Identifier of the shared history when ``history_type`` is ``named``;
+            otherwise null.
+        history_mode:
+          type: string
+          description: 'How history is compressed once it exceeds the limit: ``summarize``,
+            ``truncate_tokens``, or ``max_history_length``.'
+        max_history_length:
+          type: integer
+          nullable: true
+          description: Keep only the most recent messages up to this count.
+        user_max_token_limit:
+          type: integer
+          nullable: true
+          description: Token budget before history is summarized or truncated. Distinct
+            from the LLM model's own context window (reported under the node's ``llm``
+            object).
+        prompt:
+          type: string
+          description: System prompt for the LLM call.
+        generate_citations:
+          type: boolean
+          description: Reference indexed-collection files in responses and let users
+            download them.
+        max_indexed_collection_search_results:
+          type: integer
+          description: Maximum number of results retrieved from an indexed collection
+            search.
+        tools:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Names of OCS tools enabled for the node (e.g. ``update-user-data``).
+        built_in_tools:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Provider-native tools enabled for the model (e.g. ``web-search``).
+        tool_config:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Per-tool configuration for the built-in tools.
+        mcp_tools:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: MCP server tools enabled for the node.
+    MediaCollection:
+      type: object
+      description: 'A media collection: its identity and files, with no embedding
+        details (ADR-0025).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectFile'
+      required:
+      - files
+      - id
+      - name
     Message:
       type: object
       properties:
@@ -1607,6 +2644,25 @@ components:
       - chat.completion
       type: string
       description: '* `chat.completion` - chat.completion'
+    PaginatedChatbotList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Chatbot'
     PaginatedExperimentList:
       type: object
       required:
@@ -1811,6 +2867,99 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    Provider:
+      type: object
+      description: |-
+        A minimal reference to any provider: its id, type and name.
+
+        It's a plain ``Serializer`` rather than a ``ModelSerializer`` so the same class works for every
+        provider model (LLM, voice, messaging, auth, trace). When nested, a ``None`` provider renders as
+        ``null``; callers that use it on its own must handle ``None`` themselves.
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        name:
+          type: string
+      required:
+      - id
+      - name
+      - type
+    RenderTemplateParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        template_string:
+          type: string
+          description: Jinja2 template rendered against the node input.
+    RouterNodeParams:
+      type: object
+      properties:
+        llm_model_parameters:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Model call parameters (e.g. ``temperature``) keyed by name.
+            Older nodes may instead carry a flat ``llm_temperature``; both feed the
+            same underlying setting.
+        history_type:
+          type: string
+          description: 'Where this node''s chat history is scoped: ``global`` (whole
+            session), ``node`` (this node only), ``named`` (a shared, named history),
+            or ``none``.'
+        history_name:
+          type: string
+          nullable: true
+          description: Identifier of the shared history when ``history_type`` is ``named``;
+            otherwise null.
+        history_mode:
+          type: string
+          description: 'How history is compressed once it exceeds the limit: ``summarize``,
+            ``truncate_tokens``, or ``max_history_length``.'
+        max_history_length:
+          type: integer
+          nullable: true
+          description: Keep only the most recent messages up to this count.
+        user_max_token_limit:
+          type: integer
+          nullable: true
+          description: Token budget before history is summarized or truncated. Distinct
+            from the LLM model's own context window (reported under the node's ``llm``
+            object).
+        keywords:
+          type: array
+          items:
+            type: string
+          description: Router branch labels, one per output handle (``output_0`` maps
+            to ``keywords[0]``, etc.). Only meaningful on router nodes; a stray empty
+            value on other node types is legacy data.
+        default_keyword_index:
+          type: integer
+          description: Index into ``keywords`` used when no branch matches.
+        tag_output_message:
+          type: boolean
+          description: Tag the output message with the selected route.
+        prompt:
+          type: string
+          description: Prompt steering the LLM router's choice.
+    SendEmailParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        recipient_list:
+          type: string
+          description: Comma-separated email addresses. Supports Jinja2 templates.
+        subject:
+          type: string
+          description: Email subject. Supports Jinja2 templates.
+        body:
+          type: string
+          description: Jinja2 body template; the pipeline input is used when blank.
     SessionStatusEnum:
       enum:
       - active
@@ -1819,6 +2968,48 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
+    SourceMaterial:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+      required:
+      - id
+      - material
+      - topic
+    StaticRouterNodeParams:
+      type: object
+      properties:
+        keywords:
+          type: array
+          items:
+            type: string
+          description: Router branch labels, one per output handle (``output_0`` maps
+            to ``keywords[0]``, etc.). Only meaningful on router nodes; a stray empty
+            value on other node types is legacy data.
+        default_keyword_index:
+          type: integer
+          description: Index into ``keywords`` used when no branch matches.
+        tag_output_message:
+          type: boolean
+          description: Tag the output message with the selected route.
+        data_source:
+          type: string
+          description: Where the routing value is read from (e.g. ``participant_data``).
+        route_key:
+          type: string
+          nullable: true
+          description: Key within the data source whose value selects the route.
     StatusCb5Enum:
       enum:
       - setup

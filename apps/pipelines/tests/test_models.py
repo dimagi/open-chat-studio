@@ -8,6 +8,7 @@ from apps.chat.bots import PipelineTestBot
 from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.pipelines.models import Node
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
@@ -474,3 +475,16 @@ class TestPipelineValidation:
         pipeline.update_nodes_from_data()
         errors = pipeline.validate()
         assert not errors
+
+
+@pytest.mark.parametrize(
+    ("node_type", "param_name", "expected"),
+    [
+        pytest.param(LLMResponseWithPrompt.__name__, "llm_provider_id", True, id="declared"),
+        pytest.param(LLMResponseWithPrompt.__name__, "assistant_id", False, id="not-declared"),
+        pytest.param(AssistantNode.__name__, "assistant_id", True, id="declared-on-other-type"),
+        pytest.param("NoSuchNode", "assistant_id", False, id="unknown-node-type"),
+    ],
+)
+def test_node_has_parameter(node_type, param_name, expected):
+    assert Node(type=node_type).has_parameter(param_name) is expected
