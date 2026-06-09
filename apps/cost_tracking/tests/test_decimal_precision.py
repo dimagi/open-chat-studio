@@ -9,7 +9,7 @@ import pytest
 from django.db.models import Sum
 
 from apps.cost_tracking.models import PricingRule, ServiceKind
-from apps.cost_tracking.services.recorder import UsageEvent, record_usage_bulk
+from apps.cost_tracking.services.recorder import TraceContext, UsageEvent, record_usage_bulk
 
 
 @pytest.mark.parametrize(
@@ -43,7 +43,7 @@ def test_cost_calc_is_exact(team, qty, unit_price, expected_cost):
                 quantity=qty,
             )
         ],
-        team_id=team.id,
+        TraceContext(team_id=team.id),
     )
     row_cost = team.usagerecord_set.get().cost
     assert row_cost == Decimal(expected_cost)
@@ -72,7 +72,7 @@ def test_summed_costs_have_no_float_drift(team):
         for _ in range(1000)
     ]
 
-    record_usage_bulk(events, team_id=team.id)
+    record_usage_bulk(events, TraceContext(team_id=team.id))
 
     expected = sum(
         (Decimal(e.quantity) / Decimal(1000) * Decimal("0.00015")).quantize(Decimal("0.00000001")) for e in events

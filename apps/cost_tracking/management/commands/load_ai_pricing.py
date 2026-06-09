@@ -10,6 +10,7 @@ locally as `manage.py load_ai_pricing` after editing the seed JSON.
 """
 
 import json
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.cost_tracking.models import PricingRule, PricingSource
-from apps.cost_tracking.services.pricing import PricingResolver
+from apps.cost_tracking.services.pricing import PricingKey, PricingResolver
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "seed_data" / "llm_pricing.json"
 
@@ -39,9 +40,11 @@ class Command(BaseCommand):
         for entry in seed:
             for rule in entry["rules"]:
                 outcome = upsert_global_rule(
-                    provider_type=entry["provider_type"],
-                    model_name=entry["model_name"],
-                    service_kind=rule["service_kind"],
+                    PricingKey(
+                        provider_type=entry["provider_type"],
+                        model_name=entry["model_name"],
+                        service_kind=rule["service_kind"],
+                    ),
                     unit_price=Decimal(rule["unit_price"]),
                     currency=rule.get("currency", "USD"),
                     source=PricingSource.SEED,
@@ -56,25 +59,21 @@ class Command(BaseCommand):
 
 
 def upsert_global_rule(
+    key: PricingKey,
     *,
-    provider_type: str,
-    model_name: str,
-    service_kind: str,
     unit_price: Decimal,
     currency: str = "USD",
     source: str = PricingSource.SEED,
 ) -> str:
     """Apply the supersession pattern for a single (provider, model, service_kind).
 
-    Returns one of "unchanged", "created", or "superseded" so the caller can
-    keep stats. Caller is expected to wrap many of these in their own
-    transaction or run them sequentially (each call is internally atomic).
+    Returns one of "unchanged", "created", or "superseded".
     """
     active = PricingRule.objects.filter(
         team__isnull=True,
-        provider_type=provider_type,
-        model_name=model_name,
-        service_kind=service_kind,
+        provider_type=key.provider_type,
+        model_name=key.model_name,
+        service_kind=key.service_kind,
         effective_to__isnull=True,
     )
 
@@ -88,9 +87,9 @@ def upsert_global_rule(
         closed = active.update(effective_to=now)
         PricingRule.objects.create(
             team=None,
-            provider_type=provider_type,
-            model_name=model_name,
-            service_kind=service_kind,
+            provider_type=key.provider_type,
+            model_name=key.model_name,
+            service_kind=key.service_kind,
             unit_price=unit_price,
             currency=currency,
             source=source,
@@ -102,11 +101,6 @@ def upsert_global_rule(
     # `create()` above did fire post_save, but the closed row's transition
     # needs an explicit invalidation too.
     if closed:
-        PricingResolver.invalidate(
-            team_id=None,
-            provider_type=provider_type,
-            model_name=model_name,
-            service_kind=service_kind,
-        )
+        PricingResolver.invalidate(replace(key, team_id=None))
 
     return "superseded" if closed else "created"
