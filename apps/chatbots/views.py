@@ -305,12 +305,12 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
-
-    # This page operates on the family-head (working) Experiment. If a version snapshot's id was
-    # requested, redirect to the working version's canonical detail URL instead of erroring.
-    if not experiment.is_working_version:
-        return redirect(experiment.get_working_version().get_absolute_url())
+    # This page operates on the family-head (working) Experiment. Filtering on
+    # working_version__isnull=True ensures a version snapshot's id resolves to a 404 rather than
+    # erroring downstream in resolve_published_or_working().
+    experiment = get_object_or_404(
+        Experiment.objects.get_all(), id=experiment_id, team=request.team, working_version__isnull=True
+    )
 
     channels, available_platforms = get_channels_context(experiment)
 
