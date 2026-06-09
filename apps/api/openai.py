@@ -45,7 +45,7 @@ create_chat_completion_response = inline_serializer(
 def chat_completions_schema(versioned: bool):
     operation_id = "openai_chat_completions"
     summary = "Chat Completions API for Experiments"
-    base_url = "https://chatbots.dimagi.com/api/openai/{experiment_id}"
+    base_url = "https://www.openchatstudio.com/api/openai/{experiment_id}"
 
     parameters = [
         OpenApiParameter(
@@ -59,7 +59,7 @@ def chat_completions_schema(versioned: bool):
     if versioned:
         operation_id = f"{operation_id}_versioned"
         summary = "Versioned Chat Completions API for Experiments"
-        base_url = "https://chatbots.dimagi.com/api/openai/{experiment_id}/v{version}"
+        base_url = "https://www.openchatstudio.com/api/openai/{experiment_id}/v{version}"
         parameters.append(
             OpenApiParameter(
                 name="version",
