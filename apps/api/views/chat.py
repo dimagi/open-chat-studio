@@ -465,13 +465,17 @@ def chat_send_message(request, session_id):
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
-    task_id = get_response_for_webchat_task.delay(
+    task = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachment_data if attachment_data else None,
         context=context,
-    ).task_id
+    )
+    task_id = task.task_id
+    # Bind the task to this session so the poll endpoint can reject cross-session reads (IDOR).
+    # TTL matches the Celery result backend's default expiry (24 h).
+    cache.set(f"task_session:{task_id}", str(session_id), 24 * 3600)
 
     response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
     return Response(response_data, status=status.HTTP_202_ACCEPTED)
@@ -527,6 +531,13 @@ def chat_poll_task_response(request, session_id, task_id):
     session = get_experiment_session_cached(session_id)
     if not session:
         return NotFound()
+
+    # Verify the task belongs to this session to prevent cross-session result reads (IDOR).
+    # A missing binding (None) is allowed for backward compatibility with tasks dispatched
+    # before this check was introduced; a present but mismatched binding is rejected.
+    bound_session = cache.get(f"task_session:{task_id}")
+    if bound_session is not None and bound_session != str(session_id):
+        raise NotFound()
 
     experiment = session.experiment
     task_details = get_message_task_response(experiment, task_id)

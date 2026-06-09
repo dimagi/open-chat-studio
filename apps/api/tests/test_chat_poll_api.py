@@ -2,6 +2,7 @@ import uuid
 from unittest import mock
 
 import pytest
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -141,3 +142,43 @@ def test_chat_poll_generic_error_returns_500(api_client, mock_session, mock_task
     assert response.status_code == 500
     data = response.json()
     assert data["status"] == "error"
+
+
+@pytest.mark.django_db()
+def test_chat_poll_task_bound_to_correct_session_succeeds(api_client, mock_session, mock_task_response):
+    """Polling with a task_id bound to the current session succeeds."""
+    task_id = "bound-task-ok"
+    cache.set(f"task_session:{task_id}", TEST_SESSION_ID, 60)
+    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
+    response = api_client.get(url)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_chat_poll_task_bound_to_different_session_returns_404(api_client, mock_session, mock_task_response):
+    """Polling session A's endpoint with a task_id bound to session B returns 404 (IDOR prevention)."""
+    other_session_id = str(uuid.uuid4())
+    task_id = "cross-session-task"
+    cache.set(f"task_session:{task_id}", other_session_id, 60)
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
+    response = api_client.get(url)
+
+    assert response.status_code == 404
+    mock_task_response.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_chat_poll_task_with_no_binding_succeeds(api_client, mock_session, mock_task_response):
+    """Tasks with no cache binding (dispatched before this fix) are allowed through for backward compatibility."""
+    task_id = "legacy-unbound-task"
+    # No cache.set — binding is absent
+    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
+    response = api_client.get(url)
+
+    assert response.status_code == 200
