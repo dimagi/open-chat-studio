@@ -57,3 +57,6 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0035](0035-read-only-mode-during-deprecation-window.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Read-only mode gates features during the deprecation window |
 | [0036](0036-sunset-headers-and-410-for-retired-http-surfaces.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Sunset headers and 410 Gone for retired HTTP surfaces |
 | [0037](0037-row-multiplying-filters-use-exists-not-distinct.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Row-multiplying list filters use EXISTS, not a blanket DISTINCT |
+| [0038](0038-require-proof-of-possession-for-chat-session-access.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Require proof of possession for chat session access |
+| [0039](0039-stateless-signed-session-tokens-with-inactivity-expiry.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Stateless signed session tokens with server-side inactivity expiry |
+| [0040](0040-fail-closed-session-token-enforcement-rollout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Fail-closed session-token enforcement rollout |
