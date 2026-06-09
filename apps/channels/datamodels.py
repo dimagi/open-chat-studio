@@ -186,6 +186,25 @@ class SureAdhereMessage(BaseMessage):
         )
 
 
+# Meta/Turn WhatsApp message types that are NOT user-authored conversational
+# messages. These payloads may omit the top-level "contacts" array entirely
+# (e.g. "system" notifications like user_changed_number, or "unsupported").
+_NON_CONVERSATIONAL_WA_MESSAGE_TYPES = frozenset({"system", "unsupported"})
+
+
+def is_non_conversational_whatsapp_message(message_data: dict) -> bool:
+    """True for Meta/Turn WhatsApp payloads that are not user-authored conversational
+    messages (e.g. type="system" user_changed_number, or "unsupported").
+
+    These have a "messages" array but no "contacts" key, so the webhook views use
+    this to skip them before dispatching a task that would KeyError while parsing.
+    """
+    messages = message_data.get("messages") or []
+    if not messages:
+        return False
+    return messages[0].get("type") in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES
+
+
 class WhatsAppMessage(BaseMessage):
     """Base class for WhatsApp messages (Turn.io and Meta Cloud API)."""
 

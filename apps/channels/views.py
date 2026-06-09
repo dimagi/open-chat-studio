@@ -30,7 +30,7 @@ from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
 from apps.channels import meta_webhook, tasks
-from apps.channels.datamodels import TwilioMessage
+from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsapp_message
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -141,6 +141,10 @@ def new_turn_message(request, experiment_id: uuid):
     message_data = json.loads(request.body.decode("utf-8"))
     if "messages" not in message_data:
         # Normal inbound messages should have a "messages" key, so ignore everything else
+        return HttpResponse()
+
+    if is_non_conversational_whatsapp_message(message_data):
+        log.info("Ignoring non-conversational Turn.io WhatsApp webhook")
         return HttpResponse()
 
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
@@ -486,6 +490,10 @@ class MetaCloudAPIWebhookView(View):
             phone_number_id = value["metadata"]["phone_number_id"]
             ch = channel_map.get(phone_number_id)
             if not ch:
+                continue
+
+            if is_non_conversational_whatsapp_message(value):
+                log.info("Ignoring non-conversational Meta Cloud API webhook value")
                 continue
 
             tasks.handle_meta_cloud_api_message.delay(
