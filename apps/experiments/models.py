@@ -603,7 +603,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
-    use_processor_bot_voice = models.BooleanField(default=False)
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     # Versioning fields
@@ -1023,12 +1022,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 group_name="Voice",
                 name="echo_transcript",
                 raw_value=self.echo_transcript,
-                to_display=VersionFieldDisplayFormatters.yes_no,
-            ),
-            VersionField(
-                group_name="Voice",
-                name="use_processor_bot_voice",
-                raw_value=self.use_processor_bot_voice,
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),

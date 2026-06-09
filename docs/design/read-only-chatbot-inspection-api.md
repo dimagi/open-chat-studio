@@ -497,7 +497,6 @@ shape, one parser.
     "conversational_consent_enabled": false,
     "voice_response_behaviour": "reciprocal",
     "echo_transcript": false,
-    "use_processor_bot_voice": false,
     "debug_mode_enabled": false,
     "file_uploads_enabled": false,
     "participant_allowlist": []
