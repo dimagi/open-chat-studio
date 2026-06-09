@@ -897,6 +897,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "x-ocs-widget-version",
     "x-embed-key",
+    "x-session-token",
 ]
 
 CORS_ALLOW_METHODS = [
