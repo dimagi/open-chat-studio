@@ -22,12 +22,14 @@ export interface UploadContext {
   sessionId: string;
   participantId: string;
   participantName?: string;
+  sessionToken?: string;
 }
 
 export interface UploadResult {
   selectedFiles: SelectedFile[];
   uploadedIds: number[];
   errorMessage?: string;
+  tokenRejected?: boolean;
 }
 
 export class FileAttachmentManager {
@@ -108,8 +110,13 @@ export class FileAttachmentManager {
     }
 
     try {
+      const headers: Record<string, string> = {};
+      if (context.sessionToken) {
+        headers['X-Session-Token'] = context.sessionToken;
+      }
       const response = await fetch(`${context.apiBaseUrl}/api/chat/${context.sessionId}/upload/`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
@@ -120,6 +127,7 @@ export class FileAttachmentManager {
           selectedFiles: this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
           errorMessage,
+          tokenRejected: response.status === 403,
         };
       }
 
