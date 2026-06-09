@@ -581,6 +581,7 @@ PROJECT_METADATA = {
     "IMAGE": "https://www.openchatstudio.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
+    "ACCEPTABLE_USE_POLICY_URL": env("ACCEPTABLE_USE_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
 }
 
