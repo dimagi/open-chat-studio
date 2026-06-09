@@ -5,13 +5,10 @@ from celery.result import GroupResult
 from celery_progress.backend import GroupProgress
 from django import forms
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import redirect, render
-from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils.translation import gettext_lazy as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import HealthCheckView
@@ -23,25 +20,8 @@ from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
 from apps.web.search import get_searchable_models
 from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
-from apps.web.waf import WafRule, waf_allow
 
 UUID_PATTERN = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$", re.IGNORECASE)
-
-
-@waf_allow(WafRule.NoUserAgent_HEADER)
-def home(request):
-    if request.user.is_authenticated:
-        team = request.team
-        if team:
-            return redirect("dashboard:index", team_slug=team.slug)
-        else:
-            messages.info(
-                request,
-                _("You are not a member of any teams. Create a new one to get started."),
-            )
-            return HttpResponseRedirect(reverse("teams:create_team"))
-    else:
-        return render(request, "web/landing_page.html")
 
 
 @login_and_team_required

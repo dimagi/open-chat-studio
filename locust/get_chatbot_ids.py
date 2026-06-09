@@ -6,7 +6,7 @@ This script lists available chatbots (experiments) with their IDs.
 
 Usage:
     python locust/get_chatbot_ids.py
-    python locust/get_chatbot_ids.py --base-url https://chatbots.dimagi.com
+    python locust/get_chatbot_ids.py --base-url https://www.openchatstudio.com
     python locust/get_chatbot_ids.py --format env
     OCS_API_KEY=your-key python locust/get_chatbot_ids.py --format list
 """
@@ -127,7 +127,7 @@ Examples:
     OCS_API_KEY=your-key python locust/get_chatbot_ids.py
 
     # Specify a different base URL
-    python locust/get_chatbot_ids.py --base-url https://chatbots.dimagi.com
+    python locust/get_chatbot_ids.py --base-url https://www.openchatstudio.com
 
     # Export as environment variable
     OCS_API_KEY=your-key python locust/get_chatbot_ids.py --format env

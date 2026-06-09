@@ -9,6 +9,7 @@ from openai import (
     UnprocessableEntityError,
 )
 
+from apps.assistants.models import OpenAiAssistant
 from apps.assistants.sync import OpenAiSyncError, delete_openai_assistant
 
 logger = get_task_logger("ocs.openai_sync")
@@ -21,8 +22,6 @@ logger = get_task_logger("ocs.openai_sync")
     bind=True,
 )
 def delete_openai_assistant_task(self, assistant_id: int):
-    from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: models.py imports this task
-
     try:
         assistant = OpenAiAssistant.all_objects.get(id=assistant_id, is_archived=True)
     except OpenAiAssistant.DoesNotExist:

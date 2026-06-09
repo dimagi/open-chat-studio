@@ -27,7 +27,7 @@ def detangle_file_ids(file_ids: list[str]) -> list[str]:
     return detangled_file_ids
 
 
-def extract_file_ids_from_ocs_citations(text: str) -> list[int]:
+def extract_file_ids_from_ocs_citations(text: str) -> list[str]:
     from apps.chat.agent.tools import OCS_CITATION_PATTERN  # noqa: PLC0415 - lazy: chat.agent.tools
 
     file_ids = []

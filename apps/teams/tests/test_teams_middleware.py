@@ -22,7 +22,7 @@ class TeamsAuthTest(TestCase):
         add_user_to_team(cls.yanks, cls.yanks_member)
 
     def test_unauthenticated_view(self):
-        response = self.client.get(reverse("web:home"))
+        response = self.client.get(reverse("prelogin:home"))
         assert response.status_code == 200
         self._assertRequestHasTeam(response, None)
 

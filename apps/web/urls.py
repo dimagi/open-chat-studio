@@ -6,7 +6,6 @@ from .waf import WafRule, waf_allow
 
 app_name = "web"
 urlpatterns = [
-    path("", views.home, name="home"),
     path(
         "robots.txt",
         waf_allow(WafRule.NoUserAgent_HEADER)(
