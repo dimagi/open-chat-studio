@@ -1,18 +1,15 @@
-{% extends "web/base.html" %}
-{% load allauth i18n %}
-{% block page_title %}
-  {% translate "Sign Up Closed" %}
-{% endblock page_title %}
+{% extends "prelogin/auth_base.html" %}
+{% load i18n %}
+{% block title %}
+  {% translate "Sign Up Closed" %} | Open Chat Studio
+{% endblock title %}
 
-{% block body %}
-  <div class="flex justify-center my-8 ">
-    <div class="w-96 px-4 py-4 bg-base-100">
-      <div>
-        <h2 class="mt-6 text-center text-2xl font-bold">
-          {% translate "Sign Up Closed" %}
-        </h2>
-        <p>{% translate "We are sorry, but the sign up is currently closed." %}</p>
-      </div>
-    </div>
+{% block card_eyebrow %}
+  <h1 class="card-eyebrow">{% translate "Sign Up" %}</h1>
+{% endblock card_eyebrow %}
+
+{% block auth_body %}
+  <div class="pg-content" style="text-align:center;">
+    <p>{% translate "We are sorry, but the sign up is currently closed." %}</p>
   </div>
-{% endblock body %}
+{% endblock auth_body %}
