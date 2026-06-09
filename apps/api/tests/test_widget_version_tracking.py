@@ -8,6 +8,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.widget_versions import WidgetDeprecation
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -122,6 +123,7 @@ def test_send_message_sunset_headers_for_deprecated_version(api_client, widget_c
                 HTTP_X_EMBED_KEY="test_widget_token_123456789012",
                 HTTP_ORIGIN="https://example.com",
                 HTTP_X_OCS_WIDGET_VERSION="0.5.0",
+                HTTP_X_SESSION_TOKEN=issue_session_token(session),
             )
     assert response.status_code == 202
     assert response.headers["Deprecation"] == "true"
