@@ -15,9 +15,10 @@ RECENT_ACTIVITY_WINDOW = timedelta(days=90)
 
 class Command(IdempotentCommand):
     help = "Notify teams whose embedded chat widgets run a deprecated version"
-    # Bump the suffix for each new deprecation batch
-    # (see docs/developer_guides/widget_versioning.md)
-    migration_name = "notify_deprecated_widget_versions_2026_06"
+    # Fixed slug: each new deprecation ships its own Django data migration
+    # (RunDataMigration with force=True), so this never needs bumping.
+    # See docs/developer_guides/widget_versioning.md
+    migration_name = "notify_deprecated_widget_versions"
     disable_audit = True
 
     def perform_migration(self, dry_run=False):

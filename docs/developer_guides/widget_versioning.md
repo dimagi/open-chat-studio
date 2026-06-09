@@ -25,17 +25,26 @@ version policy lives in `apps/channels/widget_versions.py`.
    `apps/channels/widget_versions.py` with a sunset date at least 60 days out.
    Versions below `below_version` are deprecated; widgets that predate the
    version header (< 0.5.1) count as deprecated too.
-2. Deploy. Deprecated widgets now receive RFC 8594 `Deprecation`/`Sunset`
-   headers on chat API responses, and affected channels show a warning badge.
-3. Bump the `migration_name` suffix in
-   `apps/data_migrations/management/commands/notify_deprecated_widget_versions.py`
-   for the new batch, then run it:
+2. Add a data migration in `apps/channels/migrations/` that triggers the
+   notification on deploy (see `0027_notify_widget_deprecation_below_0_6_0.py`):
 
-        python manage.py notify_deprecated_widget_versions --dry-run
-        python manage.py notify_deprecated_widget_versions
+        from apps.data_migrations.utils.migrations import RunDataMigration
 
-   Teams with affected channels (deprecated recorded version, or no recorded
-   version but sessions in the last 90 days) get an in-app notification.
+        operations = [
+            RunDataMigration("notify_deprecated_widget_versions", command_options={"force": True}),
+        ]
+
+   The command slug is fixed; Django tracks each migration's single run, so
+   nothing needs bumping. Teams with affected channels (deprecated recorded
+   version, or no recorded version but sessions in the last 90 days) get an
+   in-app notification on deploy.
+3. Deploy. Deprecated widgets now receive RFC 8594 `Deprecation`/`Sunset`
+   headers on chat API responses, affected channels show a warning badge, and
+   the migration sends the notifications.
 4. At sunset nothing breaks automatically — the date marks when breaking
    server-side changes may land. Plan any actual removal separately, following
    [feature deprecation](feature_deprecation.md).
+
+To preview who would be notified before deploying, run the command manually:
+
+        python manage.py notify_deprecated_widget_versions --dry-run

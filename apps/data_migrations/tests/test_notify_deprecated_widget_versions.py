@@ -87,7 +87,8 @@ class TestNotifyDeprecatedWidgetVersionsCommand:
     @patch(NOTIFY_PATCH)
     def test_dry_run_does_not_notify(self, mock_notify, capsys):
         _widget_channel(version="0.5.0")
+        # force past the run-once slug, which the deploy-time data migration marks applied
         with patch("apps.channels.widget_versions.DEPRECATIONS", FAKE_DEPRECATIONS):
-            call_command("notify_deprecated_widget_versions", dry_run=True)
+            call_command("notify_deprecated_widget_versions", dry_run=True, force=True)
         mock_notify.assert_not_called()
         assert "Would notify" in capsys.readouterr().out
