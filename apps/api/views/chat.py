@@ -481,6 +481,17 @@ def chat_send_message(request, session_id):
     return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
 
+def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
+    """Raise NotFound if task_id is bound to a different session (IDOR prevention).
+
+    A missing cache entry is allowed for backward compatibility with tasks
+    dispatched before this binding was introduced.
+    """
+    bound_session = cache.get(f"task_session:{task_id}")
+    if bound_session is not None and bound_session != str(session_id):
+        raise NotFound()
+
+
 @extend_schema(
     operation_id="chat_poll_task_response",
     summary="Poll for task updates",
@@ -533,21 +544,10 @@ def chat_send_message(request, session_id):
 @api_view(["GET"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
-def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
-    """Raise NotFound if task_id is bound to a different session (IDOR prevention).
-
-    A missing cache entry is allowed for backward compatibility with tasks
-    dispatched before this binding was introduced.
-    """
-    bound_session = cache.get(f"task_session:{task_id}")
-    if bound_session is not None and bound_session != str(session_id):
-        raise NotFound()
-
-
 def chat_poll_task_response(request, session_id, task_id):
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     _verify_task_belongs_to_session(task_id, str(session_id))
 
