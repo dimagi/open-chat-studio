@@ -37,7 +37,7 @@ class Command(BaseCommand):
             row = cursor.fetchone()
             return row[0] if row else False
 
-    def _get_totp_devices(self):
+    def _get_totp_devices(self) -> list[dict]:
         """Get TOTP devices using raw SQL."""
         with connection.cursor() as cursor:
             cursor.execute("""
