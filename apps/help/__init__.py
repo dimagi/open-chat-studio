@@ -9,8 +9,7 @@ class SystemAgentModel(BaseModel):
     key: str
 
     def init_model(self):
-        # Imported lazily: langchain.chat_models pulls in transformers and is slow to import (startup time).
-        from langchain.chat_models import init_chat_model  # noqa: PLC0415
+        from langchain.chat_models import init_chat_model  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return init_chat_model(self.model, model_provider=self.provider, **self.model_kwargs)
 

@@ -56,9 +56,11 @@ def get_file_content_reader(content_type) -> callable:
 
 def markitdown_read(file_obj) -> Document:
     # markitdown supports text, pdf, docx, xlsx, xls, outlook, pptx which will be handled by the default text reader
-    # Imported lazily: markitdown is slow to import and is only needed when actually reading a document (startup time).
-    from markitdown import MarkItDown  # noqa: PLC0415
-    from markitdown._exceptions import FileConversionException, UnsupportedFormatException  # noqa: PLC0415
+    from markitdown import MarkItDown  # noqa: PLC0415 - TID253: heavy lib, slow startup
+    from markitdown._exceptions import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+        FileConversionException,
+        UnsupportedFormatException,
+    )
 
     md = MarkItDown(enable_plugins=False)
     try:
