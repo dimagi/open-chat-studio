@@ -10,6 +10,8 @@
   "status.starting": "Démarrage du chat...",
   "status.typing": "Préparation de la réponse",
   "status.uploading": "Téléversement",
+  "status.sessionExpired": "Votre session de chat a expiré. Un nouveau chat va démarrer — veuillez renvoyer votre message.",
+  "status.sessionError": "Cette session de chat n'est plus disponible.",
   "modal.newChatTitle": "Nouveau Chat",
   "modal.newChatBody": "Démarrer un nouveau chat effacera votre conversation actuelle. Continuer?",
   "modal.cancel": "Annuler",

@@ -30,6 +30,7 @@
             mode="kiosk"
             chatbot-id="{{ experiment.public_id }}"
             session-id="{{ session.external_id }}"
+            session-token="{{ session_token }}"
             api-base-url="{{ request.scheme }}://{{ request.get_host }}"
             {% if not request.user.is_anonymous %}
               user-id="{{ request.user.email }}"

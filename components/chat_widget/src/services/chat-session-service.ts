@@ -1,5 +1,17 @@
 import { getCSRFToken } from '../utils/cookies';
 
+export class SessionAccessError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, code: string | undefined, message: string) {
+    super(message);
+    this.name = 'SessionAccessError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export type ChatRole = 'system' | 'user' | 'assistant';
 
 export interface ChatAttachment {
@@ -18,6 +30,7 @@ export interface ChatMessage {
 
 export interface ChatStartSessionResponse {
   session_id: string;
+  session_token?: string | null;
   chatbot: unknown;
   participant: unknown;
 }
@@ -44,6 +57,7 @@ export interface ChatSessionServiceOptions {
   apiBaseUrl: string;
   embedKey?: string;
   widgetVersion: string;
+  sessionToken?: string;
   csrfTokenProvider?: (apiBaseUrl: string) => string | undefined;
   taskPollingIntervalMs?: number;
   taskPollingMaxAttempts?: number;
@@ -75,6 +89,7 @@ export class ChatSessionService {
   private readonly apiBaseUrl: string;
   private readonly embedKey?: string;
   private readonly widgetVersion: string;
+  private sessionToken?: string;
   private readonly csrfTokenProvider: (apiBaseUrl: string) => string | undefined;
   private readonly taskPollingIntervalMs: number;
   private readonly taskPollingMaxAttempts: number;
@@ -86,6 +101,7 @@ export class ChatSessionService {
     this.apiBaseUrl = options.apiBaseUrl;
     this.embedKey = options.embedKey;
     this.widgetVersion = options.widgetVersion;
+    this.sessionToken = options.sessionToken;
     this.csrfTokenProvider = options.csrfTokenProvider ?? getCSRFToken;
     this.taskPollingIntervalMs = options.taskPollingIntervalMs ?? 1000;
     this.taskPollingMaxAttempts = options.taskPollingMaxAttempts ?? 120;
@@ -100,7 +116,7 @@ export class ChatSessionService {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to start session: ${response.statusText}`);
+      await this.raiseForStatus(response, 'Failed to start session');
     }
 
     return response.json() as Promise<ChatStartSessionResponse>;
@@ -114,7 +130,7 @@ export class ChatSessionService {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to send message: ${response.statusText}`);
+      await this.raiseForStatus(response, 'Failed to send message');
     }
 
     return response.json() as Promise<ChatSendMessageResponse>;
@@ -126,17 +142,7 @@ export class ChatSessionService {
     });
 
     if (!response.ok) {
-      let errorMessage = `Failed to poll task: ${response.statusText}`;
-      try {
-        const data = (await response.json()) as { error?: string };
-        if (data?.error) {
-          errorMessage = data.error;
-        }
-      } catch {
-        // non-JSON body; keep statusText fallback
-      }
-
-      throw new Error(errorMessage);
+      await this.raiseForStatus(response, 'Failed to poll task');
     }
 
     return response.json() as Promise<ChatTaskPollResponse>;
@@ -212,7 +218,7 @@ export class ChatSessionService {
       headers: this.getCommonHeaders(),
     });
     if (!response.ok) {
-      throw new Error(`Failed to poll messages: ${response.statusText}`);
+      await this.raiseForStatus(response, 'Failed to poll messages');
     }
 
     return response.json() as Promise<ChatPollResponse>;
@@ -278,6 +284,28 @@ export class ChatSessionService {
     }
   }
 
+  setSessionToken(token?: string): void {
+    this.sessionToken = token;
+  }
+
+  private async raiseForStatus(response: Response, fallbackPrefix: string): Promise<never> {
+    let message = `${fallbackPrefix}: ${response.statusText}`;
+    let code: string | undefined;
+    try {
+      const data = (await response.json()) as { error?: string; code?: string };
+      if (data?.error) {
+        message = data.error;
+      }
+      code = data?.code;
+    } catch {
+      // non-JSON body; keep statusText fallback
+    }
+    if (response.status === 403) {
+      throw new SessionAccessError(response.status, code, message);
+    }
+    throw new Error(message);
+  }
+
   private getJsonHeaders(): Record<string, string> {
     const headers = this.getCommonHeaders();
     headers['Content-Type'] = 'application/json';
@@ -297,6 +325,10 @@ export class ChatSessionService {
 
     if (this.embedKey) {
       headers['X-Embed-Key'] = this.embedKey;
+    }
+
+    if (this.sessionToken) {
+      headers['X-Session-Token'] = this.sessionToken;
     }
 
     return headers;
