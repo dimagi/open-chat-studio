@@ -95,7 +95,7 @@ class MeView(APIView):
     required_scopes = []  # Any valid OAuth token is accepted; no specific scope required.
 
     @extend_schema(
-        operation_id="me_retrieve",
+        operation_id="me",
         summary="Current User",
         description="Returns basic information about the authenticated user and the team the token is scoped to.",
         tags=["Me"],
