@@ -25,6 +25,7 @@ interface PointerEvent {
 interface SessionStorageData {
   sessionId?: string;
   messages: ChatMessage[];
+  sessionToken?: string;
 }
 
 @Component({
@@ -219,6 +220,13 @@ export class OcsChat {
    */
   @Prop() sessionId?: string;
 
+  /**
+   * A session token proving access to the session named by `session-id`. Host
+   * pages that create the session server-side pass a server-minted token here so
+   * the widget can authenticate its requests. Only meaningful with `session-id`.
+   */
+  @Prop() sessionToken?: string;
+
   @State() error: string = '';
   @State() messages: ChatMessage[] = [];
   @State() activeSessionId?: string;
@@ -269,6 +277,7 @@ export class OcsChat {
   private positionInitialized: boolean = false;
   private internalPageContext?: Record<string, any>;
   private sessionEpoch: number = 0;
+  private currentSessionToken?: string;
   @Element() host: HTMLElement;
 
   async componentWillLoad() {
@@ -286,12 +295,14 @@ export class OcsChat {
     if (this.isSessionBound()) {
       // Bound to an externally-managed session: the host page is the source of truth.
       this.activeSessionId = this.sessionId;
+      this.applySessionToken(this.sessionToken);
     } else if (this.persistentSession && this.isLocalStorageAvailable()) {
       // Always try to load existing session if localStorage is available
-      const { sessionId, messages } = this.loadSessionFromStorage();
+      const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
       if (sessionId && messages) {
         this.activeSessionId = sessionId;
         this.messages = messages;
+        this.applySessionToken(sessionToken);
       }
     }
     this.parseWelcomeMessages();
@@ -346,6 +357,11 @@ export class OcsChat {
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
+  private applySessionToken(token?: string): void {
+    this.currentSessionToken = token;
+    this.chatService?.setSessionToken(token);
+  }
+
   private getChatService(): ChatSessionService {
     if (!this.chatService) {
       this.chatService = new ChatSessionService({
@@ -355,6 +371,7 @@ export class OcsChat {
         taskPollingIntervalMs: OcsChat.TASK_POLLING_INTERVAL_MS,
         taskPollingMaxAttempts: OcsChat.TASK_POLLING_MAX_ATTEMPTS,
         messagePollingIntervalMs: OcsChat.MESSAGE_POLLING_INTERVAL_MS,
+        sessionToken: this.currentSessionToken,
       });
     }
     return this.chatService;
@@ -462,6 +479,7 @@ export class OcsChat {
 
       const requestBody: Record<string, unknown> = {
         chatbot_id: this.chatbotId,
+        use_session_token: true,
         session_data: {
           source: 'widget',
           page_url: window.location.href,
@@ -480,6 +498,7 @@ export class OcsChat {
       const data = await this.getChatService().startSession(requestBody);
       if (epoch !== this.sessionEpoch) return;
       this.activeSessionId = data.session_id;
+      this.applySessionToken(data.session_token ?? undefined);
       this.saveSessionToStorage();
 
       this.startMessagePolling();
@@ -525,6 +544,7 @@ export class OcsChat {
         sessionId: this.activeSessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
+        sessionToken: this.currentSessionToken,
       });
       this.selectedFiles = uploadResult.selectedFiles;
       return uploadResult.uploadedIds;
@@ -1423,6 +1443,7 @@ export class OcsChat {
       messages: `ocs-chat-messages-${this.chatbotId}`,
       lastActivity: `ocs-chat-activity-${this.chatbotId}`,
       visible: `ocs-chat-visible-${this.chatbotId}`,
+      sessionToken: `ocs-chat-token-${this.chatbotId}`,
     };
   }
 
@@ -1435,6 +1456,11 @@ export class OcsChat {
       if (this.activeSessionId) {
         localStorage.setItem(keys.sessionId, this.activeSessionId);
         localStorage.setItem(keys.lastActivity, new Date().toISOString());
+        if (this.currentSessionToken) {
+          localStorage.setItem(keys.sessionToken, this.currentSessionToken);
+        } else {
+          localStorage.removeItem(keys.sessionToken);
+        }
       }
       localStorage.setItem(keys.messages, JSON.stringify(this.messages));
     } catch (error) {
@@ -1473,7 +1499,9 @@ export class OcsChat {
         }
       }
 
-      return { sessionId, messages };
+      const sessionToken = localStorage.getItem(keys.sessionToken) ?? undefined;
+
+      return { sessionId, messages, sessionToken };
     } catch (error) {
       // fall back to starting a new session
       console.warn('Failed to load chat session from localStorage, starting new session:', error);
@@ -1547,6 +1575,7 @@ export class OcsChat {
       localStorage.removeItem(keys.messages);
       localStorage.removeItem(keys.lastActivity);
       localStorage.removeItem(keys.visible);
+      localStorage.removeItem(keys.sessionToken);
     } catch (error) {
       console.warn('Failed to clear chat session from localStorage:', error);
     }
@@ -1593,6 +1622,7 @@ export class OcsChat {
     // A session provided by the host page (session-id prop) cannot be cleared;
     // stay bound to it. Unbound widgets start a new session on the next message.
     this.activeSessionId = this.sessionId;
+    this.applySessionToken(this.isSessionBound() ? this.sessionToken : undefined);
     this.messages = [];
     this.isTyping = false;
     this.currentPollTaskId = '';
