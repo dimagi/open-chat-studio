@@ -2,6 +2,7 @@ import uuid
 from unittest import mock
 
 import pytest
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -141,3 +142,35 @@ def test_chat_poll_generic_error_returns_500(api_client, mock_session, mock_task
     assert response.status_code == 500
     data = response.json()
     assert data["status"] == "error"
+
+
+@pytest.fixture()
+def poll_setup(api_client, mock_session, mock_task_response):
+    """Bundle common fixtures for poll endpoint tests."""
+    return api_client, mock_session, mock_task_response
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("cache_owner", "expected_status", "task_called"),
+    [
+        pytest.param(TEST_SESSION_ID, 200, True, id="bound-to-correct-session"),
+        pytest.param(str(uuid.uuid4()), 404, False, id="bound-to-different-session"),
+        pytest.param(None, 200, True, id="no-binding-backward-compat"),
+    ],
+)
+def test_chat_poll_task_session_binding(poll_setup, cache_owner, expected_status, task_called):
+    """task_id is bound to its originating session; cross-session reads return 404 (IDOR prevention).
+    A missing binding is allowed for backward compatibility with tasks dispatched before this fix.
+    """
+    api_client, _mock_session, mock_task_response = poll_setup
+    task_id = str(uuid.uuid4())  # unique per run to avoid inter-test cache pollution
+    if cache_owner is not None:
+        cache.set(f"task_session:{task_id}", cache_owner, 60)
+    mock_task_response.return_value = {"complete": False, "error_msg": None, "message": None}
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": TEST_SESSION_ID, "task_id": task_id})
+    response = api_client.get(url)
+
+    assert response.status_code == expected_status
+    assert mock_task_response.called == task_called
