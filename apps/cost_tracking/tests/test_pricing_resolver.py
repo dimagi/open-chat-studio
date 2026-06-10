@@ -92,6 +92,27 @@ def test_time_travel_picks_the_rule_active_at_that_moment():
 
 
 @pytest.mark.django_db()
+def test_historical_query_bypasses_cache_automatically():
+    """Even without an explicit `use_cache=False`, a historical `at` must not
+    be served from a cache warmed by a current-time query — the resolver
+    auto-bypasses via `_is_near_now`.
+    """
+    now = timezone.now()
+    _make_rule(unit_price="0.00100", window=(now - timedelta(days=10), now - timedelta(days=5)))
+    _make_rule(unit_price="0.00050", window=(now - timedelta(days=5), None))
+    resolver = PricingResolver()
+
+    # Warm the cache with the current rate.
+    current = resolver.resolve(KEY, at=now)
+    assert current.unit_price == Decimal("0.00050")
+
+    # Historical query with use_cache=True (the default). Must hit the DB and
+    # return the old rate, not the cached current one.
+    historical = resolver.resolve(KEY, at=now - timedelta(days=7))
+    assert historical.unit_price == Decimal("0.00100")
+
+
+@pytest.mark.django_db()
 def test_cache_hit_does_not_query_the_db():
     _make_rule(unit_price="0.00015")
     resolver = PricingResolver()

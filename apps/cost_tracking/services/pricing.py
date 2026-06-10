@@ -70,12 +70,14 @@ class PricingResolver:
         return now - self.CACHE_AT_SKEW <= at <= now + self.CACHE_AT_SKEW
 
     def _maybe_team_rule(self, key: PricingKey, at: datetime, use_cache: bool) -> ResolvedRule | None:
-        """Return the team-scoped rule if one is set and matched, else None.
+        """Return a priced team-scoped rule if one is set and matched, else None.
 
-        Returning `None` (rather than the UNPRICED sentinel) lets `resolve()`
-        cleanly distinguish "no team override exists" from "found a team
-        override that happens to be unpriced" — only the former should fall
-        through to the global lookup.
+        `None` signals "no applicable priced team override" and triggers the
+        global fallback in `resolve()`. Both of these cases return `None`:
+
+        * `key.team_id is None` — caller didn't ask for a team scope at all.
+        * A team-scoped row exists but resolved to `UNPRICED` (unit_price is
+          None) — treat it the same as absent so we still try the global rule.
         """
         if key.team_id is None:
             return None
