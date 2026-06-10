@@ -88,10 +88,17 @@ jobs:
           sudo apt-get install -y ripgrep
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
+      - id: changed_files
+        name: Build space-separated file list
+        env:
+          CHANGED_FILES: ${{ steps.file_changes.outputs.files }}
+        run: |
+          files=$(printf '%s' "$CHANGED_FILES" | jq -r '.[]' | tr '\n' ' ')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
       - name: Run pre-commit hooks
         uses: j178/prek-action@v2
         with:
-          extra-args: --files ${{ steps.file_changes.outputs.files }}
+          extra-args: --files ${{ steps.changed_files.outputs.files }}
 
   type-check:
     if: github.ref != 'refs/heads/main'
@@ -126,7 +133,7 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.file_changes.outputs.files }}
         run: |
-          files=$(printf '%s\n' "$CHANGED_FILES" | tr ' ' '\n' | grep -E '^apps/.*\.py$' | tr '\n' ' ' || true)
+          files=$(printf '%s' "$CHANGED_FILES" | jq -r '.[]' | grep -E '^apps/.*\.py$' | tr '\n' ' ' || true)
           echo "files=$files" >> "$GITHUB_OUTPUT"
       - name: Set up Python
         if: steps.py_files.outputs.files != ''
