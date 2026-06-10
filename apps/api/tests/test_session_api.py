@@ -33,6 +33,7 @@ def test_list_sessions(auth_method, session):
         "next": None,
         "previous": None,
         "results": [get_session_json(session)],
+        "count": 1,
     }
 
 
@@ -67,6 +68,7 @@ def test_list_sessions_with_tag(experiment):
         "next": None,
         "previous": None,
         "results": expected_results,
+        "count": 2,
     }
 
     # Remove filters by tag
@@ -80,7 +82,30 @@ def test_list_sessions_with_tag(experiment):
         "next": None,
         "previous": None,
         "results": expected_results,
+        "count": 3,
     }
+
+
+@pytest.mark.django_db()
+def test_list_sessions_count_only_on_first_page(experiment):
+    """The total count is computed once, on the first page; cursor-following
+    requests skip the COUNT query and omit the field."""
+    user = experiment.team.members.first()
+    ExperimentSessionFactory.create_batch(3, experiment=experiment)
+
+    client = ApiTestClient(user, experiment.team)
+    response = client.get(reverse("api:session-list") + "?page_size=2")
+    assert response.status_code == 200
+    first_page = response.json()
+    assert first_page["count"] == 3
+    assert len(first_page["results"]) == 2
+    assert first_page["next"] is not None
+
+    response = client.get(first_page["next"])
+    assert response.status_code == 200
+    second_page = response.json()
+    assert "count" not in second_page
+    assert len(second_page["results"]) == 1
 
 
 def get_session_json(session, expected_messages=None, expected_tags=None):
@@ -236,6 +261,7 @@ def test_list_sessions_with_experiment_filter(experiment):
         "next": None,
         "previous": None,
         "results": expected_results,
+        "count": 2,
     }
 
     # Filter by second experiment
@@ -248,6 +274,7 @@ def test_list_sessions_with_experiment_filter(experiment):
         "next": None,
         "previous": None,
         "results": expected_results,
+        "count": 1,
     }
 
 

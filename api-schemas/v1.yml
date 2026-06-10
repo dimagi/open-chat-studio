@@ -502,6 +502,7 @@ paths:
                           name: John
                           timezone: Africa/Johannesburg
                         connect_channel_id: null
+                    count: 123
                   summary: A participant with their chatbot data
           description: ''
     post:
@@ -643,6 +644,7 @@ paths:
                           name: John
                           timezone: Africa/Johannesburg
                         connect_channel_id: null
+                    count: 123
                   summary: A participant with their chatbot data
           description: ''
     post:
@@ -2688,6 +2690,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Chatbot'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     PaginatedExperimentList:
       type: object
       required:
@@ -2707,6 +2714,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Experiment'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     PaginatedExperimentSessionList:
       type: object
       required:
@@ -2726,6 +2738,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExperimentSession'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     PaginatedParticipantDetailList:
       type: object
       required:
@@ -2745,6 +2762,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ParticipantDetail'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     Participant:
       type: object
       properties:
