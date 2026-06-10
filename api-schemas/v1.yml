@@ -1135,6 +1135,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/me/:
+    get:
+      operationId: me_retrieve
+      description: Returns basic information about the authenticated user and the
+        team the token is scoped to.
+      summary: Current User
+      tags:
+      - Me
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
       operationId: new_api_message
@@ -2603,6 +2622,36 @@ components:
             type: string
           nullable: true
           description: MCP server tools enabled for the node.
+    Me:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        team:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - team
+      - username
     MediaCollection:
       type: object
       description: 'A media collection: its identity and files, with no embedding
