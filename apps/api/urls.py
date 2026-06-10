@@ -53,6 +53,11 @@ v1_patterns = [
 #   * ``/api/v1/...`` and the unversioned ``/api/...`` alias both resolve to these views, and
 #   * reverse() always produces the unversioned URL, keeping existing callers and hyperlinked
 #     serializer fields stable.
+#
+# The v2 surface is mounted first under a capturing ``v2/`` prefix in its own namespace, so
+# ``/api/v2/...`` matches there rather than falling through to v1. v2 has no unversioned alias, so
+# reverse("api:v2:...") keeps the ``/api/v2/`` prefix.
 urlpatterns = [
+    path("v2/", include("apps.api.v2.urls")),
     re_path(r"^(?:v1/)?", include(v1_patterns)),
 ]

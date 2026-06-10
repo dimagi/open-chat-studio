@@ -603,7 +603,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
-    use_processor_bot_voice = models.BooleanField(default=False)
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     # Versioning fields
@@ -663,6 +662,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
+        if self.is_a_version:
+            url = reverse(
+                "chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.working_version_id]
+            )
+            return f"{url}?version_id={self.version_number}#versions"
         return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> Experiment:
@@ -1020,12 +1024,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 raw_value=self.echo_transcript,
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
-            VersionField(
-                group_name="Voice",
-                name="use_processor_bot_voice",
-                raw_value=self.use_processor_bot_voice,
-                to_display=VersionFieldDisplayFormatters.yes_no,
-            ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
             # Triggers
             VersionField(
@@ -1367,6 +1365,10 @@ class ExperimentSession(BaseTeamModel):
 
     objects = ExperimentSessionObjectManager()
     external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
+    session_token_required = models.BooleanField(
+        default=True,
+        help_text="Require a signed session token (or authenticated user) for chat API access to this session.",
+    )
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)

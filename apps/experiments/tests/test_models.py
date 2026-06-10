@@ -42,7 +42,7 @@ from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.tests.langchain import build_fake_llm_service
 
 
 @pytest.fixture()
@@ -1071,3 +1071,36 @@ def test_experimentsession_team_lastactivity_index_exists():
         names = {row[0] for row in cursor.fetchall()}
 
     assert "expsession_team_lastact_idx" in names
+
+
+@pytest.mark.django_db()
+def test_experiment_get_absolute_url_working_version(team_with_users):
+    """Working versions link to their own detail page."""
+    from django.urls import reverse
+
+    from apps.teams.utils import get_slug_for_team
+
+    team = team_with_users
+    user = team.members.first()
+    experiment = Experiment.objects.create(name="My Bot", owner=user, team=team)
+    expected = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
+    assert experiment.get_absolute_url() == expected
+
+
+@pytest.mark.django_db()
+def test_experiment_get_absolute_url_published_version(team_with_users):
+    """Published version snapshots link to the working version with ?version_id=X#versions."""
+    from django.urls import reverse
+
+    from apps.pipelines.models import Pipeline
+    from apps.teams.utils import get_slug_for_team
+
+    team = team_with_users
+    user = team.members.first()
+    pipeline = Pipeline.objects.create(team=team, name="pipe", data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(name="My Bot", owner=user, team=team, pipeline=pipeline)
+    snapshot = experiment.create_new_version()
+
+    base_url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
+    expected = f"{base_url}?version_id={snapshot.version_number}#versions"
+    assert snapshot.get_absolute_url() == expected

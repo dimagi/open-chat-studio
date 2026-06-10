@@ -371,6 +371,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def name(self):
         return self.params.get("name", None)
 
+    def has_parameter(self, param_name: str) -> bool:
+        """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
+        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        node_class = getattr(pipeline_nodes, self.type, None)
+        return node_class is not None and param_name in node_class.model_fields
+
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant

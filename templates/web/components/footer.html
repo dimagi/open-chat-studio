@@ -1,20 +1,48 @@
 {% load i18n %}
-<footer class="footer footer-center p-4 bg-base-200 text-base-content">
-  <aside>
-    <div class="text-center text-gray-700 dark:text-gray-500">
-      <p>{{ project_meta.NAME }}</p>
-      {% include "web/components/language_select.html" %}
-      <p>{% translate "Copyright" %} <span id="copyright-year">2022</span></p>
-      {% if project_meta.TERMS_URL %}
-        <p><a href="{{ project_meta.TERMS_URL }}" target="_blank" class="link">Terms of use</a>
-      {% endif %}
-      {% if project_meta.TERMS_URL and project_meta.PRIVACY_POLICY_URL %}—{% endif %}
-      {% if project_meta.PRIVACY_POLICY_URL %}
-        <a href="{{ project_meta.PRIVACY_POLICY_URL }}" class="link">Privacy Policy</a></p>
-      {% endif %}
+<footer class="bg-base-200 text-base-content p-4">
+  <div class="mx-auto w-full max-w-6xl">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="font-semibold">{{ project_meta.NAME }}</p>
+      <div class="flex flex-wrap items-center gap-4">
+        {% if project_meta.DOCS_URL %}
+          <a href="{{ project_meta.DOCS_URL }}"
+             target="_blank"
+             rel="noopener"
+             class="link link-hover">{% translate "Documentation" %}</a>
+        {% endif %}
+        <a href="https://github.com/dimagi/open-chat-studio"
+           target="_blank"
+           rel="noopener"
+           class="link link-hover">GitHub</a>
+        {% include "web/components/language_select.html" %}
+      </div>
     </div>
-  </aside>
+    <div class="divider my-1"></div>
+    <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-400">
+      <p>
+        {% translate "Copyright" %} © <span id="copyright-year">2022</span>
+      </p>
+      <div class="flex flex-wrap items-center gap-4">
+        {% if project_meta.TERMS_URL %}
+          <a href="{{ project_meta.TERMS_URL }}"
+             target="_blank"
+             rel="noopener"
+             class="link link-hover">{% translate "Terms of use" %}</a>
+        {% endif %}
+        {% if project_meta.PRIVACY_POLICY_URL %}
+          <a href="{{ project_meta.PRIVACY_POLICY_URL }}"
+             target="_blank"
+             rel="noopener"
+             class="link link-hover">{% translate "Privacy Policy" %}</a>
+        {% endif %}
+        {% if project_meta.ACCEPTABLE_USE_POLICY_URL %}
+          <a href="{{ project_meta.ACCEPTABLE_USE_POLICY_URL }}"
+             target="_blank"
+             rel="noopener"
+             class="link link-hover">{% translate "Acceptable Use" %}</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </footer>
-<script>
-  document.getElementById('copyright-year').innerText = (new Date()).getFullYear();
-</script>
+<script>document.getElementById('copyright-year').innerText = (new Date()).getFullYear();</script>

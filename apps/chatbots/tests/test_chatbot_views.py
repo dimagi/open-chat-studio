@@ -136,6 +136,26 @@ def test_single_chatbot_home(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_single_chatbot_home_version_snapshot_redirects_to_working_version(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    client.force_login(user)
+    pipeline = Pipeline.objects.create(team=team, name="Test Pipeline", data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(
+        name="Test Experiment", description="Test Description", owner=user, team=team, pipeline=pipeline
+    )
+    snapshot = experiment.create_new_version()
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, snapshot.id])
+    response = client.get(url)
+
+    expected_url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    assert response.status_code == 302
+    assert response["Location"] == f"{expected_url}?version_id={snapshot.version_number}#versions"
+
+
+@pytest.mark.django_db()
 def test_get_success_url(team_with_users):
     team = team_with_users
     user = team.members.first()

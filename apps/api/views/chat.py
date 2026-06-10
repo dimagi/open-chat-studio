@@ -15,7 +15,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.authentication import EmbeddedWidgetAuthentication
-from apps.api.permissions import LegacySessionAccessPermission, WidgetDomainPermission
+from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -24,10 +24,12 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
+from apps.channels.widget_versions import WIDGET_VERSION_HEADER, widget_sunset_headers
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
@@ -36,7 +38,7 @@ from apps.files.models import File
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
-SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
+SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
@@ -168,6 +170,22 @@ def chat_upload_file(request, session_id):
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 
+def _issue_or_opt_out_session_token(request, session, use_session_token):
+    """Issue a session token, or opt the session out of token enforcement.
+
+    `use_session_token` is the request preference (True/False/None). When None, a
+    pre-token widget (identified by the x-ocs-widget-version header) opts out;
+    everything else defaults to enforced. Returns the token, or None when opted out.
+    """
+    if use_session_token is None:
+        use_session_token = "x-ocs-widget-version" not in request.headers
+    if use_session_token:
+        return issue_session_token(session)
+    session.session_token_required = False
+    session.save(update_fields=["session_token_required"])
+    return None
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -232,6 +250,7 @@ def chat_upload_file(request, session_id):
         ),
     ],
 )
+@widget_sunset_headers
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([WidgetDomainPermission])
@@ -277,6 +296,7 @@ def chat_start_session(request):
     # Check if authenticated via DRF EmbeddedWidgetAuthentication
     if isinstance(request.auth, ExperimentChannel):
         experiment_channel = request.auth
+        experiment_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
     else:
         # legacy flow
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
@@ -330,9 +350,12 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
+    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"))
+
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
+        "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
     }
@@ -379,6 +402,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
         ),
     ],
 )
+@widget_sunset_headers
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
@@ -441,16 +465,31 @@ def chat_send_message(request, session_id):
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
-    task_id = get_response_for_webchat_task.delay(
+    task = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachment_data if attachment_data else None,
         context=context,
-    ).task_id
+    )
+    task_id = task.task_id
+    # Bind the task to this session so the poll endpoint can reject cross-session reads (IDOR).
+    # TTL matches the Celery result backend's default expiry (24 h).
+    cache.set(f"task_session:{task_id}", str(session_id), 24 * 3600)
 
     response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
     return Response(response_data, status=status.HTTP_202_ACCEPTED)
+
+
+def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
+    """Raise NotFound if task_id is bound to a different session (IDOR prevention).
+
+    A missing cache entry is allowed for backward compatibility with tasks
+    dispatched before this binding was introduced.
+    """
+    bound_session = cache.get(f"task_session:{task_id}")
+    if bound_session is not None and bound_session != str(session_id):
+        raise NotFound()
 
 
 @extend_schema(
@@ -470,6 +509,12 @@ def chat_send_message(request, session_id):
             {
                 "error": serializers.CharField(required=False),
                 "status": serializers.CharField(),
+            },
+        ),
+        404: inline_serializer(
+            "ChatTaskPollNotFound",
+            {
+                "detail": serializers.CharField(),
             },
         ),
         500: inline_serializer(
@@ -502,7 +547,9 @@ def chat_send_message(request, session_id):
 def chat_poll_task_response(request, session_id, task_id):
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
+
+    _verify_task_belongs_to_session(task_id, str(session_id))
 
     experiment = session.experiment
     task_details = get_message_task_response(experiment, task_id)

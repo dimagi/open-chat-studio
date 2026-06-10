@@ -13,7 +13,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import ConfigDict
 
 from apps.service_providers.llm_service import LlmService, OpenAIGenericService
 from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
@@ -182,33 +182,3 @@ def build_fake_llm_service(responses, fake_llm=None, llm_service_class=FakeLlmSe
 def build_fake_llm_echo_service(include_system_message=True):
     llm = FakeLlmEcho(include_system_message=include_system_message)
     return FakeLlmService(llm=llm)
-
-
-def dict_to_json_schema(data: dict) -> type[BaseModel]:
-    """Converts a dictionary to a JSON schema by first converting it to a Pydantic object and dumping it again.
-    The input should be in the format {"key": "description", "key2": [{"key": "description"}]}
-
-    Nested objects are not supported at the moment
-
-    Input example 1:
-    {"name": "the user's name", "surname": "the user's surname"}
-
-    Input example 2:
-    {"name": "the user's name", "pets": [{"name": "the pet's name": "type": "the type of animal"}]}
-
-    """
-
-    def _create_model_from_data(value_data, model_name: str):
-        pydantic_schema = {}
-        for key, value in value_data.items():
-            if isinstance(value, str):
-                pydantic_schema[key] = (str | None, Field(description=value))
-            elif isinstance(value, list):
-                model = _create_model_from_data(value[0], key.capitalize())
-                pydantic_schema[key] = (list[model], Field(description=f"A list of {key}"))
-        return create_model(model_name, **pydantic_schema)
-
-    Model = _create_model_from_data(data, "CustomModel")
-
-    Model.description = ""
-    return Model

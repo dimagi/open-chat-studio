@@ -17,7 +17,7 @@ from apps.service_providers.tests.test_assistant_runnable import _create_run, _c
 from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.tests.langchain import build_fake_llm_service
 
 
 def _make_tool_for_testing(output: Any, **kwargs) -> BaseTool:

@@ -16,7 +16,7 @@ def api_client():
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory.create(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
 
 
 @pytest.mark.django_db()
@@ -32,6 +32,7 @@ def test_start_chat_session(team_with_users, api_client, experiment):
     response_json = response.json()
     assert response_json == {
         "session_id": mock.ANY,
+        "session_token": mock.ANY,
         "chatbot": {
             "id": experiment.public_id,
             "name": experiment.name,
@@ -41,6 +42,7 @@ def test_start_chat_session(team_with_users, api_client, experiment):
         },
         "participant": {"identifier": mock.ANY, "remote_id": ""},
     }
+    assert response_json["session_token"]  # token must be non-null
     assert response_json["participant"]["identifier"].startswith("anon:")
 
     session = ExperimentSession.objects.get(external_id=response_json["session_id"])

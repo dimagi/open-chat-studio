@@ -29,7 +29,7 @@ from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 ASSISTANT_ID = "test_assistant_id"
 LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
