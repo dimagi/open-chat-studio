@@ -144,6 +144,7 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evalua
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, EvaluatorFormsetMixin, UpdateView):
     permission_required = "evaluations.change_evaluator"
     model = Evaluator
