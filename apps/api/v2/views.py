@@ -88,19 +88,19 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return Response(serializer.data)
 
 
-@extend_schema(
-    operation_id="me_retrieve",
-    summary="Current User",
-    description="Returns basic information about the authenticated user and the team the token is scoped to.",
-    tags=["Me"],
-    responses={200: MeSerializer},
-)
 class MeView(APIView):
     """Return info about the authenticated user and their scoped team."""
 
     permission_classes = [IsAuthenticated, TokenHasOAuthResourceScope]
     required_scopes = []  # Any valid OAuth token is accepted; no specific scope required.
 
+    @extend_schema(
+        operation_id="me_retrieve",
+        summary="Current User",
+        description="Returns basic information about the authenticated user and the team the token is scoped to.",
+        tags=["Me"],
+        responses={200: MeSerializer},
+    )
     def get(self, request):
         serializer = MeSerializer(request.user, context={"team": request.team})
         return Response(serializer.data)

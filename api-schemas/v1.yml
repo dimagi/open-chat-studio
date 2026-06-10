@@ -2646,12 +2646,30 @@ components:
           type: string
           maxLength: 150
         team:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/MeTeam'
           readOnly: true
       required:
       - id
       - team
       - username
+    MeTeam:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+      required:
+      - id
+      - name
+      - slug
     MediaCollection:
       type: object
       description: 'A media collection: its identity and files, with no embedding
@@ -3257,6 +3275,8 @@ components:
             files:read: Download file content
             participants:read: Read Participant Data
             participants:write: Update Participant Data
+            openid: OpenID Connect scope
+            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header
@@ -3278,8 +3298,8 @@ tags:
 - name: Channels
   description: Trigger bot messages or deliver messages directly to users on a channel.
 - name: Chat
-  description: "\n                The Chat API is designed to be used for integrating
-    chatbots into external systems.\n            "
+  description: "\n                The Chat API is designed to be used for integrating\
+    \ chatbots into external systems.\n            "
 - name: Experiments
   description: List and retrieve chatbots (formerly 'experiments').
 - name: Experiment Sessions

@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.experiments.models import Experiment
@@ -42,6 +43,7 @@ class MeSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ["id", "username", "email", "first_name", "last_name", "team"]
 
+    @extend_schema_field(MeTeamSerializer)
     def get_team(self, obj):
         team = self.context.get("team")
         return MeTeamSerializer(team).data if team else None
