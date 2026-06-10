@@ -222,9 +222,9 @@ jobs:
         id: cov_flags
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "flags=--cov --cov-report=xml" >> $GITHUB_OUTPUT
+            echo "flags=--cov --cov-report=xml" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=" >> $GITHUB_OUTPUT
+            echo "flags=" >> "$GITHUB_OUTPUT"
           fi
       - name: Run Tests
         env:
