@@ -853,7 +853,10 @@ haven't synced that resource yet. We should be able to rerun everything to conti
 
 ## Questions
 
-- How will FKs to global resources created by the setup work, e.g. LLM models / synthetic voices?
-  - **Resolved**: export-team returns global rows alongside team-scoped ones, flagged `is_global`.
-    Globals are not recreated — the importer matches each to the target's already-seeded row by
-    natural key and records the mapping in the FK translation table.
+- How do we keep the API up to date with new model additions? Do we lean on tests to catch them all,
+  following the `backends.py` test pattern?
+- Scheduled messages — how are these handled?
+- Fetching live data: how do we paginate it?
+- OAuth models — how (if at all) do we handle these?
+- How do we handle the chatbot switchover? Do we interactively go through each bot one at a time, or
+  ask the user whether they'd rather pull in everything and update the webhooks once it's done?
