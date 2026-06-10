@@ -249,10 +249,6 @@ class Survey(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:survey_edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    @transaction.atomic()
-    def archive(self):
-        super().archive()
-
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,

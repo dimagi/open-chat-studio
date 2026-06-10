@@ -1,10 +1,10 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views import View
-from django.views.generic import CreateView, TemplateView, UpdateView
+from django.views.generic import TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
 from apps.experiments.forms import SurveyForm
@@ -13,9 +13,13 @@ from apps.experiments.tables import SurveyTable
 from apps.generics.help import render_help_with_link
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
+SURVEY_DEPRECATION_MESSAGE = (
+    "Surveys are deprecated and will be removed on 2026-07-10. New surveys can no longer be created."
+)
+
 
 class SurveyHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
-    template_name = "generic/object_home.html"
+    template_name = "experiments/survey_home.html"
     permission_required = "experiments.view_survey"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
@@ -23,7 +27,7 @@ class SurveyHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVie
             "active_tab": "survey",
             "title": "Survey",
             "title_help_content": render_help_with_link("", "survey"),
-            "new_object_url": reverse("experiments:survey_new", args=[team_slug]),
+            "allow_new": False,
             "table_url": reverse("experiments:survey_table", args=[team_slug]),
         }
 
@@ -38,41 +42,43 @@ class SurveyTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Single
         return Survey.objects.filter(team=self.request.team, is_version=False)
 
 
-class CreateSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
-    model = Survey
-    form_class = SurveyForm
-    template_name = "generic/object_form.html"
-    extra_context = {
-        "title": "Create Survey",
-        "page_title": "Create Survey",
-        "button_text": "Create",
-        "active_tab": "survey",
-    }
-    permission_required = "experiments.add_survey"
+class CreateSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Survey creation is disabled during deprecation."""
 
-    def get_success_url(self):
-        return reverse("experiments:survey_home", args=[self.request.team.slug])
+    # view_survey (not add_survey) so any team member who lands here gets the
+    # informative deprecation redirect rather than a 403.
+    permission_required = "experiments.view_survey"
 
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        form.instance.owner = self.request.user
-        return super().form_valid(form)
+    def dispatch(self, request, team_slug: str, *args, **kwargs):
+        messages.error(request, SURVEY_DEPRECATION_MESSAGE)
+        return HttpResponseRedirect(reverse("experiments:survey_home", args=[team_slug]))
 
 
 class EditSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = Survey
     form_class = SurveyForm
-    template_name = "generic/object_form.html"
+    template_name = "experiments/survey_form.html"
     extra_context = {
-        "title": "Update Survey",
-        "page_title": "Update Survey",
-        "button_text": "Update",
+        "title": "View Survey",
+        "page_title": "View Survey",
         "active_tab": "survey",
     }
-    permission_required = "experiments.change_survey"
+    permission_required = "experiments.view_survey"
 
     def get_queryset(self):
         return Survey.objects.filter(team=self.request.team)
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        for field in form.fields.values():
+            field.disabled = True
+        return form
+
+    def post(self, request, *args, **kwargs):
+        # Reject all edits without loading self.object; this relies on the
+        # self-contained get_success_url() below (which doesn't touch self.object).
+        messages.error(request, "Surveys are read-only and can no longer be edited.")
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse("experiments:survey_home", args=[self.request.team.slug])
