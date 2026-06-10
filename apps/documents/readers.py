@@ -2,8 +2,6 @@ import logging
 from io import BytesIO
 
 from bs4 import UnicodeDammit
-from markitdown import MarkItDown
-from markitdown._exceptions import FileConversionException, UnsupportedFormatException
 from pydantic import BaseModel, Field
 
 from apps.files.models import File
@@ -58,6 +56,10 @@ def get_file_content_reader(content_type) -> callable:
 
 def markitdown_read(file_obj) -> Document:
     # markitdown supports text, pdf, docx, xlsx, xls, outlook, pptx which will be handled by the default text reader
+    # Imported lazily: markitdown is slow to import and is only needed when actually reading a document (startup time).
+    from markitdown import MarkItDown  # noqa: PLC0415
+    from markitdown._exceptions import FileConversionException, UnsupportedFormatException  # noqa: PLC0415
+
     md = MarkItDown(enable_plugins=False)
     try:
         result = md.convert(BytesIO(file_obj.read()))
