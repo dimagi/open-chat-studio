@@ -2647,29 +2647,12 @@ components:
           maxLength: 150
         team:
           allOf:
-          - $ref: '#/components/schemas/MeTeam'
+          - $ref: '#/components/schemas/Team'
           readOnly: true
       required:
       - id
       - team
       - username
-    MeTeam:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          maxLength: 100
-        slug:
-          type: string
-          maxLength: 50
-          pattern: ^[-a-zA-Z0-9_]+$
-      required:
-      - id
-      - name
-      - slug
     MediaCollection:
       type: object
       description: 'A media collection: its identity and files, with no embedding

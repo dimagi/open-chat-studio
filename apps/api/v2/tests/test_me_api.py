@@ -42,7 +42,6 @@ def test_me_returns_user_and_team(auth_method):
     assert data["last_name"] == user.last_name
 
     # Team scoped to this token
-    assert data["team"]["id"] == team.id
     assert data["team"]["name"] == team.name
     assert data["team"]["slug"] == team.slug
 
@@ -60,4 +59,4 @@ def test_me_team_is_scoped_to_token():
     response = client.get(reverse("api:v2:me"))
 
     assert response.status_code == 200
-    assert response.json()["team"]["id"] == team_a.id
+    assert response.json()["team"]["slug"] == team_a.slug
