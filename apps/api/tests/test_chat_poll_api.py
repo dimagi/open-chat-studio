@@ -144,6 +144,12 @@ def test_chat_poll_generic_error_returns_500(api_client, mock_session, mock_task
     assert data["status"] == "error"
 
 
+@pytest.fixture()
+def poll_setup(api_client, mock_session, mock_task_response):
+    """Bundle common fixtures for poll endpoint tests."""
+    return api_client, mock_session, mock_task_response
+
+
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("cache_owner", "expected_status", "task_called"),
@@ -153,12 +159,11 @@ def test_chat_poll_generic_error_returns_500(api_client, mock_session, mock_task
         pytest.param(None, 200, True, id="no-binding-backward-compat"),
     ],
 )
-def test_chat_poll_task_session_binding(
-    api_client, mock_session, mock_task_response, cache_owner, expected_status, task_called
-):
+def test_chat_poll_task_session_binding(poll_setup, cache_owner, expected_status, task_called):
     """task_id is bound to its originating session; cross-session reads return 404 (IDOR prevention).
     A missing binding is allowed for backward compatibility with tasks dispatched before this fix.
     """
+    api_client, _mock_session, mock_task_response = poll_setup
     task_id = str(uuid.uuid4())  # unique per run to avoid inter-test cache pollution
     if cache_owner is not None:
         cache.set(f"task_session:{task_id}", cache_owner, 60)
