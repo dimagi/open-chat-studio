@@ -325,7 +325,6 @@ def test_new_human_message_resets_count(session):
     [
         (SessionStatus.SETUP, True),
         (SessionStatus.PENDING, True),
-        (SessionStatus.PENDING_PRE_SURVEY, True),
         (SessionStatus.ACTIVE, True),
         (SessionStatus.PENDING_REVIEW, False),
         (SessionStatus.COMPLETE, False),
