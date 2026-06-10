@@ -510,7 +510,7 @@ class TestVerifyPublicChatToken:
     @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     def test_valid_token_redirects_to_chat(self, record_consent_and_redirect, client):
         record_consent_and_redirect.return_value = HttpResponse()
-        session = ExperimentSessionFactory.create(experiment__pre_survey=None)
+        session = ExperimentSessionFactory.create()
         experiment = session.experiment
         token = jwt.encode(
             {
