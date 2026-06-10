@@ -134,7 +134,7 @@ def system_user_changed_number_value(phone_number_id="12345"):
                 "type": "system",
                 "system": {
                     "body": "User changed number from 27000000000 to 27456897512",
-                    "wa_id": "27456897512",
+                    "new_wa_id": "27456897512",
                     "type": "user_changed_number",
                 },
             }

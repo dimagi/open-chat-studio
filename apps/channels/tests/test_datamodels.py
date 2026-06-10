@@ -21,8 +21,10 @@ class TestBaseMessage:
 
 
 class TestIsNonConversationalWhatsAppMessage:
-    """The webhook views use this to skip non-conversational payloads (which omit
-    the ``contacts`` array) before dispatching a Celery task that would crash."""
+    """The webhook views use this to skip non-conversational payloads before
+    dispatching a Celery task. "system" payloads omit the ``contacts`` array and
+    would crash the task; "unsupported"/"unknown" payloads include ``contacts`` but
+    carry nothing conversational to process."""
 
     @pytest.mark.parametrize(
         "message_data",
@@ -31,6 +33,8 @@ class TestIsNonConversationalWhatsAppMessage:
             turnio_messages.unsupported_message(),
             meta_cloud_api_messages.system_user_changed_number_value(),
             meta_cloud_api_messages.unsupported_message_value(),
+            # The "unsupported" type is reported as "unknown" on some Meta API versions.
+            {"messages": [{"type": "unknown"}]},
         ],
     )
     def test_true_for_system_and_unsupported(self, message_data):
