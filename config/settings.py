@@ -568,6 +568,12 @@ CACHES = {
     },
 }
 
+if IS_TESTING:
+    # Isolate the cache per pytest-xdist worker. Workers get separate databases
+    # but share one Redis, so without this, cached DB-backed objects (e.g. waffle
+    # flags) leak between workers and cause flaky failures.
+    CACHES["default"]["KEY_PREFIX"] = os.environ.get("PYTEST_XDIST_WORKER", "test")
+
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
 WAFFLE_CREATE_MISSING_FLAGS = True
@@ -863,6 +869,9 @@ SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_ke
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+
+# How long after the last message a chat session token remains usable.
+CHAT_SESSION_TOKEN_INACTIVITY_WINDOW = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
 SUPPORTED_FILE_TYPES = {
     "file_search": (
@@ -895,6 +904,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "x-ocs-widget-version",
     "x-embed-key",
+    "x-session-token",
 ]
 
 CORS_ALLOW_METHODS = [

@@ -91,6 +91,7 @@ dependencies = [
     "dictdiffer>=0.9.0",
     "djlint>=1.36.4",
     "transformers",
+    "packaging>=23.2",
 ]
 
 [project.urls]
