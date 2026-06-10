@@ -1,5 +1,6 @@
 import { newSpecPage } from '@stencil/core/testing';
 import { OcsChat } from './ocs-chat';
+import { SessionAccessError } from '../../services/chat-session-service';
 
 // Create mock functions at the module level
 const mockStartSession = jest.fn();
@@ -10,7 +11,9 @@ const mockStopMessagePolling = jest.fn();
 const mockFetchAllMessages = jest.fn();
 // Mock the ChatSessionService module
 jest.mock('../../services/chat-session-service', () => {
+  const actual = jest.requireActual('../../services/chat-session-service');
   return {
+    ...actual,
     ChatSessionService: jest.fn().mockImplementation(() => ({
       startSession: mockStartSession,
       sendMessage: mockSendMessage,
@@ -809,5 +812,49 @@ describe('ocs-chat session tokens', () => {
     expect(page.rootInstance['currentSessionToken']).toBe('host-tok');
     expect(page.rootInstance['getChatService']()['sessionToken']).toBe('host-tok');
     expect(window.localStorage.setItem).not.toHaveBeenCalledWith('ocs-chat-token-test-bot', expect.anything());
+  });
+
+  it('on an unbound 403 it shows a notice and resets the session for a fresh start', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    await page.waitForChanges();
+
+    // Start a session, then make the message send reject with a 403.
+    await page.rootInstance.sendMessage('Hello');
+    await page.waitForChanges();
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
+
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'sendMessage').mockRejectedValueOnce(new SessionAccessError(403, 'session_expired', 'Session has expired'));
+
+    await page.rootInstance.sendMessage('again');
+    await page.waitForChanges();
+
+    // Session is discarded so the next send starts fresh, and a system notice is shown.
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
+    expect(page.rootInstance['currentSessionToken']).toBeUndefined();
+    const systemMessage = page.rootInstance.messages.find((m: any) => m.role === 'system');
+    expect(systemMessage).toBeDefined();
+  });
+
+  it('on a bound 403 it surfaces an error and stays bound', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" session-id="host-session" session-token="bad-tok" visible="true"></open-chat-studio-widget>',
+    });
+
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'fetchAllMessages').mockRejectedValue(new SessionAccessError(403, 'session_token_invalid', 'Invalid session token'));
+
+    // Trigger history load for the bound session.
+    await page.rootInstance['loadBoundSessionHistory']();
+    await page.waitForChanges();
+
+    // Bound widget cannot restart: it stays on the host session and shows an error.
+    expect(page.rootInstance.activeSessionId).toBe('host-session');
+    const systemMessage = page.rootInstance.messages.find((m: any) => m.role === 'system');
+    expect(systemMessage).toBeDefined();
   });
 });

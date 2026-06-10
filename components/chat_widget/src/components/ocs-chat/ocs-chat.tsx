@@ -14,7 +14,7 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import { TranslationStrings, TranslationManager, defaultTranslations } from '../../utils/translations';
-import { ChatSessionService, ChatMessage, MessagePollingHandle, TaskPollingHandle } from '../../services/chat-session-service';
+import { ChatSessionService, ChatMessage, MessagePollingHandle, TaskPollingHandle, SessionAccessError } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
 interface PointerEvent {
@@ -390,6 +390,30 @@ export class OcsChat {
     this.scrollToBottom();
   }
 
+  /**
+   * Recover from a rejected session token (403). Unbound widgets discard the
+   * dead session/token, show a notice, and start fresh on the next send; bound
+   * widgets cannot restart a host-owned session, so they surface an error.
+   */
+  private handleSessionAccessError(): void {
+    this.cleanup();
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.typingProgressMessage = '';
+
+    if (this.isSessionBound()) {
+      this.addErrorMessage(this.translationManager.get('status.sessionError', 'This chat session is no longer available.'));
+      return;
+    }
+
+    this.sessionEpoch += 1;
+    this.activeSessionId = undefined;
+    this.applySessionToken(undefined);
+    this.clearSessionStorage();
+    this.addErrorMessage(this.translationManager.get('status.sessionExpired', 'Your chat session expired. Starting a new chat — please resend your message.'));
+  }
+
   private handleError(errorText: string): void {
     // show as system message
     this.addErrorMessage(errorText);
@@ -527,6 +551,10 @@ export class OcsChat {
       this.scrollToBottom(true);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
+      if (error instanceof SessionAccessError) {
+        this.handleSessionAccessError();
+        return;
+      }
       console.warn('Failed to load chat history:', error);
     }
     this.startMessagePolling();
@@ -547,6 +575,9 @@ export class OcsChat {
         sessionToken: this.currentSessionToken,
       });
       this.selectedFiles = uploadResult.selectedFiles;
+      if (uploadResult.tokenRejected) {
+        throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
+      }
       return uploadResult.uploadedIds;
     } finally {
       this.isUploadingFiles = false;
@@ -643,6 +674,10 @@ export class OcsChat {
       this.startTaskPolling(data.task_id);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
+      if (error instanceof SessionAccessError) {
+        this.handleSessionAccessError();
+        return;
+      }
       const errorText = error instanceof Error ? error.message : 'Failed to send message';
       this.handleError(errorText);
     }
@@ -836,8 +871,12 @@ export class OcsChat {
       },
       onError: error => {
         this.typingProgressMessage = '';
-        this.handleError(error.message);
         this.taskPollingHandle = undefined;
+        if (error instanceof SessionAccessError) {
+          this.handleSessionAccessError();
+          return;
+        }
+        this.handleError(error.message);
         this.startMessagePolling();
       },
     });
