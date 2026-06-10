@@ -63,6 +63,7 @@ def test_list_experiments(auth_method, experiment):
         ],
         "next": None,
         "previous": None,
+        "count": 1,
     }
     assert response.json() == expected_json
 
