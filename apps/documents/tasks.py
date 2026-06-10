@@ -5,6 +5,7 @@ from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
+import openai
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -19,6 +20,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
+from apps.documents.document_source_service import sync_document_source
 from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
     Collection,
@@ -96,8 +98,6 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
-    import openai  # noqa: PLC0415 - lazy: avoid loading openai at startup (not in top-level imports)
-
     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     old_manager = llm_provider.get_remote_index_manager(vector_store_id)
     old_manager.delete_remote_index()
@@ -174,10 +174,6 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 @shared_task(ignore_result=True)
 def sync_document_source_task(document_source_id: int):
     """Sync a specific document source"""
-    from apps.documents.document_source_service import (  # noqa: PLC0415 - circular: document_source_service imports documents.tasks
-        sync_document_source,
-    )
-
     try:
         document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
     except DocumentSource.DoesNotExist:

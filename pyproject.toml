@@ -91,6 +91,7 @@ dependencies = [
     "dictdiffer>=0.9.0",
     "djlint>=1.36.4",
     "transformers",
+    "packaging>=23.2",
 ]
 
 [project.urls]
@@ -172,7 +173,7 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "prek>=0.3.2",
     "django-types",
-    "ty==0.0.38",
+    "ty>=0.0.38",
     "honcho>=2.0.0",
     # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
     # the CommCare Connect backend for local development.

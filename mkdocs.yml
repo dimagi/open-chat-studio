@@ -66,6 +66,10 @@ nav:
     - User Docs: contributing/user_docs.md
   - Getting Started:
     - Overview: getting-started/index.md
+    - Local Setup: getting-started/local-setup.md
+    - Docker Setup: getting-started/docker-setup.md
+    - Common Tasks: getting-started/common-tasks.md
+    - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
     - Decisions:
@@ -108,16 +112,21 @@ nav:
       - 0035 Read-only mode gates features during the deprecation window: adr/0035-read-only-mode-during-deprecation-window.md
       - 0036 Sunset headers and 410 Gone for retired HTTP surfaces: adr/0036-sunset-headers-and-410-for-retired-http-surfaces.md
       - 0037 Row-multiplying list filters use EXISTS, not a blanket DISTINCT: adr/0037-row-multiplying-filters-use-exists-not-distinct.md
+      - 0038 Redirect version snapshot URLs to the working version: adr/0038-redirect-version-snapshot-urls-to-working-version.md
+      - 0039 Require proof of possession for chat session access: adr/0039-require-proof-of-possession-for-chat-session-access.md
+      - 0040 Stateless signed session tokens with server-side inactivity expiry: adr/0040-stateless-signed-session-tokens-with-inactivity-expiry.md
+      - 0041 Fail-closed session-token enforcement rollout: adr/0041-fail-closed-session-token-enforcement-rollout.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Deployment: developer_guides/deployment.md
-      - AI Development: developer_guides/ai_development.md
+      - AI-Assisted Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
+      - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
     - Code Systems:
       - Common Practises: developer_guides/common_practises.md

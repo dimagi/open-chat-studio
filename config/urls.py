@@ -80,6 +80,7 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),  # MFA URLs included automatically
     path("users/", include("apps.users.urls")),
     path("teams/", include("apps.teams.urls")),
+    path("", include("apps.prelogin.urls")),
     path("", include("apps.web.urls")),
     path("", include(slack_global_urls)),
     path("celery-progress/", include("celery_progress.urls")),

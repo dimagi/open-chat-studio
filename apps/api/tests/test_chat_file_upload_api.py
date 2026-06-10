@@ -25,7 +25,7 @@ def authed_client(team_with_users):
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory.create(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
 
 
 def _get_test_file_path(filename):

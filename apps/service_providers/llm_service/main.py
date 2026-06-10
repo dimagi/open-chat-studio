@@ -4,7 +4,7 @@ import logging
 import re
 from functools import cached_property
 from io import BytesIO
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import ClassVar, Literal
 
 import pydantic
 from django.db.models import Q
@@ -18,6 +18,13 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.index_managers import (
+    GoogleLocalIndexManager,
+    IndexManager,
+    OpenAILocalIndexManager,
+    OpenAIRemoteIndexManager,
+    VoyageAILocalIndexManager,
+)
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
@@ -26,9 +33,6 @@ from apps.service_providers.llm_service.utils import (
 )
 
 logger = logging.getLogger("ocs.llm_service")
-
-if TYPE_CHECKING:
-    from apps.service_providers.llm_service.index_managers import IndexManager
 
 
 class OpenAIBuiltinTool(dict):
@@ -225,17 +229,9 @@ class OpenAILlmService(OpenAIGenericService):
         return tools
 
     def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
-            OpenAIRemoteIndexManager,
-        )
-
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
-            OpenAILocalIndexManager,
-        )
-
         return OpenAILocalIndexManager(
             api_key=self.openai_api_key,
             embedding_model_name=embedding_model_name,
@@ -441,10 +437,6 @@ class GoogleLlmService(LlmService):
         # return tools
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
-            GoogleLocalIndexManager,
-        )
-
         return GoogleLocalIndexManager(api_key=self.google_api_key, embedding_model_name=embedding_model_name)
 
 
@@ -458,10 +450,6 @@ class VoyageAILlmService(LlmService):
         raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
 
     def get_local_index_manager(self, embedding_model_name: str) -> IndexManager:
-        from apps.service_providers.llm_service.index_managers import (  # noqa: PLC0415 - lazy: avoids loading pgvector at startup
-            VoyageAILocalIndexManager,
-        )
-
         return VoyageAILocalIndexManager(api_key=self.voyage_api_key, embedding_model_name=embedding_model_name)
 
 

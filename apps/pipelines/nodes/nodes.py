@@ -63,6 +63,7 @@ from apps.service_providers.llm_service.history_managers import AssistantPipelin
 from apps.service_providers.llm_service.prompt_context import (
     PipelineParticipantDataProxy,
     PromptTemplateContext,
+    SafeAccessWrapper,
 )
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.runnables import (
@@ -742,10 +743,6 @@ class StaticRouterNode(RouterMixin, PipelineRouterNode):
     route_key: str = Field(..., description="The key in the data to use for routing")
 
     def _process_conditional(self, context: "NodeContext"):
-        from apps.service_providers.llm_service.prompt_context import (  # noqa: PLC0415 - lazy: avoids startup load
-            SafeAccessWrapper,
-        )
-
         match self.data_source:
             case self.DataSource.participant_data:
                 data = context.state.participant_data

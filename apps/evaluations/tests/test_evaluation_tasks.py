@@ -34,7 +34,7 @@ from apps.utils.factories.evaluations import (
 )
 from apps.utils.factories.experiment import ChatbotFactory, ChatFactory, ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.langchain import build_fake_llm_service
+from apps.utils.tests.langchain import build_fake_llm_service
 
 
 @pytest.fixture()

@@ -40,10 +40,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
 class ParticipantDataEntrySerializer(serializers.ModelSerializer):
     chatbot = serializers.CharField(source="experiment.name", read_only=True)
     chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
+    connect_channel_id = serializers.SerializerMethodField(
+        help_text="CommCare Connect channel ID. Only set for the CommCare Connect channel."
+    )
 
     class Meta:
         model = ParticipantData
-        fields = ["chatbot", "chatbot_id", "data"]
+        fields = ["chatbot", "chatbot_id", "data", "connect_channel_id"]
+
+    def get_connect_channel_id(self, obj) -> str | None:
+        return obj.system_metadata.get("commcare_connect_channel_id")
 
 
 class ParticipantDetailSerializer(serializers.ModelSerializer):
@@ -59,7 +65,7 @@ class ParticipantDetailSerializer(serializers.ModelSerializer):
         # queryset is pre-annotated via the view's get_queryset / prefetch
         qs = getattr(obj, "_prefetched_participant_data", None)
         if qs is None:
-            qs = obj.data_set.filter(team=obj.team)
+            qs = obj.data_set.filter(team=obj.team).select_related("experiment")
         return ParticipantDataEntrySerializer(qs, many=True).data
 
 
@@ -253,10 +259,26 @@ class ChatStartSessionRequest(serializers.Serializer):
     participant_name = serializers.CharField(
         label="Paricipant Name", required=False, help_text="Optional participant name"
     )
+    use_session_token = serializers.BooleanField(
+        label="Use session token",
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Whether to protect the session with a session token (default true). When enabled, the"
+        " response includes a `session_token` which must be sent as the `X-Session-Token` header on all"
+        " subsequent requests for this session. Set to false to opt out and rely on legacy access rules.",
+    )
 
 
 class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
+    session_token = serializers.CharField(
+        label="Session token",
+        allow_null=True,
+        required=False,
+        help_text="Present when the session is token-protected. Send as the `X-Session-Token` header on all"
+        " subsequent requests for this session.",
+    )
     chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
 

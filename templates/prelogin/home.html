@@ -1,0 +1,427 @@
+{% extends "prelogin/base.html" %}
+{% load static %}
+
+{% block meta %}
+<meta name="description" content="An open-source platform for building and deploying AI chatbots, designed to bring the benefits of AI to global development.">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+<meta property="og:title" content="Open Chat Studio: AI Chatbots for Global Health">
+<meta property="og:description" content="An open-source platform for building and deploying AI chatbots for global development and social impact.">
+<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'prelogin/images/uc-personas.jpg' %}">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "{{ request.build_absolute_uri }}#organization",
+      "name": "Open Chat Studio",
+      "alternateName": "Open Chat Studio by Dimagi",
+      "url": "{{ request.build_absolute_uri }}",
+      "description": "An open-source platform for building and deploying AI chatbots, designed to bring the benefits of AI to global development.",
+      "parentOrganization": {
+        "@type": "Organization",
+        "name": "Dimagi, Inc.",
+        "url": "https://dimagi.com/"
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "{{ request.build_absolute_uri }}#website",
+      "url": "{{ request.build_absolute_uri }}",
+      "name": "Open Chat Studio",
+      "publisher": { "@id": "{{ request.build_absolute_uri }}#organization" },
+      "inLanguage": "en"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Open Chat Studio",
+      "operatingSystem": "Web",
+      "applicationCategory": "WebApplication",
+      "url": "{{ request.build_absolute_uri }}",
+      "publisher": { "@id": "{{ request.build_absolute_uri }}#organization" }
+    }
+  ]
+}
+</script>
+{% endblock meta %}
+
+{% block page_styles %}
+<style>
+  :root {
+    --indigo: #16006D;
+    --indigo-soft: #ffffff;
+    --grad-text: linear-gradient(90deg, #16006D 0%, #16006D 100%);
+  }
+
+  /* ── Hero layout (two-column: text left, devices right) ── */
+  .hero-ocs { padding: 80px 0 88px; position: relative; overflow: hidden; }
+  .hero-ocs .hero-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; position: relative; z-index: 1; }
+  .hero-inner { position: relative; z-index: 1; }
+  .hero-ocs h1.hero-title { font-size: clamp(38px, 4.4vw, 58px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 200; margin: 0 0 22px; }
+  .hero-ocs .eyebrow { justify-content: flex-start; }
+  .hero-ocs .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .btn-arrow-down::after { content: "↓"; font-weight: 500; transition: transform 150ms; }
+  .btn-arrow-down:hover::after { transform: translateY(3px); }
+  .hero-ocs .hero-sub { font-size: 1.1rem; margin: 0 0 32px; max-width: 520px; font-weight: 400; line-height: 1.7; }
+  .hero-devices { position: relative; z-index: 1; }
+  .hero-devices img { width: 118%; max-width: none; height: auto; display: block; margin-right: -18%; }
+  @media (max-width: 860px) {
+    .hero-ocs { padding: 64px 0 56px; text-align: center; }
+    .hero-ocs .hero-grid { grid-template-columns: 1fr; gap: 32px; }
+    .hero-ocs .eyebrow { justify-content: center; }
+    .hero-ocs .hero-ctas { justify-content: center; }
+    .hero-ocs .hero-sub { margin: 0 auto 32px; }
+    .hero-devices img { width: 100%; margin-right: 0; max-width: 560px; margin-left: auto; margin-right: auto; }
+  }
+
+  /* ── Partner strip ── */
+  .partner-strip {
+    background: transparent;
+    border-bottom: none;
+    padding: 14px 0;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, black 6%, black 94%, transparent 100%);
+  }
+  .partner-strip-track { display: flex; width: max-content; animation: strip-scroll 90s linear infinite; }
+  .partner-strip-track:hover { animation-play-state: paused; }
+  @keyframes strip-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .partner-strip-track { animation: none; } }
+  .partner-strip-name { padding: 0 28px; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(22,0,109,0.55); white-space: nowrap; }
+  .partner-strip-dot { color: rgba(22,0,109,0.20); padding: 0 4px; user-select: none; }
+
+  /* ── How It Works diagram ── */
+  .hiw-diagram { display:grid; grid-template-columns:0.8fr auto 2.7fr auto 0.8fr; gap:0; align-items:center; }
+  .hiw-col { display:flex; flex-direction:column; gap:12px; align-items:center; }
+  .hiw-col-label { font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted-soft); margin-bottom:4px; text-align:center; }
+  .hiw-providers { display:flex; flex-direction:column; gap:7px; align-items:center; }
+  .hiw-provider-pill { background:#fff; border:1px solid var(--line); border-radius:100px; padding:7px 16px; font-size:0.82rem; font-weight:500; color:var(--ink); text-align:center; white-space:nowrap; }
+  .hiw-provider-muted { opacity:0.55; }
+  .hiw-connector { display:flex; align-items:center; padding:0 16px; }
+  .hiw-connector-line { flex:1; height:1px; background:linear-gradient(90deg,#E6E7F0 0%,#16006D 100%); min-width:32px; }
+  .hiw-platform { background:#16006D; border-radius:var(--radius-lg); padding:48px 44px; box-shadow:0 20px 64px -16px rgba(22,0,109,0.4); }
+  .hiw-platform-inner { display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .hiw-platform-features { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:4px; }
+  .hiw-pfeat { background:rgba(141,233,105,0.18); border:1px solid rgba(141,233,105,0.55); border-radius:100px; padding:8px 16px; font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:0.03em; color:#8DE969; text-transform:uppercase; }
+  @media (max-width:860px) {
+    .nav-links { background: #16006D !important; border-top-color: rgba(255,255,255,0.20) !important; }
+    .hiw-diagram { grid-template-columns:1fr; gap:20px; }
+    .hiw-connector { padding:0; justify-content:center; transform:rotate(90deg); width:40px; margin:0 auto; }
+    .hiw-connector-line { min-width:40px; }
+    .hiw-providers { flex-direction:row; flex-wrap:wrap; justify-content:center; }
+  }
+
+
+  /* ── Podcast CTA card ── */
+  .podcast-cta-card {
+    background: #fff; border: 1px solid rgba(22,0,109,0.08); border-radius: 14px; overflow: hidden;
+    text-decoration: none; display: block; color: inherit;
+    box-shadow: 0 4px 24px -6px rgba(22,0,109,0.10);
+    transition: box-shadow 200ms, transform 200ms;
+  }
+  .podcast-cta-card:hover { box-shadow: 0 12px 40px -8px rgba(22,0,109,0.18); transform: translateY(-3px); color: inherit; }
+  .podcast-cta-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .podcast-cta-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 6px; }
+  .podcast-cta-label { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(22,0,109,0.40); }
+  .podcast-cta-title { font-size: 0.95rem; font-weight: 600; color: #16006D; line-height: 1.4; margin: 0; }
+  .podcast-cta-desc { font-size: 0.82rem; color: var(--muted); line-height: 1.6; margin: 0; }
+  .podcast-cta-link { font-size: 0.78rem; font-weight: 700; color: #16006D; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+
+  /* ── Open source home 2-col ── */
+  .os-home-grid { display: grid; grid-template-columns: 1fr 320px; gap: 72px; align-items: center; }
+  .gh-repo-card {
+    background: #ffffff; border: 1px solid rgba(184,164,255,0.22); border-radius: 14px;
+    padding: 28px 32px; box-shadow: 0 4px 24px -6px rgba(22,0,109,0.10);
+  }
+  .gh-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .gh-icon { width: 18px; height: 18px; fill: #16006D; opacity: 0.7; flex-shrink: 0; }
+  .gh-repo-name { font-size: 0.88rem; color: rgba(22,0,109,0.65); }
+  .gh-repo-name strong { font-weight: 600; color: #16006D; }
+  .gh-card-desc { font-size: 0.85rem; color: var(--muted); line-height: 1.65; margin: 0 0 20px; }
+  .gh-card-stats { display: flex; gap: 20px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid rgba(184,164,255,0.16); }
+  .gh-stat { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; color: rgba(22,0,109,0.55); font-family: var(--mono); }
+  .gh-stat svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  .gh-lang-dot { width: 10px; height: 10px; border-radius: 50%; background: #3572A5; display: inline-block; }
+  @media (max-width: 860px) { .os-home-grid { grid-template-columns: 1fr; gap: 40px; } }
+  .community-home-grid { display:grid; grid-template-columns:1fr 1fr; gap:72px; align-items:center; }
+  @media (max-width:860px) { .community-home-grid { grid-template-columns:1fr; gap:40px; } }
+  @media (max-width:860px) { .community-home-grid img { max-width:100% !important; height:240px !important; } }
+
+  /* ── Use-case teaser (copy + persona collage) ── */
+  .uc-teaser-grid { display:grid; grid-template-columns:1.08fr 0.92fr; gap:64px; align-items:center; }
+  .uc-teaser-media { max-width:520px; margin-left:auto; }
+  .uc-teaser-copy { text-align:left; }
+  .uc-teaser-copy .eyebrow { justify-content:flex-start; }
+  .uc-teaser-media img { width:100%; height:auto; display:block; }
+  @media (max-width:860px) {
+    .uc-teaser-grid { grid-template-columns:1fr; gap:28px; }
+    .uc-teaser-copy { text-align:center; }
+    .uc-teaser-copy .eyebrow { justify-content:center; }
+    .uc-teaser-media { max-width:440px; margin:0 auto; }
+  }
+  /* Open-source community network graphic (replaces photo) */
+  /* Black "Challenge" section */
+  #challenge .eyebrow { color: #8DE969 !important; }
+  #challenge .eyebrow::before { background: #8DE969 !important; }
+  #challenge .section-title { color: #ffffff !important; }
+  #challenge .section-title em { color: #8DE969 !important; -webkit-text-fill-color: #8DE969 !important; background: none !important; font-style: normal; font-weight: 600; }
+  /* Use Cases badge (home teaser) */
+
+  /* ── How It Works: interactive capability tags ── */
+  .hiw-pfeat { cursor:pointer; transition:background 150ms, border-color 150ms, color 150ms, box-shadow 150ms; }
+  .hiw-pfeat.pop-open { background:#8DE969; border-color:#8DE969; color:#16006D; }
+  .hiw-hint { font-family:var(--mono); font-size:0.82rem; font-weight:700; letter-spacing:0.06em; color:rgba(255,255,255,0.92); margin:16px 0 0; text-align:center; }
+
+  /* ── Feature popover (capability tag detail) ── */
+  .hiw-popover { position:fixed; z-index:300; background:#fff; border-radius:10px; padding:14px 18px 16px; width:260px; box-shadow:0 10px 36px -8px rgba(22,0,109,0.32); opacity:0; pointer-events:none; transition:opacity 140ms, transform 140ms; transform:translateY(4px); }
+  .hiw-popover.visible { opacity:1; pointer-events:auto; transform:translateY(0); }
+  .hiw-popover-title { font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#16006D; margin:0 0 10px; }
+  .hiw-popover-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:7px; }
+  .hiw-popover-list li { font-size:0.79rem; color:var(--muted); line-height:1.6; padding-left:14px; position:relative; }
+  .hiw-popover-list li::before { content:"→"; position:absolute; left:0; color:#16006D; font-size:0.72rem; font-weight:700; top:1px; }
+
+  /* ── Learn grid (walkthrough video + docs) ── */
+
+  /* .ocs-feature-dark + footer/nav colors come from ocs-theme.css */
+</style>
+{% endblock page_styles %}
+
+{% block content %}
+<!-- ───── HERO ───── -->
+<section id="main" class="hero-ocs hero-home">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-inner">
+        <span class="eyebrow">OPEN CHAT STUDIO</span>
+        <h1 class="hero-title">The responsible layer between AI and <em>the people it serves</em></h1>
+        <p class="hero-sub">Open-source, equitable by design, and built for the communities where AI's impact is needed most.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-indigo btn-arrow-down" href="#how-it-works">See how it works</a>
+        </div>
+      </div>
+      <div class="hero-devices">
+        <img src="{% static 'prelogin/images/ocs-device-lineup.webp' %}" width="1800" height="1200" alt="Open Chat Studio across desktop, laptop and mobile" fetchpriority="high">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── COMMUNITY PARTNERS STRIP ───── -->
+<div style="background:#D6EEF2;padding:32px 0;">
+  <p style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.10em;text-transform:uppercase;color:rgba(22,0,109,0.40);margin:0 0 18px;">Open Chat Studio Community Partners</p>
+  <div class="partner-strip" style="border-bottom:none;">
+    <div class="partner-strip-track">
+      <span class="partner-strip-name">Shujaaz</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">RAES</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">KNCV Tuberculosis Foundation</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Sanofi</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Zvandiri</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Walimu</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">United Nations Children's Fund</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Massachusetts General Hospital</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Univ. of California, Los Angeles</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Columbia University</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Ariadne Labs</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">PACHI</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Save the Children</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">World Health Organization / ESPEN</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Clear Global</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Gates Foundation</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Shujaaz</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">RAES</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">KNCV Tuberculosis Foundation</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Sanofi</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Zvandiri</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Walimu</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">United Nations Children's Fund</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Massachusetts General Hospital</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Univ. of California, Los Angeles</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Columbia University</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Ariadne Labs</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">PACHI</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Save the Children</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">World Health Organization / ESPEN</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Clear Global</span><span class="partner-strip-dot">·</span>
+      <span class="partner-strip-name">Gates Foundation</span><span class="partner-strip-dot">·</span>
+    </div>
+  </div>
+</div>
+
+<!-- ───── THE CHALLENGE (compact) ───── -->
+<section class="section" style="background:#131316;padding-top:88px;padding-bottom:88px;" id="challenge">
+  <div class="container" style="max-width:760px;text-align:center;">
+    <span class="eyebrow" style="justify-content:center;">THE CHALLENGE</span>
+    <h2 class="section-title" style="color:#ffffff;">AI is advancing faster than <em style="font-style:normal;font-weight:600;background:none;-webkit-text-fill-color:var(--ocs-green);color:var(--ocs-green);">the systems built to share its benefits</em></h2>
+    <p style="color:rgba(255,255,255,0.78);font-size:1.1rem;line-height:1.85;margin:20px auto 0;">Most AI tools aren't built for the contexts that need them most: low-resource settings, low-literacy users, multilingual communities, constrained infrastructure. Open Chat Studio is working to close the gap.</p>
+  </div>
+</section>
+
+<!-- ───── HOW IT WORKS ───── -->
+<section class="section" style="background:#ffffff;" id="how-it-works">
+  <div class="container">
+    <div style="text-align:center;max-width:680px;margin:0 auto 56px;">
+      <span class="eyebrow" style="justify-content:center;">HOW IT WORKS</span>
+      <h2 class="section-title">Responsible AI platform <em>for social impact</em></h2>
+      <p style="color:var(--muted);font-size:1.05rem;line-height:1.8;">Open Chat Studio gives your team full control to build, evaluate, and deploy AI chatbots responsibly. Any LLM. Any channel.</p>
+    </div>
+    <div class="hiw-diagram" style="max-width:1160px;margin:0 auto;">
+      <div class="hiw-col">
+        <div class="hiw-col-label">LLM Providers</div>
+        <div class="hiw-providers">
+          <div class="hiw-provider-pill">OpenAI</div>
+          <div class="hiw-provider-pill">Anthropic</div>
+          <div class="hiw-provider-pill">Gemini</div>
+          <div class="hiw-provider-pill">Azure</div>
+          <div class="hiw-provider-pill hiw-provider-muted">Mistral</div>
+          <div class="hiw-provider-pill hiw-provider-muted">LLaMA</div>
+          <div class="hiw-provider-pill hiw-provider-muted">+ more</div>
+        </div>
+      </div>
+      <div class="hiw-connector">
+        <div class="hiw-connector-line"></div>
+        <svg width="12" height="20" viewBox="0 0 12 20" fill="none"><path d="M1 1l10 9-10 9" stroke="rgba(22,0,109,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <div class="hiw-platform">
+          <div class="hiw-platform-inner">
+            <img src="{% static 'prelogin/images/ocs-logo.png' %}" width="175" height="78" alt="Open Chat Studio" style="height:80px;width:auto;margin-bottom:20px;display:block;filter:brightness(0) invert(1);opacity:0.9;">
+            <div class="hiw-platform-features">
+              <span class="hiw-pfeat" data-bullets="Model-agnostic: 8 providers currently supported|Text-to-speech and Speech-to-Text via Azure, AWS Polly, OpenAI|Deploy to Web, WhatsApp, Telegram, Facebook Messenger, Slack">LLM &amp; Channels</span>
+              <span class="hiw-pfeat" data-bullets="Centralized prompt configuration|Structured prompt templates and context injection|Multi-step conversational logic and multi-agent workflows|Full flow control including safety routing">Prompt &amp; Logic</span>
+              <span class="hiw-pfeat" data-bullets="Full transcript logging for all conversations|Message tagging and quality review|Structured participant data capture, referencing prior interactions|Tracing integration with Langfuse for detailed visibility">Interaction &amp; Data</span>
+              <span class="hiw-pfeat" data-bullets="Participant consent flows, pre- and post-interaction surveys|Configuration version tracking|LLM-as-a-judge and human-as-a-judge evaluation workflows">Evaluation</span>
+              <span class="hiw-pfeat" data-bullets="Source documentation for conversation control|Internal retrieval-augmented generation (RAG) support|Media libraries for controlled media sharing|Automated database updates from Confluence and GitHub">RAG &amp; Knowledge</span>
+              <span class="hiw-pfeat" data-bullets="Integration with external systems via user-configurable tools (e.g., CommCare and Connect)|APIs for integration with other systems and platforms">Extensible</span>
+            </div>
+            <p class="hiw-hint">↑ Hover any tag to explore</p>
+          </div>
+        </div>
+      </div>
+      <div class="hiw-connector">
+        <div class="hiw-connector-line"></div>
+        <svg width="12" height="20" viewBox="0 0 12 20" fill="none"><path d="M1 1l10 9-10 9" stroke="rgba(22,0,109,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="hiw-col">
+        <div class="hiw-col-label">Deployment Channels</div>
+        <div class="hiw-providers">
+          <div class="hiw-provider-pill">WhatsApp</div>
+          <div class="hiw-provider-pill">Web</div>
+          <div class="hiw-provider-pill">SMS</div>
+          <div class="hiw-provider-pill">Telegram</div>
+          <div class="hiw-provider-pill hiw-provider-muted">Messenger</div>
+          <div class="hiw-provider-pill hiw-provider-muted">Slack</div>
+          <div class="hiw-provider-pill hiw-provider-muted">Voice</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ───── IN ACTION TEASER ───── -->
+<section class="section" style="background:#E8F4F7;padding-top:64px;padding-bottom:64px;" id="in-action-home">
+  <div class="container">
+    <div class="uc-teaser-grid">
+      <div class="uc-teaser-copy">
+        <span class="eyebrow">USE CASES</span>
+        <h2 class="section-title">How teams put Open Chat Studio <em>to work</em></h2>
+        <p style="color:var(--muted);font-size:1.05rem;line-height:1.8;margin:0;">
+          From individuals getting trusted answers, to frontline workers delivering care, to organizations coordinating at scale, see how Open Chat Studio is used across every layer of impact.
+        </p>
+        <div style="margin-top:30px;">
+          <a class="btn btn-indigo btn-arrow" href="{% url 'prelogin:applications' %}">Explore use cases</a>
+        </div>
+      </div>
+      <div class="uc-teaser-media">
+        <img src="{% static 'prelogin/images/uc-personas-circles.webp' %}" width="1014" height="842" alt="Illustrated chatbot personas from real Open Chat Studio deployments" loading="lazy">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── OPEN SOURCE & COMMUNITY (merged DPG + community) ───── -->
+<section class="section" style="background:#ffffff;padding-top:96px;padding-bottom:96px;" id="open-source">
+  <div class="container">
+    <div class="community-home-grid">
+      <div>
+        <span class="eyebrow">OPEN COMMUNITY</span>
+        <h2 class="section-title">Built in the <em>open</em></h2>
+        <p style="color:var(--muted);font-size:1.05rem;line-height:1.8;margin:0 0 28px;">
+          Fully open source and shaped by the people using it: researchers, developers, and global development organizations building with it today.
+        </p>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <a class="btn btn-indigo btn-arrow" href="{% url 'prelogin:about' %}">Join the Community</a>
+          <a class="btn btn-ghost btn-arrow" href="https://github.com/dimagi/open-chat-studio" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+      <div>
+        <img src="{% static 'prelogin/images/zvandiri-catscoach.webp' %}" width="1094" height="728" alt="Zvandiri CATSCoach peer supporters" style="width:100%;height:380px;object-fit:cover;object-position:center;border-radius:16px;display:block;box-shadow:0 24px 64px -16px rgba(22,0,109,0.30);">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── FINAL CTA: COLLABORATE ───── -->
+<section class="section ocs-cta-blue" style="background:#D6EEF2;text-align:center;">
+  <div class="container" style="max-width:640px;">
+    <span class="eyebrow" style="justify-content:center;">LEARN MORE</span>
+    <h2 class="section-title" style="color:#16006D;margin-bottom:20px;">Want to <em style="font-weight:600;background:linear-gradient(90deg,#16006D 0%,#16006D 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">learn more?</em></h2>
+    <p style="color:var(--muted);font-size:1.05rem;margin-bottom:40px;line-height:1.8;">
+      Whether you want to contribute code, deploy with your community, or collaborate on research, we're happy to talk.
+    </p>
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+      <a class="btn btn-indigo btn-arrow" href="{% url 'prelogin:contact' %}">Contact Dimagi</a>
+    </div>
+  </div>
+</section>
+{% endblock content %}
+
+{% block page_scripts %}
+<script>
+// Capability-tag popovers (How It Works diagram)
+(function() {
+  var pills = document.querySelectorAll('.hiw-pfeat');
+  if (!pills.length) return;
+  var pop = document.createElement('div');
+  pop.className = 'hiw-popover';
+  pop.innerHTML = '<p class="hiw-popover-title"></p><ul class="hiw-popover-list"></ul>';
+  document.body.appendChild(pop);
+  var activePill = null;
+
+  function showPop(pill) {
+    pop.querySelector('.hiw-popover-title').textContent = pill.textContent.trim();
+    var bullets = (pill.dataset.bullets || '').split('|');
+    pop.querySelector('.hiw-popover-list').innerHTML = bullets.map(function(b) {
+      return '<li>' + b.trim() + '</li>';
+    }).join('');
+    pop.classList.add('visible');
+    positionPop(pill);
+    activePill = pill;
+    pill.classList.add('pop-open');
+  }
+  function hidePop() {
+    pop.classList.remove('visible');
+    if (activePill) { activePill.classList.remove('pop-open'); activePill = null; }
+  }
+  function positionPop(pill) {
+    var r = pill.getBoundingClientRect();
+    var pw = pop.offsetWidth;
+    var left = r.left + r.width / 2 - pw / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+    pop.style.left = left + 'px';
+    pop.style.top = (r.top - pop.offsetHeight - 12) + 'px';
+  }
+
+  pills.forEach(function(pill) {
+    pill.setAttribute('tabindex', '0');
+    pill.addEventListener('mouseenter', function() { showPop(pill); });
+    pill.addEventListener('mouseleave', function() { hidePop(); });
+    pill.addEventListener('focus', function() { showPop(pill); });
+    pill.addEventListener('blur', function() { hidePop(); });
+  });
+  window.addEventListener('scroll', function() { if (activePill) positionPop(activePill); }, { passive: true });
+})();
+</script>
+{% endblock page_scripts %}

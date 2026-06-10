@@ -15,7 +15,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession, SourceMaterial
+from apps.documents.models import Collection
+from apps.experiments.models import ExperimentSession, SourceMaterial, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
@@ -370,6 +371,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def name(self):
         return self.params.get("name", None)
 
+    def has_parameter(self, param_name: str) -> bool:
+        """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
+        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        node_class = getattr(pipeline_nodes, self.type, None)
+        return node_class is not None and param_name in node_class.model_fields
+
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node and if the node is an assistant node, create a new version of the assistant
@@ -436,10 +444,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def _get_version_details(self) -> VersionDetails:
         from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
-        from apps.experiments.models import (  # noqa: PLC0415 - circular: experiments.models→models
-            VersionFieldDisplayFormatters,
-        )
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         node_name = self.params.get("name", self.type)
@@ -504,7 +508,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         Archive related params that were also versioned along with this node
         """
         from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
         from apps.pipelines.nodes import nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         # AssistantNode versions its assistant here. LLMResponseWithPrompt's collection params

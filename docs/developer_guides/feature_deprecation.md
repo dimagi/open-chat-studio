@@ -4,6 +4,9 @@ This guide describes how to retire a feature from Open Chat Studio: measuring
 usage, communicating with affected teams, gating access during the wind-down,
 and removing code and data safely.
 
+For deprecating old chat widget versions specifically, see
+[widget versioning](widget_versioning.md).
+
 Every deprecation is tracked as a **GitHub issue** on `dimagi/open-chat-studio`.
 Create it with the **Feature deprecation** issue template
 (`.github/ISSUE_TEMPLATE/feature_deprecation.md`), which contains the

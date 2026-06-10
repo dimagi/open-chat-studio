@@ -9,8 +9,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
-from django.urls import reverse
-from telebot import TeleBot, apihelper, types
+from telebot import TeleBot, apihelper
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
@@ -25,7 +24,6 @@ from apps.channels.utils import (
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
-from apps.web.meta import absolute_url
 
 logger = logging.getLogger("ocs.channels")
 
@@ -163,6 +161,29 @@ class ExtraFormBase(forms.Form):
         """Override this method to perform any additional actions after the channel has been saved"""
         pass
 
+    def configure_webhook(self, channel: ExperimentChannel):
+        """Point the channel's inbound webhook at us, via its WebhookManager.
+
+        Falls back to manual setup instructions when the channel has no manager or the
+        manager cannot configure webhooks. On failure, surfaces a warning rather than
+        raising, so channel creation still succeeds.
+        """
+        try:
+            manager = channel.get_webhook_manager()
+            if not manager or not manager.supports_webhook_management:
+                if channel.webhook_url:
+                    self.success_message = f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+                return
+            manager.set_incoming_webhook(channel.extra_data, channel.webhook_url)
+        except Exception:
+            logger.exception("Error configuring webhook for channel %s", channel.id)
+            self.warning_message = (
+                "Could not configure the webhook automatically. "
+                f"Use the following URL when setting up the webhook: {channel.webhook_url}"
+            )
+        else:
+            self.success_message = "Webhook configured automatically."
+
 
 class WebhookUrlFormBase(ExtraFormBase):
     webook_url = forms.CharField(
@@ -190,24 +211,7 @@ class TelegramChannelForm(ExtraFormBase):
     bot_token = forms.CharField(label="Bot Token", max_length=100)
 
     def post_save(self, channel: ExperimentChannel):
-        try:
-            self._set_telegram_webhook(channel)
-        except apihelper.ApiTelegramException as e:
-            logger.exception("Error setting Telegram webhook")
-            raise ExperimentChannelException("Error setting Telegram webhook") from e
-
-    def _set_telegram_webhook(self, experiment_channel: ExperimentChannel):
-        """
-        Set the webhook at Telegram to allow message forwarding to this platform
-        """
-        tele_bot = TeleBot(experiment_channel.extra_data.get("bot_token", ""), threaded=False)
-        if experiment_channel.deleted:
-            webhook_url = None
-        else:
-            webhook_url = absolute_url(reverse("channels:new_telegram_message", args=[experiment_channel.external_id]))
-
-        tele_bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
-        tele_bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
+        self.configure_webhook(channel)
 
     def clean_bot_token(self):
         """Checks the bot token by making a request to get info on the bot. If the token is invalid, an
@@ -242,6 +246,9 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+
+    def post_save(self, channel: ExperimentChannel):
+        self.configure_webhook(channel)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -566,10 +573,11 @@ class CommCareConnectChannelForm(ExtraFormBase):
 class WidgetParams(forms.Widget):
     template_name = "channels/widgets/widget_params.html"
 
-    def __init__(self, experiment, widget_token):
+    def __init__(self, experiment, widget_token, channel=None):
         super().__init__()
         self.experiment = experiment
         self.widget_token = widget_token
+        self.channel = channel
 
     def format_value(self, value):
         return "" if value is None else value
@@ -578,6 +586,10 @@ class WidgetParams(forms.Widget):
         context = super().get_context(name, value, attrs)
         context["widget"]["experiment"] = self.experiment
         context["widget"]["token"] = self.widget_token
+        if self.channel:
+            context["widget"]["version"] = self.channel.widget_version
+            context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
+            context["widget"]["version_status"] = self.channel.widget_update_status
         context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
         context["docs_links"] = settings.DOCUMENTATION_LINKS
         return context
@@ -624,7 +636,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             if widget_token:
                 self.initial["widget_token"] = widget_token
                 self.fields["widget_token"].widget = WidgetParams(
-                    experiment=self.channel.experiment, widget_token=widget_token
+                    experiment=self.channel.experiment, widget_token=widget_token, channel=self.channel
                 )
 
         self.form_attrs = {

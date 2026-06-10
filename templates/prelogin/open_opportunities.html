@@ -1,0 +1,589 @@
+{% extends "prelogin/base.html" %}
+{% load static %}
+
+{% block title %}Request for EOI | Open Chat Studio{% endblock %}
+
+{% block meta %}
+<meta name="description" content="Request for Expression of Interest for the Open Chat Studio Ecosystem Development Program. Paid deliverables for developers, implementation partners, and researchers building open AI for global development.">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+<meta property="og:title" content="Request for EOI | Open Chat Studio Ecosystem Program">
+<meta property="og:description" content="The OCS Ecosystem Development Program: paid deliverables for developers, implementation partners, and researchers building open AI for global development.">
+<meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'prelogin/images/ocs-device-lineup.png' %}">
+{% endblock meta %}
+
+{% block page_styles %}
+<style>
+  :root {
+    --indigo: #16006D;
+    --indigo-soft: #F1ECFF;
+    --indigo-400: #16006D;
+    --indigo-500: #16006D;
+    --indigo-deep: #2A1090;
+    --grad-text: linear-gradient(90deg, #16006D 0%, #16006D 100%);
+  }
+
+  /* Nav + footer + button colors come from ocs-theme.css */
+
+  /* ══════════════════════════════════════
+     PAGE SHELL
+  ══════════════════════════════════════ */
+
+  .doc-page {
+    background: #FAFAF8;
+    min-height: 60vh;
+    padding: 56px 0 100px;
+  }
+
+  /* Two-column layout: sidebar + content */
+  .doc-layout {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 40px;
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    gap: 64px;
+    align-items: start;
+  }
+
+  /* ══════════════════════════════════════
+     LEFT SIDEBAR: STICKY TOC
+  ══════════════════════════════════════ */
+
+  .doc-sidebar {
+    position: sticky;
+    top: 92px; /* clears nav */
+    padding-top: 4px;
+  }
+
+  .doc-toc-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #BBB;
+    margin: 0 0 14px;
+  }
+
+  .doc-toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: toc-counter;
+    border-left: 1px solid #E4E4E0;
+  }
+
+  .doc-toc-list li {
+    counter-increment: toc-counter;
+    position: relative;
+  }
+
+  .doc-toc-list li a {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 0 7px 16px;
+    font-size: 0.82rem;
+    color: #888;
+    text-decoration: none;
+    line-height: 1.45;
+    transition: color 130ms;
+    border-left: 2px solid transparent;
+    margin-left: -1px;
+  }
+
+  .doc-toc-list li a::before {
+    content: counter(toc-counter, decimal-leading-zero);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    color: #CCC;
+    flex-shrink: 0;
+    transition: color 130ms;
+  }
+
+  .doc-toc-list li a:hover {
+    color: #16006D;
+  }
+
+  .doc-toc-list li a:hover::before {
+    color: #16006D;
+  }
+
+  /* Active state, set by JS scroll spy */
+  .doc-toc-list li a.toc-active {
+    color: #16006D;
+    font-weight: 600;
+    border-left-color: #16006D;
+  }
+
+  .doc-toc-list li a.toc-active::before {
+    color: #16006D;
+  }
+
+  /* ══════════════════════════════════════
+     RIGHT: MAIN CONTENT
+  ══════════════════════════════════════ */
+
+  .doc-content {
+    max-width: 720px;
+    min-width: 0;
+  }
+
+  /* ── Cover ── */
+  .doc-cover {
+    padding-bottom: 44px;
+  }
+  .doc-cover-meta {
+    display: flex;
+    gap: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 24px;
+  }
+  .doc-cover-meta span::before {
+    content: "// ";
+    color: #CCC;
+  }
+  .doc-title {
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    font-weight: 600;
+    color: #16006D;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 0 0 8px;
+  }
+  .doc-subtitle {
+    font-size: 1.05rem;
+    font-weight: 400;
+    color: #555;
+    letter-spacing: -0.01em;
+    margin: 0 0 18px;
+    line-height: 1.4;
+  }
+  .doc-funder-tag {
+    display: inline-flex;
+    align-items: center;
+    background: #F1ECFF;
+    border: 1px solid rgba(22,0,109,0.25);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #16006D;
+  }
+
+  /* ── Dividers ── */
+  .doc-rule {
+    border: none;
+    border-top: 1px solid #DDD;
+    margin: 0;
+  }
+
+  /* ── Sections ── */
+  .doc-section {
+    padding: 44px 0;
+  }
+  .doc-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .doc-section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #16006D;
+    flex-shrink: 0;
+  }
+  .doc-h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #16006D;
+    letter-spacing: -0.025em;
+    margin: 0;
+    line-height: 1.2;
+  }
+  .doc-h3 {
+    font-size: 0.97rem;
+    font-weight: 600;
+    color: #16006D;
+    letter-spacing: -0.01em;
+    margin: 30px 0 10px;
+    border-bottom: 1px solid #EEE;
+    padding-bottom: 7px;
+  }
+  .doc-h4 {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #333;
+    margin: 0 0 8px;
+  }
+
+  /* ── Body text ── */
+  .doc-body {
+    font-size: 0.96rem;
+    color: #444;
+    line-height: 1.82;
+    margin: 0 0 14px;
+  }
+
+  /* ── Lists ── */
+  .doc-list {
+    padding-left: 0;
+    margin: 0 0 16px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .doc-list li {
+    font-size: 0.95rem;
+    color: #444;
+    line-height: 1.78;
+    padding-left: 20px;
+    position: relative;
+  }
+  .doc-list li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: #16006D;
+    font-weight: 600;
+    font-size: 0.78rem;
+    top: 4px;
+  }
+  .doc-list li a { color: #16006D; text-decoration: none; }
+  .doc-list li a:hover { text-decoration: underline; }
+
+  /* ── Track block ── */
+  .doc-track-block {
+    border-left: 2px solid #DDD;
+    padding: 12px 0 12px 20px;
+    margin: 12px 0;
+  }
+  .doc-track-block .doc-body { margin-bottom: 0; }
+  .doc-track-block .doc-list { margin-top: 10px; margin-bottom: 0; }
+
+  /* ── Table ── */
+  .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.87rem;
+    margin: 12px 0 8px;
+    border: 1px solid #DDD;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .doc-table thead th {
+    padding: 9px 14px;
+    text-align: left;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: #999;
+    background: #F0F0EE;
+    border-bottom: 1px solid #DDD;
+  }
+  .doc-table tbody tr { border-bottom: 1px solid #EBEBEB; }
+  .doc-table tbody tr:last-child { border-bottom: none; }
+  .doc-table tbody tr:hover { background: #F7F7F5; }
+  .doc-table td {
+    padding: 10px 14px;
+    vertical-align: top;
+    color: #444;
+    line-height: 1.6;
+  }
+  .doc-table td:first-child { font-weight: 600; color: #16006D; white-space: nowrap; width: 20%; }
+  .doc-table td:last-child { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 600; color: #16006D; white-space: nowrap; width: 20%; }
+
+  /* ── Callouts ── */
+  .doc-footnote { font-size: 0.79rem; color: #999; font-style: italic; margin: 5px 0 0; }
+  .doc-note {
+    background: #F5F4F0;
+    border-left: 2px solid #CCC;
+    padding: 11px 16px;
+    font-size: 0.86rem;
+    color: #555;
+    line-height: 1.75;
+    margin: 18px 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* ── Resource links ── */
+  .doc-resource-links { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 16px; }
+  .doc-link { font-size: 0.87rem; font-weight: 500; color: #16006D; text-decoration: none; }
+  .doc-link:hover { text-decoration: underline; }
+
+  /* ── Apply CTA ── */
+  .doc-apply-cta {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid #DDD;
+  }
+
+  /* ══════════════════════════════════════
+     RESPONSIVE
+  ══════════════════════════════════════ */
+
+  @media (max-width: 860px) {
+    .doc-layout {
+      grid-template-columns: 1fr;
+      gap: 0;
+      padding: 0 24px;
+    }
+    .doc-sidebar {
+      position: static;
+      border-bottom: 1px solid #DDD;
+      padding-bottom: 28px;
+      margin-bottom: 40px;
+    }
+    .doc-toc-list { border-left: none; }
+    .doc-toc-list li a { padding-left: 0; border-left: none; }
+  }
+
+  @media (max-width: 480px) {
+    .doc-table { display: block; overflow-x: auto; }
+    .doc-cover-meta { flex-direction: column; gap: 6px; }
+  }
+</style>
+{% endblock page_styles %}
+
+{% block content %}
+<!-- ───── DOCUMENT ───── -->
+<main id="main" class="doc-page">
+  <div class="doc-layout">
+
+    <!-- ══ LEFT SIDEBAR: STICKY TOC ══ -->
+    <aside class="doc-sidebar">
+      <p class="doc-toc-label">Contents</p>
+      <ol class="doc-toc-list">
+        <li><a href="#s1" class="toc-link">About Dimagi and Open Chat Studio</a></li>
+        <li><a href="#s2" class="toc-link">About the OCS Ecosystem Development Program</a></li>
+        <li><a href="#s3" class="toc-link">What We Are Looking For</a></li>
+        <li><a href="#s4" class="toc-link">Deliverables and Payments</a></li>
+        <li><a href="#s5" class="toc-link">Partner Requirements</a></li>
+        <li><a href="#s6" class="toc-link">Before You Apply</a></li>
+        <li><a href="#s7" class="toc-link">Application and Timelines</a></li>
+      </ol>
+    </aside>
+
+    <!-- ══ RIGHT: MAIN CONTENT ══ -->
+    <div class="doc-content">
+
+      <!-- COVER -->
+      <header class="doc-cover">
+        <div class="doc-cover-meta">
+          <span>Dimagi, Inc.</span>
+          <span>Open Chat Studio</span>
+          <span>Ecosystem Development Program</span>
+          <span>May 2026</span>
+        </div>
+        <h1 class="doc-title">Request for Expression of Interest (EOI)</h1>
+        <p class="doc-subtitle">Open Chat Studio Ecosystem Development Program</p>
+        <div class="doc-funder-tag">Supported by the Gates Foundation · Digital Public Infrastructure</div>
+      </header>
+
+      <hr class="doc-rule">
+
+      <!-- ── 01 · ABOUT ── -->
+      <section class="doc-section" id="s1">
+        <div class="doc-section-header">
+          <span class="doc-section-num">01</span>
+          <h2 class="doc-h2">About Dimagi and Open Chat Studio</h2>
+        </div>
+        <p class="doc-body">For over 20 years, Dimagi has built and supported the deployment of inclusive, robust, and scalable digital solutions, primarily through its widely used open-source CommCare platform. Open Chat Studio (OCS) is a new open-source platform by Dimagi that enables organizations to rapidly build, deploy, and evaluate LLM-powered chatbots without requiring AI expertise. In just minutes, non-programmers can iterate on a chatbot and deploy it over WhatsApp, the web, and other channels in text or voice and in their language of choice.</p>
+        <div class="doc-resource-links">
+          <a href="{% url 'prelogin:home' %}#how-it-works" class="doc-link">Overview: Open Chat Studio →</a>
+          <a href="https://www.loom.com/share/32924312accf43dd822ed51266a89232" target="_blank" rel="noopener" class="doc-link">Starter Guide: Watch the Video →</a>
+        </div>
+      </section>
+
+      <hr class="doc-rule">
+
+      <!-- ── 02 · PROGRAM ── -->
+      <section class="doc-section" id="s2">
+        <div class="doc-section-header">
+          <span class="doc-section-num">02</span>
+          <h2 class="doc-h2">About the OCS Ecosystem Development Program</h2>
+        </div>
+        <p class="doc-body">With support from the Gates Foundation's Digital Public Infrastructure team, Dimagi is investing in OCS as a future Digital Public Good and building a global ecosystem of developers, implementers, and researchers who can extend and deploy the platform. Through this program, Dimagi is seeking expressions of interest from qualified organizations and individuals to contribute to the OCS ecosystem. Selected partners will receive payments for specific deliverables, gain early access to an emerging AI platform, receive capacity building in LLM technologies, and have the opportunity to shape the roadmap of Open Chat Studio.</p>
+      </section>
+
+      <hr class="doc-rule">
+
+      <!-- ── 03 · WHO ── -->
+      <section class="doc-section" id="s3">
+        <div class="doc-section-header">
+          <span class="doc-section-num">03</span>
+          <h2 class="doc-h2">What We Are Looking For</h2>
+        </div>
+        <ul class="doc-list">
+          <li><strong>Developers/Engineering Groups</strong> who can contribute code, build integrations, and self-host the platform, including those interested in building and selling solutions built on Open Chat Studio to other organizations.</li>
+          <li><strong>Implementation Partners</strong> who deploy digital interventions with end users in health, education, agriculture, or other sectors. This includes organizations across a range of technical capacity, from those using SaaS platforms only, to those with in-house teams who can self-host and manage infrastructure. We particularly encourage applications from implementation partners with technical capacity to self-host OCS, as this supports our goal of building sustainable, locally-owned AI infrastructure.</li>
+          <li><strong>Research Organizations</strong> studying AI/LLM applications or conducting program evaluations.</li>
+          <li><strong>Individual Contributors (Developers)</strong> working on open source projects.</li>
+        </ul>
+      </section>
+
+      <hr class="doc-rule">
+
+      <!-- ── 04 · DELIVERABLES ── -->
+      <section class="doc-section" id="s4">
+        <div class="doc-section-header">
+          <span class="doc-section-num">04</span>
+          <h2 class="doc-h2">Deliverables and Payments</h2>
+        </div>
+        <p class="doc-body">Partners will be paid for their contributions based on the deliverables they complete. The deliverables available depend on your partner category and technical capacity. All figures below are illustrative and will be finalized during discussions with selected partners.</p>
+
+        <h3 class="doc-h3">Developer/Engineering Group Deliverables*</h3>
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Deliverable</th>
+              <th>Description</th>
+              <th>Illustrative Payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Self-Host Setup</td>
+              <td>Self-host OCS + validation report + screen recording</td>
+              <td>$500</td>
+            </tr>
+            <tr>
+              <td>Small PR</td>
+              <td>Merged PR (bug fix, minor feature) + documentation</td>
+              <td>$150 – $3,000</td>
+            </tr>
+            <tr>
+              <td>Major PR</td>
+              <td>Merged PR (significant feature) + documentation + demo video</td>
+              <td>$3,000 – $8,000</td>
+            </tr>
+            <tr>
+              <td>Platform Integration</td>
+              <td>New integration (messaging channel, external tool)</td>
+              <td>$2,000 – $10,000</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="doc-footnote">* Applicants can select which deliverables they would like to pursue.</p>
+
+        <h3 class="doc-h3">Implementation Partner Deliverables</h3>
+        <p class="doc-body">Implementation partners may choose between two tracks. Where needed, Dimagi will provide support. For example, if a team is new to LLM evaluations, Dimagi will provide resources to help develop a conceptual understanding.</p>
+
+        <div class="doc-track-block">
+          <h4 class="doc-h4">Base Track ($5,000)</h4>
+          <p class="doc-body">Organizations will deliver on the following outputs:</p>
+          <ul class="doc-list">
+            <li>Non-Dimagi hosted instance of OCS (self-host or procure hosting; deliverables: validation report, screen recording)</li>
+            <li>Starter Chatbot (functional chatbot for a specific use case; deliverables: working chatbot, 2-min demo)</li>
+            <li>Micro-Pilot (deploy with 50+ users for 1–4 weeks; deliverables: anonymized transcripts, feedback summary)</li>
+            <li>Case Study (2–3 page writeup with 100+ users)</li>
+            <li>Template (fill in Dimagi-provided template + short video walkthrough)</li>
+          </ul>
+        </div>
+
+        <div class="doc-track-block">
+          <h4 class="doc-h4">Base + Evaluation Track ($6,000)</h4>
+          <p class="doc-body">All Base deliverables, plus: LLM Evaluation (structured evaluation using OCS evaluators; deliverables: 50+ message pairs, configured evaluator, findings summary; must include human evaluations).</p>
+        </div>
+
+        <div class="doc-note">Note: Implementation partners with in-house software developers may also pursue Developer/Engineering Group deliverables (Small PR, Major PR, Platform Integration) in addition to the Implementation Partner track.</div>
+
+        <h3 class="doc-h3">Research Partner Deliverables</h3>
+        <div class="doc-track-block">
+          <h4 class="doc-h4">Formal Research Study ($15,000)</h4>
+          <p class="doc-body">Research partners will work with an implementation partner to conduct a formal research study. Deliverables include: methodology, IRB approval (if needed), dataset, and publishing findings.</p>
+        </div>
+      </section>
+
+      <hr class="doc-rule">
+
+      <!-- ── 05 · REQUIREMENTS ── -->
+      <section class="doc-section" id="s5">
+        <div class="doc-section-header">
+          <span class="doc-section-num">05</span>
+          <h2 class="doc-h2">Partner Requirements</h2>
+        </div>
+        <ul class="doc-list">
+          <li><strong>Developers/Engineering Groups:</strong> Should have experience with Python/Django (OCS tech stack), frontend JavaScript, and/or hosting/DevOps (AWS, Docker). Applicants should provide GitHub profiles for team members who would contribute.</li>
+          <li><strong>Implementation Partners:</strong> Should have experience deploying digital interventions with end users. Experience with chatbots, low-code/no-code platforms, or AI-powered interventions is preferred but not required.</li>
+          <li><strong>Research Organizations:</strong> Should have experience conducting program evaluations or research studies, and provide examples of these.</li>
+        </ul>
+      </section>
+
+      <hr class="doc-rule">
+
+      <!-- ── 06 · BEFORE YOU APPLY ── -->
+      <section class="doc-section" id="s6">
+        <div class="doc-section-header">
+          <span class="doc-section-num">06</span>
+          <h2 class="doc-h2">Before You Apply</h2>
+        </div>
+        <p class="doc-body">Before you apply, we recommend briefly reviewing the Open Chat Studio codebase on GitHub as well as developer and implementation-focused documentation:</p>
+        <ul class="doc-list">
+          <li>For implementers and researchers: <a href="https://docs.openchatstudio.com/" target="_blank" rel="noopener">https://docs.openchatstudio.com/</a></li>
+          <li>For developers: <a href="https://github.com/dimagi/open-chat-studio" target="_blank" rel="noopener">https://github.com/dimagi/open-chat-studio</a></li>
+        </ul>
+      </section>
+
+      <hr class="doc-rule">
+
+      <!-- ── 07 · APPLY ── -->
+      <section class="doc-section" id="s7">
+        <div class="doc-section-header">
+          <span class="doc-section-num">07</span>
+          <h2 class="doc-h2">Expression of Interest (EOI) Application and Timelines</h2>
+        </div>
+        <p class="doc-body">Applications are reviewed on a rolling basis. Submit your EOI at any time.</p>
+        <p class="doc-body">To apply, please complete the EOI application form. If you have any questions, please <a href="{% url 'prelogin:contact' %}" style="color:#16006D;">contact us</a>.</p>
+        <div class="doc-apply-cta">
+          <a class="btn btn-indigo btn-arrow" href="{% url 'prelogin:contact' %}">Submit Expression of Interest</a>
+        </div>
+      </section>
+
+    </div><!-- /doc-content -->
+  </div><!-- /doc-layout -->
+</main>
+{% endblock content %}
+
+{% block page_scripts %}
+<script>
+(function () {
+  // Scroll spy: highlight active TOC link
+  var tocLinks = document.querySelectorAll('.toc-link');
+  var sections = Array.from(document.querySelectorAll('.doc-section[id]'));
+
+  if (tocLinks.length && sections.length) {
+    function updateActive() {
+      var scrollY = window.scrollY + 120;
+      var current = sections[0].id;
+      sections.forEach(function (sec) {
+        if (sec.offsetTop <= scrollY) current = sec.id;
+      });
+      tocLinks.forEach(function (link) {
+        var target = link.getAttribute('href').replace('#', '');
+        link.classList.toggle('toc-active', target === current);
+      });
+    }
+    window.addEventListener('scroll', updateActive, { passive: true });
+    updateActive();
+  }
+})();
+</script>
+{% endblock page_scripts %}

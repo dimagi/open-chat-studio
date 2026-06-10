@@ -36,7 +36,7 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 from ...service_providers.speech_service import SynthesizedAudio
 from ...utils.factories.service_provider_factories import LlmProviderFactory
@@ -732,28 +732,24 @@ def test_voice_tag_created_on_message(
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("expected_message_type", "response_behaviour", "use_processor_bot_voice"),
+    ("expected_message_type", "response_behaviour"),
     [
-        ("text", VoiceResponseBehaviours.NEVER, True),
-        ("text", VoiceResponseBehaviours.RECIPROCAL, True),
-        ("voice", VoiceResponseBehaviours.ALWAYS, True),
-        ("text", VoiceResponseBehaviours.NEVER, False),
-        ("text", VoiceResponseBehaviours.RECIPROCAL, False),
-        ("voice", VoiceResponseBehaviours.ALWAYS, False),
+        ("text", VoiceResponseBehaviours.NEVER),
+        ("text", VoiceResponseBehaviours.RECIPROCAL),
+        ("voice", VoiceResponseBehaviours.ALWAYS),
     ],
 )
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice", Mock())
 def test_send_message_to_user_with_single_bot(
-    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour, use_processor_bot_voice
+    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour
 ):
     """A simple test to make sure that when we call `channel_instance.send_message_to_user`, the correct message format
     will be used
     """
 
     session = ExperimentSessionFactory.create(
-        experiment__use_processor_bot_voice=use_processor_bot_voice,
         experiment__voice_response_behaviour=response_behaviour,
     )
     session.experiment_channel = ExperimentChannelFactory.create(experiment=session.experiment)

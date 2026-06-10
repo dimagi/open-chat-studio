@@ -10,6 +10,8 @@
   "status.starting": "Inaanzisha gumzo...",
   "status.typing": "Inatayarisha jibu",
   "status.uploading": "Inapakia",
+  "status.sessionExpired": "Kipindi chako cha gumzo kimeisha. Gumzo jipya linaanza — tafadhali tuma tena ujumbe wako.",
+  "status.sessionError": "Kipindi hiki cha gumzo hakipatikani tena.",
   "modal.newChatTitle": "Anza gumzo jipya",
   "modal.newChatBody": "Kuanza gumzo jipya kutafuta gumzo lako la sasa. Je, ungependa kuendelea?",
   "modal.cancel": "Ghairi",

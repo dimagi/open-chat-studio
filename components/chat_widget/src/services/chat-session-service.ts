@@ -1,5 +1,17 @@
 import { getCSRFToken } from '../utils/cookies';
 
+export class SessionAccessError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, code: string | undefined, message: string) {
+    super(message);
+    this.name = 'SessionAccessError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export type ChatRole = 'system' | 'user' | 'assistant';
 
 export interface ChatAttachment {
@@ -18,6 +30,7 @@ export interface ChatMessage {
 
 export interface ChatStartSessionResponse {
   session_id: string;
+  session_token?: string | null;
   chatbot: unknown;
   participant: unknown;
 }
@@ -44,6 +57,7 @@ export interface ChatSessionServiceOptions {
   apiBaseUrl: string;
   embedKey?: string;
   widgetVersion: string;
+  sessionToken?: string;
   csrfTokenProvider?: (apiBaseUrl: string) => string | undefined;
   taskPollingIntervalMs?: number;
   taskPollingMaxAttempts?: number;
@@ -75,17 +89,20 @@ export class ChatSessionService {
   private readonly apiBaseUrl: string;
   private readonly embedKey?: string;
   private readonly widgetVersion: string;
+  private sessionToken?: string;
   private readonly csrfTokenProvider: (apiBaseUrl: string) => string | undefined;
   private readonly taskPollingIntervalMs: number;
   private readonly taskPollingMaxAttempts: number;
   private readonly messagePollingIntervalMs: number;
   private messagePollingTimer?: ReturnType<typeof setInterval>;
+  private loggedSunsetLevel?: 'warn' | 'error';
   private static readonly MAX_HISTORY_PAGES = 40;
 
   constructor(options: ChatSessionServiceOptions) {
     this.apiBaseUrl = options.apiBaseUrl;
     this.embedKey = options.embedKey;
     this.widgetVersion = options.widgetVersion;
+    this.sessionToken = options.sessionToken;
     this.csrfTokenProvider = options.csrfTokenProvider ?? getCSRFToken;
     this.taskPollingIntervalMs = options.taskPollingIntervalMs ?? 1000;
     this.taskPollingMaxAttempts = options.taskPollingMaxAttempts ?? 120;
@@ -93,50 +110,40 @@ export class ChatSessionService {
   }
 
   async startSession(requestBody: Record<string, unknown>): Promise<ChatStartSessionResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/start/`, {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/start/`, {
       method: 'POST',
       headers: this.getJsonHeaders(),
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to start session: ${response.statusText}`);
+      await this.raiseForStatus(response, 'Failed to start session');
     }
 
     return response.json() as Promise<ChatStartSessionResponse>;
   }
 
   async sendMessage(sessionId: string, payload: Record<string, unknown>): Promise<ChatSendMessageResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/${sessionId}/message/`, {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/${sessionId}/message/`, {
       method: 'POST',
       headers: this.getJsonHeaders(),
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to send message: ${response.statusText}`);
+      await this.raiseForStatus(response, 'Failed to send message');
     }
 
     return response.json() as Promise<ChatSendMessageResponse>;
   }
 
   async pollTaskOnce(sessionId: string, taskId: string): Promise<ChatTaskPollResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/${sessionId}/${taskId}/poll/`, {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/${sessionId}/${taskId}/poll/`, {
       headers: this.getCommonHeaders(),
     });
 
     if (!response.ok) {
-      let errorMessage = `Failed to poll task: ${response.statusText}`;
-      try {
-        const data = (await response.json()) as { error?: string };
-        if (data?.error) {
-          errorMessage = data.error;
-        }
-      } catch {
-        // non-JSON body; keep statusText fallback
-      }
-
-      throw new Error(errorMessage);
+      await this.raiseForStatus(response, 'Failed to poll task');
     }
 
     return response.json() as Promise<ChatTaskPollResponse>;
@@ -208,11 +215,11 @@ export class ChatSessionService {
       url.searchParams.set('since', since);
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await this.request(url.toString(), {
       headers: this.getCommonHeaders(),
     });
     if (!response.ok) {
-      throw new Error(`Failed to poll messages: ${response.statusText}`);
+      await this.raiseForStatus(response, 'Failed to poll messages');
     }
 
     return response.json() as Promise<ChatPollResponse>;
@@ -278,6 +285,80 @@ export class ChatSessionService {
     }
   }
 
+  setSessionToken(token?: string): void {
+    this.sessionToken = token;
+  }
+
+  private async request(input: string, init?: RequestInit): Promise<Response> {
+    const response = await fetch(input, init);
+    this.checkSunsetHeaders(response);
+    return response;
+  }
+
+  /**
+   * Log a deprecation warning (RFC 8594 `Deprecation`/`Sunset`/`Link` headers)
+   * when the server reports that this widget version is deprecated. Warns
+   * during the deprecation window and errors once the sunset date has passed.
+   * Logs at most once per level so polling does not flood the console.
+   */
+  private checkSunsetHeaders(response: Response): void {
+    const headers = response?.headers;
+    if (!headers || typeof headers.get !== 'function') {
+      return;
+    }
+    if (headers.get('Deprecation') !== 'true') {
+      return;
+    }
+
+    const sunsetAt = this.parseSunsetDate(headers.get('Sunset'));
+    const pastSunset = sunsetAt !== null && Date.now() >= sunsetAt.getTime();
+    const level: 'warn' | 'error' = pastSunset ? 'error' : 'warn';
+    if (this.loggedSunsetLevel === level) {
+      return;
+    }
+    this.loggedSunsetLevel = level;
+
+    const upgradeUrl = this.parseSuccessorUrl(headers.get('Link'));
+    const upgradeSuffix = upgradeUrl ? ` Upgrade: ${upgradeUrl}` : '';
+    const sunsetText = sunsetAt ? sunsetAt.toUTCString() : 'an upcoming date';
+    if (level === 'error') {
+      console.error(`[open-chat-studio-widget] Widget version ${this.widgetVersion} is past its sunset date ` + `(${sunsetText}) and may stop working.${upgradeSuffix}`);
+    } else {
+      console.warn(`[open-chat-studio-widget] Widget version ${this.widgetVersion} is deprecated and will stop ` + `working after ${sunsetText}.${upgradeSuffix}`);
+    }
+  }
+
+  private parseSunsetDate(sunset: string | null): Date | null {
+    if (!sunset) {
+      return null;
+    }
+    const parsed = new Date(sunset);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private parseSuccessorUrl(link: string | null): string | undefined {
+    const match = link?.match(/<([^>]+)>\s*;\s*rel="?successor-version"?/);
+    return match?.[1];
+  }
+
+  private async raiseForStatus(response: Response, fallbackPrefix: string): Promise<never> {
+    let message = `${fallbackPrefix}: ${response.statusText}`;
+    let code: string | undefined;
+    try {
+      const data = (await response.json()) as { error?: string; code?: string };
+      if (data?.error) {
+        message = data.error;
+      }
+      code = data?.code;
+    } catch {
+      // non-JSON body; keep statusText fallback
+    }
+    if (response.status === 403) {
+      throw new SessionAccessError(response.status, code, message);
+    }
+    throw new Error(message);
+  }
+
   private getJsonHeaders(): Record<string, string> {
     const headers = this.getCommonHeaders();
     headers['Content-Type'] = 'application/json';
@@ -297,6 +378,10 @@ export class ChatSessionService {
 
     if (this.embedKey) {
       headers['X-Embed-Key'] = this.embedKey;
+    }
+
+    if (this.sessionToken) {
+      headers['X-Session-Token'] = this.sessionToken;
     }
 
     return headers;

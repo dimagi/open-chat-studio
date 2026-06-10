@@ -1,0 +1,188 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon"
+          type="image/png"
+          href="{% static 'prelogin/images/ocs-favicon.png' %}">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      {% block title %}Open Chat Studio by Dimagi{% endblock %}
+    </title>
+    {% block meta %}{% endblock %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+          rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'prelogin/styles.css' %}">
+    {% block page_styles %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'prelogin/ocs-theme.css' %}">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <!-- ───── NAV ───── -->
+    <div class="nav-wrap">
+      <div class="container">
+        <nav class="primary">
+          <a class="logo" href="{% url 'prelogin:home' %}">
+            <img src="{% static 'prelogin/images/ocs-logo.png' %}"
+                 width="175"
+                 height="78"
+                 alt="Open Chat Studio by Dimagi"
+                 style="height:36px;
+                        width:auto;
+                        filter:brightness(0) invert(1);
+                        opacity:0.95">
+          </a>
+          <div class="nav-links">
+            <a href="{% url 'prelogin:home' %}"
+               {% if active_nav == "home" %}class="nav-active" aria-current="page"{% endif %}>Open Chat Studio</a>
+            <a href="{% url 'prelogin:applications' %}"
+               {% if active_nav == "applications" %}class="nav-active" aria-current="page"{% endif %}>Use Cases</a>
+            <a href="{% url 'prelogin:about' %}"
+               {% if active_nav == "about" %}class="nav-active" aria-current="page"{% endif %}>Community</a>
+            <a href="{% url 'prelogin:contact' %}"
+               {% if active_nav == "contact" %}class="nav-active" aria-current="page"{% endif %}>Contact</a>
+          </div>
+          <div class="nav-cta">
+            <a class="btn btn-ghost"
+               href="https://github.com/dimagi/open-chat-studio"
+               target="_blank"
+               rel="noopener">GitHub</a>
+            {% block nav_signin_cta %}
+              <a class="btn btn-primary" href="{% url 'sso:login' %}">Sign In</a>
+            {% endblock nav_signin_cta %}
+          </div>
+          <button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">
+            {# djlint:off H020 #}
+            <span></span><span></span><span></span>
+            {# djlint:on #}
+          </button>
+        </nav>
+      </div>
+    </div>
+    {% block content %}{% endblock %}
+    <!-- ───── FOOTER ───── -->
+    <footer>
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <div class="logo" style="gap:10px;">
+              <img src="{% static 'prelogin/images/ocs-logo.png' %}"
+                   width="175"
+                   height="78"
+                   alt="Open Chat Studio by Dimagi"
+                   style="height:28px;
+                          width:auto;
+                          filter:brightness(0) invert(1);
+                          opacity:0.85">
+            </div>
+            <p>Open-source AI chatbots for global development.</p>
+          </div>
+          <div class="footer-col">
+            <h2>About</h2>
+            <ul>
+              <li>
+                <a href="{% url 'prelogin:home' %}">Open Chat Studio</a>
+              </li>
+              <li>
+                <a href="{% url 'prelogin:applications' %}">Use Cases</a>
+              </li>
+              <li>
+                <a href="{% url 'prelogin:about' %}">Community</a>
+              </li>
+              <li>
+                <a href="{% url 'prelogin:open_opportunities' %}">Open Opportunities</a>
+              </li>
+              <li>
+                <a href="{% url 'prelogin:contact' %}">Contact</a>
+              </li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Resources</h2>
+            <ul>
+              {% block footer_signin_link %}
+                <li>
+                  <a href="{% url 'sso:login' %}">Sign In</a>
+                </li>
+              {% endblock footer_signin_link %}
+              <li>
+                <a href="https://github.com/dimagi/open-chat-studio"
+                   target="_blank"
+                   rel="noopener">GitHub</a>
+              </li>
+              <li>
+                <a href="https://docs.openchatstudio.com/"
+                   target="_blank"
+                   rel="noopener">Documentation</a>
+              </li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h2>Dimagi</h2>
+            <ul>
+              <li>
+                <a href="https://dimagi.com/" target="_blank" rel="noopener">About Dimagi</a>
+              </li>
+              <li>
+                <a href="https://dimagi.com/blog/" target="_blank" rel="noopener">Blog</a>
+              </li>
+              <li>
+                <a href="https://www.dimagi.com/podcast/" target="_blank" rel="noopener">Podcast</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 DIMAGI, INC.</span>
+          {% if project_meta.PRIVACY_POLICY_URL or project_meta.TERMS_URL or project_meta.ACCEPTABLE_USE_POLICY_URL %}
+            <span style="display:flex;gap:24px;flex-wrap:wrap;">
+              {% if project_meta.PRIVACY_POLICY_URL %}
+                <a href="{{ project_meta.PRIVACY_POLICY_URL }}"
+                   target="_blank"
+                   rel="noopener">PRIVACY</a>
+              {% endif %}
+              {% if project_meta.TERMS_URL %}
+                <a href="{{ project_meta.TERMS_URL }}" target="_blank" rel="noopener">TERMS</a>
+              {% endif %}
+              {% if project_meta.ACCEPTABLE_USE_POLICY_URL %}
+                <a href="{{ project_meta.ACCEPTABLE_USE_POLICY_URL }}"
+                   target="_blank"
+                   rel="noopener">ACCEPTABLE USE POLICY</a>
+              {% endif %}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </footer>
+    <!-- Mobile nav toggle -->
+    <script>
+(function () {
+  var ham = document.querySelector('.nav-hamburger');
+  if (ham) {
+    ham.addEventListener('click', function () {
+      var open = this.classList.toggle('is-open');
+      document.querySelector('.nav-links').classList.toggle('is-open');
+      document.querySelector('.nav-cta').classList.toggle('is-open');
+      this.setAttribute('aria-expanded', open ? 'true' : 'false');
+      this.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    });
+  }
+  document.querySelectorAll('.nav-links a').forEach(function (a) {
+    a.addEventListener('click', function () {
+      var h = document.querySelector('.nav-hamburger');
+      h.classList.remove('is-open');
+      h.setAttribute('aria-expanded', 'false');
+      h.setAttribute('aria-label', 'Open menu');
+      document.querySelector('.nav-links').classList.remove('is-open');
+      document.querySelector('.nav-cta').classList.remove('is-open');
+    });
+  });
+})();
+    </script>
+    {% block page_scripts %}
+    {% endblock page_scripts %}
+  </body>
+</html>

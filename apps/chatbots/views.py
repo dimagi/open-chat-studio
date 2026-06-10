@@ -21,6 +21,7 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import ChannelBase
@@ -307,6 +308,13 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
+    # This page operates on the family-head (working) Experiment. If a version snapshot's id was
+    # requested (e.g. from a notification link), redirect to the working version and highlight
+    # that version in the versions tab via ?version_id=X#versions.
+    if experiment.is_a_version:
+        url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment.working_version_id])
+        return redirect(f"{url}?version_id={experiment.version_number}#versions")
+
     channels, available_platforms = get_channels_context(experiment)
 
     published = resolve_published_or_working(experiment)
@@ -319,6 +327,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
+        "highlight_version_id": request.GET.get("version_id"),
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -785,6 +794,7 @@ def _chatbot_chat_ui(request, embedded=False):
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
+            "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
             "embedded": embedded,
             **version_specific_vars,

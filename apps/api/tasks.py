@@ -20,6 +20,9 @@ logger = get_task_logger("ocs.api")
 )
 def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: dict):
     """
+    DEPRECATED: no longer queued; channels are created synchronously in the update-participant API
+    view. Kept so in-flight tasks survive deploy. Remove in a follow-up.
+
     Set up Connect channels for experiments that are using the ConnectMessaging channel
 
     experiment_data_map: {experiment_id: participant_data_id}

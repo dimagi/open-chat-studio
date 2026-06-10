@@ -16,6 +16,7 @@ from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
+from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import is_email_domain_allowed
 from apps.chat.channels import MESSAGE_TYPES
@@ -385,8 +386,9 @@ def email_inbound_handler(sender, event, **kwargs):
 
     Returns immediately so the ESP gets a fast 200 OK.
     """
-    from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel  # noqa: PLC0415
-    from apps.channels.tasks import handle_email_message  # noqa: PLC0415
+    from apps.channels.tasks import (  # noqa: PLC0415 - tests patch handle_email_message on the tasks module
+        handle_email_message,
+    )
 
     message = event.message
 
