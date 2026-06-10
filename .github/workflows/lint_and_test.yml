@@ -82,10 +82,15 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - name: Install dependencies
         run: |
           npm ci
           sudo apt-get install -y ripgrep
+          uv venv
+          uv sync --locked --dev
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - id: changed_files
