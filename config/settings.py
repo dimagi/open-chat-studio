@@ -568,6 +568,12 @@ CACHES = {
     },
 }
 
+if IS_TESTING:
+    # Isolate the cache per pytest-xdist worker. Workers get separate databases
+    # but share one Redis, so without this, cached DB-backed objects (e.g. waffle
+    # flags) leak between workers and cause flaky failures.
+    CACHES["default"]["KEY_PREFIX"] = os.environ.get("PYTEST_XDIST_WORKER", "test")
+
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
 WAFFLE_CREATE_MISSING_FLAGS = True
