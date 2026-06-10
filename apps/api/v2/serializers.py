@@ -1,6 +1,9 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.api.serializers import TeamSerializer
 from apps.experiments.models import Experiment
+from apps.users.models import CustomUser
 
 
 class ChatbotVersionSerializer(serializers.ModelSerializer):
@@ -25,3 +28,16 @@ class ChatbotSerializer(serializers.ModelSerializer):
     class Meta:
         model = Experiment
         fields = ["id", "name", "url", "version_number", "versions"]
+
+
+class MeSerializer(serializers.ModelSerializer):
+    team = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ["id", "username", "email", "first_name", "last_name", "team"]
+
+    @extend_schema_field(TeamSerializer)
+    def get_team(self, obj):
+        team = self.context.get("team")
+        return TeamSerializer(team).data if team else None
