@@ -292,7 +292,6 @@ class ConsentFlowStage(ProcessingStage):
             in [
                 SessionStatus.SETUP,
                 SessionStatus.PENDING,
-                SessionStatus.PENDING_PRE_SURVEY,
             ]
         )
 
@@ -303,22 +302,11 @@ class ConsentFlowStage(ProcessingStage):
         if session.status == SessionStatus.SETUP:
             session.update_status(SessionStatus.PENDING)
             response = self._build_consent_prompt(ctx)
-
         elif session.status == SessionStatus.PENDING:
-            if self._user_gave_consent(ctx):
-                if not ctx.experiment.pre_survey:
-                    response = self._start_conversation(ctx)
-                else:
-                    session.update_status(SessionStatus.PENDING_PRE_SURVEY)
-                    response = self._build_survey_prompt(ctx)
-            else:
-                response = self._build_consent_prompt(ctx)
-
-        elif session.status == SessionStatus.PENDING_PRE_SURVEY:
             if self._user_gave_consent(ctx):
                 response = self._start_conversation(ctx)
             else:
-                response = self._build_survey_prompt(ctx)
+                response = self._build_consent_prompt(ctx)
 
         if response is not None:
             raise EarlyExitResponse(response)
@@ -331,12 +319,6 @@ class ConsentFlowStage(ProcessingStage):
         consent_text = ctx.experiment.consent_form.consent_text
         confirmation_text = ctx.experiment.consent_form.confirmation_text
         return f"{consent_text}\n\n{confirmation_text}"
-
-    def _build_survey_prompt(self, ctx: MessageProcessingContext) -> str:
-        """Build the survey prompt text. Does NOT send or persist -- just returns the string."""
-        pre_survey_link = ctx.experiment_session.get_pre_survey_link(ctx.experiment)
-        confirmation_text = ctx.experiment.pre_survey.confirmation_text
-        return confirmation_text.format(survey_link=pre_survey_link)
 
     def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)

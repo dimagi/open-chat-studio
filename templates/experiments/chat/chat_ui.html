@@ -32,7 +32,7 @@
 </div>
 {% include "experiments/chat/input_bar.html" %}
 {% if not embedded %}
-  {% if experiment.consent_form or experiment.post_survey %}
+  {% if experiment.consent_form %}
     <div class="w-full text-center bg-base-300">
       <label for="end-experiment-modal" class="btn btn-warning btn-xs">End chat and give feedback</label>
     </div>

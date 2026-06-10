@@ -17,11 +17,10 @@ class TestConsentFlowStage:
         session.status = status
         return session
 
-    def _make_experiment(self, consent_enabled=True, consent_form_id=1, pre_survey=None, seed_message=None):
+    def _make_experiment(self, consent_enabled=True, consent_form_id=1, seed_message=None):
         experiment = MagicMock()
         experiment.conversational_consent_enabled = consent_enabled
         experiment.consent_form_id = consent_form_id
-        experiment.pre_survey = pre_survey
         experiment.seed_message = seed_message
         experiment.consent_form.consent_text = "Do you consent?"
         experiment.consent_form.confirmation_text = "Type 1 to agree"
@@ -78,38 +77,6 @@ class TestConsentFlowStage:
 
     def test_pending_consent_no_survey_activates(self):
         session = self._make_session(status=SessionStatus.PENDING)
-        experiment = self._make_experiment(pre_survey=None, seed_message=None)
-        ctx = make_context(
-            experiment=experiment,
-            experiment_session=session,
-            user_query="1",
-        )
-
-        # No early exit when no seed message
-        self.stage(ctx)
-
-        session.update_status.assert_called_with(SessionStatus.ACTIVE)
-
-    def test_pending_consent_with_survey(self):
-        pre_survey = MagicMock()
-        pre_survey.confirmation_text = "Complete survey: {survey_link}"
-        session = self._make_session(status=SessionStatus.PENDING)
-        session.get_pre_survey_link.return_value = "https://survey.example.com"
-        experiment = self._make_experiment(pre_survey=pre_survey)
-        ctx = make_context(
-            experiment=experiment,
-            experiment_session=session,
-            user_query="1",
-        )
-
-        with pytest.raises(EarlyExitResponse) as exc_info:
-            self.stage(ctx)
-
-        session.update_status.assert_called_with(SessionStatus.PENDING_PRE_SURVEY)
-        assert exc_info.value.response == "Complete survey: https://survey.example.com"
-
-    def test_pre_survey_consent_activates(self):
-        session = self._make_session(status=SessionStatus.PENDING_PRE_SURVEY)
         experiment = self._make_experiment(seed_message=None)
         ctx = make_context(
             experiment=experiment,
