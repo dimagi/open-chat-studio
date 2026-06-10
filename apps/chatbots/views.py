@@ -21,6 +21,7 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import ChannelBase
@@ -793,6 +794,7 @@ def _chatbot_chat_ui(request, embedded=False):
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
+            "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
             "embedded": embedded,
             **version_specific_vars,
