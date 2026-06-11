@@ -40,15 +40,19 @@ def generate_key(request: Request):
     response.raise_for_status()
     connect_id = response.json().get("sub").lower()
 
-    try:
-        participant_data = ParticipantData.objects.defer("data").get(
-            participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
+    participant_data = (
+        ParticipantData.objects.defer("data")
+        .filter(
+            participant__identifier=connect_id,
+            system_metadata__commcare_connect_channel_id=commcare_connect_channel_id,
         )
-    except ParticipantData.DoesNotExist:
-        connect_logger.exception(
+        .first()
+    )
+    if participant_data is None:
+        connect_logger.error(
             f"ParticipantData with connect_id: {connect_id} and channel_id: {commcare_connect_channel_id} not found"
         )
-        raise Http404() from None
+        raise Http404()
 
     if not participant_data.encryption_key:
         participant_data.generate_encryption_key()

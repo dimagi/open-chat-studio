@@ -1,5 +1,6 @@
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from django.db import transaction
 from django.db.models import Subquery
 
 from apps.channels.clients.connect_client import CommCareConnectClient
@@ -76,11 +77,39 @@ def create_connect_channel_for_participant(channel, connect_client, connect_id, 
     response = connect_client.create_channel(
         connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
     )
-    participant_data.system_metadata = {
-        "commcare_connect_channel_id": response["channel_id"],
-        "consent": response["consent"],
-    }
-    participant_data.save(update_fields=["system_metadata"])
+    channel_id = response["channel_id"]
+
+    # Guard against storing the same channel_id on multiple ParticipantData rows for the same
+    # participant. The CommCare Connect API is idempotent and returns the same channel_id for a
+    # given (connect_id, channel_source) pair, so a participant enrolled in multiple experiments
+    # that share the same bot would otherwise accumulate duplicate rows, causing
+    # MultipleObjectsReturned in generate_key.
+    with transaction.atomic():
+        existing = (
+            ParticipantData.objects.select_for_update()
+            .filter(
+                participant=participant_data.participant,
+                system_metadata__commcare_connect_channel_id=channel_id,
+            )
+            .exclude(pk=participant_data.pk)
+            .first()
+        )
+        if existing is not None:
+            # Copy the channel metadata (and encryption key if already generated) from the
+            # canonical row so that generate_key always resolves to a single consistent record.
+            participant_data.system_metadata = existing.system_metadata.copy()
+            update_fields = ["system_metadata"]
+            if existing.encryption_key and not participant_data.encryption_key:
+                participant_data.encryption_key = existing.encryption_key
+                update_fields.append("encryption_key")
+            participant_data.save(update_fields=update_fields)
+            return
+
+        participant_data.system_metadata = {
+            "commcare_connect_channel_id": channel_id,
+            "consent": response["consent"],
+        }
+        participant_data.save(update_fields=["system_metadata"])
 
 
 @shared_task(ignore_result=True)
