@@ -79,8 +79,7 @@ def upsert_global_rule(
         effective_to__isnull=True,
     )
 
-    # No-op fast path: same rate already active. Push equality into the WHERE
-    # clause so we don't hydrate the row.
+    # No-op fast path: same rate already active.
     if active.filter(unit_price=unit_price, currency=currency).exists():
         return "unchanged"
 
