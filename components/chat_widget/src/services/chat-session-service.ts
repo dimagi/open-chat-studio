@@ -359,15 +359,21 @@ export class ChatSessionService {
     throw new Error(message);
   }
 
-  private getJsonHeaders(): Record<string, string> {
+  /** Headers for multipart requests (no Content-Type — fetch sets the boundary). */
+  getUploadHeaders(): Record<string, string> {
     const headers = this.getCommonHeaders();
-    headers['Content-Type'] = 'application/json';
 
     const csrfToken = this.csrfTokenProvider(this.apiBaseUrl);
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
     }
 
+    return headers;
+  }
+
+  private getJsonHeaders(): Record<string, string> {
+    const headers = this.getUploadHeaders();
+    headers['Content-Type'] = 'application/json';
     return headers;
   }
 

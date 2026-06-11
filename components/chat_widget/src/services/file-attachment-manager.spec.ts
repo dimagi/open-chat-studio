@@ -8,12 +8,12 @@ function makeFile(name = 'a.txt') {
   return new File(['hello'], name, { type: 'text/plain' });
 }
 
-describe('FileAttachmentManager session tokens', () => {
+describe('FileAttachmentManager request headers', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('sends the X-Session-Token header on upload when provided', async () => {
+  it('forwards the provided headers on upload', async () => {
     const manager = makeManager();
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
@@ -25,11 +25,13 @@ describe('FileAttachmentManager session tokens', () => {
       apiBaseUrl: 'https://example.com',
       sessionId: 's1',
       participantId: 'p1',
-      sessionToken: 'tok-123',
+      headers: { 'X-Session-Token': 'tok-123', 'X-CSRFToken': 'csrf-456', 'x-ocs-widget-version': '1.0.0' },
     });
 
     const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
     expect(headers['X-Session-Token']).toBe('tok-123');
+    expect(headers['X-CSRFToken']).toBe('csrf-456');
+    expect(headers['x-ocs-widget-version']).toBe('1.0.0');
   });
 
   it('flags tokenRejected on a 403 upload response', async () => {
@@ -44,14 +46,14 @@ describe('FileAttachmentManager session tokens', () => {
       apiBaseUrl: 'https://example.com',
       sessionId: 's1',
       participantId: 'p1',
-      sessionToken: 'tok-123',
+      headers: { 'X-Session-Token': 'tok-123' },
     });
 
     expect(result.tokenRejected).toBe(true);
     expect(result.errorMessage).toBe('Session token required');
   });
 
-  it('omits the X-Session-Token header when no token is provided', async () => {
+  it('sends no auth headers when none are provided', async () => {
     const manager = makeManager();
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
@@ -66,7 +68,7 @@ describe('FileAttachmentManager session tokens', () => {
     });
 
     const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
-    expect(headers['X-Session-Token']).toBeUndefined();
+    expect(headers).toEqual({});
   });
 
   it('does not flag tokenRejected on a non-403 failure', async () => {
