@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
+from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.channels_v2.stages.core import ConsentFlowStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.experiments.models import SessionStatus
@@ -84,10 +84,10 @@ class TestConsentFlowStage:
             user_query="1",
         )
 
-        # Short-circuits with an empty response so the consent token isn't
-        # forwarded to the bot, even when there's no seed message.
-        with pytest.raises(EarlyExitResponse) as exc_info:
+        # No seed message: halt silently (EarlyAbort) so the consent token is
+        # consumed without sending/persisting an empty message or forwarding it
+        # to the bot. The session is still transitioned to ACTIVE.
+        with pytest.raises(EarlyAbort):
             self.stage(ctx)
 
         session.update_status.assert_called_with(SessionStatus.ACTIVE)
-        assert exc_info.value.response == ""
