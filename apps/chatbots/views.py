@@ -651,8 +651,6 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
             "experiment": experiment,
             "session": session,
             "session_token": issue_session_token(session),
-            # pin widget-started sessions to the version being tested rather than the published one
-            "widget_version_number": version_number,
             "active_tab": "chatbots",
             **version_specific_vars,
         },

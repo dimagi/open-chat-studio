@@ -724,24 +724,7 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
 
 @pytest.mark.django_db()
-def test_chatbot_chat_ui_widget_context():
-    """The public chat page never pins a widget version: anonymous participants
-    may not request one through the chat API."""
-    experiment = ExperimentFactory()
-    session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
-
-    request = RequestFactory().get("/")
-    request.team = experiment.team
-    request.experiment = experiment
-    request.experiment_session = session
-
-    response = _chatbot_chat_ui(request)
-
-    assert "widget_version_number" not in response.context_data
-
-
-@pytest.mark.django_db()
-def test_chatbot_chat_session_includes_widget_session_context(client, team_with_users):
+def test_chatbot_chat_session_includes_valid_session_token(client, team_with_users):
     user = team_with_users.members.first()
     experiment = ExperimentFactory(team=team_with_users)
     session = ExperimentSessionFactory(experiment=experiment, participant__user=user)
@@ -756,7 +739,6 @@ def test_chatbot_chat_session_includes_widget_session_context(client, team_with_
     assert response.status_code == 200
     token = response.context["session_token"]
     assert validate_session_token(token, session.external_id)
-    assert response.context["widget_version_number"] == experiment.version_number
 
 
 @pytest.mark.django_db()
@@ -773,7 +755,6 @@ def test_web_chat_widget_rendering(client, team_with_users):
     )
     content = client.get(url).content.decode()
 
-    assert f'version-number="{experiment.version_number}"' in content
     assert 'allow-attachments="true"' in content
     # consent-form experiments keep the end-chat-and-give-feedback flow alongside the widget
     assert "end-experiment-modal" in content
