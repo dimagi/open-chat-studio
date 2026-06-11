@@ -1883,7 +1883,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/StatusCb5Enum'
+          $ref: '#/components/schemas/Status490Enum'
         platform:
           type: string
           nullable: true
@@ -1955,7 +1955,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/StatusCb5Enum'
+          $ref: '#/components/schemas/Status490Enum'
         platform:
           type: string
           nullable: true
@@ -3107,11 +3107,10 @@ components:
           type: string
           nullable: true
           description: Key within the data source whose value selects the route.
-    StatusCb5Enum:
+    Status490Enum:
       enum:
       - setup
       - pending
-      - pending-pre-survey
       - active
       - pending-review
       - complete
@@ -3120,7 +3119,6 @@ components:
       description: |-
         * `setup` - Setting Up
         * `pending` - Awaiting participant
-        * `pending-pre-survey` - Awaiting pre-survey
         * `active` - Active
         * `pending-review` - Awaiting final review.
         * `complete` - Complete
