@@ -25,6 +25,35 @@ function completeMessage(content: string) {
   };
 }
 
+describe('ChatSessionService.getUploadHeaders', () => {
+  it('includes the common headers and the CSRF token', () => {
+    const service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      embedKey: 'embed-1',
+      sessionToken: 'tok-123',
+      csrfTokenProvider: () => 'csrf-456',
+    });
+
+    expect(service.getUploadHeaders()).toEqual({
+      'x-ocs-widget-version': '1.0.0',
+      'X-Embed-Key': 'embed-1',
+      'X-Session-Token': 'tok-123',
+      'X-CSRFToken': 'csrf-456',
+    });
+  });
+
+  it('omits the CSRF header when no token is available', () => {
+    const service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      csrfTokenProvider: () => undefined,
+    });
+
+    expect(service.getUploadHeaders()).toEqual({ 'x-ocs-widget-version': '1.0.0' });
+  });
+});
+
 describe('ChatSessionService.pollTask', () => {
   let service: ChatSessionService;
 
