@@ -14,7 +14,9 @@ status: stable
 The migration process runs as a management command on the target server. This command fetches data
 from the source server over HTTPS and recreates it locally using the ORM.
 
-The following APIs will be used (those marked `*` are new, served under the `/api/v2/sync/` prefix):
+The following APIs will be used. Endpoints marked `*` are new and served under the `/api/v2/sync/`
+prefix; the pipeline read (marked `†`) is also new but lives outside that prefix; the Files API
+already exists:
 
 - `*` **Export team** — `GET /api/v2/sync/export-team/`: Returns all team data plus the "building
   block" resources that chatbots are composed of (consent forms, source material, collections,
@@ -26,8 +28,10 @@ The following APIs will be used (those marked `*` are new, served under the `/ap
   embedding model.
 - `*` **Chatbot export** — `GET /api/v2/sync/chatbots/{id}/export/`: Fetch a single chatbot version
   (working or published) by its integer pk, including its FK references, channels, and events.
-- **[Existing] Pipeline read** — `GET /api/v2/pipelines/{id}/`: Fetch a pipeline's raw graph
-  (nodes + edges with full params).
+- `†` **Pipeline read** — `GET /api/v2/pipelines/{id}/`: Fetch a pipeline's raw graph
+  (nodes + edges with full params). **Not yet built** — no `pipelines` route exists in the v2 API
+  today; to be provided by the planned v2 pipeline write API (outside the `/api/v2/sync/` prefix),
+  reusing the react-flow serialization in `apps/pipelines/flow.py`. See endpoint 3.
 - `*` **Living data** — `GET /api/v2/sync/living-data/<resource>/`: A family of keyset-paginated,
   per-resource delta endpoints for the data that grows with chatbot interactions (participants,
   sessions, messages, scheduled messages, notifications, annotations, …).
@@ -394,7 +398,8 @@ mapping table), so nothing is silently dropped:
 
 Steps 1–7 describe the migration flow with abbreviated responses. This section is the full schema
 reference for the five source-side read endpoints the sync command consumes — four new ones under
-`/api/v2/sync/` plus the existing v2 pipeline read. Per the timestamp rule, every row additionally
+`/api/v2/sync/` plus the v2 pipeline read (also new, not yet built — see endpoint 3). Per the
+timestamp rule, every row additionally
 carries `created_at`/`updated_at`; these are omitted from the schemas below except where they are
 load-bearing (the living-data cursors).
 
@@ -641,9 +646,14 @@ RSA public key, used to re-encrypt the channels' secret-bearing `extra_data` (se
 
 ### 3. `GET /api/v2/pipelines/{id}/`
 
+**Status: not yet built.** No `pipelines` route exists in the v2 API today — the only registered v2
+surface is the `chatbots` viewset, and pipeline graph data is currently exposed only *embedded* in
+the digested `/inspect/` projection. This endpoint must be built (or provided by the planned v2
+pipeline write API), reusing the round-trippable react-flow serialization in `apps/pipelines/flow.py`.
+
 Returns the raw pipeline graph (nodes + edges with full params) for a given pipeline id
 (numeric — pipelines have no public UUID). This is the same round-trippable react-flow shape the
-write API spec uses for `GET /api/v2/chatbots/{id}/pipeline/` (`apps/pipelines/flow.py`), **not**
+write API spec specifies for `GET /api/v2/chatbots/{id}/pipeline/` (`apps/pipelines/flow.py`), **not**
 the digested `/inspect/` projection.
 
 This is the **sole** pipeline read: the importer fetches every pipeline **version** through it. Like
@@ -821,8 +831,8 @@ The `/api/v2/sync/` endpoints (`export-team`, `chatbots/{id}/export`, `living-da
 expose the full team's data including re-encrypted secrets, so they must be tightly authorized,
 strictly team-scoped, and audited. See `docs/agents/django_view_security.md`.
 
-The standalone v2 pipeline endpoint (`GET /api/v2/pipelines/{id}/`) uses the existing v2 auth and
-team-scoping machinery unchanged.
+The standalone v2 pipeline endpoint (`GET /api/v2/pipelines/{id}/`), once built, uses the existing
+v2 auth and team-scoping machinery unchanged.
 
 ### Serialization, FK remapping, and guard tests
 
