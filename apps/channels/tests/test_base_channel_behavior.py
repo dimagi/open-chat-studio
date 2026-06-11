@@ -281,12 +281,9 @@ def test_pre_conversation_flow(_send_seed_message):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
     user and bot must first go through the pre conversation flow. The following needs to happen:
     - The user must give consent
-    - The user must indicate that they filled out the survey
     """
     experiment = ExperimentFactory.create(conversational_consent_enabled=True)
     channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
-    pre_survey = experiment.pre_survey
-    assert pre_survey
 
     def _user_message(message: str):
         message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
@@ -299,32 +296,12 @@ def test_pre_conversation_flow(_send_seed_message):
     response = _user_message("Hi")
     assert experiment.consent_form.consent_text in response.content
     chat = channel.experiment_session.chat
-    pre_survey_link = channel.experiment_session.get_pre_survey_link(experiment)
-    confirmation_text = pre_survey.confirmation_text
-    expected_survey_text = confirmation_text.format(survey_link=pre_survey_link)
     # Let's see if the bot asked consent
     assert experiment.consent_form.consent_text in chat.messages.last().content
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.PENDING
-    # It did, now the user gives consent
-    response = _user_message("1")
-    assert expected_survey_text in response.content
-    # Check the status
-    channel.experiment_session.refresh_from_db()
-    assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
-    # Let's make sure the bot presented the user with the survey
-    assert expected_survey_text in chat.messages.last().content
-    # Now the user tries to talk
-    response = _user_message("Hi there")
-    assert expected_survey_text in response.content
-    # Check the status. It should not have changed
-    channel.experiment_session.refresh_from_db()
-    assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
-    # The bot should be persistent about that survey. Let's make sure it sends it
-    assert expected_survey_text in chat.messages.last().content
-
-    # The user caves, and says they did fill it out
+    # The user gives consent - should go directly to ACTIVE
     assert _send_seed_message.call_count == 0
     _send_seed_message.return_value = "Hi human"
     response = _user_message("1")
@@ -509,8 +486,6 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
 
     channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
     channel.experiment_session = experiment_session
-    pre_survey = experiment.pre_survey
-    assert pre_survey
 
     with (
         patch.object(channel, "_get_voice_transcript") as _get_voice_transcript,

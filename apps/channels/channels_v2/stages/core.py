@@ -292,35 +292,28 @@ class ConsentFlowStage(ProcessingStage):
             in [
                 SessionStatus.SETUP,
                 SessionStatus.PENDING,
-                SessionStatus.PENDING_PRE_SURVEY,
             ]
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
         session = ctx.experiment_session
-        response = None
 
         if session.status == SessionStatus.SETUP:
             session.update_status(SessionStatus.PENDING)
-            response = self._build_consent_prompt(ctx)
+            raise EarlyExitResponse(self._build_consent_prompt(ctx))
 
-        elif session.status == SessionStatus.PENDING:
-            if self._user_gave_consent(ctx):
-                if not ctx.experiment.pre_survey:
-                    response = self._start_conversation(ctx)
-                else:
-                    session.update_status(SessionStatus.PENDING_PRE_SURVEY)
-                    response = self._build_survey_prompt(ctx)
-            else:
-                response = self._build_consent_prompt(ctx)
+        if session.status == SessionStatus.PENDING:
+            if not self._user_gave_consent(ctx):
+                raise EarlyExitResponse(self._build_consent_prompt(ctx))
 
-        elif session.status == SessionStatus.PENDING_PRE_SURVEY:
-            if self._user_gave_consent(ctx):
-                response = self._start_conversation(ctx)
-            else:
-                response = self._build_survey_prompt(ctx)
-
-        if response is not None:
+            response = self._start_conversation(ctx)
+            if response is None:
+                # Consent accepted but no seed message: the session is now ACTIVE.
+                # Halt silently -- there's nothing to send, and the consent token
+                # must not be forwarded to the bot as the participant's first prompt.
+                # (EarlyExitResponse("") would make terminal stages persist/send an
+                # empty AI message; EarlyAbort skips them entirely.)
+                raise EarlyAbort()
             raise EarlyExitResponse(response)
 
     def _user_gave_consent(self, ctx: MessageProcessingContext) -> bool:
@@ -331,12 +324,6 @@ class ConsentFlowStage(ProcessingStage):
         consent_text = ctx.experiment.consent_form.consent_text
         confirmation_text = ctx.experiment.consent_form.confirmation_text
         return f"{consent_text}\n\n{confirmation_text}"
-
-    def _build_survey_prompt(self, ctx: MessageProcessingContext) -> str:
-        """Build the survey prompt text. Does NOT send or persist -- just returns the string."""
-        pre_survey_link = ctx.experiment_session.get_pre_survey_link(ctx.experiment)
-        confirmation_text = ctx.experiment.pre_survey.confirmation_text
-        return confirmation_text.format(survey_link=pre_survey_link)
 
     def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)

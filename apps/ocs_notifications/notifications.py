@@ -208,6 +208,25 @@ def tool_error_notification(team, tool_name: str, error_message: str, session=No
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create survey deprecation notification")
+def survey_deprecation_notification(team) -> None:
+    """Notify a team that the Surveys feature is being removed."""
+    create_notification(
+        title="Surveys are being removed",
+        message=(
+            "The Surveys feature is deprecated and will be removed on 2026-07-10. "
+            "Surveys are now read-only and are no longer connected to chatbots. "
+            "Please export any survey details you need before then."
+        ),
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="survey-feature-deprecated",
+        # view_survey matches the (now read-only) survey views, so everyone who
+        # can still access the feature is notified — not just survey editors.
+        permissions=["experiments.view_survey"],
+    )
+
+
 @silence_exceptions(logger, log_message="Failed to create deprecated model notification")
 def deprecated_model_notification(
     team,

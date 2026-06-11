@@ -294,9 +294,6 @@ class TestCopyExperiment:
         assert experiment_copy.consent_form == experiment.consent_form
         assert experiment_copy.consent_form.is_working_version
 
-        assert experiment_copy.pre_survey == experiment.pre_survey
-        assert experiment_copy.pre_survey.is_working_version
-
         assert experiment_copy.synthetic_voice_id == experiment.synthetic_voice_id
         assert experiment_copy.voice_provider_id == experiment.voice_provider_id
 
