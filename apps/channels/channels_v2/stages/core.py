@@ -266,16 +266,18 @@ class ConsentCheckStage(ProcessingStage):
 class ConsentFlowStage(ProcessingStage):
     """Handles the conversational consent state machine.
 
-    This stage only manages consent state transitions and raises
-    EarlyExitResponse. It does NOT:
+    This stage only manages consent state transitions. It does NOT:
       - Send messages (ResponseSendingStage handles that)
       - Persist to chat history (PersistenceStage handles that)
+      - Invoke the bot (BotInteractionStage handles that)
 
     Sub-behaviors:
-      - Builds consent/survey prompt text and raises EarlyExitResponse
-      - After consent, sends the participant's original (pre-consent) message
-        to the bot so their first question is answered. Falls back to the
-        seed message only when there was no substantive original message.
+      - Builds the consent prompt text and raises EarlyExitResponse
+      - Once consent is given, swaps the participant's original (pre-consent)
+        message into ctx.user_query and lets the pipeline continue, so the
+        normal bot-interaction path answers their first question. Falls back
+        to the seed message when there was no substantive original message,
+        and halts silently when there is neither.
     """
 
     USER_CONSENT_TEXT = "1"
@@ -308,16 +310,7 @@ class ConsentFlowStage(ProcessingStage):
             if not self._user_gave_consent(ctx):
                 raise EarlyExitResponse(self._build_consent_prompt(ctx))
 
-            response = self._start_conversation(ctx)
-            if response is None:
-                # Consent accepted but there's nothing to send to the bot: no
-                # substantive original message and no seed message. The session
-                # is now ACTIVE. Halt silently -- the consent token must not be
-                # forwarded to the bot as the participant's first prompt.
-                # (EarlyExitResponse("") would make terminal stages persist/send an
-                # empty AI message; EarlyAbort skips them entirely.)
-                raise EarlyAbort()
-            raise EarlyExitResponse(response)
+            self._start_conversation(ctx)
 
     def _user_gave_consent(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None and ctx.user_query.strip() == self.USER_CONSENT_TEXT
@@ -328,18 +321,34 @@ class ConsentFlowStage(ProcessingStage):
         confirmation_text = ctx.experiment.consent_form.confirmation_text
         return f"{consent_text}\n\n{confirmation_text}"
 
-    def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
+    def _start_conversation(self, ctx: MessageProcessingContext) -> None:
+        """Consent accepted: activate the session and hand off to the normal
+        bot-interaction path by swapping the bot input into ctx.user_query.
+
+        ctx.human_message stays as the consent-token message. The bot excludes
+        the input message from the LLM history it builds, so the token never
+        sits next to the swapped-in query in the LLM context, while remaining
+        in the persisted history as the record of the consent reply.
+        """
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)
 
         # Original message wins over the seed message: answer what the
         # participant actually asked before they were interrupted for consent.
         original_message = self._get_original_message(ctx)
         if original_message is not None:
-            return self._process_message(ctx, original_message.content, human_message=original_message)
+            ctx.user_query = original_message.content
+            return
 
         if ctx.experiment.seed_message:
-            return self._process_message(ctx, ctx.experiment.seed_message)
-        return None
+            ctx.user_query = ctx.experiment.seed_message
+            return
+
+        # Nothing to answer: no substantive original message and no seed
+        # message. The session is now ACTIVE. Halt silently -- the consent
+        # token must not be forwarded to the bot as the participant's first
+        # prompt. (EarlyExitResponse("") would make terminal stages
+        # persist/send an empty AI message; EarlyAbort skips them entirely.)
+        raise EarlyAbort()
 
     def _get_original_message(self, ctx: MessageProcessingContext) -> ChatMessage | None:
         """Return the participant's first substantive message -- the one that
@@ -359,24 +368,6 @@ class ConsentFlowStage(ProcessingStage):
         if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
             return None
         return first_human_message
-
-    def _process_message(
-        self, ctx: MessageProcessingContext, user_input: str, human_message: ChatMessage | None = None
-    ) -> str:
-        """Invokes the bot with the given input and returns the response text.
-
-        Note: bot.process_input() persists the AI response internally.
-        PersistenceStage detects this (ctx.bot_response is not None) and
-        skips creating a duplicate AI ChatMessage for the early exit response.
-
-        When ``human_message`` is provided (the original pre-consent message,
-        already in chat history), it is passed through so the AI response is
-        linked to it without creating a duplicate HUMAN record.
-        """
-        if not ctx.bot:
-            ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
-        ctx.bot_response = ctx.bot.process_input(user_input=user_input, human_message=human_message)
-        return ctx.bot_response.content
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +511,7 @@ class BotInteractionStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         ctx.callbacks.on_submit_input_to_llm(ctx.participant_identifier)
 
-        # Lazy bot creation -- reuse if already created (e.g. by ConsentFlowStage seed message)
+        # Lazy bot creation -- reuse if already set on the context
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
 

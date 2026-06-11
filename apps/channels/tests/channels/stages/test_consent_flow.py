@@ -83,72 +83,59 @@ class TestConsentFlowStage:
 
         assert "Do you consent?" in exc_info.value.response
 
-    def test_pending_consent_activates_with_no_original_or_seed(self):
-        # First message was the consent token itself -> no substantive original
-        # message and no seed message.
+    @pytest.mark.parametrize(
+        ("first_human_message_content", "seed_message", "expected_query"),
+        [
+            pytest.param(
+                "How do I reset my password?",
+                "Welcome!",
+                "How do I reset my password?",
+                id="original-message-wins-over-seed",
+            ),
+            pytest.param(
+                "1",
+                "Welcome!",
+                "Welcome!",
+                id="falls-back-to-seed-when-first-message-is-consent-token",
+            ),
+            pytest.param(
+                "1",
+                None,
+                None,
+                id="no-original-or-seed-halts-silently",
+            ),
+        ],
+    )
+    def test_pending_consent_activation(self, first_human_message_content, seed_message, expected_query):
+        consent_token_message = self._make_message("1")
         session = self._make_session(
             status=SessionStatus.PENDING,
-            first_human_message=self._make_message("1"),
+            first_human_message=self._make_message(first_human_message_content),
         )
-        experiment = self._make_experiment(seed_message=None)
+        experiment = self._make_experiment(seed_message=seed_message)
         ctx = make_context(
             experiment=experiment,
             experiment_session=session,
             user_query="1",
+            human_message=consent_token_message,
         )
 
-        # Nothing to send: halt silently (EarlyAbort) so the consent token is
-        # consumed without sending/persisting an empty message or forwarding it
-        # to the bot. The session is still transitioned to ACTIVE.
-        with pytest.raises(EarlyAbort):
+        if expected_query is None:
+            # Nothing to answer: halt silently (EarlyAbort) so the consent token
+            # is consumed without forwarding it to the bot or sending/persisting
+            # an empty message.
+            with pytest.raises(EarlyAbort):
+                self.stage(ctx)
+        else:
+            # The stage returns normally so the pipeline continues into
+            # BotInteractionStage with the swapped-in query. The consent-token
+            # message stays as ctx.human_message: the bot excludes the input
+            # message from the LLM history, keeping the token out of the
+            # LLM context while preserving it in the persisted history.
             self.stage(ctx)
 
-        session.update_status.assert_called_with(SessionStatus.ACTIVE)
-
-    def test_pending_consent_answers_original_message(self):
-        # The participant's first (pre-consent) message is sent to the bot after
-        # consent, so their actual question is answered.
-        original = self._make_message("How do I reset my password?")
-        session = self._make_session(status=SessionStatus.PENDING, first_human_message=original)
-        experiment = self._make_experiment(seed_message="Welcome!")
-        bot = MagicMock()
-        bot.process_input.return_value.content = "Here's how to reset your password"
-        ctx = make_context(
-            experiment=experiment,
-            experiment_session=session,
-            user_query="1",
-            bot=bot,
-        )
-
-        with pytest.raises(EarlyExitResponse) as exc_info:
-            self.stage(ctx)
+            assert ctx.user_query == expected_query
+            assert ctx.human_message is consent_token_message
+            assert ctx.bot_response is None
 
         session.update_status.assert_called_with(SessionStatus.ACTIVE)
-        # Original message wins over the seed message, and is passed through as
-        # the existing human_message so no duplicate HUMAN record is created.
-        bot.process_input.assert_called_once_with(user_input="How do I reset my password?", human_message=original)
-        assert exc_info.value.response == "Here's how to reset your password"
-        assert ctx.bot_response is ctx.bot.process_input.return_value
-
-    def test_pending_consent_falls_back_to_seed_when_first_message_is_consent_token(self):
-        # First message was the consent token itself -> fall back to the seed.
-        session = self._make_session(
-            status=SessionStatus.PENDING,
-            first_human_message=self._make_message("1"),
-        )
-        experiment = self._make_experiment(seed_message="Welcome!")
-        bot = MagicMock()
-        bot.process_input.return_value.content = "Hi there"
-        ctx = make_context(
-            experiment=experiment,
-            experiment_session=session,
-            user_query="1",
-            bot=bot,
-        )
-
-        with pytest.raises(EarlyExitResponse) as exc_info:
-            self.stage(ctx)
-
-        session.update_status.assert_called_with(SessionStatus.ACTIVE)
-        bot.process_input.assert_called_once_with(user_input="Welcome!", human_message=None)
-        assert exc_info.value.response == "Hi there"

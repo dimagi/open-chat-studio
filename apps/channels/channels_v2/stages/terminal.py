@@ -251,7 +251,8 @@ class PersistenceStage(ProcessingStage):
 
         # 2. Persist early exit response to chat history.
         #    Skip when ctx.bot_response exists -- bot.process_input() already
-        #    persisted the AI message (e.g. seed message in ConsentFlowStage).
+        #    persisted the AI message (e.g. when the catch-all error handler
+        #    set early_exit_response after BotInteractionStage succeeded).
         if ctx.early_exit_response is not None and ctx.bot_response is None:
             ChatMessage.objects.create(
                 chat=ctx.experiment_session.chat,
