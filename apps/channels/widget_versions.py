@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
-LATEST_VERSION = "0.9.0"
+LATEST_VERSION = "0.9.1"
 
 # Widgets older than 0.5.1 (Sept 2025) do not send the x-ocs-widget-version
 # header, so a missing/unparseable version is treated as older than everything.
