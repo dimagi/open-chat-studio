@@ -572,7 +572,7 @@ export class OcsChat {
         sessionId: this.activeSessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
-        sessionToken: this.currentSessionToken,
+        headers: this.getChatService().getUploadHeaders(),
       });
       this.selectedFiles = uploadResult.selectedFiles;
       if (uploadResult.tokenRejected) {
