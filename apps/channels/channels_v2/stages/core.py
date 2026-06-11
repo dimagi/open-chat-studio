@@ -331,13 +331,6 @@ class ConsentFlowStage(ProcessingStage):
     def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)
 
-        # The consent token (e.g. "1") was persisted as a HUMAN message by
-        # ChatMessageCreationStage, but it's a control token, not conversational
-        # content. Drop it before building the bot's history so it doesn't end
-        # up between the original message and the AI reply (which would feed the
-        # LLM two consecutive HUMAN messages and corrupt the context).
-        self._discard_consent_token_message(ctx)
-
         # Original message wins over the seed message: answer what the
         # participant actually asked before they were interrupted for consent.
         original_message = self._get_original_message(ctx)
@@ -347,21 +340,6 @@ class ConsentFlowStage(ProcessingStage):
         if ctx.experiment.seed_message:
             return self._process_message(ctx, ctx.experiment.seed_message)
         return None
-
-    def _discard_consent_token_message(self, ctx: MessageProcessingContext) -> None:
-        """Delete the consent-token HUMAN message created for this request.
-
-        ``_start_conversation`` only runs once consent has been given, so
-        ``ctx.human_message`` is the consent token itself. Removing it keeps the
-        token out of the persisted chat history and the LLM context. The trace's
-        input-message link is re-pointed when the original message is answered
-        (see ``_process_message``).
-        """
-        consent_message = ctx.human_message
-        if consent_message is None:
-            return
-        consent_message.delete()
-        ctx.human_message = None
 
     def _get_original_message(self, ctx: MessageProcessingContext) -> ChatMessage | None:
         """Return the participant's first substantive message -- the one that
@@ -387,10 +365,6 @@ class ConsentFlowStage(ProcessingStage):
     ) -> str:
         """Invokes the bot with the given input and returns the response text.
 
-        Mirrors BotInteractionStage: notifies the channel (e.g. typing
-        indicator) before invoking the bot and exposes any assistant files via
-        ``ctx.files_to_send`` so ResponseFormattingStage can deliver them.
-
         Note: bot.process_input() persists the AI response internally.
         PersistenceStage detects this (ctx.bot_response is not None) and
         skips creating a duplicate AI ChatMessage for the early exit response.
@@ -399,16 +373,9 @@ class ConsentFlowStage(ProcessingStage):
         already in chat history), it is passed through so the AI response is
         linked to it without creating a duplicate HUMAN record.
         """
-        ctx.callbacks.on_submit_input_to_llm(ctx.participant_identifier)
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
-        # Re-point the trace's input message: the consent token it originally
-        # referenced has been discarded, so link the trace to the message we're
-        # actually answering.
-        if human_message is not None and ctx.trace_service:
-            ctx.trace_service.set_input_message_id(human_message.id)
         ctx.bot_response = ctx.bot.process_input(user_input=user_input, human_message=human_message)
-        ctx.files_to_send = ctx.bot_response.get_attached_files() or []
         return ctx.bot_response.content
 
 
