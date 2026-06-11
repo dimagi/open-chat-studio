@@ -724,6 +724,27 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
 
 @pytest.mark.django_db()
+@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
+    """The chatbots table chat button posts version 0 so sessions run against the published version."""
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory(team=team_with_users)
+    experiment.create_new_version(make_default=True)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:start_authed_web_session",
+        args=[team_with_users.slug, experiment.id, Experiment.DEFAULT_VERSION_NUMBER],
+    )
+    response = client.post(url)
+    assert response.status_code == 302
+
+    response = client.get(response.url)
+    assert response.status_code == 200
+    assert response.context["experiment_version"].is_default_version
+
+
+@pytest.mark.django_db()
 def test_chatbot_chat_session_includes_valid_session_token(client, team_with_users):
     user = team_with_users.members.first()
     experiment = ExperimentFactory(team=team_with_users)
