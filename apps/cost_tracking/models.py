@@ -30,8 +30,9 @@ class PricingSource(models.TextChoices):
 
 
 class PricingRule(BaseTeamModel):
-    """team=NULL is a global rule. Rate changes use supersession:
-    close the active rule, insert a new one. Never edit in place.
+    """team=NULL is a global rule. Intended as mostly read-only table.
+    Rate changes close the current rule by setting `effective_to` and
+    insert a new rule with the new rate.
     """
 
     # Override BaseTeamModel.team to allow NULL (global rules).
