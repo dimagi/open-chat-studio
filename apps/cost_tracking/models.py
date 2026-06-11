@@ -14,7 +14,6 @@ class ServiceKind(models.TextChoices):
     LLM_OUTPUT = "llm_output"
     LLM_CACHED_INPUT = "llm_cached_input"
     LLM_CACHE_WRITE = "llm_cache_write"
-    LLM_REASONING = "llm_reasoning"
 
 
 class Confidence(models.TextChoices):
