@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
@@ -726,8 +725,8 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
 @pytest.mark.django_db()
 def test_chatbot_chat_ui_widget_context():
-    """The public chat page configures the widget with a greeting but never pins a version:
-    anonymous participants may not request one through the chat API."""
+    """The public chat page never pins a widget version: anonymous participants
+    may not request one through the chat API."""
     experiment = ExperimentFactory()
     session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
 
@@ -739,9 +738,6 @@ def test_chatbot_chat_ui_widget_context():
     response = _chatbot_chat_ui(request)
 
     assert "widget_version_number" not in response.context_data
-    assert json.loads(response.context_data["welcome_messages"]) == [
-        f"Hello, you can ask me anything you want about {experiment.name}."
-    ]
 
 
 @pytest.mark.django_db()
@@ -761,9 +757,6 @@ def test_chatbot_chat_session_includes_widget_session_context(client, team_with_
     token = response.context["session_token"]
     assert validate_session_token(token, session.external_id)
     assert response.context["widget_version_number"] == experiment.version_number
-    assert json.loads(response.context["welcome_messages"]) == [
-        f"Hello, you can ask me anything you want about {experiment.name}."
-    ]
 
 
 @pytest.mark.django_db()
@@ -782,6 +775,5 @@ def test_web_chat_widget_rendering(client, team_with_users):
 
     assert f'version-number="{experiment.version_number}"' in content
     assert 'allow-attachments="true"' in content
-    assert "welcome-messages=" in content
     # consent-form experiments keep the end-chat-and-give-feedback flow alongside the widget
     assert "end-experiment-modal" in content

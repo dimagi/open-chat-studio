@@ -32,7 +32,6 @@
             session-id="{{ session.external_id }}"
             session-token="{{ session_token }}"
             api-base-url="{{ request.scheme }}://{{ request.get_host }}"
-            welcome-messages="{{ welcome_messages }}"
             {% if widget_version_number is not None %}
               version-number="{{ widget_version_number }}"
             {% endif %}
