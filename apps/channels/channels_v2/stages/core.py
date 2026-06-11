@@ -273,7 +273,9 @@ class ConsentFlowStage(ProcessingStage):
 
     Sub-behaviors:
       - Builds consent/survey prompt text and raises EarlyExitResponse
-      - Handles seed message after consent is given
+      - After consent, sends the participant's original (pre-consent) message
+        to the bot so their first question is answered. Falls back to the
+        seed message only when there was no substantive original message.
     """
 
     USER_CONSENT_TEXT = "1"
@@ -308,9 +310,10 @@ class ConsentFlowStage(ProcessingStage):
 
             response = self._start_conversation(ctx)
             if response is None:
-                # Consent accepted but no seed message: the session is now ACTIVE.
-                # Halt silently -- there's nothing to send, and the consent token
-                # must not be forwarded to the bot as the participant's first prompt.
+                # Consent accepted but there's nothing to send to the bot: no
+                # substantive original message and no seed message. The session
+                # is now ACTIVE. Halt silently -- the consent token must not be
+                # forwarded to the bot as the participant's first prompt.
                 # (EarlyExitResponse("") would make terminal stages persist/send an
                 # empty AI message; EarlyAbort skips them entirely.)
                 raise EarlyAbort()
@@ -327,20 +330,52 @@ class ConsentFlowStage(ProcessingStage):
 
     def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
         ctx.experiment_session.update_status(SessionStatus.ACTIVE)
+
+        # Original message wins over the seed message: answer what the
+        # participant actually asked before they were interrupted for consent.
+        original_message = self._get_original_message(ctx)
+        if original_message is not None:
+            return self._process_message(ctx, original_message.content, human_message=original_message)
+
         if ctx.experiment.seed_message:
-            return self._process_seed_message(ctx)
+            return self._process_message(ctx, ctx.experiment.seed_message)
         return None
 
-    def _process_seed_message(self, ctx: MessageProcessingContext) -> str:
-        """Invokes the bot with the seed message and returns the response text.
+    def _get_original_message(self, ctx: MessageProcessingContext) -> ChatMessage | None:
+        """Return the participant's first substantive message -- the one that
+        triggered SETUP -> PENDING -- so it can be answered after consent.
+
+        Returns None when the participant's first message was itself just the
+        consent token (no prior content), so the caller falls back to the seed
+        message / silent halt.
+        """
+        first_human_message = (
+            ctx.experiment_session.chat.messages.filter(message_type=ChatMessageType.HUMAN)
+            .order_by("created_at")
+            .first()
+        )
+        if first_human_message is None:
+            return None
+        if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
+            return None
+        return first_human_message
+
+    def _process_message(
+        self, ctx: MessageProcessingContext, user_input: str, human_message: ChatMessage | None = None
+    ) -> str:
+        """Invokes the bot with the given input and returns the response text.
 
         Note: bot.process_input() persists the AI response internally.
         PersistenceStage detects this (ctx.bot_response is not None) and
         skips creating a duplicate AI ChatMessage for the early exit response.
+
+        When ``human_message`` is provided (the original pre-consent message,
+        already in chat history), it is passed through so the AI response is
+        linked to it without creating a duplicate HUMAN record.
         """
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
-        ctx.bot_response = ctx.bot.process_input(user_input=ctx.experiment.seed_message)
+        ctx.bot_response = ctx.bot.process_input(user_input=user_input, human_message=human_message)
         return ctx.bot_response.content
 
 
