@@ -43,18 +43,15 @@ UNPRICED = ResolvedRule(unit_price=None, currency="USD", pricing_rule_id=None)
 class PricingResolver:
     CACHE_TTL_SECONDS = 24 * 60 * 60  # safety net; signals do the real invalidation
     CACHE_KEY_PREFIX = "cost_tracking:pricing"
-    # The cache key intentionally omits `at`; the cache is correct only for
-    # "active right now" lookups. Resolves with an `at` further than this
-    # window from now bypass the cache automatically so historical/future
-    # queries can't accidentally hit a stale "current" entry.
+    # Cache stores "active now" only — `at` is deliberately not part of the key.
+    # Lookups outside this skew window bypass the cache.
     CACHE_AT_SKEW = timedelta(minutes=1)
 
     def resolve(self, key: PricingKey, at: datetime, use_cache: bool = True) -> ResolvedRule:
         """Resolve the active rule for `key` at `at`.
 
         Lookup order: team override -> global rule -> UNPRICED sentinel.
-        `use_cache=False` skips Redis explicitly; the cache is also bypassed
-        automatically when `at` is too far from now (see `_is_near_now`).
+        Cache is bypassed when `use_cache=False` or `at` is not near-now.
         """
         cache_ok = use_cache and self._is_near_now(at)
         team_rule = self._maybe_team_rule(key, at, cache_ok)
@@ -63,21 +60,14 @@ class PricingResolver:
         return self._lookup_one(replace(key, team_id=None), at, cache_ok)
 
     def _is_near_now(self, at: datetime) -> bool:
-        """The cache only stores "active right now" results. Historical or
-        future `at` queries can't be safely served from it, so we bypass.
-        """
+        """Gate the cache to "active now" lookups; bypass for historical/future `at`."""
         now = timezone.now()
         return now - self.CACHE_AT_SKEW <= at <= now + self.CACHE_AT_SKEW
 
     def _maybe_team_rule(self, key: PricingKey, at: datetime, use_cache: bool) -> ResolvedRule | None:
-        """Return a priced team-scoped rule if one is set and matched, else None.
-
-        `None` signals "no applicable priced team override" and triggers the
-        global fallback in `resolve()`. Both of these cases return `None`:
-
-        * `key.team_id is None` — caller didn't ask for a team scope at all.
-        * A team-scoped row exists but resolved to `UNPRICED` (unit_price is
-          None) — treat it the same as absent so we still try the global rule.
+        """Return a priced team-scoped rule if one matched. `None` (used to
+        trigger the global fallback) covers both "no team scope requested"
+        and "team rule found but unpriced".
         """
         if key.team_id is None:
             return None
@@ -86,10 +76,7 @@ class PricingResolver:
 
     @classmethod
     def invalidate(cls, key: PricingKey) -> None:
-        """Drop the cached resolved-rule entry for `key`. Called from signal
-        handlers on PricingRule save/delete and from `load_ai_pricing` when
-        closing a rule via queryset `.update()` (signals don't fire there).
-        """
+        """Drop the cached entry for `key`."""
         cache.delete(cls._cache_key(key))
 
     def _lookup_one(self, key: PricingKey, at: datetime, use_cache: bool) -> ResolvedRule:

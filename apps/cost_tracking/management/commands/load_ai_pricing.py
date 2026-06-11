@@ -10,7 +10,6 @@ locally as `manage.py load_ai_pricing` after editing the seed JSON.
 """
 
 import json
-from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -19,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.cost_tracking.models import PricingRule, PricingSource
-from apps.cost_tracking.services.pricing import PricingKey, PricingResolver
+from apps.cost_tracking.services.pricing import PricingKey
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "seed_data" / "llm_pricing.json"
 
@@ -28,7 +27,7 @@ class Command(BaseCommand):
     help = "Load the in-repo LLM pricing seed into PricingRule (idempotent, supersedes on change)."
 
     def add_arguments(self, parser):
-        """Register the --path override for the seed JSON location."""
+        """Expose --path so devs can point the loader at an alternate seed file."""
         parser.add_argument(
             "--path",
             default=str(SEED_PATH),
@@ -36,7 +35,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, path: str, **options):
-        """Read the seed JSON and upsert each rule via supersession."""
+        """Walk the seed JSON and upsert each rule, tallying outcomes for stdout."""
         seed = json.loads(Path(path).read_text())
         stats = {"unchanged": 0, "created": 0, "superseded": 0}
         for entry in seed:
@@ -86,6 +85,9 @@ def upsert_global_rule(
     now = timezone.now()
     with transaction.atomic():
         closed = active.update(effective_to=now)
+        # The post_save signal on this create() invalidates the resolver cache
+        # for this key, which covers both the new row and the just-closed row
+        # (same PricingKey). No explicit invalidate needed.
         PricingRule.objects.create(
             team=None,
             provider_type=key.provider_type,
@@ -96,12 +98,5 @@ def upsert_global_rule(
             source=source,
             effective_from=now,
         )
-
-    # `.update()` is a queryset write and does NOT fire post_save, so the
-    # signal-based cache invalidation didn't run for the closed row. The
-    # `create()` above did fire post_save, but the closed row's transition
-    # needs an explicit invalidation too.
-    if closed:
-        PricingResolver.invalidate(replace(key, team_id=None))
 
     return "superseded" if closed else "created"

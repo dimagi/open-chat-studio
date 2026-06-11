@@ -1,15 +1,6 @@
-"""Load the in-repo LLM pricing seed via the `load_ai_pricing` command.
-
-Idempotent: applying the migration on a database that already has the seed
-rows is a no-op (the loader returns "unchanged" for matching rates).
-"""
-
-from django.core.management import call_command
 from django.db import migrations
 
-
-def forwards(apps, schema_editor):
-    call_command("load_ai_pricing", verbosity=0)
+from apps.cost_tracking.migration_utils import load_pricing_data
 
 
 class Migration(migrations.Migration):
@@ -18,5 +9,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(forwards, migrations.RunPython.noop),
+        load_pricing_data(),
     ]

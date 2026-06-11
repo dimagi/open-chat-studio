@@ -10,6 +10,8 @@ from apps.utils.fields import SanitizedJSONField
 
 
 class ServiceKind(models.TextChoices):
+    """Billing dimension. Each kind has its own PricingRule per (provider, model)."""
+
     LLM_INPUT = "llm_input"
     LLM_OUTPUT = "llm_output"
     LLM_CACHED_INPUT = "llm_cached_input"
@@ -17,24 +19,29 @@ class ServiceKind(models.TextChoices):
 
 
 class Confidence(models.TextChoices):
+    """Provenance of a UsageRecord's token count, not its pricing state."""
+
     EXACT = "exact"
     ESTIMATED = "estimated"
     UNKNOWN = "unknown"
 
 
 class PricingSource(models.TextChoices):
+    """Where a PricingRule's rate came from."""
+
     SEED = "seed"
     MANUAL = "manual"
     IMPORT = "import"
 
 
-class PricingRule(BaseTeamModel):
-    """team=NULL is a global rule. Intended as mostly read-only table.
-    Rate changes close the current rule by setting `effective_to` and
-    insert a new rule with the new rate.
+class PricingRule(models.Model):
+    """A pricing rule. `team=NULL` means a global rule. Effectively
+    write-once: rate changes close the active rule via `effective_to` and
+    insert a new one. Not a `BaseTeamModel` subclass because `team` is
+    nullable here and the inherited `updated_at` / `VersioningMixin` don't
+    apply.
     """
 
-    # Override BaseTeamModel.team to allow NULL (global rules).
     team = models.ForeignKey(
         Team,
         verbose_name=gettext("Team"),
@@ -61,8 +68,7 @@ class PricingRule(BaseTeamModel):
             models.Index(fields=["team", "provider_type", "model_name", "service_kind", "effective_from"]),
         ]
         constraints = [
-            # At most one active rule per (team, provider, model, service_kind).
-            # nulls_distinct=False so global rows (team=NULL) can't duplicate.
+            # nulls_distinct=False so multiple `team=NULL` rows can't be active simultaneously.
             models.UniqueConstraint(
                 fields=["team", "provider_type", "model_name", "service_kind"],
                 condition=Q(effective_to__isnull=True),
@@ -72,7 +78,7 @@ class PricingRule(BaseTeamModel):
         ]
 
     def __str__(self):
-        """Compact representation for admin / shell debugging."""
+        """Show team scope, full key, and current rate."""
         scope = self.team_id if self.team_id else "global"
         return f"[{scope}] {self.provider_type}/{self.model_name}/{self.service_kind} @ {self.unit_price}"
 
@@ -89,9 +95,8 @@ class UsageRecord(BaseTeamModel):
     model_name = models.CharField(max_length=128)
     quantity = models.DecimalField(max_digits=18, decimal_places=4, null=True)
 
-    # Per 1K tokens (the canonical unit for every v4 service kind).
-    # NULL means no rule matched at write time; `cost` will be 0.
-    # Readers infer "priced" from `unit_price IS NOT NULL`.
+    # Denormalised snapshot of the rule's rate at write time. Anchor "priced"
+    # on `pricing_rule IS NOT NULL` (the primary source).
     unit_price = models.DecimalField(max_digits=14, decimal_places=8, null=True)
     cost = models.DecimalField(max_digits=14, decimal_places=8, default=0)
     currency = models.CharField(max_length=3, default="USD")
@@ -101,10 +106,11 @@ class UsageRecord(BaseTeamModel):
     session = models.ForeignKey("experiments.ExperimentSession", null=True, on_delete=models.SET_NULL)
     participant = models.ForeignKey("experiments.Participant", null=True, on_delete=models.SET_NULL)
     trace = models.ForeignKey("trace.Trace", null=True, on_delete=models.SET_NULL)
-    pricing_rule = models.ForeignKey(PricingRule, null=True, on_delete=models.SET_NULL)
+    # PROTECT so a rule with usage history can't be hard-deleted — keeps
+    # `pricing_rule IS NOT NULL` as a stable historical "priced" anchor.
+    pricing_rule = models.ForeignKey(PricingRule, null=True, on_delete=models.PROTECT)
 
-    # Known keys: `estimator` (when confidence=ESTIMATED),
-    # `missing_usage_calls` (when confidence=UNKNOWN).
+    # Known keys: `estimator` (confidence=ESTIMATED), `missing_usage_calls` (confidence=UNKNOWN).
     extra = SanitizedJSONField(default=dict, blank=True)
 
     class Meta:

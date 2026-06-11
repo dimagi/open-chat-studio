@@ -6,5 +6,5 @@ class CostTrackingConfig(AppConfig):
     label = "cost_tracking"
 
     def ready(self):
-        """Import signals so the post_save / post_delete receivers register."""
+        """Register PricingRule signal receivers."""
         from apps.cost_tracking import signals  # noqa: F401, PLC0415 - lazy: signal registration belongs in ready()

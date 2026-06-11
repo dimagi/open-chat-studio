@@ -13,7 +13,7 @@ from apps.cost_tracking.services.pricing import PricingKey, PricingResolver
 
 
 def _key_for(instance: PricingRule) -> PricingKey:
-    """Build the PricingKey that addresses this rule's cache entry."""
+    """Build the cache key that addresses this rule's resolver entry."""
     return PricingKey(
         provider_type=instance.provider_type,
         model_name=instance.model_name,
@@ -24,9 +24,7 @@ def _key_for(instance: PricingRule) -> PricingKey:
 
 @receiver(post_save, sender=PricingRule)
 def _invalidate_on_save(sender, instance: PricingRule, **kwargs):
-    """Drop the resolver cache for this rule on any model save (incl. updates
-    to `effective_to` from supersession-via-save).
-    """
+    """Drop the resolver cache when a rule changes (incl. supersession-via-save)."""
     PricingResolver.invalidate(_key_for(instance))
 
 
