@@ -9,6 +9,21 @@ status: active
 - **Source Server**: The server being migrated from.
 - **Target Server**: The server being migrated to.
 
+## Scope & prerequisites
+
+**This document covers data *ingestion* only** — how a team's data is pulled from the source
+and recreated on the target. It is **not** a guide to standing up a self-hosted instance.
+Provisioning and configuring the target (environment variables, database, Redis, object
+storage, the initial superuser) is covered by the hosting docs — `docs/hosting/index.md`
+(Self-Hosting → Overview) and `docs/hosting/configuration.md` (Self-Hosting → Configuration).
+
+Before running the sync, the target must be a working OCS instance per those docs. There is
+nothing migration-specific to set up on the target by hand — the sync brings the team and all its
+data across, and a team that already exists on the target is fine.
+
+The only source-side prerequisites are a team admin, an API key, and arming the migration lock
+(see *End-to-end lifecycle*, *Migration lock*, and *Authorization*).
+
 ## Overview
 
 The migration process runs as a management command on the target server. This command fetches a
@@ -33,12 +48,43 @@ existing Files API:
   nothing nested or bundled.
 - **[Existing] Files API**: Fetches a file's content (bytes) given its metadata.
 
+## End-to-end lifecycle
+
+The migration is a mostly-hands-off loop bracketed by two manual moments: a team admin **arms**
+the migration lock at the start, and the operator runs **cutover** at the end. Each step is
+detailed in its own section below; this is the map of what to do, in order.
+
+1. **Provision the target.** Stand up and configure the self-hosted instance per the hosting
+   docs (*Scope & prerequisites*).
+2. **Mint a source API key.** On the source, a team admin creates an API key for the team
+   (read-only is sufficient — every sync endpoint is `GET`). See *Authorization*.
+3. **Arm the migration lock.** The team admin flips the team into migration mode from the
+   source's team settings. This freezes structural changes and stops the source firing
+   scheduled messages for that team, so the data can't drift while it is being pulled. See
+   *Migration lock*.
+4. **Run the sync.** On the target:
+   `manage.py sync_team --source-url=<src> --api-key=<key>` (the team is implicit in the key).
+   The first call fetches the manifest, generates the run's RSA keypair, builds the team
+   (setting `is_migrating` on the target so its synced scheduled messages stay inert), and
+   pages through every manifest entry. See *The sync process*.
+5. **Parity check.** Confirm no `FKTranslation` row has a null `target_key` (and, under file
+   content option B, spot-check file content). See *Parity check*.
+6. **Cutover.** Re-point inbound webhooks to the target (auto for Telegram/Twilio; the command
+   prints the manual list for the rest), do a final run once the source is quiet, then clear the
+   lock on the target so it resumes firing. Work the re-establishment checklist. See *Cutover*.
+   The source team stays locked and is abandoned.
+
 ## Setup
 
-Running the command creates a local SQLite DB named for the team slug and initialises the
-`FKTranslation` table. No chatbots, users, service providers, or other resources may be created on
-the **source** while the migration runs. Before the first call, the command fetches the manifest and
-generates one ephemeral RSA keypair for the run.
+Before the first call, a team admin must **arm the migration lock** on the source (see
+*Migration lock*); the sync endpoints refuse to serve a team that is not in migration mode.
+Arming the lock is what enforces the "no structural changes on the source while migrating" rule —
+it blocks the main structural-creation paths and stops the source firing scheduled messages for
+the team, while leaving live chat traffic untouched.
+
+Running the command fetches the manifest, generates one ephemeral RSA keypair for the run, and
+creates a local SQLite DB named for the team slug (learned from the synced `teams.team` row),
+initialising the `FKTranslation` table.
 
 **FK translation rule.** Every source row we sync gets an `FKTranslation` row keyed by
 `(content_type, source_key)`, with `target_key` left null until the row exists on the target. Every
@@ -254,18 +300,44 @@ GET /api/v2/sync/files.filechunkembedding/?cursor=0
 }
 ```
 
-## Scheduled-message firing gate
+## Migration lock
 
-`poll_scheduled_messages` is a global, unconditional beat task, so a synced `ScheduledMessage` with a
-due `next_trigger_date` would fire on the target **while the source is still live**. The target
-therefore holds a **per-team "migrating" gate** that excludes teams under migration from
-`get_messages_to_fire()` (and timeout-trigger firing), so synced `ScheduledMessage` rows sit inert
-until cutover clears the gate. The persisted live-data cursors capture the source's final firing
-state, so a later rerun never repeats an already-sent occurrence. `events.timeouttrigger` rows keep
-their source `config_changed_at` so the trigger's retroactive-firing gate
-(`TimeoutTrigger.timed_out_sessions()` filters messages `>= config_changed_at`) carries the source's
-semantics rather than resetting to import time. Cutover (below) defines the full
-suspend → flip → final-run → clear-gate sequence.
+A single per-team flag, `Team.is_migrating`, drives the whole migration. It is the "lock" the rest
+of this document refers to. It is operational state, not migrated data, so it sits in
+`EXCLUDE_REGISTRY` for `teams.team` — the command never copies the source value; it sets the flag
+explicitly on the target instead (below).
+
+**Arming it (source).** A team admin flips the flag from the source's team settings (gated by
+`is_team_admin()`; the toggle is audited via `field_audit`). Arming is a deliberate, fast action
+taken at the start of a migration — syncing is quick, so the team is locked only briefly. While
+armed, on the source:
+
+1. **Structural changes are frozen.** The main structural-creation paths (new chatbot, new service
+   provider, pipeline edits, …) are blocked with a banner, so the structural data the sync pulls
+   once cannot drift mid-migration. Live chat traffic is unaffected — the source stays fully usable
+   for conversations.
+2. **Scheduled-message firing stops.** `poll_scheduled_messages` is a global, unconditional beat
+   task, so the firing query `get_messages_to_fire()` (and timeout-trigger firing) excludes teams
+   where `is_migrating` is set. The source stops firing scheduled messages for the team the moment
+   the lock is armed.
+
+**The same flag on the target.** When the command syncs the team (manifest entry #1) it sets
+`is_migrating=True` on the target too. Because `get_messages_to_fire()` excludes migrating teams
+everywhere, the target holds its synced `ScheduledMessage` rows inert with no extra mechanism. The
+creation-freeze is a view/API-layer guard, so it never interferes with the command's own ORM writes.
+
+**No double-fire, no pile-up.** Source firing is frozen from the moment the lock is armed, and the
+target stays inert until cutover clears its flag — so a given occurrence fires on exactly one
+server. Because the sync is fast, the window in which neither server fires is short. The persisted
+live-data cursors capture the source's final firing state, so a later rerun never repeats an
+already-sent occurrence. `events.timeouttrigger` rows keep their source `config_changed_at`, so the
+retroactive-firing gate (`TimeoutTrigger.timed_out_sessions()` filters messages
+`>= config_changed_at`) carries the source's semantics rather than resetting to import time.
+
+**Clearing it.** Cutover clears `is_migrating` **on the target**, so the target resumes firing from
+the synced state (see *Cutover*). The **source** flag is left set — the source team is abandoned
+after cutover. A team admin can also clear the source flag manually to **abort** a migration before
+cutover, which unfreezes structural changes and resumes source firing.
 
 ## Parity check
 
@@ -283,9 +355,9 @@ landed.
 
 Cutover is the single, team-wide switch from the source to the target. Until this point the source is
 still live and the target — though fully built and kept current by repeated reruns of the command — is
-held **inert** by the per-team firing gate. Cutover flips inbound traffic and outbound firing over to the
-target in one controlled window. It is **all-at-once for the team**, not bot-by-bot: channels that
-share a provider physically move together (below), so the team is the clean unit and the firing gate
+held **inert** by the per-team migration lock. Cutover flips inbound traffic and outbound firing over to
+the target in one controlled window. It is **all-at-once for the team**, not bot-by-bot: channels that
+share a provider physically move together (below), so the team is the clean unit and the migration lock
 stays **per-team**.
 
 ### Webhook re-registration by platform
@@ -320,16 +392,17 @@ command only reports.
 
 ### Cutover sequence
 
-1. **Suspend source firing (team).** Exclude the team from the source's `poll_scheduled_messages`
-   (and timeout-trigger firing). Scheduled messages fire on a timer independent of inbound traffic, so
-   freezing the source's outbound timer *first* is what prevents the same message being sent from both
-   servers. Inbound chat still works on the source at this point.
+1. **Source firing is already frozen.** The migration lock (armed at the start — see *Migration
+   lock*) already excludes the team from the source's `poll_scheduled_messages` and timeout-trigger
+   firing, so the source's outbound timer was frozen *before* cutover began — this is what prevents
+   the same message being sent from both servers. Inbound chat still works on the source at this
+   point. Nothing to do here beyond confirming the lock is still armed.
 2. **Flip the webhooks.** The command auto-flips Telegram and Twilio immediately, then prints two
    lists for the operator: **providers to update** (each Meta app / Slack workspace / SureAdhere
    tenant — flipping one moves all its bots) and **channels to update** (Turn.io, Web/widget embeds,
    API base-URL). Inbound moves to the target per channel as each flip lands. The target serves those
-   conversations immediately — the firing gate governs only *scheduled-message* firing, not inbound
-   handling.
+   conversations immediately — the migration lock's firing freeze governs only *scheduled-message*
+   firing, not inbound handling.
 3. **Keep re-running through the window.** Until the last webhook is flipped, messages to
    not-yet-flipped channels still land on the source, so keep re-running the command to pull the new
    live data. The window in which some channels point at the target and others at the source is
@@ -337,10 +410,10 @@ command only reports.
 4. **Final run once the source is quiet.** After the last channel is flipped (no new data can reach
    the source), run the command one last time so the target is fully caught up, including the frozen
    scheduled-message state.
-5. **Clear the target gate.** Flip the team out of "migrating" mode; the target's
-   `poll_scheduled_messages` resumes from the synced state. Because source firing was suspended and the
-   final run captured the source's last firing state, no scheduled occurrence is duplicated or
-   skipped.
+5. **Clear the lock on the target.** Set `is_migrating=False` on the target team; its
+   `poll_scheduled_messages` resumes from the synced state. Because source firing was frozen for the
+   whole (short) migration window and the final run captured the source's last firing state, no
+   scheduled occurrence is duplicated or skipped. The **source** team stays locked and is abandoned.
 
 ### Re-establishment checklist
 
@@ -583,12 +656,22 @@ only derived values such as Meta's `verify_token_hash`).
 
 ### Authorization
 
-The `/api/v2/sync/` endpoints (the manifest and the generic slug endpoint) require a
-**superuser-level or dedicated migration credential**. They expose the full team's data including
-sealed secrets, so they must be tightly authorized, strictly team-scoped, and audited. See
-`docs/agents/django_view_security.md`. The generic slug endpoint additionally enforces the manifest
-allowlist — a content type not in the manifest is rejected, so the endpoint cannot be coaxed into
-serving an unclassified model.
+The `/api/v2/sync/` endpoints (the manifest and the generic slug endpoint) authenticate with a
+**`UserAPIKey`** (or OAuth token) whose owner is an **admin of the team being migrated** — i.e.
+`request.team_membership.is_team_admin()` must hold (a superuser with temporary team access
+qualifies via `SuperuserMembership`). The team is resolved *from the key* (`UserAPIKey.team`), so
+there is no team URL parameter and a key can only ever reach its own team's data. A read-only key
+suffices, since every endpoint is `GET`. A non-admin key is rejected with 403.
+
+These endpoints expose the full team's data including sealed secrets, so they must be tightly
+authorized, strictly team-scoped, and audited. See `docs/agents/django_view_security.md`. Two
+further guards:
+
+- **Migration mode required.** The endpoints refuse to serve a team that is not in migration mode
+  (`is_migrating`), so data can only be pulled while the source is frozen and not firing scheduled
+  messages (see *Migration lock*).
+- **Manifest allowlist.** The generic slug endpoint rejects any content type not in the manifest,
+  so it cannot be coaxed into serving an unclassified model.
 
 ### Guard tests
 
@@ -844,8 +927,15 @@ same idea applies to append-only `pk` slugs: the largest synced `id` is the curs
 - **Versioning** — `experiments.experiment` and `pipelines.pipeline` are pulled
   `order_by working_version_id NULLS FIRST, id`, so every working version precedes any published
   version that references it via `working_version`.
-- **Scheduled messages** — synced as live data (`events.scheduledmessage`) with a per-team firing gate
-  so the target does not double-fire during the migration window. See *Scheduled-message firing gate*.
+- **Scheduled messages** — synced as live data (`events.scheduledmessage`); the per-team migration
+  lock stops the source firing and holds the target's synced rows inert, so neither server
+  double-fires during the migration window. See *Migration lock*.
+- **Migration lock — enabling & scope** — a single per-team flag (`Team.is_migrating`), armed by a
+  team admin from the source's team settings (not auto-enabled on the first API call). While armed it
+  freezes the main structural-creation paths on the source *and* stops the source firing scheduled
+  messages; the same flag, set by the command on the target, holds the target's synced messages inert
+  until cutover. The sync endpoints require both a team-admin API key and the team to be in migration
+  mode. See *Migration lock* and *Authorization*.
 - **Paginating live data** — per-slug keyset pagination set by the manifest `cursor` field (`pk` for
   append-only, `updated_at_id` for mutable), consumed in manifest order, with each slug's cursor
   persisted locally between runs. See the slug endpoint reference.
