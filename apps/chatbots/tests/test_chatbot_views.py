@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
@@ -11,6 +12,7 @@ from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.http import http_date
+from waffle.testutils import override_flag
 
 from apps.annotations.models import Tag
 from apps.api.session_tokens import validate_session_token
@@ -720,3 +722,66 @@ def test_chatbot_chat_ui_includes_valid_session_token():
     token = response.context_data["session_token"]
     assert token
     assert validate_session_token(token, session.external_id)
+
+
+@pytest.mark.django_db()
+def test_chatbot_chat_ui_widget_context():
+    """The public chat page configures the widget with a greeting but never pins a version:
+    anonymous participants may not request one through the chat API."""
+    experiment = ExperimentFactory()
+    session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+
+    request = RequestFactory().get("/")
+    request.team = experiment.team
+    request.experiment = experiment
+    request.experiment_session = session
+
+    response = _chatbot_chat_ui(request)
+
+    assert "widget_version_number" not in response.context_data
+    assert json.loads(response.context_data["welcome_messages"]) == [
+        f"Hello, you can ask me anything you want about {experiment.name}."
+    ]
+
+
+@pytest.mark.django_db()
+def test_chatbot_chat_session_includes_widget_session_context(client, team_with_users):
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory(team=team_with_users)
+    session = ExperimentSessionFactory(experiment=experiment, participant__user=user)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team_with_users.slug, experiment.id, experiment.version_number, session.id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    token = response.context["session_token"]
+    assert validate_session_token(token, session.external_id)
+    assert response.context["widget_version_number"] == experiment.version_number
+    assert json.loads(response.context["welcome_messages"]) == [
+        f"Hello, you can ask me anything you want about {experiment.name}."
+    ]
+
+
+@pytest.mark.django_db()
+@override_flag("flag_chat_widget", active=True)
+def test_web_chat_widget_rendering(client, team_with_users):
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory(team=team_with_users, file_uploads_enabled=True)
+    session = ExperimentSessionFactory(experiment=experiment, participant__user=user)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team_with_users.slug, experiment.id, experiment.version_number, session.id],
+    )
+    content = client.get(url).content.decode()
+
+    assert f'version-number="{experiment.version_number}"' in content
+    assert 'allow-attachments="true"' in content
+    assert "welcome-messages=" in content
+    # consent-form experiments keep the end-chat-and-give-feedback flow alongside the widget
+    assert "end-experiment-modal" in content

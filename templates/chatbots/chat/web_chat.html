@@ -32,12 +32,20 @@
             session-id="{{ session.external_id }}"
             session-token="{{ session_token }}"
             api-base-url="{{ request.scheme }}://{{ request.get_host }}"
+            welcome-messages="{{ welcome_messages }}"
+            {% if widget_version_number is not None %}
+              version-number="{{ widget_version_number }}"
+            {% endif %}
+            {% if experiment.file_uploads_enabled %}
+              allow-attachments="true"
+            {% endif %}
             {% if not request.user.is_anonymous %}
               user-id="{{ request.user.email }}"
               user-name="{{ request.user.get_full_name }}"
             {% endif %}
           ></open-chat-studio-widget>
         </div>
+        {% include "experiments/chat/end_chat_button.html" %}
       {% else %}
         {% include "experiments/chat/chat_ui.html" %}
       {% endflag %}

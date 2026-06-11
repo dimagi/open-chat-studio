@@ -1,3 +1,4 @@
+import json
 import unicodedata
 import uuid
 from functools import cached_property
@@ -647,7 +648,16 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
     return TemplateResponse(
         request,
         "chatbots/chat/web_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": "chatbots", **version_specific_vars},
+        {
+            "experiment": experiment,
+            "session": session,
+            "session_token": issue_session_token(session),
+            # pin widget-started sessions to the version being tested rather than the published one
+            "widget_version_number": version_number,
+            "welcome_messages": _widget_welcome_messages(experiment_version.name),
+            "active_tab": "chatbots",
+            **version_specific_vars,
+        },
     )
 
 
@@ -795,11 +805,17 @@ def _chatbot_chat_ui(request, embedded=False):
             "experiment": request.experiment,
             "session": request.experiment_session,
             "session_token": issue_session_token(request.experiment_session),
+            "welcome_messages": _widget_welcome_messages(chatbot_version.name),
             "active_tab": "chatbots",
             "embedded": embedded,
             **version_specific_vars,
         },
     )
+
+
+def _widget_welcome_messages(experiment_name: str) -> str:
+    """JSON for the widget's `welcome-messages` attribute, mirroring the legacy chat UI greeting."""
+    return json.dumps([f"Hello, you can ask me anything you want about {experiment_name}."])
 
 
 @login_and_team_required
