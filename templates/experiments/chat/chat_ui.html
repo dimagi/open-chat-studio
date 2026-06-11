@@ -31,14 +31,7 @@
   {% endfor %}
 </div>
 {% include "experiments/chat/input_bar.html" %}
-{% if not embedded %}
-  {% if experiment.consent_form %}
-    <div class="w-full text-center bg-base-300">
-      <label for="end-experiment-modal" class="btn btn-warning btn-xs">End chat and give feedback</label>
-    </div>
-    {% include "experiments/chat/end_experiment_modal.html" %}
-  {% endif %}
-{% endif %}
+{% include "experiments/chat/end_chat_button.html" %}
 <script>
   let refreshTimer = null;
   const pollInterval = 30000;

@@ -647,7 +647,13 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
     return TemplateResponse(
         request,
         "chatbots/chat/web_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": "chatbots", **version_specific_vars},
+        {
+            "experiment": experiment,
+            "session": session,
+            "session_token": issue_session_token(session),
+            "active_tab": "chatbots",
+            **version_specific_vars,
+        },
     )
 
 
