@@ -221,7 +221,9 @@ def survey_deprecation_notification(team) -> None:
         level=LevelChoices.WARNING,
         team=team,
         slug="survey-feature-deprecated",
-        permissions=["experiments.change_survey"],
+        # view_survey matches the (now read-only) survey views, so everyone who
+        # can still access the feature is notified — not just survey editors.
+        permissions=["experiments.view_survey"],
     )
 
 

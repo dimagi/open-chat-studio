@@ -298,18 +298,26 @@ class ConsentFlowStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         session = ctx.experiment_session
         response = None
+        handled = False
 
         if session.status == SessionStatus.SETUP:
             session.update_status(SessionStatus.PENDING)
             response = self._build_consent_prompt(ctx)
+            handled = True
         elif session.status == SessionStatus.PENDING:
             if self._user_gave_consent(ctx):
                 response = self._start_conversation(ctx)
             else:
                 response = self._build_consent_prompt(ctx)
+            handled = True
 
-        if response is not None:
-            raise EarlyExitResponse(response)
+        # Always short-circuit once we've handled the consent step: the consent
+        # reply must be consumed even when there's no seed message (and so
+        # _start_conversation returns None), otherwise downstream stages would
+        # feed the consent token to the bot as the participant's first prompt.
+        # Mirrors the v1 flow, which returns an empty message rather than leaking it.
+        if handled:
+            raise EarlyExitResponse(response or "")
 
     def _user_gave_consent(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None and ctx.user_query.strip() == self.USER_CONSENT_TEXT

@@ -49,9 +49,13 @@ class CreateSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     # informative deprecation redirect rather than a 403.
     permission_required = "experiments.view_survey"
 
-    def dispatch(self, request, team_slug: str, *args, **kwargs):
+    # Handle via get/post (not dispatch) so the mixins' dispatch — login, team,
+    # and permission checks — still runs before we redirect.
+    def get(self, request, team_slug: str, *args, **kwargs):
         messages.error(request, SURVEY_DEPRECATION_MESSAGE)
         return HttpResponseRedirect(reverse("experiments:survey_home", args=[team_slug]))
+
+    post = get
 
 
 class EditSurvey(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):

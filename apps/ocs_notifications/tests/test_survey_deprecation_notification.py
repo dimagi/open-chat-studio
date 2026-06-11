@@ -9,7 +9,8 @@ from apps.utils.factories.team import TeamFactory
 def test_survey_deprecation_notification_creates_event():
     team = TeamFactory.create()
     survey_deprecation_notification(team)
-    event = NotificationEvent.objects.filter(team=team).first()
-    assert event is not None
+    events = NotificationEvent.objects.filter(team=team, title="Surveys are being removed")
+    assert events.count() == 1
+    event = events.get()
     assert "2026-07-10" in event.message
     assert "deprecated" in event.message.lower()

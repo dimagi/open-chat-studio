@@ -84,7 +84,10 @@ class TestConsentFlowStage:
             user_query="1",
         )
 
-        # No early exit when no seed message
-        self.stage(ctx)
+        # Short-circuits with an empty response so the consent token isn't
+        # forwarded to the bot, even when there's no seed message.
+        with pytest.raises(EarlyExitResponse) as exc_info:
+            self.stage(ctx)
 
         session.update_status.assert_called_with(SessionStatus.ACTIVE)
+        assert exc_info.value.response == ""
