@@ -15,7 +15,7 @@ from django.utils import timezone
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord
 from apps.cost_tracking.services.pricing import PricingKey, PricingResolver
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ocs.cost_tracking")
 
 _CENT_QUANTUM = Decimal("0.00000001")
 _THOUSAND = Decimal(1000)
