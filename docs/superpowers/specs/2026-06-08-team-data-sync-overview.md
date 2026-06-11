@@ -1,5 +1,5 @@
 ---
-status: active
+status: stable
 ---
 
 # Team Data Sync — Overview
@@ -28,11 +28,12 @@ The following APIs will be used (those marked `*` are new, served under the `/ap
   (working or published) by its integer pk, including its FK references, channels, and events.
 - **[Existing] Pipeline read** — `GET /api/v2/pipelines/{id}/`: Fetch a pipeline's raw graph
   (nodes + edges with full params).
-- `*` **Living data** — `GET /api/v2/sync/living-data/`: A cursor-paginated delta stream of the
-  data that grows with chatbot interactions.
+- `*` **Living data** — `GET /api/v2/sync/living-data/<resource>/`: A family of keyset-paginated,
+  per-resource delta endpoints for the data that grows with chatbot interactions (participants,
+  sessions, messages, scheduled messages, notifications, annotations, …).
 
-The migration runs in six steps: (1) general resources, (2) file hydration, (3) pipeline creation,
-(4) chatbot and channel creation, (5) live data, (6) parity check.
+The migration runs in seven steps: (1) general resources, (2) file hydration, (3) pipeline creation,
+(4) chatbot and channel creation, (5) live data, (6) parity check, (7) cutover.
 
 ## Setup
 
@@ -72,8 +73,13 @@ public key (see the [Secrets](#secrets) section below).
 - **Evaluations** and **human-annotation** review data — future scope. (Tags and tagged items *are*
   synced — in this step and Step 5.)
 - OAuth/social login, hashed API keys, and Slack installs are re-established or re-registered on the
-  target, not migrated. See the Model → source-API mapping table in the Read API Reference section
-below for the exhaustive list.
+  target, not migrated — no synced model depends on them, and `AuthProviderType` has no OAuth variant,
+  so outbound custom-action auth (api-key/bearer, stored in the encrypted `config`) is unaffected. The
+  migration instead emits a **cutover re-establishment checklist**: the team's `OAuth2Application`
+  registrations to recreate and the users relying on social login / MFA to re-authenticate, so these
+  are surfaced rather than silently dropped — the same treatment as channel webhooks and Slack
+  installs. See the Model → source-API mapping table in the Read API Reference section below for the
+  exhaustive list.
 
 **Response** (abbreviated):
 
@@ -259,21 +265,48 @@ the source `created_at`/`updated_at` back with raw SQL on the chatbot, channel, 
 
 ## Step 5 - Live data
 
-Live data is the tables that grow with chatbot interactions: participants, sessions, chat messages,
-traces, participant data, and tagged items.
+Live data is the tables that grow with chatbot interactions. Rather than one combined endpoint, each
+related group is served by its **own** keyset-paginated endpoint under `/api/v2/sync/living-data/`,
+consumed in **dependency order** so referencing rows are always created after their targets:
 
-**Call.** `GET /api/v2/sync/living-data/?cursor=<iso_timestamp>&limit=<n>`, polled repeatedly,
-passing `next_cursor` each time until cutover.
+1. `participants` + `participant_data`
+2. `sessions` + `chats` + `chat_attachments` (plus the `File` rows backing those attachments)
+3. `chat_messages` + `traces`
+4. `pipeline_chat_history` + `pipeline_chat_messages`
+5. `scheduled_messages`
+6. `notification_events` + `event_users`
+7. `custom_tagged_items` + `user_comments` (last — generic FKs that may point at any of the above)
 
-**Response** (abbreviated): arrays of `participants`, `sessions`, `chat_messages`, `traces`,
-`participant_data`, `custom_tagged_items`, plus `next_cursor` and `has_more`. Each row carries its
-source `created_at`/`updated_at`.
+**Pagination (keyset, per resource).** Append-only resources (`chat_messages`, `traces`,
+`chat_attachments`, `pipeline_chat_messages`, `custom_tagged_items`, `notification_events`) paginate
+by **primary key** (`id > cursor`) — immutable and monotonic, so no boundary overlap. Mutable
+resources (`participants`, `sessions`, `participant_data`, `scheduled_messages`, `user_comments`,
+`event_users`) paginate by the **composite keyset `(updated_at, id) > (cursor_ts, cursor_id)`** so a
+run of rows sharing one `updated_at` is paged deterministically — never skipped (truncation) nor
+re-served forever (timestamp ties). Each endpoint returns its own `next_cursor` + `has_more` and is
+polled until cutover. (See endpoint 4 in the Read API Reference for the per-resource cursor rules.)
 
-**Use.** Upsert each row by source pk (idempotent, so the boundary overlap from the `>=` cursor is a
-no-op) and record its `target_key`; write each row's source `created_at`/`updated_at` back with raw
-SQL after the upsert (timestamp rule). Apply `participants` **before** the other arrays in a batch —
-sessions, participant data, and tagged items reference them. Keep paginating while `has_more` is
-true; otherwise record `next_cursor` as the checkpoint and wait before the next poll.
+**Use.** Upsert each row by source pk (idempotent) and record its `target_key`; write the source
+`created_at`/`updated_at` back with raw SQL after the upsert (timestamp rule). FK refs are remapped
+through `FKTranslation` by field introspection (see *Serialization, FK remapping, and guard tests*).
+Two resource-specific notes:
+
+- **`ParticipantData.data` and `ParticipantData.encryption_key` are encrypted at rest** — the only
+  living-data secrets. They travel through the same decrypt → re-encrypt-under-`public_key` path as
+  provider `config` (see [Secrets](#secrets)), so the `participants` endpoint also accepts the
+  target's `public_key`.
+- **`ChatAttachment.files` is an M2M to `File`.** export-team only sees files reached via
+  collections, so attachment files are *living-data* files: each `chat_attachments` row carries its
+  backing `File` metadata (created and content-hydrated as in Step 2) plus the remapped `file_id`
+  list, which the importer applies with `.set()` after the attachment row exists.
+
+**Firing gate (avoiding double-sends).** `poll_scheduled_messages` is a global, unconditional beat
+task, so a synced `ScheduledMessage` with a due `next_trigger_date` would fire on the target **while
+the source is still live**. The target therefore holds a **per-team "migrating" gate** that excludes
+teams under migration from `get_messages_to_fire()` (and timeout-trigger firing), so synced
+`ScheduledMessage` rows sit inert until cutover clears the gate. The cursors capture the source's
+final firing state, so on resume the target never repeats an already-sent occurrence. Step 7 (Cutover)
+defines the full suspend → flip → final-poll → clear-gate sequence.
 
 ## Step 6 - Parity check
 
@@ -287,9 +320,79 @@ instead spot-checks a sample of files (e.g. 20–50 across the team) and confirm
 its expected storage key. Loading every file's bytes is unnecessary; a sample confirms the upload
 landed.
 
+## Step 7 - Cutover
+
+Cutover is the single, team-wide switch from the source to the target. Until this point the source is
+still live and the target — though fully built and kept current by Steps 1–5 — is held **inert** by
+the per-team firing gate (Step 5). Cutover flips inbound traffic and outbound firing over to the
+target in one controlled window. It is **all-at-once for the team**, not bot-by-bot: channels that
+share a provider physically move together (below), so the team is the clean unit and the firing gate
+stays **per-team**.
+
+### Webhook re-registration by platform
+
+Each channel's inbound webhook embeds the server's domain, so cutover re-points each platform at the
+target. The *unit* of that flip differs by platform — which is why some are auto-flipped, some are
+reported as provider-level, and some as per-channel:
+
+| Platform | Inbound keyed by | Flip unit | Cutover |
+| --- | --- | --- | --- |
+| Telegram | per-bot token (`setWebhook`) | per channel | **auto** |
+| WhatsApp/FB via Twilio | per phone number (Twilio API) | per channel | **auto** |
+| WhatsApp via Turn.io | per number/account | per channel | manual |
+| Web / Embedded Widget | the embed/widget's target domain | per embed | manual (customer-side; no webhook) |
+| API | client's base URL | per client | manual (client-side; no webhook) |
+| WhatsApp via Meta Cloud | the Meta **app** callback URL | per provider/app | manual, coupled |
+| Slack | the **workspace/installation** | per workspace | manual, coupled |
+| SureAdhere | the **tenant** (`tenant_id`) | per tenant | manual, coupled |
+| Email | one Anymail inbound webhook (mail-provider/domain) | instance-level | ops only |
+| CommCare Connect | the Connect server's shared endpoint | instance/app-level | ops only |
+| Evaluations | internal only | — | n/a |
+
+The dividing line is whether inbound is keyed by a **per-bot credential** (Telegram token, Twilio
+number — individually flippable, so the command automates them) or by **one shared account/app/domain**
+(Meta/Slack/SureAdhere — flipping it moves *every* bot on that provider at once). Email and CommCare
+Connect are configured once at the **deployment level** and shared across teams, so a single-team
+migration cannot flip them in isolation — they are an out-of-band ops task the command only reports.
+
+### Cutover sequence
+
+1. **Suspend source firing (team).** Exclude the team from the source's `poll_scheduled_messages`
+   (and timeout-trigger firing). Scheduled messages fire on a timer independent of inbound traffic, so
+   freezing the source's outbound timer *first* is what prevents the same message being sent from both
+   servers. Inbound chat still works on the source at this point.
+2. **Flip the webhooks.** The command auto-flips Telegram and Twilio immediately, then prints two
+   lists for the operator: **providers to update** (each Meta app / Slack workspace / SureAdhere
+   tenant — flipping one moves all its bots) and **channels to update** (Turn.io, Web/widget embeds,
+   API base-URL). Inbound moves to the target per channel as each flip lands. The target serves those
+   conversations immediately — the firing gate governs only *scheduled-message* firing, not inbound
+   handling.
+3. **Keep polling through the window.** Until the last webhook is flipped, messages to not-yet-flipped
+   channels still land on the source, so the living-data sync keeps running. The window in which some
+   channels point at the target and others at the source is data-safe: source firing is frozen and the
+   sync keeps pulling stragglers.
+4. **Final poll once the source is quiet.** After the last channel is flipped (no new data can reach
+   the source), run the final living-data poll so the target is fully caught up, including the frozen
+   scheduled-message state.
+5. **Clear the target gate.** Flip the team out of "migrating" mode; the target's
+   `poll_scheduled_messages` resumes from the synced state. Because source firing was suspended and the
+   final poll captured the source's last firing state, no scheduled occurrence is duplicated or
+   skipped.
+
+### Re-establishment checklist
+
+Cutover also surfaces the resources that are re-established rather than migrated (see Step 1 and the
+mapping table), so nothing is silently dropped:
+
+- **OAuth2 applications** — the team's `OAuth2Application` registrations to recreate on the target;
+  external API clients re-consent (client secrets are hashed and tokens are bearer secrets, so neither
+  is migrated).
+- **Social login / MFA** — users relying on social login or MFA re-authenticate / re-enrol.
+- **Email / CommCare Connect** — instance-level inbound routing, handled out of band by ops.
+
 ## Read API Reference
 
-Steps 1–6 describe the migration flow with abbreviated responses. This section is the full schema
+Steps 1–7 describe the migration flow with abbreviated responses. This section is the full schema
 reference for the five source-side read endpoints the sync command consumes — four new ones under
 `/api/v2/sync/` plus the existing v2 pipeline read. Per the timestamp rule, every row additionally
 carries `created_at`/`updated_at`; these are omitted from the schemas below except where they are
@@ -589,70 +692,59 @@ assistant or MCP node remain dangling (those resources are excluded by decision 
 notes). No `ETag` is returned for this read; the write spec's chatbot-scoped variant carries one for
 optimistic concurrency, which the sync read does not need.
 
-### 4. `GET /api/v2/sync/living-data/?cursor=<iso_timestamp>&limit=<n>`
+### 4. `GET /api/v2/sync/living-data/<resource>/?cursor=<keyset>&limit=<n>`
 
-Returns all living-data rows created or updated since `cursor`. Called repeatedly until cutover;
-the sync engine stores `next_cursor` and passes it on the next call.
+Living data is served as a **family of per-resource endpoints**, not one combined call. Each is
+keyset-paginated and polled repeatedly until cutover; the engine consumes them in the dependency
+order listed in Step 5. The `participants` endpoint (whose `participant_data` rows carry encrypted
+fields) also accepts `?public_key=<base64>` (see [Secrets](#secrets)).
 
-**Cursor semantics:**
+**Resource groups and keyset:**
 
-| Resource | Filter |
-| --- | --- |
-| `chat_messages`, `traces`, `custom_tagged_items` | `created_at >= cursor` (append-only) |
-| `participants`, `sessions`, `participant_data` | `created_at >= cursor OR updated_at >= cursor` |
+| Endpoint (`<resource>`) | Rows returned | Keyset |
+| --- | --- | --- |
+| `participants` | `participants` + `participant_data` | `(updated_at, id)` |
+| `sessions` | `sessions` + `chats` + `chat_attachments` (+ backing `File` rows) | `(updated_at, id)` |
+| `messages` | `chat_messages` + `traces` | `id` (append-only) |
+| `pipeline-history` | `pipeline_chat_history` + `pipeline_chat_messages` | history `(updated_at, id)`, messages `id` |
+| `scheduled-messages` | `scheduled_messages` | `(updated_at, id)` |
+| `notifications` | `notification_events` + `event_users` | events `id`, users `(updated_at, id)` |
+| `annotations` | `custom_tagged_items` + `user_comments` | items `id`, comments `(updated_at, id)` |
 
-`next_cursor` is the maximum `created_at`/`updated_at` observed across all rows in the response.
-Because `>=` is used at the boundary, the first row of the next page may overlap with the last row
-of the current page; the sync engine's upsert-by-source-pk treats duplicates as no-ops.
+**Cursor semantics.** Append-only resources filter `id > cursor` ordered by `id` — primary keys are
+immutable and monotonic, so there is no boundary overlap. Mutable resources filter
+`(updated_at, id) > (cursor_ts, cursor_id)` ordered by the same composite, so a run of rows sharing a
+single `updated_at` is paged through deterministically rather than skipped (per-table truncation
+under a shared timestamp cursor) or re-served forever (timestamp ties). `next_cursor` is the last
+keyset value in the response; `has_more` indicates more rows beyond it. Upsert-by-source-pk keeps any
+re-served boundary row a no-op.
 
-**Response:**
+**Response** (e.g. `sessions`):
 
 ```json
 {
-  "cursor": "2026-06-09T10:00:00Z",
-  "next_cursor": "2026-06-09T14:32:00Z",
+  "next_cursor": { "updated_at": "2026-06-09T14:32:00Z", "id": 30 },
   "has_more": true,
-  "participants": [
-    { "id": 12, "identifier": "user-abc", "name": "Alice B.",
-      "created_at": "...", "updated_at": "..." }
-  ],
   "sessions": [
-    {
-      "id": 30, "experiment_id": 20, "participant_id": 12,
-      "status": "pending", "created_at": "...", "updated_at": "...",
-      "session_data": {}
-    }
+    { "id": 30, "experiment_id": 20, "participant_id": 12, "experiment_channel_id": 42,
+      "status": "pending", "session_data": {}, "created_at": "...", "updated_at": "..." }
   ],
-  "chat_messages": [
-    {
-      "id": 50, "session_id": 30, "role": "human",
-      "content": "Hello", "created_at": "..."
-    }
+  "chats": [
+    { "id": 71, "experiment_session_id": 30, "created_at": "...", "updated_at": "..." }
   ],
-  "traces": [
-    { "id": 60, "experiment_id": 20, "session_id": 30, "created_at": "...", "data": {} }
-  ],
-  "participant_data": [
-    { "id": 70, "participant_id": 12, "experiment_id": 20,
-      "data": {}, "created_at": "...", "updated_at": "..." }
-  ],
-  "custom_tagged_items": [
-    { "id": 80, "tag_id": 8, "content_type": "experiments.experimentsession",
-      "object_id": 30, "created_at": "..." }
+  "chat_attachments": [
+    { "id": 80, "chat_id": 71, "tool_type": "code_interpreter", "extra": {},
+      "file_ids": [501],
+      "files": [ { "id": 501, "name": "out.csv", "content_type": "text/csv", "content_size": 2048 } ] }
   ]
 }
 ```
 
-`has_more: true` means there are more rows beyond `next_cursor`; the caller should continue
-paginating before waiting for new data. When `has_more: false`, the sync engine can record
-`next_cursor` as its checkpoint and wait before the next poll.
-
-`participants` ride the same stream because they grow with usage, but `sessions`, `participant_data`,
-and any `custom_tagged_items` targeting a participant FK-reference them. A participant is always
-created before the rows that reference it (`participant.created_at <= session.created_at`), so it
-appears in the same page or an earlier one — never a later one. The sync engine must therefore apply
-`participants` **before** the other arrays within each batch so the `FKTranslation` mapping exists
-when the referencing rows are upserted.
+Within a response the engine applies parents before children (`sessions` → `chats` →
+`chat_attachments`). Across endpoints, the dependency order in Step 5 guarantees a referenced row
+(e.g. a `participant`) was already created by an earlier endpoint's drain. `chat_attachments` create
+their backing `File` rows from the embedded `files[]` metadata (content hydrated as in Step 2) before
+applying the `file_ids` M2M with `.set()`.
 
 ### 5. `GET /api/v2/sync/file-chunk-embeddings/?cursor=<id>&limit=<n>`
 
@@ -692,9 +784,15 @@ overlap. `next_cursor` is the maximum `id` in the response.
 Each provider's `config` is a JSON object stored encrypted at rest with the source environment's
 key. Rather than singling out individual sensitive keys, the export treats the **entire `config`
 object as opaque**: it is decrypted with the source key and re-encrypted with the target's public
-key as one blob. `collections[].document_sources[].config` (in export-team) and the chatbot export's
-`channels[].extra_data` are handled the same way. This keeps the source and target code agnostic to
-each provider type's field layout.
+key as one blob. `collections[].document_sources[].config` (in export-team), the chatbot export's
+`channels[].extra_data`, and living data's `participant_data[].data` / `encryption_key` are handled
+the same way. This keeps the source and target code agnostic to each provider type's field layout.
+
+These secrets fall into two classes, guarded differently by the secret tripwire (see *Serialization,
+FK remapping, and guard tests*): *encrypted at rest* — the five provider `config`s plus
+`ParticipantData.data` / `encryption_key`, all detectable as `django_cryptography` `EncryptedMixin`
+fields — and *plaintext at rest but sensitive by policy* — `documents.documentsource.config` and
+`bot_channels.experimentchannel.extra_data`, which no field type marks as secret.
 
 To transfer a `config`:
 
@@ -725,6 +823,43 @@ strictly team-scoped, and audited. See `docs/agents/django_view_security.md`.
 
 The standalone v2 pipeline endpoint (`GET /api/v2/pipelines/{id}/`) uses the existing v2 auth and
 team-scoping machinery unchanged.
+
+### Serialization, FK remapping, and guard tests
+
+Export and import are **field-introspection-driven**, so new model fields are handled without
+per-field code:
+
+- **Scalars / JSON** are serialized as-is and written back on insert.
+- **Foreign keys** are remapped through `FKTranslation`: on import, walk `model._meta.get_fields()`
+  and, for each `ForeignKey`, resolve `field.attname` → the related model's content type →
+  `FKTranslation`. A new FK rides along correctly with no per-field list to maintain. (Refs to
+  excluded resources — assistants, MCP — stay dangling by decision.)
+- **Many-to-many** are exported as remapped pk lists and applied with `.set()`/`.add()` *after* the
+  row exists (M2M cannot be set in the initial `create()`). *Bare* auto-through tables (e.g.
+  `chat.ChatAttachment_files`) are handled entirely via `.set()`; *explicit* through models that
+  carry extra columns (e.g. `documents.CollectionFile`) are synced as their own rows so those columns
+  are not lost.
+
+**Exhaustiveness guard.** A test enumerates `apps.get_models(include_auto_created=True)` — the
+`include_auto_created` flag is required, since auto M2M through tables are otherwise invisible — and
+asserts every model is classified in the mapping table below as either a sync category or an explicit
+exclusion-with-reason. Adding a model fails the test until it is classified: the executable
+counterpart of the mapping table, modelled on
+`apps/teams/tests/test_permissions.py::test_missing_content_types`.
+
+**Secret tripwire.** Two prongs guard against leaking secrets as plaintext:
+
+- *Prong A — encrypted-at-rest (automatic).* Secrets are `django_cryptography` fields, detectable via
+  `isinstance(field, EncryptedMixin)`. The secret path is introspection-driven over those fields, and
+  a behavioural test runs each synced model through the exporter and asserts every encrypted field
+  comes out as ciphertext, never plaintext (the library decrypts transparently on read, so naive
+  serialization *would* leak). Covers the five provider `config`s and `ParticipantData.data` /
+  `encryption_key`.
+- *Prong B — sensitive plaintext (declared).* Some fields are plaintext at rest but sensitive by
+  policy (`bot_channels.experimentchannel.extra_data`, `documents.documentsource.config`) and cannot
+  be detected by type. A field-snapshot baseline over the secret-carrying models trips CI whenever a
+  field is added to one of them, forcing a classify-or-acknowledge decision (add to a
+  `SENSITIVE_PLAINTEXT_FIELDS` allowlist, or bump the baseline).
 
 ### Model → source-API mapping
 
@@ -758,7 +893,7 @@ produces it. Legend: **export-team** = endpoint 1; **chatbot-export** =
 | `documents.collection` | export-team | `collections[]` |
 | `documents.collectionfile` | export-team | `collections[].files[].collection_file` |
 | `documents.documentsource` | export-team | `collections[].document_sources[]`; `config` re-encrypted |
-| `files.file` | export-team | metadata only; content via file-content API |
+| `files.file` | export-team / living-data | metadata only; content via file-content API. Collection files via export-team; chat-attachment files ride living-data (`chat_attachments`) |
 | `ocs_notifications.eventtype` | export-team | `notification_event_types[]` |
 | `ocs_notifications.usernotificationpreferences` | export-team | `user_notification_preferences[]` |
 | `experiments.experiment` | chatbot-export | all versions (working + published), grouped by working version in `export-team.experiment_versions`; working version created first so others can set `working_version_id` |
@@ -816,6 +951,8 @@ produces it. Legend: **export-team** = endpoint 1; **chatbot-export** =
 | `rest_framework_api_key.apikey` | — | hashed; re-issued on target |
 | `auth.group` | — | seeded on target; referenced by name in memberships |
 | `auth.permission` | — | Django built-in; seeded on target |
+| `users.customuser_groups` (auto M2M) | — | global Django groups; skipped — team authz flows via `teams.membership.groups`; carrying these risks cross-team/admin escalation on the target |
+| `users.customuser_user_permissions` (auto M2M) | — | direct per-user permissions; skipped — perms flow via groups; re-established deliberately on the target |
 | `contenttypes.contenttype` | — | Django built-in; generic-FK refs sent as `app_label.model`, remapped |
 | `taggit.tag` | — | not used directly; concrete table is `annotations.tag` |
 | `taggit.taggeditem` | — | not used directly; concrete table is `annotations.customtaggeditem` |
@@ -853,10 +990,23 @@ haven't synced that resource yet. We should be able to rerun everything to conti
 
 ## Questions
 
-- How do we keep the API up to date with new model additions? Do we lean on tests to catch them all,
-  following the `backends.py` test pattern?
-- Scheduled messages — how are these handled?
-- Fetching live data: how do we paginate it?
-- OAuth models — how (if at all) do we handle these?
-- How do we handle the chatbot switchover? Do we interactively go through each bot one at a time, or
-  ask the user whether they'd rather pull in everything and update the webhooks once it's done?
+### Resolved
+
+- **Keeping the API current as models are added** — a guard test enumerates
+  `apps.get_models(include_auto_created=True)` and fails until each model is classified in the
+  mapping table; serialization is field-introspection-driven (scalars, FKs, and M2M) so new fields
+  ride along; a two-pronged secret tripwire guards encrypted-at-rest and sensitive-plaintext fields.
+  See *Serialization, FK remapping, and guard tests*.
+- **Scheduled messages** — synced as living data (`scheduled-messages` endpoint) with a per-team
+  firing gate so the target does not double-fire during the migration window. See Step 5.
+- **Paginating live data** — per-resource endpoints consumed in dependency order, keyset-paginated
+  (pk for append-only, `(updated_at, id)` for mutable). See Step 5 and endpoint 4.
+- **OAuth models** — deferred; re-established on the target via a cutover checklist (same bucket as
+  Slack/webhook re-registration), since no synced model depends on them and there is no OAuth
+  auth-provider type. See Step 1 and the mapping table.
+- **Chatbot switchover** — a single team-wide cutover (Step 7), not bot-by-bot: auto-flip what we can
+  (Telegram/Twilio), report the provider-level flips (Meta/Slack/SureAdhere) and per-channel manual
+  flips (Turn.io/Web/API), and treat email + CommCare Connect as instance-level ops. The firing gate
+  stays per-team. See Step 7 (Cutover).
+
+All open questions are now resolved.
