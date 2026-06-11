@@ -75,7 +75,7 @@ class TestConsentFlowStage:
 
         assert "Do you consent?" in exc_info.value.response
 
-    def test_pending_consent_no_survey_activates(self):
+    def test_pending_consent_activates(self):
         session = self._make_session(status=SessionStatus.PENDING)
         experiment = self._make_experiment(seed_message=None)
         ctx = make_context(
