@@ -270,6 +270,81 @@ describe('ChatSessionService.fetchAllMessages', () => {
   });
 });
 
+describe('ChatSessionService.startMessagePolling', () => {
+  let service: ChatSessionService;
+
+  beforeEach(() => {
+    service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      messagePollingIntervalMs: 10,
+    });
+  });
+
+  afterEach(() => {
+    service.stopMessagePolling();
+    jest.restoreAllMocks();
+  });
+
+  function pollResponse(messages: string[], sessionStatus: 'active' | 'ended' = 'active') {
+    return {
+      messages: messages.map(content => ({
+        created_at: new Date().toISOString(),
+        role: 'assistant' as const,
+        content,
+        attachments: [],
+      })),
+      has_more: false,
+      session_status: sessionStatus,
+    };
+  }
+
+  it('keeps polling while the session is active', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([]));
+    const onSessionEnded = jest.fn();
+
+    service.startMessagePolling('session-1', {
+      getSince: () => undefined,
+      onMessages: jest.fn(),
+      onSessionEnded,
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(onSessionEnded).not.toHaveBeenCalled();
+  });
+
+  it('delivers final messages, stops polling, and reports an ended session', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse(['goodbye'], 'ended'));
+    const onMessages = jest.fn();
+    const onSessionEnded = jest.fn();
+
+    service.startMessagePolling('session-1', {
+      getSince: () => undefined,
+      onMessages,
+      onSessionEnded,
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(onMessages).toHaveBeenCalledTimes(1);
+    expect(onMessages.mock.calls[0][0].map((m: { content: string }) => m.content)).toEqual(['goodbye']);
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when an ended session is reported without an onSessionEnded callback', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([], 'ended'));
+
+    service.startMessagePolling('session-1', {
+      getSince: () => undefined,
+      onMessages: jest.fn(),
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ChatSessionService session tokens', () => {
   afterEach(() => {
     jest.restoreAllMocks();

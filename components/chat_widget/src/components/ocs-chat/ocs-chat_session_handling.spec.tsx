@@ -697,6 +697,57 @@ describe('ocs-chat bound session (session-id prop)', () => {
     expect(page.rootInstance.messages).toEqual(history);
   });
 
+  it('disables the composer and stops polling when the server reports the session ended', async () => {
+    const page = await newBoundPage();
+    const callbacks = mockStartMessagePolling.mock.calls[0][1];
+
+    callbacks.onSessionEnded();
+    await page.waitForChanges();
+
+    expect(page.rootInstance.sessionEnded).toBe(true);
+    const textarea = page.root?.shadowRoot?.querySelector('.message-textarea') as HTMLTextAreaElement;
+    expect(textarea.hasAttribute('disabled')).toBe(true);
+    const sendButton = page.root?.shadowRoot?.querySelector('.send-button') as HTMLButtonElement;
+    expect(sendButton.hasAttribute('disabled')).toBe(true);
+    const systemMessage = page.rootInstance.messages.find((m: any) => m.role === 'system');
+    expect(systemMessage).toBeDefined();
+
+    // Sends are ignored and polling does not restart.
+    await page.rootInstance.sendMessage('hello');
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    mockStartMessagePolling.mockClear();
+    page.rootInstance['startMessagePolling']();
+    expect(mockStartMessagePolling).not.toHaveBeenCalled();
+  });
+
+  it('adds the ended notice only once when the session-ended signal repeats', async () => {
+    const page = await newBoundPage();
+    const callbacks = mockStartMessagePolling.mock.calls[0][1];
+
+    callbacks.onSessionEnded();
+    await page.waitForChanges();
+    callbacks.onSessionEnded();
+    await page.waitForChanges();
+
+    const systemMessages = page.rootInstance.messages.filter((m: any) => m.role === 'system');
+    expect(systemMessages).toHaveLength(1);
+  });
+
+  it('clears the ended state when the session is cleared', async () => {
+    const page = await newBoundPage();
+    const callbacks = mockStartMessagePolling.mock.calls[0][1];
+
+    callbacks.onSessionEnded();
+    await page.waitForChanges();
+    expect(page.rootInstance.sessionEnded).toBe(true);
+
+    await page.rootInstance.clearSession();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+
+    expect(page.rootInstance.sessionEnded).toBe(false);
+  });
+
   it('preserves messages sent while the history is still loading', async () => {
     let resolveHistory: (messages: typeof history) => void;
     mockFetchAllMessages.mockReturnValueOnce(new Promise(resolve => (resolveHistory = resolve)));
