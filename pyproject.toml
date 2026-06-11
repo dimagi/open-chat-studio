@@ -153,7 +153,11 @@ banned-module-level-imports = [
     "langchain_anthropic",
     "langchain_openai",
     "langchain_voyageai",
+    "langchain.chat_models",
     "boto3",
+    "markitdown",
+    "transformers",
+    "pandas",
 ]
 
 [dependency-groups]
