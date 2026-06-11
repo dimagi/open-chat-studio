@@ -1586,7 +1586,9 @@ export class OcsChat {
   }
 
   private saveVisibleState(visible: boolean): void {
-    if (!this.persistentSession) return;
+    // Kiosk visibility is forced, so persisting it would only leak into a
+    // standard-mode widget for the same chatbot on another page.
+    if (!this.persistentSession || this.isKioskMode()) return;
     try {
       const keys = this.getStorageKeys();
       localStorage.setItem(keys.visible, visible ? '1' : '0');

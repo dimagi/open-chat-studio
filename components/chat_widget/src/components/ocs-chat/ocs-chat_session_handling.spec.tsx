@@ -639,6 +639,19 @@ describe('ocs-chat bound session (session-id prop)', () => {
     expect(setItemKeys).not.toContain('ocs-chat-token-test-bot');
   });
 
+  it('does not persist visible state in kiosk mode', async () => {
+    const page = await newBoundPage();
+
+    // Attempting to hide a kiosk widget forces it back to visible; neither
+    // transition may write the visible key, which is shared with any
+    // standard-mode widget for the same chatbot on other pages.
+    page.rootInstance.visible = false;
+    await page.waitForChanges();
+
+    const setItemKeys = (window.localStorage.setItem as jest.Mock).mock.calls.map(call => call[0]);
+    expect(setItemKeys).not.toContain('ocs-chat-visible-test-bot');
+  });
+
   it('sends messages to the bound session without starting a new one', async () => {
     const page = await newBoundPage();
 
