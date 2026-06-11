@@ -825,6 +825,13 @@ class ForeignKeyTranslation():
 The `ForeignKeyTranslation` table acts as a checkpoint table. An empty `target_key` indicates we
 haven't synced that resource yet. We should be able to rerun everything to continue.
 
+For content types marked **`live`**, we don't need to persist a separate cursor — the checkpoint
+falls out of the rows already synced. On a rerun, take the latest timestamp (`created_at` and/or
+`updated_at`, depending on the slug's `cursor` rule) among the rows already imported for that content
+type and use it directly as the cursor for the next request. That timestamp marks exactly how far the
+previous run got, so the next page resumes where the last one left off — no extra bookkeeping. The
+same idea applies to append-only `pk` slugs: the largest synced `id` is the cursor for the next pull.
+
 ## Questions
 
 ### Resolved
