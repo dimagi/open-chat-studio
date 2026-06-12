@@ -73,14 +73,43 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
 
 
 def create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data):
-    response = connect_client.create_channel(
-        connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
+    bot_name = channel.extra_data["commcare_connect_bot_name"]
+    response = connect_client.create_channel(connect_id=connect_id, channel_source=bot_name)
+    channel_id = response["channel_id"]
+
+    # Connect's create_channel is idempotent on (connect_user, channel_source), so a reused bot
+    # name returns a channel_id that may already be bound to another ParticipantData row. A
+    # channel_id can only route to one experiment, so never store it on a second row.
+    # See https://github.com/dimagi/open-chat-studio/issues/3620.
+    existing = (
+        ParticipantData.objects.filter(system_metadata__commcare_connect_channel_id=channel_id)
+        .exclude(pk=participant_data.pk)
+        .only("id", "experiment_id")
+        .first()
     )
+    if existing is not None:
+        logger.error(
+            "Connect returned channel_id %s for participant '%s' and experiment %s, but it is "
+            "already bound to ParticipantData %s (experiment %s). Not storing it; the bot name "
+            "'%s' was likely reused.",
+            channel_id,
+            connect_id,
+            participant_data.experiment_id,
+            existing.pk,
+            existing.experiment_id,
+            bot_name,
+        )
+        return
+
     participant_data.system_metadata = {
-        "commcare_connect_channel_id": response["channel_id"],
+        "commcare_connect_channel_id": channel_id,
         "consent": response["consent"],
     }
     participant_data.save(update_fields=["system_metadata"])
+    # Generate the key eagerly so the device (via generate_key) and the outbound send path can
+    # never race to create different keys for the same channel.
+    if not participant_data.encryption_key:
+        participant_data.generate_encryption_key()
 
 
 @shared_task(ignore_result=True)

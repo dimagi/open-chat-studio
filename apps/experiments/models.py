@@ -1264,6 +1264,26 @@ class ParticipantDataObjectManager(models.Manager):
             experiment_id = experiment.working_version_id
         return super().get_queryset().filter(experiment_id=experiment_id, team=experiment.team)
 
+    def for_connect_channel(self, channel_id: str, participant_identifier: str | None = None):
+        """Resolve the ParticipantData row that owns a CommCare Connect channel ID.
+
+        Exactly one row should hold a given channel_id; duplicates break key exchange and message
+        routing (see issue #3620). If duplicates exist anyway, return the oldest row — the one
+        whose encryption key the device originally fetched — and log an error.
+        Returns ``None`` when no row matches.
+        """
+        queryset = self.get_queryset().filter(system_metadata__commcare_connect_channel_id=channel_id)
+        if participant_identifier is not None:
+            queryset = queryset.filter(participant__identifier=participant_identifier)
+        rows = list(queryset.defer("data").order_by("id")[:2])
+        if len(rows) > 1:
+            log.error(
+                "Multiple ParticipantData rows hold CommCare Connect channel_id %s; using the oldest (pk=%s)",
+                channel_id,
+                rows[0].pk,
+            )
+        return rows[0] if rows else None
+
 
 def validate_json_dict(value):
     """Participant data must be a dict"""

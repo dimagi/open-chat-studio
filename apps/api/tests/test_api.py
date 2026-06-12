@@ -5,7 +5,7 @@ import json
 import os
 import uuid
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
 import pytest
@@ -16,6 +16,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.api.tasks import create_connect_channel_for_participant
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
 from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
@@ -516,6 +517,59 @@ def test_register_connect_participant(client, experiment):
 
 
 @pytest.mark.django_db()
+class TestCreateConnectChannelForParticipant:
+    def _connect_channel(self, experiment, bot_name):
+        return ExperimentChannelFactory.create(
+            team=experiment.team,
+            experiment=experiment,
+            platform=ChannelPlatform.COMMCARE_CONNECT,
+            extra_data={"commcare_connect_bot_name": bot_name},
+        )
+
+    def _connect_client(self, channel_id):
+        client = Mock()
+        client.create_channel.return_value = {"channel_id": channel_id, "consent": True}
+        return client
+
+    def test_stores_channel_id_and_generates_encryption_key(self, experiment):
+        channel = self._connect_channel(experiment, "bot1")
+        connect_id = uuid.uuid4().hex
+        participant_data = _setup_participant_data(experiment, connect_id, system_metadata={})
+        channel_id = str(uuid.uuid4())
+
+        create_connect_channel_for_participant(channel, self._connect_client(channel_id), connect_id, participant_data)
+
+        participant_data.refresh_from_db()
+        assert participant_data.system_metadata == {"commcare_connect_channel_id": channel_id, "consent": True}
+        assert participant_data.encryption_key
+
+    def test_does_not_store_channel_id_owned_by_another_row(self, experiment, caplog):
+        """Connect's create_channel is idempotent on (connect_user, channel_source), so a reused
+        bot name returns a channel_id that may already be bound to another ParticipantData row.
+        It must never be stored on a second row (issue #3620)."""
+        channel_id = str(uuid.uuid4())
+        connect_id = uuid.uuid4().hex
+        existing = _setup_participant_data(
+            experiment,
+            connect_id,
+            system_metadata={"commcare_connect_channel_id": channel_id, "consent": True},
+        )
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        channel = self._connect_channel(other_experiment, "reused-bot-name")
+        participant_data = ParticipantData.objects.create(
+            team=experiment.team,
+            participant=existing.participant,
+            experiment=other_experiment,
+        )
+
+        create_connect_channel_for_participant(channel, self._connect_client(channel_id), connect_id, participant_data)
+
+        participant_data.refresh_from_db()
+        assert "commcare_connect_channel_id" not in participant_data.system_metadata
+        assert "already bound" in caplog.text
+
+
+@pytest.mark.django_db()
 class TestConnectApis:
     def _make_key_request(self, client, data):
         token = uuid.uuid4()
@@ -541,6 +595,66 @@ class TestConnectApis:
         assert base64.b64decode(base64_key) is not None
         participant_data.refresh_from_db()
         assert participant_data.encryption_key == base64_key
+
+    def test_generate_key_duplicate_rows_returns_oldest_key(self, client, experiment, httpx_mock, caplog):
+        """If duplicate rows hold the same channel_id (issue #3620), serve the oldest row's key —
+        the one the device originally fetched — instead of raising MultipleObjectsReturned."""
+        connect_id = uuid.uuid4().hex
+        commcare_connect_channel_id = uuid.uuid4().hex
+        oldest_key = base64.b64encode(os.urandom(32)).decode("utf-8")
+        oldest = _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
+            encryption_key=oldest_key,
+        )
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        ParticipantData.objects.create(
+            team=experiment.team,
+            participant=oldest.participant,
+            experiment=other_experiment,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
+            encryption_key=base64.b64encode(os.urandom(32)).decode("utf-8"),
+        )
+
+        httpx_mock.add_response(
+            method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": connect_id}
+        )
+        response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
+
+        assert response.status_code == 200
+        assert response.json()["key"] == oldest_key
+        assert "Multiple ParticipantData rows" in caplog.text
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
+    def test_consent_with_duplicate_rows_updates_oldest(self, client, experiment, caplog):
+        connect_id = uuid.uuid4().hex
+        commcare_connect_channel_id = uuid.uuid4().hex
+        oldest = _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": False},
+        )
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        ParticipantData.objects.create(
+            team=experiment.team,
+            participant=oldest.participant,
+            experiment=other_experiment,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": False},
+        )
+
+        payload = {"channel_id": commcare_connect_channel_id, "consent": True}
+        response = client.post(
+            reverse("api:commcare-connect:consent"),
+            json.dumps(payload),
+            headers=self._get_request_headers(payload),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        oldest.refresh_from_db()
+        assert oldest.system_metadata["consent"] is True
+        assert "Multiple ParticipantData rows" in caplog.text
 
     def test_generate_key_cannot_the_find_user(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex

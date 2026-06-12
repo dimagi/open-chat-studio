@@ -40,15 +40,14 @@ def generate_key(request: Request):
     response.raise_for_status()
     connect_id = response.json().get("sub").lower()
 
-    try:
-        participant_data = ParticipantData.objects.defer("data").get(
-            participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
-        )
-    except ParticipantData.DoesNotExist:
-        connect_logger.exception(
+    participant_data = ParticipantData.objects.for_connect_channel(
+        commcare_connect_channel_id, participant_identifier=connect_id
+    )
+    if participant_data is None:
+        connect_logger.error(
             f"ParticipantData with connect_id: {connect_id} and channel_id: {commcare_connect_channel_id} not found"
         )
-        raise Http404() from None
+        raise Http404()
 
     if not participant_data.encryption_key:
         participant_data.generate_encryption_key()
@@ -76,9 +75,9 @@ def consent(request: Request):
     if "consent" not in request_data or "channel_id" not in request_data:
         return HttpResponse("Missing consent or commcare_connect_channel_id", status=400)
 
-    participant_data = get_object_or_404(
-        ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
-    )
+    participant_data = ParticipantData.objects.for_connect_channel(request_data["channel_id"])
+    if participant_data is None:
+        raise Http404()
     participant_data.update_consent(request_data["consent"])
 
     return HttpResponse()
