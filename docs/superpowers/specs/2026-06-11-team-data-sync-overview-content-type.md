@@ -53,8 +53,8 @@ this is the map of what to do, in order.
    scheduled messages for that team, so the data can't drift while it is being pulled. See
    *Migration lock*.
 4. **Run the sync.** On the target:
-   `manage.py sync_team --source-url=<src> --api-key=<key> [--private-key-path=<path>]` (the team
-   is implicit in the key).
+   `manage.py sync_team --source-url=<src> --api-key=<key> --team-slug=<slug> [--private-key-path=<path>]`
+   (the team's data is scoped by the key; `--team-slug` names the local run DB).
    The first call fetches the manifest, prepares the run's RSA keypair (generated ephemerally under
    Approach 1, or loaded from `--private-key-path` under Approach 2; see *Authorization*), builds
    the team (setting `is_migrating` on the target so its synced scheduled messages stay inert), and
@@ -73,19 +73,22 @@ Before the first call, a team admin arms the migration lock on the source (see *
 sync endpoints refuse to serve a team that isn't in migration mode. Arming the lock enforces the "no
 structural changes on the source while migrating" rule: it blocks the main structural-creation paths
 and stops the source firing scheduled messages for the team, while leaving live chat traffic
-untouched.
+untouched. These include mutating:
+
+- Chatbots
+- Pipelines
+- Service providers
 
 Running the command fetches the manifest, prepares the run's RSA keypair (see *Authorization* for the
 two key-handling approaches), and creates a local SQLite DB for the run with an empty `FKTranslation`
 table.
 
-**State persistence (SQLite).** The SQLite DB holds the `FKTranslation` table and the per-slug
-cursors, so it must live on a persistent, mounted path. If the target runs in an ephemeral container,
-an unmounted file means resume silently loses all translation state between reruns. The DB is
-eventually named for the team slug, but the slug isn't known until the `teams.team` row is synced, so
-the run starts under a provisional name keyed on the source URL (e.g. a hash) and renames to the team
-slug once that row arrives. The `FKTranslation` table lives in SQLite while the synced rows live in
-the target's Postgres, so "create row" and "record translation" can't share a transaction. A crash
+**State persistence (SQLite).** The SQLite DB holds the `FKTranslation` table, so it must live on a
+persistent, mounted path. It isn't a cursor store: the per-slug cursors aren't persisted separately,
+they're derived from the rows already synced (see *Checkpointing*), so that's one less thing to keep
+in sync. The DB is named for the team slug, which the operator passes to the command. The
+`FKTranslation` table lives in SQLite while the synced rows live in the target's Postgres, so "create
+row" and "record translation" can't share a transaction. A crash
 between the two is expected, and rerun resolves it via the identity rules in *The sync process*
 (primary `FKTranslation` lookup, with a natural-key safety net).
 
@@ -159,9 +162,9 @@ Each manifest entry carries a `phase`:
 build the team, then syncs every live entry once as a delta, and exits. Structural is idempotent, so
 on a rerun its already-created rows are skipped via the checkpoint and that pass is a quick no-op
 before the live entries are re-synced. To take another iteration of the live data, rerun the command.
-There is no internal polling loop or scheduler. Each live slug's cursor is persisted in the local DB,
-so every rerun resumes that slug's delta where the previous run ended; it never re-pulls from the
-start. The operator reruns as often as needed during the migration, with the final rerun after cutover
+There is no internal polling loop or scheduler. Each live slug's cursor is derived from the rows
+already synced (see *Checkpointing*), so every rerun resumes that slug's delta where the previous run
+ended; it never re-pulls from the start. The operator reruns as often as needed during the migration, with the final rerun after cutover
 freezes the source (see *Cutover*).
 
 ### Error handling, retries, and cursor advance
@@ -176,9 +179,10 @@ is explicit:
   many-to-many*). An unexpected unresolvable required FK, a non-null column whose target wasn't created
   (e.g. a manifest-ordering bug), is a hard error: the command fails loudly rather than inserting a
   broken or silently-nulled row.
-- **Cursor advance is per-page, after commit.** Each slug's cursor only advances once a page's rows
-  are fully committed locally, so a mid-page crash re-pulls that whole page on rerun; the identity
-  rules (primary `FKTranslation` lookup plus natural-key safety net) make the re-pull idempotent.
+- **The cursor is the high-water mark of committed rows.** It's derived from the synced rows, not
+  advanced explicitly, so a crash mid-stream resumes from the highest keyset already committed for that
+  slug; the identity rules (primary `FKTranslation` lookup plus natural-key safety net) keep any
+  re-served boundary row idempotent.
 
 ### Foreign keys and many-to-many
 
@@ -397,14 +401,7 @@ When the migration is complete, no `FKTranslation` row may have a null `target_k
 source row must have a created target row. A null entry means a resource was missed or a dependency
 was never created, and the command can be re-run to fill the gaps.
 
-**File content.** The selected bulk-zip transfer moves bytes out of band, so the `FKTranslation` check
-doesn't cover file content. The parity step checks two things instead: an aggregate check, where the
-object count and total byte size at the target bucket match the source for the team (this catches a
-truncated or partial upload that a sample would miss); and a spot-check of a sample of files (e.g.
-20–50 across the team), confirming each has content at its expected storage key. Loading every file's
-bytes is unnecessary; the aggregate plus the sample confirm the upload landed intact. (Under the
-per-file fallback, the FK-table check covers content already, since each row's bytes were fetched as
-it was created.)
+**File content**. The selected bulk-zip transfer moves bytes out of band, so the FKTranslation check doesn't cover file content. The parity step does a spot-check of a sample of files (e.g. 20–50 across the team), confirming each has content at its expected storage key.
 
 ## Cutover
 
@@ -478,7 +475,7 @@ Cutover also surfaces the resources that are re-established rather than migrated
 - **OAuth2 applications**: the team's `OAuth2Application` registrations to recreate on the target;
   external API clients re-consent (client secrets are hashed and tokens are bearer secrets, so neither
   is migrated).
-- **Social login / MFA**: users relying on social login or MFA re-authenticate or re-enrol.
+- ~~**Social login / MFA**: users relying on social login or MFA re-authenticate or re-enrol.~~
 - **API keys**: hashed on the source, so re-issued on the target.
 - **Slack installs**: re-added (channel re-registration is manual).
 - **Email / CommCare Connect**: instance-level inbound routing, handled out of band by ops.
@@ -1086,9 +1083,9 @@ same idea applies to append-only `pk` slugs: the largest synced `id` is the curs
   mode. See *Migration lock* and *Authorization*.
 - **Paginating live data:** per-slug keyset pagination set by the manifest `cursor` field (`pk` for
   append-only, `updated_at_id` for mutable), consumed in manifest order, with each slug's cursor
-  persisted locally between runs. See the slug endpoint reference.
+  derived from the rows already synced between runs (see *Checkpointing*). See the slug endpoint reference.
 - **Re-syncing live data:** the command is single-pass. Each run ensures the structural data is present
-  (idempotent), then syncs the live data once as a delta from the persisted cursors, then exits. There
+  (idempotent), then syncs the live data once as a delta from the derived cursors, then exits. There
   is no internal polling loop; to take another iteration the operator reruns the command. See *The sync
   process*.
 - **OAuth models:** deferred, re-established on the target via a cutover checklist (same bucket as
