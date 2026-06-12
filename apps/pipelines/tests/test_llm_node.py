@@ -34,19 +34,22 @@ class TestBuildNodeAgentPromptCaching:
         build_node_agent(node, context=Mock(), session=Mock(), tool_callbacks=Mock())
         return captured["middleware"]
 
-    def test_anthropic_node_gets_caching_middleware(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("service", "expected"),
+        [
+            pytest.param(
+                AnthropicLlmService(anthropic_api_key="test", anthropic_api_base="https://api.anthropic.com"),
+                True,
+                id="anthropic_gets_caching_middleware",
+            ),
+            pytest.param(OpenAILlmService(openai_api_key="test"), False, id="openai_no_caching_middleware"),
+        ],
+    )
+    def test_node_caching_middleware(self, monkeypatch, service, expected):
         from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 
-        service = AnthropicLlmService(anthropic_api_key="test", anthropic_api_base="https://api.anthropic.com")
         middleware = self._build_agent_middleware(monkeypatch, service)
-        assert any(isinstance(m, AnthropicPromptCachingMiddleware) for m in middleware)
-
-    def test_openai_node_does_not_get_caching_middleware(self, monkeypatch):
-        from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
-
-        service = OpenAILlmService(openai_api_key="test")
-        middleware = self._build_agent_middleware(monkeypatch, service)
-        assert not any(isinstance(m, AnthropicPromptCachingMiddleware) for m in middleware)
+        assert any(isinstance(m, AnthropicPromptCachingMiddleware) for m in middleware) == expected
 
 
 class TestMessageSizeValidationMiddleware:
