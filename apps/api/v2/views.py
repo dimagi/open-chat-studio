@@ -3,14 +3,16 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 from rest_framework import mixins
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.v2.inspect.resources import ResourceFetcher
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
-from apps.api.v2.serializers import ChatbotSerializer
+from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -83,4 +85,22 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             raise NotFound("Requested chatbot version was not found.") from err
         fetcher = ResourceFetcher.for_experiment(target)
         serializer = ChatbotInspectSerializer(target, context={"team": target.team, "fetcher": fetcher})
+        return Response(serializer.data)
+
+
+class MeView(APIView):
+    """Return info about the authenticated user and their scoped team."""
+
+    permission_classes = [IsAuthenticated, TokenHasOAuthResourceScope]
+    required_scopes = []  # Any valid OAuth token is accepted; no specific scope required.
+
+    @extend_schema(
+        operation_id="me",
+        summary="Current User",
+        description="Returns basic information about the authenticated user and the team the token is scoped to.",
+        tags=["Me"],
+        responses={200: MeSerializer},
+    )
+    def get(self, request):
+        serializer = MeSerializer(request.user, context={"team": request.team})
         return Response(serializer.data)

@@ -20,8 +20,6 @@ def _inspect_target_queryset():
     return Experiment.objects.select_related(
         "team",
         "consent_form",
-        "pre_survey",
-        "post_survey",
         "trace_provider",
         "voice_provider",
         "synthetic_voice",

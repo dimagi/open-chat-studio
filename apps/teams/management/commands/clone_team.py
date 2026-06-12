@@ -437,22 +437,6 @@ class Command(BaseCommand):
                     )
                 new_exp.consent_form = ctx.consent_forms[experiment.consent_form_id]
 
-            if experiment.pre_survey_id:
-                if experiment.pre_survey_id not in ctx.surveys:
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references pre_survey_id="
-                        f"{experiment.pre_survey_id} not found in source team."
-                    )
-                new_exp.pre_survey = ctx.surveys[experiment.pre_survey_id]
-
-            if experiment.post_survey_id:
-                if experiment.post_survey_id not in ctx.surveys:
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references post_survey_id="
-                        f"{experiment.post_survey_id} not found in source team."
-                    )
-                new_exp.post_survey = ctx.surveys[experiment.post_survey_id]
-
             if experiment.voice_provider_id:
                 if experiment.voice_provider_id not in ctx.voice_providers:
                     raise CommandError(

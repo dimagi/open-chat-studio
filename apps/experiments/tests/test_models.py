@@ -6,6 +6,7 @@ import pytest
 import time_machine
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
+from django.urls import reverse
 from django.utils import timezone
 from time_machine import travel
 
@@ -18,8 +19,10 @@ from apps.experiments.models import (
     ExperimentSession,
     SyntheticVoice,
 )
+from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo
+from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
@@ -33,7 +36,6 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
     SourceMaterialFactory,
-    SurveyFactory,
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -674,12 +676,6 @@ class TestExperimentModel:
         # Setup Timeout Trigger
         TimeoutTriggerFactory.create(experiment=experiment)
 
-        # Surveys
-        pre_survey = SurveyFactory.create(team=team)
-        post_survey = SurveyFactory.create(team=team)
-        experiment.pre_survey = pre_survey
-        experiment.post_survey = post_survey
-
         experiment.pipeline = PipelineFactory.create(team=experiment.team)
         experiment.save()
         return experiment
@@ -719,8 +715,6 @@ class TestExperimentModel:
                 "version_number",
                 "is_default_version",
                 "consent_form",
-                "pre_survey",
-                "post_survey",
                 "version_description",
                 "pipeline",
             ],
@@ -732,8 +726,6 @@ class TestExperimentModel:
         )
         assert original_experiment.consent_form.is_default is True
         assert new_version.consent_form.is_default is False
-        self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
-        self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
@@ -1071,3 +1063,27 @@ def test_experimentsession_team_lastactivity_index_exists():
         names = {row[0] for row in cursor.fetchall()}
 
     assert "expsession_team_lastact_idx" in names
+
+
+@pytest.mark.django_db()
+def test_experiment_get_absolute_url_working_version(team_with_users):
+    """Working versions link to their own detail page."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = Experiment.objects.create(name="My Bot", owner=user, team=team)
+    expected = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
+    assert experiment.get_absolute_url() == expected
+
+
+@pytest.mark.django_db()
+def test_experiment_get_absolute_url_published_version(team_with_users):
+    """Published version snapshots link to the working version with ?version_id=X#versions."""
+    team = team_with_users
+    user = team.members.first()
+    pipeline = Pipeline.objects.create(team=team, name="pipe", data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(name="My Bot", owner=user, team=team, pipeline=pipeline)
+    snapshot = experiment.create_new_version()
+
+    base_url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
+    expected = f"{base_url}?version_id={snapshot.version_number}#versions"
+    assert snapshot.get_absolute_url() == expected

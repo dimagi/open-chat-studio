@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from django.utils.text import slugify
 
@@ -207,6 +208,25 @@ def tool_error_notification(team, tool_name: str, error_message: str, session=No
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create survey deprecation notification")
+def survey_deprecation_notification(team) -> None:
+    """Notify a team that the Surveys feature is being removed."""
+    create_notification(
+        title="Surveys are being removed",
+        message=(
+            "The Surveys feature is deprecated and will be removed on 2026-07-10. "
+            "Surveys are now read-only and are no longer connected to chatbots. "
+            "Please export any survey details you need before then."
+        ),
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="survey-feature-deprecated",
+        # view_survey matches the (now read-only) survey views, so everyone who
+        # can still access the feature is notified — not just survey editors.
+        permissions=["experiments.view_survey"],
+    )
+
+
 @silence_exceptions(logger, log_message="Failed to create deprecated model notification")
 def deprecated_model_notification(
     team,
@@ -241,6 +261,34 @@ def deprecated_model_notification(
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
         links={**affected_chatbots, **affected_pipelines, **affected_assistants},
+    )
+
+
+@silence_exceptions(logger, log_message="Failed to create deprecated widget version notification")
+def deprecated_widget_version_notification(
+    team,
+    affected_chatbots: dict[str, str],
+    versions: set[str],
+    sunset_at: datetime,
+    latest_version: str,
+    docs_url: str,
+) -> None:
+    """Notify a team that their embedded chat widget runs a deprecated version."""
+    versions_text = ", ".join(sorted(versions))
+    message = (
+        f"{len(affected_chatbots)} chatbot(s) on your team use a deprecated chat widget "
+        f"version ({versions_text}). Support ends {sunset_at:%d %b %Y}. "
+        f"Please update the embed snippet on your site to version {latest_version}."
+    )
+    create_notification(
+        title="Chat Widget Version Deprecated",
+        message=message,
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="widget-version-deprecated",
+        event_data={"versions": sorted(versions)},
+        permissions=["bot_channels.change_experimentchannel"],
+        links={**affected_chatbots, "Upgrade Guide": docs_url},
     )
 
 

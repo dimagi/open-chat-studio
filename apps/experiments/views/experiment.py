@@ -62,7 +62,6 @@ from apps.experiments.decorators import (
 from apps.experiments.email import send_chat_link_email
 from apps.experiments.forms import (
     ConsentForm,
-    SurveyCompletedForm,
     TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
@@ -457,16 +456,11 @@ def _record_consent_and_redirect(
 ):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    if experiment_session.experiment_version.pre_survey:
-        experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
-        redirect_url_name = "experiments:experiment_pre_survey"
-    else:
-        experiment_session.status = SessionStatus.ACTIVE
-        redirect_url_name = "chatbots:chatbot_chat"
+    experiment_session.status = SessionStatus.ACTIVE
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
-            redirect_url_name,
+            "chatbots:chatbot_chat",
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
@@ -509,43 +503,6 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
             "experiment": published_version,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view(allowed_states=[SessionStatus.PENDING_PRE_SURVEY])
-@verify_session_access_cookie
-def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    if request.method == "POST":
-        form = SurveyCompletedForm(request.POST)
-        if form.is_valid():
-            request.experiment_session.status = SessionStatus.ACTIVE
-            request.experiment_session.save()
-            return HttpResponseRedirect(
-                reverse(
-                    "experiments:experiment_chat",
-                    args=[team_slug, experiment_id, session_id],
-                )
-            )
-    else:
-        form = SurveyCompletedForm()
-
-    published_version = resolve_published_or_working(request.experiment)
-    experiment_session = request.experiment_session
-    version_specific_vars = {
-        "experiment_name": published_version.name,
-        "experiment_description": published_version.description,
-        "pre_survey_link": experiment_session.get_pre_survey_link(published_version),
-    }
-    return TemplateResponse(
-        request,
-        "experiments/pre_survey.html",
-        {
-            "active_tab": "experiments",
-            "form": form,
-            "experiment": request.experiment,
-            "experiment_session": experiment_session,
             **version_specific_vars,
         },
     )
@@ -790,8 +747,6 @@ def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id
 @verify_session_access_cookie
 def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     form = None
-    survey_link = None
-    survey_text = None
     experiment_version = resolve_published_or_working(request.experiment)
     if request.method == "POST":
         # no validation needed
@@ -801,15 +756,8 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
         return HttpResponseRedirect(
             reverse("experiments:experiment_complete", args=[team_slug, experiment_id, session_id])
         )
-    elif experiment_version.post_survey:
-        form = SurveyCompletedForm()
-        survey_link = request.experiment_session.get_post_survey_link(experiment_version)
-        survey_text = experiment_version.post_survey.confirmation_text.format(survey_link=survey_link)
 
     version_specific_vars = {
-        "experiment.post_survey": experiment_version.post_survey,
-        "survey_link": survey_link,
-        "survey_text": survey_text,
         "experiment_name": experiment_version.name,
     }
     return TemplateResponse(

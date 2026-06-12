@@ -137,15 +137,23 @@
         </div>
         <div class="footer-bottom">
           <span>© 2026 DIMAGI, INC.</span>
-          <span style="display:flex;gap:24px;flex-wrap:wrap;">
-            <a href="https://dimagi.com/terms-privacy/"
-               target="_blank"
-               rel="noopener">PRIVACY</a>
-            <a href="https://dimagi.com/terms-of-service/"
-               target="_blank"
-               rel="noopener">TERMS</a>
-            <a href="https://dimagi.com/terms-aup/" target="_blank" rel="noopener">ACCEPTABLE USE POLICY</a>
-          </span>
+          {% if project_meta.PRIVACY_POLICY_URL or project_meta.TERMS_URL or project_meta.ACCEPTABLE_USE_POLICY_URL %}
+            <span style="display:flex;gap:24px;flex-wrap:wrap;">
+              {% if project_meta.PRIVACY_POLICY_URL %}
+                <a href="{{ project_meta.PRIVACY_POLICY_URL }}"
+                   target="_blank"
+                   rel="noopener">PRIVACY</a>
+              {% endif %}
+              {% if project_meta.TERMS_URL %}
+                <a href="{{ project_meta.TERMS_URL }}" target="_blank" rel="noopener">TERMS</a>
+              {% endif %}
+              {% if project_meta.ACCEPTABLE_USE_POLICY_URL %}
+                <a href="{{ project_meta.ACCEPTABLE_USE_POLICY_URL }}"
+                   target="_blank"
+                   rel="noopener">ACCEPTABLE USE POLICY</a>
+              {% endif %}
+            </span>
+          {% endif %}
         </div>
       </div>
     </footer>

@@ -26,6 +26,7 @@ def test_list_participants(auth_method):
     client = ApiTestClient(user, team, auth_method=auth_method)
     response = client.get(reverse("api:participant-data"))
     assert response.status_code == 200
+    assert response.json()["count"] == 1
     results = response.json()["results"]
     assert len(results) == 1
     p = results[0]

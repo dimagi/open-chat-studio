@@ -30,13 +30,18 @@
             mode="kiosk"
             chatbot-id="{{ experiment.public_id }}"
             session-id="{{ session.external_id }}"
+            session-token="{{ session_token }}"
             api-base-url="{{ request.scheme }}://{{ request.get_host }}"
+            {% if experiment.file_uploads_enabled %}
+              allow-attachments="true"
+            {% endif %}
             {% if not request.user.is_anonymous %}
               user-id="{{ request.user.email }}"
               user-name="{{ request.user.get_full_name }}"
             {% endif %}
           ></open-chat-studio-widget>
         </div>
+        {% include "experiments/chat/end_chat_button.html" %}
       {% else %}
         {% include "experiments/chat/chat_ui.html" %}
       {% endflag %}

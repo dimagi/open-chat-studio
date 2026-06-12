@@ -249,12 +249,6 @@ class Survey(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:survey_edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    @transaction.atomic()
-    def archive(self):
-        super().archive()
-        self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
-        self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
-
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
@@ -558,12 +552,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         help_text="If set, send this message to the bot when the session starts, "
         "and prompt the user with the initial response.",
     )
-    pre_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_pre", on_delete=models.SET_NULL
-    )
-    post_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.SET_NULL
-    )
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
         ConsentForm,
@@ -603,7 +591,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
-    use_processor_bot_voice = models.BooleanField(default=False)
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     # Versioning fields
@@ -663,6 +650,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
+        if self.is_a_version:
+            url = reverse(
+                "chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.working_version_id]
+            )
+            return f"{url}?version_id={self.version_number}#versions"
         return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> Experiment:
@@ -891,8 +883,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
-            self._copy_attr_to_new_version("pre_survey", new_version)
-            self._copy_attr_to_new_version("post_survey", new_version)
 
         self._copy_trigger_to_new_version(
             trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
@@ -1003,9 +993,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 raw_value=self.conversational_consent_enabled,
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
-            # Surveys
-            VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
-            VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
             # Voice
             VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
             VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
@@ -1018,12 +1005,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 group_name="Voice",
                 name="echo_transcript",
                 raw_value=self.echo_transcript,
-                to_display=VersionFieldDisplayFormatters.yes_no,
-            ),
-            VersionField(
-                group_name="Voice",
-                name="use_processor_bot_voice",
-                raw_value=self.use_processor_bot_voice,
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
@@ -1328,7 +1309,6 @@ class ParticipantData(BaseTeamModel):
 class SessionStatus(models.TextChoices):
     SETUP = "setup", gettext("Setting Up")
     PENDING = "pending", gettext("Awaiting participant")
-    PENDING_PRE_SURVEY = "pending-pre-survey", gettext("Awaiting pre-survey")
     ACTIVE = "active", gettext("Active")
     PENDING_REVIEW = "pending-review", gettext("Awaiting final review.")
     COMPLETE = "complete", gettext("Complete")
@@ -1367,6 +1347,10 @@ class ExperimentSession(BaseTeamModel):
 
     objects = ExperimentSessionObjectManager()
     external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
+    session_token_required = models.BooleanField(
+        default=True,
+        help_text="Require a signed session token (or authenticated user) for chat API access to this session.",
+    )
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -1446,12 +1430,6 @@ class ExperimentSession(BaseTeamModel):
         if not self.experiment_channel:
             return self.participant.get_platform_display()
         return self.experiment_channel.get_platform_display()
-
-    def get_pre_survey_link(self, experiment_version: Experiment):
-        return experiment_version.pre_survey.get_link(self.participant, self)
-
-    def get_post_survey_link(self, experiment_version: Experiment):
-        return experiment_version.post_survey.get_link(self.participant, self)
 
     def is_stale(self) -> bool:
         """A Channel Session is considered stale if the experiment that the channel points to differs from the

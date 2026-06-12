@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
+from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.channels_v2.stages.core import ConsentFlowStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.experiments.models import SessionStatus
@@ -12,16 +12,23 @@ class TestConsentFlowStage:
     def setup_method(self):
         self.stage = ConsentFlowStage()
 
-    def _make_session(self, status=SessionStatus.SETUP):
+    def _make_session(self, status=SessionStatus.SETUP, first_human_message=None):
         session = MagicMock()
         session.status = status
+        # Stub the chat-history lookup that _get_original_message performs.
+        query = session.chat.messages.filter.return_value.order_by.return_value
+        query.first.return_value = first_human_message
         return session
 
-    def _make_experiment(self, consent_enabled=True, consent_form_id=1, pre_survey=None, seed_message=None):
+    def _make_message(self, content):
+        message = MagicMock()
+        message.content = content
+        return message
+
+    def _make_experiment(self, consent_enabled=True, consent_form_id=1, seed_message=None):
         experiment = MagicMock()
         experiment.conversational_consent_enabled = consent_enabled
         experiment.consent_form_id = consent_form_id
-        experiment.pre_survey = pre_survey
         experiment.seed_message = seed_message
         experiment.consent_form.consent_text = "Do you consent?"
         experiment.consent_form.confirmation_text = "Type 1 to agree"
@@ -76,48 +83,59 @@ class TestConsentFlowStage:
 
         assert "Do you consent?" in exc_info.value.response
 
-    def test_pending_consent_no_survey_activates(self):
-        session = self._make_session(status=SessionStatus.PENDING)
-        experiment = self._make_experiment(pre_survey=None, seed_message=None)
+    @pytest.mark.parametrize(
+        ("first_human_message_content", "seed_message", "expected_query"),
+        [
+            pytest.param(
+                "How do I reset my password?",
+                "Welcome!",
+                "How do I reset my password?",
+                id="original-message-wins-over-seed",
+            ),
+            pytest.param(
+                "1",
+                "Welcome!",
+                "Welcome!",
+                id="falls-back-to-seed-when-first-message-is-consent-token",
+            ),
+            pytest.param(
+                "1",
+                None,
+                None,
+                id="no-original-or-seed-halts-silently",
+            ),
+        ],
+    )
+    def test_pending_consent_activation(self, first_human_message_content, seed_message, expected_query):
+        consent_token_message = self._make_message("1")
+        session = self._make_session(
+            status=SessionStatus.PENDING,
+            first_human_message=self._make_message(first_human_message_content),
+        )
+        experiment = self._make_experiment(seed_message=seed_message)
         ctx = make_context(
             experiment=experiment,
             experiment_session=session,
             user_query="1",
+            human_message=consent_token_message,
         )
 
-        # No early exit when no seed message
-        self.stage(ctx)
-
-        session.update_status.assert_called_with(SessionStatus.ACTIVE)
-
-    def test_pending_consent_with_survey(self):
-        pre_survey = MagicMock()
-        pre_survey.confirmation_text = "Complete survey: {survey_link}"
-        session = self._make_session(status=SessionStatus.PENDING)
-        session.get_pre_survey_link.return_value = "https://survey.example.com"
-        experiment = self._make_experiment(pre_survey=pre_survey)
-        ctx = make_context(
-            experiment=experiment,
-            experiment_session=session,
-            user_query="1",
-        )
-
-        with pytest.raises(EarlyExitResponse) as exc_info:
+        if expected_query is None:
+            # Nothing to answer: halt silently (EarlyAbort) so the consent token
+            # is consumed without forwarding it to the bot or sending/persisting
+            # an empty message.
+            with pytest.raises(EarlyAbort):
+                self.stage(ctx)
+        else:
+            # The stage returns normally so the pipeline continues into
+            # BotInteractionStage with the swapped-in query. The consent-token
+            # message stays as ctx.human_message: the bot excludes the input
+            # message from the LLM history, keeping the token out of the
+            # LLM context while preserving it in the persisted history.
             self.stage(ctx)
 
-        session.update_status.assert_called_with(SessionStatus.PENDING_PRE_SURVEY)
-        assert exc_info.value.response == "Complete survey: https://survey.example.com"
-
-    def test_pre_survey_consent_activates(self):
-        session = self._make_session(status=SessionStatus.PENDING_PRE_SURVEY)
-        experiment = self._make_experiment(seed_message=None)
-        ctx = make_context(
-            experiment=experiment,
-            experiment_session=session,
-            user_query="1",
-        )
-
-        # No early exit when no seed message
-        self.stage(ctx)
+            assert ctx.user_query == expected_query
+            assert ctx.human_message is consent_token_message
+            assert ctx.bot_response is None
 
         session.update_status.assert_called_with(SessionStatus.ACTIVE)

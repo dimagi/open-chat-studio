@@ -102,11 +102,6 @@ urlpatterns = [
         name="start_session_from_invite",
     ),
     path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/pre-survey/",
-        views.experiment_pre_survey,
-        name="experiment_pre_survey",
-    ),
-    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/end/",
         views.end_experiment,
         name="end_experiment",

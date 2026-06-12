@@ -132,8 +132,6 @@ def _redirect_for_state(request, team_slug):
     match request.experiment_session.status:
         case SessionStatus.SETUP | SessionStatus.PENDING:
             return HttpResponseRedirect(reverse("experiments:start_session_from_invite", args=view_args))
-        case SessionStatus.PENDING_PRE_SURVEY:
-            return HttpResponseRedirect(reverse("experiments:experiment_pre_survey", args=view_args))
         case SessionStatus.ACTIVE:
             return HttpResponseRedirect(reverse("chatbots:chatbot_chat", args=view_args))
         case SessionStatus.PENDING_REVIEW:

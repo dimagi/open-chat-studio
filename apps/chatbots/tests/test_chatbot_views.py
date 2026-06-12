@@ -11,14 +11,17 @@ from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.http import http_date
+from waffle.testutils import override_flag
 
 from apps.annotations.models import Tag
+from apps.api.session_tokens import validate_session_token
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
+    _chatbot_chat_ui,
     chatbot_session_pagination_view,
     home,
 )
@@ -133,6 +136,26 @@ def test_single_chatbot_home(client, team_with_users):
 
     assert response.status_code == 200
     assert "chatbots/single_chatbot_home.html" in [t.name for t in response.templates]
+
+
+@pytest.mark.django_db()
+def test_single_chatbot_home_version_snapshot_redirects_to_working_version(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    client.force_login(user)
+    pipeline = Pipeline.objects.create(team=team, name="Test Pipeline", data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(
+        name="Test Experiment", description="Test Description", owner=user, team=team, pipeline=pipeline
+    )
+    snapshot = experiment.create_new_version()
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, snapshot.id])
+    response = client.get(url)
+
+    expected_url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    assert response.status_code == 302
+    assert response["Location"] == f"{expected_url}?version_id={snapshot.version_number}#versions"
 
 
 @pytest.mark.django_db()
@@ -681,3 +704,78 @@ def test_start_chatbot_session_public_embed_returns_deprecation_headers(client):
     assert response.headers["Deprecation"] == "true"
     assert response.headers["Sunset"] == http_date(EMBED_FLOW_SUNSET_AT.timestamp())
     assert response.headers["Link"] == f'<{EMBED_FLOW_SUCCESSOR_URL}>; rel="successor-version"'
+
+
+@pytest.mark.django_db()
+def test_chatbot_chat_ui_includes_valid_session_token():
+    experiment = ExperimentFactory()
+    session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+
+    request = RequestFactory().get("/")
+    request.team = experiment.team
+    request.experiment = experiment
+    request.experiment_session = session
+
+    response = _chatbot_chat_ui(request)
+
+    token = response.context_data["session_token"]
+    assert token
+    assert validate_session_token(token, session.external_id)
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
+    """The chatbots table chat button posts version 0 so sessions run against the published version."""
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory(team=team_with_users)
+    experiment.create_new_version(make_default=True)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:start_authed_web_session",
+        args=[team_with_users.slug, experiment.id, Experiment.DEFAULT_VERSION_NUMBER],
+    )
+    response = client.post(url)
+    assert response.status_code == 302
+
+    response = client.get(response.url)
+    assert response.status_code == 200
+    assert response.context["experiment_version"].is_default_version
+
+
+@pytest.mark.django_db()
+def test_chatbot_chat_session_includes_valid_session_token(client, team_with_users):
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory(team=team_with_users)
+    session = ExperimentSessionFactory(experiment=experiment, participant__user=user)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team_with_users.slug, experiment.id, experiment.version_number, session.id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    token = response.context["session_token"]
+    assert validate_session_token(token, session.external_id)
+
+
+@pytest.mark.django_db()
+@override_flag("flag_chat_widget", active=True)
+def test_web_chat_widget_rendering(client, team_with_users):
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory(team=team_with_users, file_uploads_enabled=True)
+    session = ExperimentSessionFactory(experiment=experiment, participant__user=user)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team_with_users.slug, experiment.id, experiment.version_number, session.id],
+    )
+    content = client.get(url).content.decode()
+
+    assert 'allow-attachments="true"' in content
+    # consent-form experiments keep the end-chat-and-give-feedback flow alongside the widget
+    assert "end-experiment-modal" in content

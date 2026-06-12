@@ -32,10 +32,6 @@ class ConsentForm(forms.Form):
             del self.fields["identifier"]
 
 
-class SurveyCompletedForm(forms.Form):
-    completed = forms.BooleanField(required=True, label="I have completed the survey.")
-
-
 class SurveyForm(forms.ModelForm):
     class Meta:
         model = Survey

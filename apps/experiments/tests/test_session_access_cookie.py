@@ -52,10 +52,10 @@ def test_access_denied_with_bad_cookie(client, session):
 def test_access_permitted_for_authenticated_user(client, session):
     next_url = _start_session(client, session)
 
-    # unless the request is for an authenticated user with the view_chat permission
+    # Authenticated users with view_chat permission are redirected from chatbot_chat to chatbot_session_view
     client.login(username=session.experiment.owner.username, password="password")
     session.experiment.owner.user_permissions.add(Permission.objects.get(codename="view_chat"))
-    response = client.get(next_url)
+    response = client.get(next_url, follow=True)
     assert response.status_code == 200
 
 
@@ -109,16 +109,10 @@ def _start_session(client, session):
     assert response.status_code == 302
     assert CHAT_SESSION_ACCESS_COOKIE in client.cookies
 
-    if session.experiment.pre_survey:
-        next_url = reverse(
-            "experiments:experiment_pre_survey",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
-        )
-    else:
-        next_url = reverse(
-            "chatbots:chatbot_chat",
-            args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
-        )
+    next_url = reverse(
+        "chatbots:chatbot_chat",
+        args=[session.experiment.team.slug, session.experiment.public_id, session.external_id],
+    )
     assert response.headers["Location"] == next_url
 
     response = client.get(next_url)
