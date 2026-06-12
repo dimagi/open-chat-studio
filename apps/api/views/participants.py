@@ -15,7 +15,11 @@ from rest_framework.views import APIView
 from apps.api.pagination import CursorPagination
 from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
-from apps.api.tasks import DuplicateConnectChannelError, create_connect_channel_for_participant
+from apps.api.tasks import (
+    DuplicateConnectChannelError,
+    connect_channel_error_details,
+    create_connect_channel_for_participant,
+)
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
@@ -25,19 +29,12 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
 logger = logging.getLogger("ocs.api")
 
 
-class ServiceUnavailable(APIException):
-    status_code = 503
-    default_detail = "Service temporarily unavailable."
+class ChannelCreationError(APIException):
+    """Channel-creation failure carrying the status code mapped from the upstream error."""
 
-
-class BadRequest(APIException):
-    status_code = 400
-    default_detail = "Bad request."
-
-
-class Conflict(APIException):
-    status_code = 409
-    default_detail = "Conflict."
+    def __init__(self, detail, status_code):
+        self.status_code = status_code
+        super().__init__(detail)
 
 
 class ParticipantView(APIView):
@@ -285,30 +282,9 @@ def _setup_connect_channels(identifier, participant_data_by_experiment_id):
     for channel, participant_data in pending:
         try:
             create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
-        except DuplicateConnectChannelError as e:
-            raise Conflict(f"Failed to create channel: {e}") from e
-        except httpx.HTTPError as e:
-            raise _connect_channel_error(e, identifier) from e
-
-
-def _connect_channel_error(error, identifier):
-    """Map a CommCare Connect client error to the DRF exception to return to the caller."""
-    if isinstance(error, httpx.HTTPStatusError):
-        status_code = error.response.status_code
-        logger.error(
-            "Failed to create CommCare Connect channel for participant %s: HTTP %s - %s",
-            identifier,
-            status_code,
-            error.response.text,
-        )
-        if status_code == 404:
-            return NotFound("Failed to create channel: Participant not found in CommCare Connect")
-        if status_code >= 500:
-            return ServiceUnavailable("Failed to create channel: CommCare Connect service error")
-        return BadRequest(f"Failed to create channel: {error.response.text}")
-
-    logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(error))
-    return ServiceUnavailable("Failed to create channel: Unable to connect to CommCare Connect service")
+        except (DuplicateConnectChannelError, httpx.HTTPError) as e:
+            status_code, detail = connect_channel_error_details(e, identifier)
+            raise ChannelCreationError(detail, status_code) from e
 
 
 def _schedule_external_id(data, experiment, participant):

@@ -1,3 +1,4 @@
+import httpx
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from django.db.models import Subquery
@@ -14,6 +15,30 @@ logger = get_task_logger("ocs.api")
 
 class DuplicateConnectChannelError(Exception):
     """The channel_id returned by Connect is already bound to another ParticipantData row."""
+
+
+def connect_channel_error_details(error: Exception, identifier: str) -> tuple[int, str]:
+    """Map a channel-creation failure to an HTTP status code and a user-safe detail message."""
+    if isinstance(error, DuplicateConnectChannelError):
+        return 409, (
+            "Failed to create channel: the CommCare Connect channel is already linked to "
+            "another chatbot for this participant"
+        )
+    if isinstance(error, httpx.HTTPStatusError):
+        status_code = error.response.status_code
+        logger.error(
+            "Failed to create CommCare Connect channel for participant %s: HTTP %s - %s",
+            identifier,
+            status_code,
+            error.response.text,
+        )
+        if status_code == 404:
+            return 404, "Failed to create channel: Participant not found in CommCare Connect"
+        if status_code >= 500:
+            return 503, "Failed to create channel: CommCare Connect service error"
+        return 400, f"Failed to create channel: {error.response.text}"
+    logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(error))
+    return 503, "Failed to create channel: Unable to connect to CommCare Connect service"
 
 
 @shared_task(

@@ -17,6 +17,7 @@ from apps.api.permissions import verify_hmac
 from apps.api.serializers import TriggerBotMessageRequest, TriggerBotMessageResponse
 from apps.api.tasks import (
     DuplicateConnectChannelError,
+    connect_channel_error_details,
     create_connect_channel_for_participant,
     trigger_bot_message_task,
 )
@@ -130,34 +131,9 @@ def _ensure_commcare_connect_ready(channel, identifier, participant_data):
         connect_client = CommCareConnectClient()
         try:
             create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
-        except DuplicateConnectChannelError as e:
-            return JsonResponse({"detail": f"Failed to create channel: {e}"}, status=status.HTTP_409_CONFLICT)
-        except httpx.HTTPStatusError as e:
-            connect_logger.error(
-                f"Failed to create CommCare Connect channel for participant {identifier}: "
-                f"HTTP {e.response.status_code} - {e.response.text}"
-            )
-            if e.response.status_code == 404:
-                return JsonResponse(
-                    {"detail": "Failed to create channel: Participant not found in CommCare Connect"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            elif e.response.status_code >= 500:
-                return JsonResponse(
-                    {"detail": "Failed to create channel: CommCare Connect service error"},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            else:
-                return JsonResponse(
-                    {"detail": f"Failed to create channel: {e.response.text}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        except httpx.HTTPError as e:
-            connect_logger.error(f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}")
-            return JsonResponse(
-                {"detail": "Failed to create channel: Unable to connect to CommCare Connect service"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        except (DuplicateConnectChannelError, httpx.HTTPError) as e:
+            status_code, detail = connect_channel_error_details(e, identifier)
+            return JsonResponse({"detail": detail}, status=status_code)
 
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
