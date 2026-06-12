@@ -535,6 +535,49 @@ class Experiment(BaseTeamModel, VersionsMixin):
     DEFAULT_VERSION_NUMBER = 0
     TREND_CACHE_KEY_TEMPLATE = "experiment_trend_data_{experiment_id}"
 
+    # Every concrete model field must appear in exactly one of the two sets below
+    # (enforced by a guard test). Version creation clones the whole row, so a new
+    # field is versioned content unless it is explicitly classified as identity/state.
+    VERSIONED_CONTENT_FIELDS = frozenset(
+        {
+            "name",
+            "description",
+            "pipeline",
+            "seed_message",
+            "consent_form",
+            "voice_provider",
+            "synthetic_voice",
+            "conversational_consent_enabled",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "trace_provider",
+            "participant_allowlist",
+            "debug_mode_enabled",
+            "file_uploads_enabled",
+        }
+    )
+    """The versioned snapshot: fields cloned into a version on publish, and the
+    surface a revert copies from a version back onto the working row."""
+
+    VERSION_IDENTITY_FIELDS = frozenset(
+        {
+            "id",
+            "team",
+            "owner",
+            "public_id",
+            "created_at",
+            "updated_at",
+            "working_version",
+            "version_number",
+            "is_default_version",
+            "is_archived",
+            "version_description",
+            "create_version_task_id",
+        }
+    )
+    """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
+    cloning (or owned by a single row) and never copied between rows in a family."""
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
