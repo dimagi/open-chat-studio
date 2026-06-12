@@ -396,7 +396,7 @@ class AnthropicLlmService(LlmService):
         # Adds a cache breakpoint to the last message of each model request, caching the
         # tools + system prompt + history prefix. Anthropic ignores breakpoints on prompts
         # below the model's cacheable minimum, so this is safe for small prompts.
-        return AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore")
+        return AnthropicPromptCachingMiddleware(ttl="5m", unsupported_model_behavior="ignore")
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         config = config or {}
