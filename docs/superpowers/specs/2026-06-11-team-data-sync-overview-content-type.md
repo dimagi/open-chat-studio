@@ -538,7 +538,14 @@ from that one model only, nothing nested. How a model is scoped to the team come
 through a declared ORM lookup path to a parent that has a `team` (e.g. `chat__team`,
 `chat_history__session__team`, `analysis__team`).
 
-**Query params:** `cursor` (keyset value, omitted on the first page); `limit` (page size);
+The source applies cursor filtering and row ordering based on its own copy of the manifest config for
+that slug (`cursor` type and `order_by`); the target does not forward these — it only supplies the
+derived cursor *value*.
+
+**Query params:** `cursor` (keyset value only; the target derives this from already-synced rows using
+the cursor type it read from the manifest — see *Checkpointing* — and sends it here; the source looks
+up that slug's cursor type in its own manifest to interpret the value and filter its queryset; omitted
+on the first page or when no rows have been synced yet); `limit` (page size);
 `public_key` (base64 DER, used by `secret: true` slugs under Approach 1; under Approach 2 the source
 reads `Team.export_public_key` instead and this param is ignored; see *Authorization*).
 
@@ -582,14 +589,35 @@ GET /api/v2/sync/service_providers.llmprovider/?public_key=<base64>
 ```
 
 ```jsonc
-// Versioned row (experiments.experiment) — working_version self-FK, working-first ordering
+// Default id ordering — no order_by param; source orders by id ascending
+GET /api/v2/sync/experiments.sourcematerial/?cursor=0
+{ "next_cursor": 5, "has_more": false,
+  "results": [ { "id": 3, "name": "FAQ v1", "content": "...", "team": 1,
+                 "created_at": "...", "updated_at": "..." },
+               { "id": 5, "name": "FAQ v2", "content": "...", "team": 1,
+                 "created_at": "...", "updated_at": "..." } ] }
+```
+
+```jsonc
+// working_version_id_nulls_first ordering — source reads order_by from its own manifest for this
+// slug and orders working versions (working_version=null) before published ones, so every working
+// version exists before a published version references it via the working_version FK
 GET /api/v2/sync/experiments.experiment/?cursor=0
 { "next_cursor": 24, "has_more": true,
-  "results": [ { "id": 20, "name": "Customer Support Bot", "version_number": 0,
-                 "working_version": null,
-                 "consent_form": 3, "pre_survey": null, "post_survey": 9,
-                 "voice_provider": 4, "synthetic_voice": 6, "trace_provider": null,
-                 "pipeline": 42, "team": 1, "created_at": "...", "updated_at": "..." } ] }
+  "results": [
+    // working version first (working_version=null)
+    { "id": 20, "name": "Customer Support Bot", "version_number": 0,
+      "working_version": null,
+      "consent_form": 3, "pre_survey": null, "post_survey": 9,
+      "voice_provider": 4, "synthetic_voice": 6, "trace_provider": null,
+      "pipeline": 42, "team": 1, "created_at": "...", "updated_at": "..." },
+    // published version follows, references the working version above
+    { "id": 24, "name": "Customer Support Bot", "version_number": 1,
+      "working_version": 20,
+      "consent_form": 3, "pre_survey": null, "post_survey": 9,
+      "voice_provider": 4, "synthetic_voice": 6, "trace_provider": null,
+      "pipeline": 42, "team": 1, "created_at": "...", "updated_at": "..." }
+  ] }
 ```
 
 ```jsonc
