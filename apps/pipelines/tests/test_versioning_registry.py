@@ -15,6 +15,8 @@ ALL_SPECS = [
     for spec in specs
 ]
 
+assert ALL_SPECS, "Versioned param registry must not be empty"
+
 
 @pytest.mark.parametrize(("node_type", "spec"), ALL_SPECS)
 def test_registry_node_types_and_params_exist(node_type, spec):
