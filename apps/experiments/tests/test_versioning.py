@@ -418,3 +418,36 @@ class TestCopyExperiment:
             "errors": {"test": "value"},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
+
+
+class TestExperimentFieldClassification:
+    """Guards against drift in the Experiment field classification.
+
+    Version creation clones the whole row, so every new field is implicitly part of
+    the versioned content unless classified otherwise. These tests force that
+    decision to be made explicitly when a field is added, renamed, or removed.
+    """
+
+    def test_every_concrete_field_is_classified(self):
+        concrete_fields = {field.name for field in Experiment._meta.get_fields() if field.concrete}
+        classified = Experiment.VERSIONED_CONTENT_FIELDS | Experiment.VERSION_IDENTITY_FIELDS
+
+        unclassified = concrete_fields - classified
+        assert not unclassified, (
+            f"Unclassified Experiment fields: {sorted(unclassified)}. Add each one to either "
+            "Experiment.VERSIONED_CONTENT_FIELDS (cloned on publish, restored on revert) or "
+            "Experiment.VERSION_IDENTITY_FIELDS (per-row identity/state, never copied)."
+        )
+
+        stale = classified - concrete_fields
+        assert not stale, f"Classified names that are not Experiment fields: {sorted(stale)}"
+
+    def test_classifications_are_disjoint(self):
+        overlap = Experiment.VERSIONED_CONTENT_FIELDS & Experiment.VERSION_IDENTITY_FIELDS
+        assert not overlap, f"Fields classified as both content and identity: {sorted(overlap)}"
+
+    def test_comparison_exclusions_are_not_content_fields(self):
+        """Fields excluded from version comparison must not be versioned content."""
+        excluded = set(Experiment().get_fields_to_exclude())
+        overlap = excluded & Experiment.VERSIONED_CONTENT_FIELDS
+        assert not overlap, f"Versioned content fields excluded from comparison: {sorted(overlap)}"

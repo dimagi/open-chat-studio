@@ -24,7 +24,7 @@
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">Create New Version</h1>
-    {% if experiment.create_version_task_id %}
+    {% if experiment.version_operation_in_progress %}
       <h2 class="pg-subtitle pb-5">A new version being created. Please wait until it is complete before making another version.</h2>
     {% else %}
       {% if not has_versions or version_details.fields_changed %}

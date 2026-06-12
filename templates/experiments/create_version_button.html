@@ -1,7 +1,7 @@
-{% if experiment.create_version_task_id %}
+{% if experiment.version_operation_in_progress %}
   <div id="version_check">
     <div class="tooltip" data-tip="A new version is being created"
-         hx-get="{% url 'chatbots:check_version_creation_status' experiment.team.slug experiment.id %}"
+         hx-get="{% url 'chatbots:check_version_operation_status' experiment.team.slug experiment.id %}"
          hx-trigger="every 2s"
          hx-swap="outerHTML"
          hx-target="#version_check"
