@@ -15,7 +15,11 @@ from rest_framework.views import APIView, Request
 
 from apps.api.permissions import verify_hmac
 from apps.api.serializers import TriggerBotMessageRequest, TriggerBotMessageResponse
-from apps.api.tasks import create_connect_channel_for_participant, trigger_bot_message_task
+from apps.api.tasks import (
+    DuplicateConnectChannelError,
+    create_connect_channel_for_participant,
+    trigger_bot_message_task,
+)
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
@@ -126,6 +130,8 @@ def _ensure_commcare_connect_ready(channel, identifier, participant_data):
         connect_client = CommCareConnectClient()
         try:
             create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+        except DuplicateConnectChannelError as e:
+            return JsonResponse({"detail": f"Failed to create channel: {e}"}, status=status.HTTP_409_CONFLICT)
         except httpx.HTTPStatusError as e:
             connect_logger.error(
                 f"Failed to create CommCare Connect channel for participant {identifier}: "

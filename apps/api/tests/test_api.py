@@ -16,7 +16,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.api.tasks import create_connect_channel_for_participant
+from apps.api.tasks import DuplicateConnectChannelError, create_connect_channel_for_participant
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
 from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
@@ -479,6 +479,50 @@ def test_update_participant_data_connect_channel_failure(httpx_mock, upstream, e
 
 
 @pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+def test_update_participant_data_duplicate_channel_id_conflict(httpx_mock):
+    """If Connect returns a channel_id already bound to another row, the request fails with a
+    409 and the channel_id is not stored, but the participant data remains saved."""
+    duplicate_channel_id = str(uuid.uuid4())
+    team = TeamWithUsersFactory.create()
+    experiment_a = ExperimentFactory.create(team=team)
+    experiment_b = ExperimentFactory.create(team=team)
+    ExperimentChannelFactory.create(
+        team=team,
+        experiment=experiment_b,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "reused-bot-name"},
+    )
+    # the same participant already owns this channel_id via another experiment
+    _setup_channel_participant(
+        experiment_a,
+        identifier="connectid_9",
+        channel_platform=ChannelPlatform.COMMCARE_CONNECT,
+        system_metadata={"commcare_connect_channel_id": duplicate_channel_id, "consent": True},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
+        json={"channel_id": duplicate_channel_id, "consent": True},
+    )
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+    data = {
+        "identifier": "connectid_9",
+        "platform": "commcare_connect",
+        "data": [{"experiment": str(experiment_b.public_id), "data": {"name": "John"}}],
+    }
+    response = client.post(reverse("api:participant-data"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 409
+    assert "already linked to another chatbot" in response.json()["detail"]
+    participant_data = ParticipantData.objects.get(participant__identifier="connectid_9", experiment=experiment_b)
+    assert participant_data.data == {"name": "John"}
+    assert "commcare_connect_channel_id" not in participant_data.system_metadata
+
+
+@pytest.mark.django_db()
 def test_register_connect_participant(client, experiment):
     """
     Test registration of a participant with a connect ID. We want to ensure that if a participant already exists with
@@ -562,7 +606,10 @@ class TestCreateConnectChannelForParticipant:
             experiment=other_experiment,
         )
 
-        create_connect_channel_for_participant(channel, self._connect_client(channel_id), connect_id, participant_data)
+        with pytest.raises(DuplicateConnectChannelError):
+            create_connect_channel_for_participant(
+                channel, self._connect_client(channel_id), connect_id, participant_data
+            )
 
         participant_data.refresh_from_db()
         assert "commcare_connect_channel_id" not in participant_data.system_metadata
@@ -974,6 +1021,51 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
     assert sent.body == "Hello from the bot"
     assert sent.to == ["user@example.com"]
     assert sent.from_email == "bot@chat.openchatstudio.com"
+
+
+@pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+@patch("apps.api.views.channels.CommCareConnectClient")
+def test_trigger_bot_duplicate_channel_id_conflict(ConnectClientView, experiment):
+    """A duplicate channel_id during enrollment surfaces as a 409, not a misleading consent error."""
+    duplicate_channel_id = uuid.uuid4().hex
+    connect_id = uuid.uuid4().hex
+    # the participant already owns this channel_id via another experiment
+    other_experiment = ExperimentFactory.create(team=experiment.team)
+    existing = _setup_participant_data(
+        other_experiment,
+        connect_id=connect_id,
+        system_metadata={"commcare_connect_channel_id": duplicate_channel_id, "consent": True},
+    )
+    # the row for the target experiment has no channel yet
+    ParticipantData.objects.create(
+        team=experiment.team,
+        participant=existing.participant,
+        experiment=experiment,
+    )
+    ExperimentChannelFactory.create(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "reused-bot-name"},
+    )
+    ConnectClientView.return_value.create_channel.return_value = {
+        "channel_id": duplicate_channel_id,
+        "consent": True,
+    }
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+    data = {
+        "identifier": connect_id,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
+        "experiment": str(experiment.public_id),
+        "message_text": "hello",
+    }
+    response = client.post(reverse("api:trigger_bot"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 409
+    assert "already linked to another chatbot" in response.json()["detail"]
 
 
 # ── trigger_bot direct-message (message_text) tests ──────────────────────────

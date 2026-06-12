@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from apps.api.pagination import CursorPagination
 from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
-from apps.api.tasks import create_connect_channel_for_participant
+from apps.api.tasks import DuplicateConnectChannelError, create_connect_channel_for_participant
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
@@ -33,6 +33,11 @@ class ServiceUnavailable(APIException):
 class BadRequest(APIException):
     status_code = 400
     default_detail = "Bad request."
+
+
+class Conflict(APIException):
+    status_code = 409
+    default_detail = "Conflict."
 
 
 class ParticipantView(APIView):
@@ -280,6 +285,8 @@ def _setup_connect_channels(identifier, participant_data_by_experiment_id):
     for channel, participant_data in pending:
         try:
             create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+        except DuplicateConnectChannelError as e:
+            raise Conflict(f"Failed to create channel: {e}") from e
         except httpx.HTTPError as e:
             raise _connect_channel_error(e, identifier) from e
 

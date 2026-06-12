@@ -12,6 +12,10 @@ from apps.teams.utils import current_team
 logger = get_task_logger("ocs.api")
 
 
+class DuplicateConnectChannelError(Exception):
+    """The channel_id returned by Connect is already bound to another ParticipantData row."""
+
+
 @shared_task(
     bind=True,
     acks_late=True,
@@ -63,6 +67,9 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
             channel = channels[experiment.id]
             create_connect_channel_for_participant(channel, connect_client, connect_id, participant_datum)
             successful_ids.add(experiment.id)
+        except DuplicateConnectChannelError:
+            # Deterministic conflict, already logged — retrying will not resolve it.
+            continue
         except Exception as e:
             if self.request.retries == self.max_retries:
                 failed_ids = set(experiment_ids) - successful_ids
@@ -99,7 +106,10 @@ def create_connect_channel_for_participant(channel, connect_client, connect_id, 
             existing.experiment_id,
             bot_name,
         )
-        return
+        raise DuplicateConnectChannelError(
+            f"The CommCare Connect channel for bot name '{bot_name}' is already linked to another "
+            "chatbot for this participant"
+        )
 
     participant_data.system_metadata = {
         "commcare_connect_channel_id": channel_id,
