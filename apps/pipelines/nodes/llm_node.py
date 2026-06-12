@@ -106,6 +106,8 @@ def build_node_agent(
     middleware = []
     if history_middleware := node.build_history_middleware(system_message=system_message):
         middleware.append(history_middleware)
+    if caching_middleware := node.get_llm_service().get_prompt_caching_middleware():
+        middleware.append(caching_middleware)
     # MessageSizeValidationMiddleware temporarily disabled — over-counts tool outputs and blocks
     # legitimate conversations. Re-enable after switching to a tool-aware token check.
 

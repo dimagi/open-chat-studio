@@ -4,7 +4,7 @@ import logging
 import re
 from functools import cached_property
 from io import BytesIO
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
 from django.db.models import Q
@@ -31,6 +31,9 @@ from apps.service_providers.llm_service.utils import (
     extract_file_ids_from_ocs_citations,
     get_openai_container_file_contents,
 )
+
+if TYPE_CHECKING:
+    from langchain.agents.middleware import AgentMiddleware
 
 logger = logging.getLogger("ocs.llm_service")
 
@@ -66,6 +69,13 @@ class LlmService(pydantic.BaseModel):
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         raise NotImplementedError
+
+    def get_prompt_caching_middleware(self) -> AgentMiddleware | None:
+        """Agent middleware that enables prompt caching for this provider, if it requires opt-in.
+
+        Providers with automatic server-side caching (OpenAI, Azure, DeepSeek) return None.
+        """
+        return None
 
     def get_output_parser(self):
         return self._default_parser
@@ -377,6 +387,16 @@ class AnthropicLlmService(LlmService):
             kwargs["model_kwargs"] = {"output_config": {"effort": effort}}
 
         return kwargs
+
+    def get_prompt_caching_middleware(self) -> AgentMiddleware | None:
+        from langchain_anthropic.middleware import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+            AnthropicPromptCachingMiddleware,
+        )
+
+        # Adds a cache breakpoint to the last message of each model request, caching the
+        # tools + system prompt + history prefix. Anthropic ignores breakpoints on prompts
+        # below the model's cacheable minimum, so this is safe for small prompts.
+        return AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore")
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         config = config or {}

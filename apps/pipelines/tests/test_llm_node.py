@@ -5,8 +5,48 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
-from apps.pipelines.nodes.llm_node import _build_size_validation_middleware
+from apps.pipelines.nodes.llm_node import _build_size_validation_middleware, build_node_agent
 from apps.pipelines.repository import RepositoryLookupError
+from apps.service_providers.llm_service.main import AnthropicLlmService, OpenAILlmService
+
+
+class TestBuildNodeAgentPromptCaching:
+    """The node agent should include the LLM service's prompt caching middleware when one is provided."""
+
+    def _build_agent_middleware(self, monkeypatch, service):
+        captured = {}
+
+        def fake_create_agent(**kwargs):
+            captured.update(kwargs)
+            return Mock()
+
+        monkeypatch.setattr("apps.pipelines.nodes.llm_node.create_agent", fake_create_agent)
+        monkeypatch.setattr("apps.pipelines.nodes.llm_node._get_configured_tools", lambda *args, **kwargs: [])
+        monkeypatch.setattr("apps.pipelines.nodes.llm_node._get_prompt_context", lambda *args, **kwargs: Mock())
+        monkeypatch.setattr(
+            "apps.pipelines.nodes.llm_node.get_system_message",
+            lambda *args, **kwargs: SystemMessage(content="prompt"),
+        )
+
+        node = Mock()
+        node.get_llm_service.return_value = service
+        node.build_history_middleware.return_value = None
+        build_node_agent(node, context=Mock(), session=Mock(), tool_callbacks=Mock())
+        return captured["middleware"]
+
+    def test_anthropic_node_gets_caching_middleware(self, monkeypatch):
+        from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+        service = AnthropicLlmService(anthropic_api_key="test", anthropic_api_base="https://api.anthropic.com")
+        middleware = self._build_agent_middleware(monkeypatch, service)
+        assert any(isinstance(m, AnthropicPromptCachingMiddleware) for m in middleware)
+
+    def test_openai_node_does_not_get_caching_middleware(self, monkeypatch):
+        from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+        service = OpenAILlmService(openai_api_key="test")
+        middleware = self._build_agent_middleware(monkeypatch, service)
+        assert not any(isinstance(m, AnthropicPromptCachingMiddleware) for m in middleware)
 
 
 class TestMessageSizeValidationMiddleware:

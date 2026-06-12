@@ -78,3 +78,31 @@ def test_voyage_ai_service_returns_local_index_manager():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     manager = service.get_local_index_manager("voyage-4-large")
     assert isinstance(manager, VoyageAILocalIndexManager)
+
+
+def test_anthropic_service_returns_prompt_caching_middleware():
+    from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+    service = AnthropicLlmService(anthropic_api_key="test", anthropic_api_base="https://api.anthropic.com")
+    middleware = service.get_prompt_caching_middleware()
+    assert isinstance(middleware, AnthropicPromptCachingMiddleware)
+    assert middleware.ttl == "5m"
+    # The agent model is always ChatAnthropic for this service, but never surface
+    # warnings to end users if that assumption breaks.
+    assert middleware.unsupported_model_behavior == "ignore"
+
+
+@pytest.mark.parametrize(
+    "service",
+    [
+        pytest.param(OpenAILlmService(openai_api_key="test"), id="openai-automatic-caching"),
+        pytest.param(
+            AzureLlmService(
+                openai_api_key="test", openai_api_base="https://api.openai.com/v1", openai_api_version="v1"
+            ),
+            id="azure-automatic-caching",
+        ),
+    ],
+)
+def test_non_anthropic_services_have_no_prompt_caching_middleware(service):
+    assert service.get_prompt_caching_middleware() is None
