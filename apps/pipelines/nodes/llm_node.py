@@ -14,7 +14,7 @@ from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.helpers import get_system_message
+from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
 from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
@@ -103,11 +103,7 @@ def build_node_agent(
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
-    middleware = []
-    if history_middleware := node.build_history_middleware(system_message=system_message):
-        middleware.append(history_middleware)
-    if caching_middleware := node.get_llm_service().get_prompt_caching_middleware():
-        middleware.append(caching_middleware)
+    middleware = get_agent_middleware(node, system_message)
     # MessageSizeValidationMiddleware temporarily disabled — over-counts tool outputs and blocks
     # legitimate conversations. Re-enable after switching to a tool-aware token check.
 

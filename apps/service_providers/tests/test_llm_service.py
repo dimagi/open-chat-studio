@@ -51,7 +51,7 @@ def test_openai_service_uses_responses_api():
 
 
 @pytest.mark.parametrize(
-    "provider_type,config",
+    ("provider_type", "config"),
     [
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),

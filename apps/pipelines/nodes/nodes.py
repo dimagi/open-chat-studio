@@ -54,7 +54,7 @@ from apps.pipelines.nodes.base import (
     deprecated_node,
 )
 from apps.pipelines.nodes.context import PipelineAccessor
-from apps.pipelines.nodes.helpers import get_system_message
+from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
@@ -681,11 +681,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         )
 
         # Build the agent
-        middleware = []
-        if history_middleware := self.build_history_middleware(system_message=system_message):
-            middleware.append(history_middleware)
-        if caching_middleware := self.get_llm_service().get_prompt_caching_middleware():
-            middleware.append(caching_middleware)
+        middleware = get_agent_middleware(self, system_message)
 
         agent = create_agent(
             model=self.get_chat_model(),
