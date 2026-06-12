@@ -545,7 +545,9 @@ derived cursor *value*.
 **Query params:** `cursor` (keyset value only; the target derives this from already-synced rows using
 the cursor type it read from the manifest — see *Checkpointing* — and sends it here; the source looks
 up that slug's cursor type in its own manifest to interpret the value and filter its queryset; omitted
-on the first page or when no rows have been synced yet); `limit` (page size);
+on the first page or when no rows have been synced yet; `pk` cursors are a plain integer,
+`updated_at_id` cursors are a URL-encoded JSON object e.g.
+`%7B%22updated_at%22%3A%222026-06-09T14%3A32%3A00Z%22%2C%22id%22%3A30%7D`); `limit` (page size);
 `public_key` (base64 DER, used by `secret: true` slugs under Approach 1; under Approach 2 the source
 reads `Team.export_public_key` instead and this param is ignored; see *Authorization*).
 
@@ -645,11 +647,19 @@ GET /api/v2/sync/chat.chatattachment/
 ```
 
 ```jsonc
-// Mutable live slug (experiments.experimentsession) — composite cursor
-GET /api/v2/sync/experiments.experimentsession/
+// Mutable live slug (experiments.experimentsession) — first page, no cursor
+GET /api/v2/sync/experiments.experimentsession/?limit=100
 { "next_cursor": { "updated_at": "2026-06-09T14:32:00Z", "id": 30 }, "has_more": true,
   "results": [ { "id": 30, "experiment": 20, "participant": 12, "experiment_channel": 42,
                  "chat": 71, "status": "pending", "session_data": {},
+                 "created_at": "...", "updated_at": "..." } ] }
+
+// Next page — composite cursor JSON-encoded in the cursor param
+GET /api/v2/sync/experiments.experimentsession/?cursor=%7B%22updated_at%22%3A%222026-06-09T14%3A32%3A00Z%22%2C%22id%22%3A30%7D&limit=100
+// decoded: cursor={"updated_at":"2026-06-09T14:32:00Z","id":30}
+{ "next_cursor": { "updated_at": "2026-06-09T15:10:00Z", "id": 45 }, "has_more": false,
+  "results": [ { "id": 45, "experiment": 20, "participant": 13, "experiment_channel": 42,
+                 "chat": 80, "status": "complete", "session_data": {},
                  "created_at": "...", "updated_at": "..." } ] }
 ```
 
