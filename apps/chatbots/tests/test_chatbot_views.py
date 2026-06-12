@@ -779,3 +779,29 @@ def test_web_chat_widget_rendering(client, team_with_users):
     assert 'allow-attachments="true"' in content
     # consent-form experiments keep the end-chat-and-give-feedback flow alongside the widget
     assert "end-experiment-modal" in content
+
+
+@pytest.mark.django_db()
+def test_version_operation_status_polling(client, team_with_users):
+    """The status endpoint reports any in-flight version operation, not just publish."""
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, owner=user)
+    url = reverse("chatbots:check_version_operation_status", args=[team.slug, experiment.id])
+
+    # lock held by some non-publish operation: response keeps polling
+    experiment.acquire_version_operation_lock("revert-task-id")
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Creating Version" in content
+    assert url in content  # hx-get poll target
+
+    # operation finished: response renders the create button and triggers a refresh
+    Experiment.release_version_operation_lock(experiment.id)
+    response = client.get(url)
+    content = response.content.decode()
+    assert "Create Version" in content
+    assert "version-changed" in content

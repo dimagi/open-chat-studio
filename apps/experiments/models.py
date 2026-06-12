@@ -886,6 +886,32 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def api_url(self):
         return self.get_api_url()
 
+    # `create_version_task_id` doubles as a lock guarding all long-running version
+    # operations (publish, revert): non-empty means an operation is in flight.
+
+    @property
+    def version_operation_in_progress(self) -> bool:
+        return bool(self.create_version_task_id)
+
+    def acquire_version_operation_lock(self, task_id: str) -> bool:
+        """Atomically claim the version-operation lock for `task_id`.
+
+        Returns False when another version operation is already in flight.
+        """
+        acquired = (
+            Experiment.objects.get_all()
+            .filter(id=self.id, create_version_task_id="")
+            .update(create_version_task_id=task_id, audit_action=AuditAction.AUDIT)
+            == 1
+        )
+        if acquired:
+            self.create_version_task_id = task_id
+        return acquired
+
+    @classmethod
+    def release_version_operation_lock(cls, experiment_id: int):
+        cls.objects.get_all().filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
+
     @transaction.atomic()
     def create_new_version(  # ty: ignore[invalid-method-override]
         self,
