@@ -42,7 +42,7 @@ UNPRICED = ResolvedRule(unit_price=None, currency="USD", pricing_rule_id=None)
 
 class PricingResolver:
     CACHE_TTL_SECONDS = 24 * 60 * 60  # safety net; signals do the real invalidation
-    CACHE_KEY_PREFIX = "cost_tracking:pricing"
+    CACHE_KEY_PREFIX = "cost"
     # Cache stores "active now" only — `at` is deliberately not part of the key.
     # Lookups outside this skew window bypass the cache.
     CACHE_AT_SKEW = timedelta(minutes=1)
@@ -92,7 +92,7 @@ class PricingResolver:
             service_kind=key.service_kind,
             effective_from__lte=at,
         ).filter(Q(effective_to__isnull=True) | Q(effective_to__gt=at))
-        qs = qs.filter(team__isnull=True) if key.team_id is None else qs.filter(team_id=key.team_id)
+        qs = qs.filter(team_id=key.team_id)
         rule = qs.order_by("-effective_from").first()
 
         resolved = (
