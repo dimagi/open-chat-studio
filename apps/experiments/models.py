@@ -38,6 +38,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.events.versioning import sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -927,12 +928,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
 
-        self._copy_trigger_to_new_version(
-            trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
-        )
-        self._copy_trigger_to_new_version(
-            trigger_queryset=self.timeout_triggers, new_version=new_version, is_copy=is_copy
-        )
+        sync_triggers(self, new_version, is_copy=is_copy)
         self._copy_pipeline_to_new_version(new_version, is_copy)
 
         return new_version
@@ -999,10 +995,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
-
-    def _copy_trigger_to_new_version(self, trigger_queryset, new_version, is_copy: bool = False):
-        for trigger in trigger_queryset.all():
-            trigger.create_new_version(new_experiment=new_version, is_copy=is_copy)
 
     @property
     def is_public(self) -> bool:
