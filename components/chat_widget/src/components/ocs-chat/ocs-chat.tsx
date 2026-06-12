@@ -244,6 +244,7 @@ export class OcsChat {
   @State() generatedUserId?: string;
   @State() isFullscreen: boolean = false;
   @State() showNewChatConfirmation: boolean = false;
+  @State() sessionEnded: boolean = false;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -412,6 +413,37 @@ export class OcsChat {
     this.applySessionToken(undefined);
     this.clearSessionStorage();
     this.addErrorMessage(this.translationManager.get('status.sessionExpired', 'Your chat session expired. Starting a new chat — please resend your message.'));
+  }
+
+  /**
+   * The server reported the session has ended (e.g. closed from another tab or
+   * by the bot). Polling has already stopped; disable the composer and tell the
+   * user. Unbound widgets can recover via the "new chat" button (clearSession).
+   */
+  private handleSessionEnded(): void {
+    if (this.sessionEnded) {
+      return;
+    }
+    this.sessionEnded = true;
+    this.stopMessagePolling();
+    this.isTyping = false;
+    this.typingProgressMessage = '';
+    const content = this.translationManager.get('status.chatEnded') ?? 'This chat has ended.';
+    // An unbound widget restores persisted messages and re-polls after a reload,
+    // so the notice may already be the last message.
+    const last = this.messages.at(-1);
+    if (last?.role === 'system' && last.content === content) {
+      return;
+    }
+    const notice: ChatMessage = {
+      created_at: new Date().toISOString(),
+      role: 'system',
+      content,
+      attachments: [],
+    };
+    this.messages = [...this.messages, notice];
+    this.saveSessionToStorage();
+    this.scrollToBottom();
   }
 
   private handleError(errorText: string): void {
@@ -585,7 +617,7 @@ export class OcsChat {
   }
 
   private async sendMessage(message: string): Promise<void> {
-    if (!message.trim()) return;
+    if (!message.trim() || this.sessionEnded) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -883,7 +915,7 @@ export class OcsChat {
   }
 
   private startMessagePolling(): void {
-    if (!this.activeSessionId || this.currentPollTaskId || !this.visible) {
+    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded) {
       return;
     }
 
@@ -899,6 +931,10 @@ export class OcsChat {
         this.saveSessionToStorage();
         this.scrollToBottom();
         this.focusInput();
+      },
+      onSessionEnded: () => {
+        this.messagePollingHandle = undefined;
+        this.handleSessionEnded();
       },
       onError: () => {
         // Silently ignore polling errors to match previous behaviour
@@ -1586,7 +1622,9 @@ export class OcsChat {
   }
 
   private saveVisibleState(visible: boolean): void {
-    if (!this.persistentSession) return;
+    // Kiosk visibility is forced, so persisting it would only leak into a
+    // standard-mode widget for the same chatbot on another page.
+    if (!this.persistentSession || this.isKioskMode()) return;
     try {
       const keys = this.getStorageKeys();
       localStorage.setItem(keys.visible, visible ? '1' : '0');
@@ -1664,6 +1702,7 @@ export class OcsChat {
     this.applySessionToken(this.isSessionBound() ? this.sessionToken : undefined);
     this.messages = [];
     this.isTyping = false;
+    this.sessionEnded = false;
     this.currentPollTaskId = '';
     if (this.allowAttachments) {
       this.selectedFiles = [];
@@ -1873,11 +1912,11 @@ export class OcsChat {
                     ref={el => (this.textareaRef = el)}
                     class="message-textarea"
                     rows={1}
-                    placeholder={this.translationManager.get('composer.placeholder')}
+                    placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
                     value={this.messageInput}
                     onInput={e => this.handleInputChange(e)}
                     onKeyPress={e => this.handleKeyPress(e)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                   ></textarea>
                   {/* File Upload Button */}
                   {this.allowAttachments && (
@@ -1900,7 +1939,7 @@ export class OcsChat {
                     <button
                       class="file-attachment-button"
                       onClick={() => this.fileInputRef?.click()}
-                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                       title={this.translationManager.get('attach.add')}
                       aria-label={this.translationManager.get('attach.add')}
                     >
@@ -1908,9 +1947,9 @@ export class OcsChat {
                     </button>
                   )}
                   <button
-                    class={`send-button ${!this.isTyping && !this.isLoading && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
+                    class={`send-button ${!this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
                     onClick={() => this.sendMessage(this.messageInput)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim()}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
                   >
                     {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                   </button>

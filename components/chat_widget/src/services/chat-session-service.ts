@@ -78,6 +78,8 @@ export interface TaskPollingHandle {
 export interface MessagePollingCallbacks {
   getSince: () => string | undefined;
   onMessages: (messages: ChatMessage[]) => void;
+  /** Called once when the server reports the session has ended; polling stops first. */
+  onSessionEnded?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -258,6 +260,10 @@ export class ChatSessionService {
         const data = await this.fetchMessages(sessionId, since);
         if (data.messages.length > 0) {
           callbacks.onMessages(data.messages);
+        }
+        if (data.session_status === 'ended') {
+          this.stopMessagePolling();
+          callbacks.onSessionEnded?.();
         }
       } catch (error) {
         if (callbacks.onError) {
