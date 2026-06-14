@@ -160,7 +160,11 @@ class OCSTracer(Tracer):
         errors internally; the outer `_finalize_trace` try/except catches
         anything else (e.g. an unexpected helper failure).
         """
-        if not self.cost_tracking_enabled or not self.metrics_collector or not self.trace_record:
+        if not self.cost_tracking_enabled:
+            return
+        if not self.metrics_collector:
+            return
+        if not self.trace_record:
             return
         from apps.cost_tracking.services.recorder import (  # noqa: PLC0415 - lazy: cost_tracking only imported when the flag is on
             TraceContext,

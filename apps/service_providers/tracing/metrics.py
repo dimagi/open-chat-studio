@@ -137,43 +137,8 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             providers_snapshot = dict(self._model_providers)
             fallback_snapshot = dict(self._fallback_usage)
 
-        for model_name, usage in exact_snapshot.items():
-            provider = providers_snapshot.get(model_name, "unknown")
-            for kind, qty in _split_buckets(usage):
-                if qty:
-                    yield UsageEvent(
-                        service_kind=kind,
-                        provider_type=provider,
-                        model_name=model_name,
-                        quantity=qty,
-                        confidence=Confidence.EXACT,
-                    )
-
-        for (model_name, confidence), bucket in fallback_snapshot.items():
-            provider = providers_snapshot.get(model_name, "unknown")
-            if confidence is Confidence.UNKNOWN:
-                yield UsageEvent(
-                    service_kind=ServiceKind.LLM_INPUT,
-                    provider_type=provider,
-                    model_name=model_name,
-                    quantity=0,
-                    confidence=Confidence.UNKNOWN,
-                    extra={"missing_usage_calls": bucket["calls"]},
-                )
-                continue
-            for kind, qty in (
-                (ServiceKind.LLM_INPUT, bucket["input_tokens"]),
-                (ServiceKind.LLM_OUTPUT, bucket["output_tokens"]),
-            ):
-                if qty:
-                    yield UsageEvent(
-                        service_kind=kind,
-                        provider_type=provider,
-                        model_name=model_name,
-                        quantity=qty,
-                        confidence=Confidence.ESTIMATED,
-                        extra={"estimator": "tiktoken"},
-                    )
+        yield from _iter_exact_events(exact_snapshot, providers_snapshot)
+        yield from _iter_fallback_events(fallback_snapshot, providers_snapshot)
 
     def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> None:
         with self._counter_lock:
@@ -199,6 +164,68 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             n_prompt_tokens=prompt_tokens or None,
             n_completion_tokens=completion_tokens or None,
         )
+
+
+def _iter_exact_events(
+    exact_snapshot: dict[str, dict],
+    providers_snapshot: dict[str, str],
+) -> Iterator[UsageEvent]:
+    """Yield EXACT events from the parent class's `usage_metadata` dict."""
+    for model_name, usage in exact_snapshot.items():
+        provider = providers_snapshot.get(model_name, "unknown")
+        yield from _exact_events_for_model(model_name, provider, usage)
+
+
+def _exact_events_for_model(model_name: str, provider: str, usage: dict) -> Iterator[UsageEvent]:
+    for kind, qty in _split_buckets(usage):
+        if qty:
+            yield UsageEvent(
+                service_kind=kind,
+                provider_type=provider,
+                model_name=model_name,
+                quantity=qty,
+                confidence=Confidence.EXACT,
+            )
+
+
+def _iter_fallback_events(
+    fallback_snapshot: dict[tuple[str, Confidence], dict[str, int]],
+    providers_snapshot: dict[str, str],
+) -> Iterator[UsageEvent]:
+    """Yield ESTIMATED and UNKNOWN events from the missing-usage fallback buckets."""
+    for (model_name, confidence), bucket in fallback_snapshot.items():
+        provider = providers_snapshot.get(model_name, "unknown")
+        if confidence is Confidence.UNKNOWN:
+            yield _unknown_event(model_name, provider, bucket)
+        else:
+            yield from _estimated_events(model_name, provider, bucket)
+
+
+def _unknown_event(model_name: str, provider: str, bucket: dict[str, int]) -> UsageEvent:
+    return UsageEvent(
+        service_kind=ServiceKind.LLM_INPUT,
+        provider_type=provider,
+        model_name=model_name,
+        quantity=0,
+        confidence=Confidence.UNKNOWN,
+        extra={"missing_usage_calls": bucket["calls"]},
+    )
+
+
+def _estimated_events(model_name: str, provider: str, bucket: dict[str, int]) -> Iterator[UsageEvent]:
+    for kind, qty in (
+        (ServiceKind.LLM_INPUT, bucket["input_tokens"]),
+        (ServiceKind.LLM_OUTPUT, bucket["output_tokens"]),
+    ):
+        if qty:
+            yield UsageEvent(
+                service_kind=kind,
+                provider_type=provider,
+                model_name=model_name,
+                quantity=qty,
+                confidence=Confidence.ESTIMATED,
+                extra={"estimator": "tiktoken"},
+            )
 
 
 def _sum_keys(details: dict, keys: tuple[str, ...]) -> int:
