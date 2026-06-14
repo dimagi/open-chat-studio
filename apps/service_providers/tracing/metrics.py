@@ -75,22 +75,27 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         run_id: UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        meta = kwargs.get("metadata") or {}
+        invocation = kwargs.get("invocation_params") or {}
+        model = invocation.get("model") or meta.get("ls_model_name")
+        provider = meta.get("ocs_provider_type")
         with self._counter_lock:
             self._turns += 1
-            meta = kwargs.get("metadata") or {}
-            invocation = kwargs.get("invocation_params") or {}
-            model = invocation.get("model") or meta.get("ls_model_name")
-            provider = meta.get("ocs_provider_type")
             # Per-call state only when the callback manager supplies a run_id
             # (production path). Tests bypassing the manager still exercise
             # turn counting + parent usage accumulation.
-            if model and provider and run_id is not None:
-                self._pending_calls[run_id] = {
-                    "model": model,
-                    "provider": provider,
-                    # Prompts retained only for the tiktoken estimate path.
-                    "prompts": prompts if provider in OPENAI_FAMILY else None,
-                }
+            if not model:
+                return
+            if not provider:
+                return
+            if run_id is None:
+                return
+            self._pending_calls[run_id] = {
+                "model": model,
+                "provider": provider,
+                # Prompts retained only for the tiktoken estimate path.
+                "prompts": prompts if provider in OPENAI_FAMILY else None,
+            }
 
     def on_llm_end(self, response, *, run_id: UUID | None = None, **kwargs: Any) -> None:
         # Parent still tracks self.usage_metadata for get_metrics()'s
@@ -109,9 +114,9 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         if provider in OPENAI_FAMILY and pending["prompts"]:
             input_tokens = tiktoken_count(model, pending["prompts"])
             output_tokens = tiktoken_count(model, response_text(response))
-            self._fallback_add(provider, model, Confidence.ESTIMATED, input_tokens, output_tokens)
+            self._fallback_add((provider, model, Confidence.ESTIMATED), input_tokens, output_tokens)
         else:
-            self._fallback_add(provider, model, Confidence.UNKNOWN, 0, 0)
+            self._fallback_add((provider, model, Confidence.UNKNOWN), 0, 0)
 
     def _exact_add(self, provider: str, model: str, usage: dict[str, Any]) -> None:
         with self._counter_lock:
@@ -124,12 +129,10 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             for k, v in (usage.get("input_token_details") or {}).items():
                 bucket["input_token_details"][k] = bucket["input_token_details"].get(k, 0) + (v or 0)
 
-    def _fallback_add(
-        self, provider: str, model: str, confidence: Confidence, input_tokens: int, output_tokens: int
-    ) -> None:
+    def _fallback_add(self, key: tuple[str, str, Confidence], input_tokens: int, output_tokens: int) -> None:
         with self._counter_lock:
             bucket = self._fallback_usage.setdefault(
-                (provider, model, confidence),
+                key,
                 {"input_tokens": 0, "output_tokens": 0, "calls": 0},
             )
             bucket["input_tokens"] += input_tokens
@@ -167,10 +170,7 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         with self._counter_lock:
             turns = self._turns
             toolcalls = self._toolcalls
-        with self._lock:
-            prompt_tokens = sum(u.get("input_tokens", 0) for u in self.usage_metadata.values())
-            completion_tokens = sum(u.get("output_tokens", 0) for u in self.usage_metadata.values())
-            total_tokens = sum(u.get("total_tokens", 0) for u in self.usage_metadata.values())
+        prompt_tokens, completion_tokens, total_tokens = self._sum_token_counts()
         return TraceMetrics(
             n_turns=turns or None,
             n_toolcalls=toolcalls or None,
@@ -178,6 +178,13 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             n_prompt_tokens=prompt_tokens or None,
             n_completion_tokens=completion_tokens or None,
         )
+
+    def _sum_token_counts(self) -> tuple[int, int, int]:
+        with self._lock:
+            prompt = sum(u.get("input_tokens", 0) for u in self.usage_metadata.values())
+            completion = sum(u.get("output_tokens", 0) for u in self.usage_metadata.values())
+            total = sum(u.get("total_tokens", 0) for u in self.usage_metadata.values())
+        return prompt, completion, total
 
 
 def _sum_response_usage(response) -> dict[str, Any]:
