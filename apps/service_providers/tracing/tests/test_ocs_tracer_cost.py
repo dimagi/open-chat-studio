@@ -61,11 +61,25 @@ def _seed_rule(provider: str, model: str, kind: ServiceKind, unit_price: str) ->
 
 
 class TestRecordCostsShortCircuits:
-    """Each branch where `_record_costs` should bail without touching the recorder."""
+    """Each branch where `_record_costs` should bail without touching the recorder.
+
+    Each test sets every guard except the one under inspection to truthy so a
+    regression in the targeted guard would actually fail this test.
+    """
+
+    def _collector_with_events(self):
+        from apps.service_providers.tracing.metrics import MetricsCollector  # noqa: PLC0415 - test scope
+
+        collector = MetricsCollector(start_time=0.0)
+        # Populate one EXACT bucket so iter_cost_events would yield without the guard.
+        collector._exact_usage = {("openai", "gpt-4o-mini"): {"input_tokens": 10, "output_tokens": 5}}
+        return collector
 
     def test_short_circuits_when_flag_off(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.cost_tracking_enabled = False
+        tracer.metrics_collector = self._collector_with_events()
+        tracer.trace_record = object()
         with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
@@ -74,6 +88,16 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.cost_tracking_enabled = True
         tracer.metrics_collector = None
+        tracer.trace_record = object()
+        with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
+            tracer._record_costs()
+            recorder.assert_not_called()
+
+    def test_short_circuits_when_trace_record_missing(self, experiment):
+        tracer = OCSTracer(experiment, experiment.team_id)
+        tracer.cost_tracking_enabled = True
+        tracer.metrics_collector = self._collector_with_events()
+        tracer.trace_record = None
         with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
@@ -134,16 +158,17 @@ class TestCostRecordingEndToEnd:
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
         ctx = TraceContext(id=uuid4(), name="t")
+        run_id = uuid4()
 
         with tracer.trace(trace_context=ctx, session=session):
             tracer.metrics_collector.on_llm_start(
                 {},
                 ["hello world"],
-                run_id=uuid4(),
+                run_id=run_id,
                 invocation_params={"model": "test-model"},
                 metadata={"ocs_provider_type": "openai"},
             )
-            tracer.metrics_collector.on_llm_end(_llm_result(1000, 500), run_id=uuid4())
+            tracer.metrics_collector.on_llm_end(_llm_result(1000, 500), run_id=run_id)
 
         rows = UsageRecord.objects.filter(team=experiment.team).order_by("service_kind")
         assert rows.count() == 2
@@ -161,16 +186,17 @@ class TestCostRecordingEndToEnd:
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
         ctx = TraceContext(id=uuid4(), name="t")
+        run_id = uuid4()
 
         with tracer.trace(trace_context=ctx, session=session):
             tracer.metrics_collector.on_llm_start(
                 {},
                 ["hello world"],
-                run_id=uuid4(),
+                run_id=run_id,
                 invocation_params={"model": "test-model"},
                 metadata={"ocs_provider_type": "openai"},
             )
-            tracer.metrics_collector.on_llm_end(_llm_result(1000, 500), run_id=uuid4())
+            tracer.metrics_collector.on_llm_end(_llm_result(1000, 500), run_id=run_id)
 
         assert UsageRecord.objects.filter(team=experiment.team).count() == 0
 

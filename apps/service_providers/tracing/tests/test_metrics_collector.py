@@ -174,19 +174,20 @@ def _result_without_usage(text: str = "response") -> LLMResult:
 
 
 class TestProviderCapture:
-    """`on_llm_start` captures (model -> provider) for later cost-event tagging."""
+    """`on_llm_start` captures (provider, model) into per-call pending state."""
 
-    def test_provider_recorded_per_model(self):
+    def test_pending_call_records_provider_and_model(self):
         collector = MetricsCollector(start_time=time.time())
         args = _start_args(model="gpt-4o-mini", provider="openai")
         collector.on_llm_start({}, **args)
-        assert collector._model_providers == {"gpt-4o-mini": "openai"}
+        pending = collector._pending_calls[args["run_id"]]
+        assert pending["provider"] == "openai"
+        assert pending["model"] == "gpt-4o-mini"
 
     def test_missing_metadata_is_silently_ignored(self):
         collector = MetricsCollector(start_time=time.time())
         # No metadata kwarg — turn-counting still works; nothing captured.
         collector.on_llm_start({}, ["prompt"])
-        assert collector._model_providers == {}
         assert collector._pending_calls == {}
 
     def test_prompts_kept_only_for_openai_family(self):
@@ -223,7 +224,7 @@ class TestOnLlmEndFallback:
         args = _start_args(model="gpt-4o-mini", provider="openai", prompts=["hello world"])
         collector.on_llm_start({}, **args)
         collector.on_llm_end(_result_without_usage("a response"), run_id=args["run_id"])
-        bucket = collector._fallback_usage[("gpt-4o-mini", Confidence.ESTIMATED)]
+        bucket = collector._fallback_usage[("openai", "gpt-4o-mini", Confidence.ESTIMATED)]
         assert bucket["input_tokens"] > 0  # tiktoken counted the prompt
         assert bucket["output_tokens"] > 0  # tiktoken counted the response
         assert bucket["calls"] == 1
@@ -233,7 +234,7 @@ class TestOnLlmEndFallback:
         args = _start_args(model="claude-haiku-4-5", provider="anthropic")
         collector.on_llm_start({}, **args)
         collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
-        bucket = collector._fallback_usage[("claude-haiku-4-5", Confidence.UNKNOWN)]
+        bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.UNKNOWN)]
         assert bucket["input_tokens"] == 0
         assert bucket["output_tokens"] == 0
         assert bucket["calls"] == 1
@@ -245,8 +246,21 @@ class TestOnLlmEndFallback:
             args = _start_args(model="claude-haiku-4-5", provider="anthropic")
             collector.on_llm_start({}, **args)
             collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
-        bucket = collector._fallback_usage[("claude-haiku-4-5", Confidence.UNKNOWN)]
+        bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.UNKNOWN)]
         assert bucket["calls"] == 2
+
+    def test_same_model_distinct_providers_kept_separate(self):
+        """Same model name routed through two providers must bucket separately
+        — otherwise usage gets billed to whichever provider was seen first.
+        Both openai and azure are in OPENAI_FAMILY so this exercises ESTIMATED.
+        """
+        collector = MetricsCollector(start_time=time.time())
+        for provider in ("openai", "azure"):
+            args = _start_args(model="gpt-4o-mini", provider=provider, prompts=["hi"])
+            collector.on_llm_start({}, **args)
+            collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
+        assert ("openai", "gpt-4o-mini", Confidence.ESTIMATED) in collector._fallback_usage
+        assert ("azure", "gpt-4o-mini", Confidence.ESTIMATED) in collector._fallback_usage
 
 
 class TestIterCostEvents:
@@ -297,14 +311,18 @@ class TestIterCostEvents:
         assert unknown[0].quantity == 0
         assert unknown[0].extra == {"missing_usage_calls": 1}
 
-    def test_provider_is_unknown_when_metadata_missing(self):
-        """If on_llm_start never saw a provider for a model, the event tags 'unknown'."""
+    def test_exact_path_keys_by_provider_and_model(self):
+        """Same model name through two providers yields one exact event per provider."""
         collector = MetricsCollector(start_time=time.time())
-        # Bypass on_llm_start — directly feed usage_metadata as the parent would.
-        collector.usage_metadata = {"mystery-model": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}}
+        for provider in ("openai", "azure"):
+            args = _start_args(model="gpt-4o-mini", provider=provider)
+            collector.on_llm_start({}, **args)
+            collector.on_llm_end(_result_with_usage("gpt-4o-mini", 100, 50), run_id=args["run_id"])
 
         events = list(collector.iter_cost_events())
-        assert all(e.provider_type == "unknown" for e in events)
+        providers = {(e.provider_type, e.model_name, e.service_kind) for e in events}
+        assert ("openai", "gpt-4o-mini", ServiceKind.LLM_INPUT) in providers
+        assert ("azure", "gpt-4o-mini", ServiceKind.LLM_INPUT) in providers
 
 
 class TestSplitBuckets:

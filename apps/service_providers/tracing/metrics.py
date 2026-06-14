@@ -46,12 +46,14 @@ class MetricsCollector(UsageMetadataCallbackHandler):
     Counter access is protected by a threading lock because LangGraph
     executes nodes in threads via DjangoSafeContextThreadPoolExecutor.
 
-    Cost tracking extension: captures provider slug per model from the
-    `ocs_provider_type` metadata set by `LlmService.get_chat_model`, plus
-    per-call pending state so `on_llm_end` can route missing-usage calls
-    into a fallback bucket (tiktoken-estimated for OpenAI family, zero-
-    quantity for everything else). `iter_cost_events()` drains both the
-    exact `usage_metadata` and the fallback buckets into `UsageEvent`s.
+    Cost tracking extension: holds per-call pending state keyed by `run_id`
+    so `on_llm_end` can attribute each response to its originating
+    (provider, model). EXACT usage routes to `_exact_usage`; missing usage
+    routes to `_fallback_usage` (tiktoken-estimated for OpenAI family, zero-
+    quantity for everything else). Both buckets are keyed by
+    (provider, model) so the same model name routed through two different
+    providers in one trace gets billed separately. `iter_cost_events()`
+    drains both into `UsageEvent`s.
     """
 
     def __init__(self, start_time: float):
@@ -61,9 +63,9 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         self._toolcalls = 0
         # Cost-tracking state. All access guarded by `_counter_lock`; the
         # parent's `_lock` covers `self.usage_metadata` separately.
-        self._model_providers: dict[str, str] = {}
         self._pending_calls: dict[UUID, dict[str, Any]] = {}
-        self._fallback_usage: dict[tuple[str, Confidence], dict[str, int]] = {}
+        self._exact_usage: dict[tuple[str, str], dict[str, Any]] = {}
+        self._fallback_usage: dict[tuple[str, str, Confidence], dict[str, int]] = {}
 
     def on_llm_start(
         self,
@@ -79,21 +81,20 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             invocation = kwargs.get("invocation_params") or {}
             model = invocation.get("model") or meta.get("ls_model_name")
             provider = meta.get("ocs_provider_type")
-            if model and provider:
-                self._model_providers.setdefault(model, provider)
-                # Per-call state only when the callback manager supplies a
-                # run_id (production path). Tests bypassing the manager
-                # still exercise turn counting + parent usage accumulation.
-                if run_id is not None:
-                    self._pending_calls[run_id] = {
-                        "model": model,
-                        "provider": provider,
-                        # Prompts retained only for the tiktoken estimate path.
-                        "prompts": prompts if provider in OPENAI_FAMILY else None,
-                    }
+            # Per-call state only when the callback manager supplies a run_id
+            # (production path). Tests bypassing the manager still exercise
+            # turn counting + parent usage accumulation.
+            if model and provider and run_id is not None:
+                self._pending_calls[run_id] = {
+                    "model": model,
+                    "provider": provider,
+                    # Prompts retained only for the tiktoken estimate path.
+                    "prompts": prompts if provider in OPENAI_FAMILY else None,
+                }
 
     def on_llm_end(self, response, *, run_id: UUID | None = None, **kwargs: Any) -> None:
-        # Parent populates self.usage_metadata for the EXACT path.
+        # Parent still tracks self.usage_metadata for get_metrics()'s
+        # token totals; the cost path uses our own (provider, model) buckets.
         super().on_llm_end(response, run_id=run_id, **kwargs)
         if run_id is None:
             return
@@ -101,19 +102,34 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             pending = self._pending_calls.pop(run_id, None)
         if pending is None:
             return
+        provider, model = pending["provider"], pending["model"]
         if has_usage_metadata(response):
+            self._exact_add(provider, model, _sum_response_usage(response))
             return
-        if pending["provider"] in OPENAI_FAMILY and pending["prompts"]:
-            input_tokens = tiktoken_count(pending["model"], pending["prompts"])
-            output_tokens = tiktoken_count(pending["model"], response_text(response))
-            self._fallback_add(pending["model"], Confidence.ESTIMATED, input_tokens, output_tokens)
+        if provider in OPENAI_FAMILY and pending["prompts"]:
+            input_tokens = tiktoken_count(model, pending["prompts"])
+            output_tokens = tiktoken_count(model, response_text(response))
+            self._fallback_add(provider, model, Confidence.ESTIMATED, input_tokens, output_tokens)
         else:
-            self._fallback_add(pending["model"], Confidence.UNKNOWN, 0, 0)
+            self._fallback_add(provider, model, Confidence.UNKNOWN, 0, 0)
 
-    def _fallback_add(self, model: str, confidence: Confidence, input_tokens: int, output_tokens: int) -> None:
+    def _exact_add(self, provider: str, model: str, usage: dict[str, Any]) -> None:
+        with self._counter_lock:
+            bucket = self._exact_usage.setdefault(
+                (provider, model),
+                {"input_tokens": 0, "output_tokens": 0, "input_token_details": {}},
+            )
+            bucket["input_tokens"] += usage.get("input_tokens", 0)
+            bucket["output_tokens"] += usage.get("output_tokens", 0)
+            for k, v in (usage.get("input_token_details") or {}).items():
+                bucket["input_token_details"][k] = bucket["input_token_details"].get(k, 0) + (v or 0)
+
+    def _fallback_add(
+        self, provider: str, model: str, confidence: Confidence, input_tokens: int, output_tokens: int
+    ) -> None:
         with self._counter_lock:
             bucket = self._fallback_usage.setdefault(
-                (model, confidence),
+                (provider, model, confidence),
                 {"input_tokens": 0, "output_tokens": 0, "calls": 0},
             )
             bucket["input_tokens"] += input_tokens
@@ -124,21 +140,19 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         """Drain accumulated usage as UsageEvents for the cost recorder.
 
         Yields events from two sources:
-          - `self.usage_metadata` (parent class) -> confidence=EXACT.
+          - `self._exact_usage` -> confidence=EXACT (one bucket per (provider, model)).
           - `self._fallback_usage` -> confidence=ESTIMATED or UNKNOWN.
 
         Zero-quantity buckets are skipped except for UNKNOWN, which yields
-        a single zero-quantity LLM_INPUT row per (model, provider) so the
+        a single zero-quantity LLM_INPUT row per (provider, model) so the
         weekly digest can surface coverage gaps.
         """
-        with self._lock:
-            exact_snapshot = dict(self.usage_metadata)
         with self._counter_lock:
-            providers_snapshot = dict(self._model_providers)
+            exact_snapshot = dict(self._exact_usage)
             fallback_snapshot = dict(self._fallback_usage)
 
-        yield from _iter_exact_events(exact_snapshot, providers_snapshot)
-        yield from _iter_fallback_events(fallback_snapshot, providers_snapshot)
+        yield from _iter_exact_events(exact_snapshot)
+        yield from _iter_fallback_events(fallback_snapshot)
 
     def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> None:
         with self._counter_lock:
@@ -166,13 +180,24 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         )
 
 
+def _sum_response_usage(response) -> dict[str, Any]:
+    """Sum `usage_metadata` across all generations on a chat response."""
+    totals: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "input_token_details": {}}
+    for gens in response.generations:
+        for g in gens:
+            usage = getattr(getattr(g, "message", None), "usage_metadata", None) or {}
+            totals["input_tokens"] += usage.get("input_tokens", 0) or 0
+            totals["output_tokens"] += usage.get("output_tokens", 0) or 0
+            for k, v in (usage.get("input_token_details") or {}).items():
+                totals["input_token_details"][k] = totals["input_token_details"].get(k, 0) + (v or 0)
+    return totals
+
+
 def _iter_exact_events(
-    exact_snapshot: dict[str, dict],
-    providers_snapshot: dict[str, str],
+    exact_snapshot: dict[tuple[str, str], dict],
 ) -> Iterator[UsageEvent]:
-    """Yield EXACT events from the parent class's `usage_metadata` dict."""
-    for model_name, usage in exact_snapshot.items():
-        provider = providers_snapshot.get(model_name, "unknown")
+    """Yield EXACT events from `_exact_usage` (keyed by (provider, model))."""
+    for (provider, model_name), usage in exact_snapshot.items():
         yield from _exact_events_for_model(model_name, provider, usage)
 
 
@@ -189,12 +214,10 @@ def _exact_events_for_model(model_name: str, provider: str, usage: dict) -> Iter
 
 
 def _iter_fallback_events(
-    fallback_snapshot: dict[tuple[str, Confidence], dict[str, int]],
-    providers_snapshot: dict[str, str],
+    fallback_snapshot: dict[tuple[str, str, Confidence], dict[str, int]],
 ) -> Iterator[UsageEvent]:
     """Yield ESTIMATED and UNKNOWN events from the missing-usage fallback buckets."""
-    for (model_name, confidence), bucket in fallback_snapshot.items():
-        provider = providers_snapshot.get(model_name, "unknown")
+    for (provider, model_name, confidence), bucket in fallback_snapshot.items():
         if confidence is Confidence.UNKNOWN:
             yield _unknown_event(model_name, provider, bucket)
         else:
