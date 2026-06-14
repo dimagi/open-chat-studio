@@ -185,7 +185,7 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -205,7 +205,7 @@ jobs:
         run: |
           BRANCH_NAME="auto-models/$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code
         id: claude
@@ -251,7 +251,38 @@ jobs:
                - Strip `llm_model_migration()` (and any `notify_deprecated_models` /
                  `remove_deprecated_models` data migrations) from earlier migrations
                  in `apps/service_providers/migrations/` so they only run once.
-            4. If a candidate's `context_window` (or other info you need, e.g.
+            4. Also add pricing rules for the model so cost-tracking can resolve
+               its rate. For each `(provider, model)` you registered above:
+               - Extract pricing from `m["details"]` in `matched_models.json` —
+                 llm-stats.com is the primary source. Look for fields like
+                 `input_price`, `output_price`, `cached_input_price` (names may
+                 vary; inspect the actual payload). These are typically per
+                 million tokens or per token; OCS stores them per 1K tokens, so
+                 convert: per-million ÷ 1000, per-token × 1000.
+               - If llm-stats has no pricing for a model, fall back to LiteLLM:
+                 fetch https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+                 and look up the model by name. LiteLLM stores `input_cost_per_token`
+                 / `output_cost_per_token` / `cache_read_input_token_cost`; multiply
+                 each by 1000 for the per-1K-tokens unit.
+               - Append entries to `apps/cost_tracking/seed_data/llm_pricing.json`.
+                 The shape is:
+                 `{"provider_type": "<slug>", "model_name": "<name>", "rules": [
+                   {"service_kind": "llm_input", "unit_price": "0.00015"}, ...]}`.
+                 Service kinds: `llm_input`, `llm_output`, `llm_cached_input`,
+                 `llm_cache_write` (Anthropic only). Include only the kinds for
+                 which a rate exists.
+               - Create a Django data migration in `apps/cost_tracking/migrations/`
+                 whose operations are exactly `[load_pricing_data()]` — import
+                 `load_pricing_data` from `apps.cost_tracking.migration_utils`.
+                 The next migration number is N+1 of the highest existing one in
+                 that directory. The migration's `dependencies` should reference
+                 the previous cost_tracking migration.
+               - If NEITHER source has pricing for a candidate, register the
+                 model in default_models.py anyway but skip the pricing rules —
+                 the row will surface in the digest's "Unpriced models" panel
+                 for an operator to backfill manually. Flag this in the PR
+                 description's `## Needs follow-up` section.
+            5. If a candidate's `context_window` (or other info you need, e.g.
                parameter ranges, modality, deprecation hints) is missing from the
                top-level payload, consult `details.sources` in the model detail
                response — it typically has keys like `api_ref`, `paper`, `weights`,
@@ -261,7 +292,7 @@ jobs:
                If a candidate has a `details_error` field set, the detail fetch
                failed — still try to add the model using only the top-level fields
                and any knowledge you have about the model family.
-            5. If after consulting sources you STILL cannot determine `context_window`
+            6. If after consulting sources you STILL cannot determine `context_window`
                or other essential info, you should STILL add the model but:
                - Use a conservative placeholder token_limit (e.g. 128000) and add a
                  comment on that line: `# TODO: verify token_limit — context_window
@@ -270,31 +301,37 @@ jobs:
                  section, listing each model with the specific info that was
                  missing (token_limit, parameters class choice, etc.) and the
                  sources you already checked.
-            6. Run linters and tests on the changed files:
-               - `uv run ruff check apps/service_providers/ --fix`
-               - `uv run ruff format apps/service_providers/`
-               - `uv run pytest apps/service_providers/tests/test_default_models.py -v`
+            7. Run linters and tests on the changed files:
+               - `uv run ruff check apps/service_providers/ apps/cost_tracking/ --fix`
+               - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
+               - `uv run pytest apps/service_providers/tests/test_default_models.py apps/cost_tracking/tests/ -v`
                If the migration touched other files, lint/test those too.
-            7. Commit the changes with a descriptive message.
-            8. Push the branch and open a PR against `main`. Use the repo's PR
+            8. Commit the changes with a descriptive message.
+            9. Push the branch and open a PR against `main`. Use the repo's PR
                template (`.github/pull_request_template.md`) and fill it in.
                - PR title: `Auto: add new LLM models from llm-stats.com (YYYY-MM-DD)`
                  (use today's UTC date).
                - The PR description MUST:
                  * List each added model and its source URL from the payload (the
                    `url` field — typically `https://llm-stats.com/models/<id>`).
+                 * For each added model, list the pricing rules written to the
+                   seed and which source they came from (`llm-stats.com`,
+                   `LiteLLM`, or `none — unpriced`).
                  * Include the line: `Model metadata sourced from
                    [llm-stats.com](https://llm-stats.com) via the zeroeval Stats
-                   API.`
+                   API. Pricing sourced from llm-stats.com with LiteLLM
+                   (https://github.com/BerriAI/litellm) as fallback.`
                  * Include a `## Needs follow-up` section listing any models where
-                   you couldn't gather enough info, with what's missing.
+                   you couldn't gather enough info OR couldn't price, with what's
+                   missing.
                  * Check the "The migrations are backwards compatible" box —
-                   `llm_model_migration()` is additive (only seeds new rows) so
-                   these migrations are inherently backwards-compatible.
-            9. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            10. If after dedup there is nothing to add, comment-only outcome: do NOT
+                   `llm_model_migration()` and `load_pricing_data()` are both
+                   additive (only seed new rows) so these migrations are
+                   inherently backwards-compatible.
+            10. Apply the `claude` and `auto-models` labels to the PR if they exist.
+            11. If after dedup there is nothing to add, comment-only outcome: do NOT
                 open an empty PR — instead print a short summary to stdout and exit.
-            11. ALWAYS write a decision report to `./decision_report.md` before
+            12. ALWAYS write a decision report to `./decision_report.md` before
                 exiting, regardless of outcome (PR opened, nothing to add, or
                 partial). Use this exact structure:
 
@@ -311,6 +348,7 @@ jobs:
                 ### `<model-id>` (org: `<org>`)
                 - **Verdict:** Added | Skipped | Needs follow-up
                 - **Mapped providers:** <e.g. openai, azure>  (if added)
+                - **Pricing:** <llm-stats.com | LiteLLM | none — unpriced>  (if added)
                 - **Reason:** <one-sentence rationale — why added/skipped, or
                   what info was missing>
                 - **Source:** <llm-stats.com URL from payload>
