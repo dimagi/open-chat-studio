@@ -51,9 +51,8 @@ class AnthropicBuiltinTool(dict):
 
 
 class LlmService(pydantic.BaseModel):
-    # Default of "unknown" so tests / direct instantiation don't raise on
-    # access. Production paths go through `LlmProviderTypes.get_llm_service`
-    # which always overrides this with the OCS provider slug.
+    # Production paths set this via LlmProviderTypes.get_llm_service; the
+    # default lets direct instantiation (mostly tests) read it without raising.
     _type: str = "unknown"
     supports_transcription: bool = False
     supports_assistants: bool = False
