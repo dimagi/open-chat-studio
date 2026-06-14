@@ -13,6 +13,7 @@ from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     boolean_node,
+    create_pipeline_model,
     create_runnable,
     end_node,
     llm_response_with_prompt_node,
@@ -431,6 +432,57 @@ class TestPipeline:
         # Double check that the node didn't archive the assistant
         assistant.refresh_from_db()
         assert assistant.is_archived is False
+
+
+@pytest.mark.django_db()
+class TestUpdateNodesFromData:
+    def test_re_adding_archived_node_flow_id_creates_fresh_working_node(self):
+        """Removing a node that has versions archives it; revert re-introduces the same
+        flow_id, which must yield a fresh editable working node without colliding with
+        the archived row."""
+        start, template, end = start_node(), render_template_node(), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+        pipeline.create_new_version()  # the template node now has a version
+
+        original = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
+        node_version = original.versions.get()
+
+        def set_nodes(node_dicts):
+            pipeline.data = {"edges": [], "nodes": [{"id": n["id"], "data": n} for n in node_dicts]}
+            pipeline.update_nodes_from_data()
+
+        # remove the template node; it has a version so it is archived rather than deleted
+        set_nodes([start, end])
+        original.refresh_from_db()
+        assert original.is_archived
+
+        # re-add the same flow_id
+        set_nodes([start, template, end])
+
+        re_added = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
+        assert re_added.id != original.id
+        assert re_added.is_working_version
+        assert not re_added.is_archived
+        assert re_added.params["template_string"] == template["params"]["template_string"]
+
+        # the archived node and its version history are untouched
+        original.refresh_from_db()
+        node_version.refresh_from_db()
+        assert original.is_archived
+        assert node_version.working_version_id == original.id
+        assert Node.objects.get_all().filter(pipeline=pipeline, flow_id=template["id"]).count() == 2
+
+        # the re-added node is editable in place; no duplicate row appears
+        template["params"]["template_string"] = "updated: {{ input }}"
+        set_nodes([start, template, end])
+        re_added.refresh_from_db()
+        assert re_added.params["template_string"] == "updated: {{ input }}"
+        assert Node.objects.filter(pipeline=pipeline, flow_id=template["id"]).count() == 1
+
+        # publishing again versions the re-added node, not the archived one
+        pipeline.create_new_version()
+        assert re_added.versions.count() == 1
+        assert original.versions.count() == 1
 
 
 @pytest.mark.django_db()

@@ -20,8 +20,8 @@ urlpatterns = [
     path("<int:experiment_id>/events/", include("apps.events.urls")),
     path(
         "<int:experiment_id>/versions/status",
-        views.chatbot_version_create_status,
-        name="check_version_creation_status",
+        views.chatbot_version_operation_status,
+        name="check_version_operation_status",
     ),
     path("<int:experiment_id>/sessions-table/", views.ChatbotSessionsTableView.as_view(), name="sessions-list"),
     path(

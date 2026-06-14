@@ -42,7 +42,7 @@ from apps.experiments.filters import (
 from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
-from apps.experiments.tasks import async_create_experiment_version
+from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     start_session_public,
@@ -288,11 +288,7 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
             form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
 
-        task_id = async_create_experiment_version.delay(
-            experiment_id=self.object.id, version_description="", make_default=True
-        )
-        self.object.create_version_task_id = task_id
-        self.object.save(update_fields=["create_version_task_id"])
+        start_version_creation(self.object, make_default=True)
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -441,7 +437,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         if working_version.is_archived:
             raise PermissionDenied("Unable to version an archived chatbot.")
 
-        if working_version.create_version_task_id:
+        if working_version.version_operation_in_progress:
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
@@ -451,11 +447,9 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
             messages.error(self.request, error_msg)
             return render(self.request, self.template_name, self.get_context_data(form=form))
 
-        task_id = async_create_experiment_version.delay(
-            experiment_id=working_version.id, version_description=description, make_default=is_default
-        )
-        working_version.create_version_task_id = task_id
-        working_version.save(update_fields=["create_version_task_id"])
+        if not start_version_creation(working_version, version_description=description, make_default=is_default):
+            messages.error(self.request, "Version creation is already in progress.")
+            return HttpResponseRedirect(self.get_success_url())
         messages.success(self.request, "Creating new version. This might take a few minutes.")
 
         return HttpResponseRedirect(self.get_success_url())
@@ -503,11 +497,12 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
 
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
-def chatbot_version_create_status(
+def chatbot_version_operation_status(
     request,
     team_slug: str,
     experiment_id: int,
 ):
+    """Poll target for any in-flight version operation (publish, revert, ...)."""
     experiment = Experiment.objects.get(id=experiment_id, team=request.team)
     return TemplateResponse(
         request,
@@ -515,7 +510,9 @@ def chatbot_version_create_status(
         {
             "active_tab": "chatbots",
             "experiment": experiment,
-            "trigger_refresh": experiment.create_version_task_id is not None,
+            # this endpoint is only polled while an operation is in flight, so the
+            # response that shows the operation has finished must trigger a refresh
+            "trigger_refresh": True,
         },
     )
 
@@ -818,11 +815,7 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             # copy chatbot
             new_experiment = experiment.create_new_version(make_default=False, is_copy=True, name=new_name)
             # create default version for copied chatbot
-            task_id = async_create_experiment_version.delay(
-                experiment_id=new_experiment.id, version_description="", make_default=True
-            )
-            new_experiment.create_version_task_id = task_id
-            new_experiment.save(update_fields=["create_version_task_id"])
+            start_version_creation(new_experiment, make_default=True)
             return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
     experiment_id = kwargs["pk"]
     return single_chatbot_home(request, team_slug, experiment_id)

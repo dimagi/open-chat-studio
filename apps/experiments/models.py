@@ -38,6 +38,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.events.versioning import sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -535,6 +536,49 @@ class Experiment(BaseTeamModel, VersionsMixin):
     DEFAULT_VERSION_NUMBER = 0
     TREND_CACHE_KEY_TEMPLATE = "experiment_trend_data_{experiment_id}"
 
+    # Every concrete model field must appear in exactly one of the two sets below
+    # (enforced by a guard test). Version creation clones the whole row, so a new
+    # field is versioned content unless it is explicitly classified as identity/state.
+    VERSIONED_CONTENT_FIELDS = frozenset(
+        {
+            "name",
+            "description",
+            "pipeline",
+            "seed_message",
+            "consent_form",
+            "voice_provider",
+            "synthetic_voice",
+            "conversational_consent_enabled",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "trace_provider",
+            "participant_allowlist",
+            "debug_mode_enabled",
+            "file_uploads_enabled",
+        }
+    )
+    """The versioned snapshot: fields cloned into a version on publish, and the
+    surface a revert copies from a version back onto the working row."""
+
+    VERSION_IDENTITY_FIELDS = frozenset(
+        {
+            "id",
+            "team",
+            "owner",
+            "public_id",
+            "created_at",
+            "updated_at",
+            "working_version",
+            "version_number",
+            "is_default_version",
+            "is_archived",
+            "version_description",
+            "create_version_task_id",
+        }
+    )
+    """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
+    cloning (or owned by a single row) and never copied between rows in a family."""
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -842,6 +886,32 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def api_url(self):
         return self.get_api_url()
 
+    # `create_version_task_id` doubles as a lock guarding all long-running version
+    # operations (publish, revert): non-empty means an operation is in flight.
+
+    @property
+    def version_operation_in_progress(self) -> bool:
+        return bool(self.create_version_task_id)
+
+    def acquire_version_operation_lock(self, task_id: str) -> bool:
+        """Atomically claim the version-operation lock for `task_id`.
+
+        Returns False when another version operation is already in flight.
+        """
+        acquired = (
+            Experiment.objects.get_all()
+            .filter(id=self.id, create_version_task_id="")
+            .update(create_version_task_id=task_id, audit_action=AuditAction.AUDIT)
+            == 1
+        )
+        if acquired:
+            self.create_version_task_id = task_id
+        return acquired
+
+    @classmethod
+    def release_version_operation_lock(cls, experiment_id: int):
+        cls.objects.get_all().filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
+
     @transaction.atomic()
     def create_new_version(  # ty: ignore[invalid-method-override]
         self,
@@ -884,12 +954,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
 
-        self._copy_trigger_to_new_version(
-            trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
-        )
-        self._copy_trigger_to_new_version(
-            trigger_queryset=self.timeout_triggers, new_version=new_version, is_copy=is_copy
-        )
+        sync_triggers(self, new_version, is_copy=is_copy)
         self._copy_pipeline_to_new_version(new_version, is_copy)
 
         return new_version
@@ -956,10 +1021,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
-
-    def _copy_trigger_to_new_version(self, trigger_queryset, new_version, is_copy: bool = False):
-        for trigger in trigger_queryset.all():
-            trigger.create_new_version(new_experiment=new_version, is_copy=is_copy)
 
     @property
     def is_public(self) -> bool:
