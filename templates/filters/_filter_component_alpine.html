@@ -211,18 +211,26 @@
 
         for (let i = 0; i < csvString.length; i++) {
           const char = csvString[i];
+
           if (char === '"') {
-            inQuotes = !inQuotes;
+            if (inQuotes && csvString[i + 1] === '"') {
+              // Escaped quote ("")
+              current += '"';
+              i++;
+            } else {
+              // Start/end quoted section
+              inQuotes = !inQuotes;
+            }
           } else if (char === '~' && !inQuotes) {
-            values.push(current.replace(/^"|"$/g, ''));
+            values.push(current);
             current = '';
           } else {
             current += char;
           }
         }
-        if (current) {
-          values.push(current.replace(/^"|"$/g, ''));
-        }
+
+        values.push(current);
+
         return values;
       },
 
