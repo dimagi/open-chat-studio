@@ -203,17 +203,56 @@
           }
         }
       },
+      parseCSVTildeValue(csvString) {
+        // Parse tilde-separated values, respecting quoted strings
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < csvString.length; i++) {
+          const char = csvString[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === '~' && !inQuotes) {
+            values.push(current.replace(/^"|"$/g, ''));
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        if (current) {
+          values.push(current.replace(/^"|"$/g, ''));
+        }
+        return values;
+      },
+
       loadFiltersFromQueryString(queryString) {
         const urlParams = new URLSearchParams(queryString);
         const filters = [];
-        let maxIndex = -1;
-        for (const [key, value] of urlParams.entries()) {
-          const match = key.match(/filter_(\d+)_column/);
-          if (match) {
-            const index = parseInt(match[1]);
-            if (index > maxIndex) maxIndex = index;
+        const newFormatColumns = new Set();
+
+        // Detect columns using new format (f_*) vs old format (filter_*_column)
+        for (const [key] of urlParams.entries()) {
+          if (key.startsWith('f_')) {
+            newFormatColumns.add(key.substring(2));
           }
         }
+
+        let maxIndex = -1;
+
+        // Load new format filters
+        let filterIndex = 0;
+        for (const columnName of newFormatColumns) {
+          const opKey = `op_${columnName}`;
+          if (urlParams.has(`f_${columnName}`) && urlParams.has(opKey)) {
+            const valueParam = urlParams.get(`f_${columnName}`);
+            const operatorParam = urlParams.get(opKey);
+
+            if (filterIndex > maxIndex) maxIndex = filterIndex;
+            filterIndex++;
+          }
+        }
+
         for (let i = 0; i <= maxIndex; i++) {
           filters.push({
             column: '',
@@ -226,30 +265,36 @@
             filteredOptions: []
           });
         }
-        for (let i = 0; i <= maxIndex; i++) {
-          const columnParam = urlParams.get(`filter_${i}_column`);
-          const operatorParam = urlParams.get(`filter_${i}_operator`);
-          const valueParam = urlParams.get(`filter_${i}_value`);
 
-          if (columnParam && operatorParam) {
-            const filter = filters[i];
-            filter.column = columnParam;
+        // Process new format filters
+        let newFormatIndex = 0;
+        for (const columnName of Array.from(newFormatColumns).sort()) {
+          const opKey = `op_${columnName}`;
+          if (urlParams.has(`f_${columnName}`) && urlParams.has(opKey)) {
+            const valueParam = urlParams.get(`f_${columnName}`);
+            const operatorParam = urlParams.get(opKey);
 
-            if (this.filterData.columns[columnParam]) {
-              filter.availableOperators = this.filterData.columns[columnParam].operators;
-              filter.operator = operatorParam;
-              if (operatorParam === 'range' && valueParam) {
-                filter.options = this.filterData.columns[columnParam].options || this.dateRangeOptions;
-                const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
-                if (matchedOption) {
-                  filter.value = matchedOption.value.toString();
-                } else {
-                  filter.value = valueParam;
+            const filterIndex = Object.keys(filters).length - Array.from(newFormatColumns).length + newFormatIndex;
+            if (filterIndex >= 0 && filterIndex < filters.length) {
+              const filter = filters[filterIndex];
+              filter.column = columnName;
+
+              if (this.filterData.columns[columnName]) {
+                filter.availableOperators = this.filterData.columns[columnName].operators;
+                filter.operator = operatorParam;
+
+                if (operatorParam === 'range' && valueParam) {
+                  filter.options = this.filterData.columns[columnName].options || this.dateRangeOptions;
+                  const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
+                  if (matchedOption) {
+                    filter.value = matchedOption.value.toString();
+                  } else {
+                    filter.value = valueParam;
+                  }
                 }
-              }
-              else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
-                try {
-                  const parsedValues = JSON.parse(valueParam);
+                else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
+                  // Parse CSV with tilde separator
+                  const parsedValues = this.parseCSVTildeValue(valueParam);
                   if (this.isObjectChoiceFilter(filter)) {
                     filter.selectedValues = parsedValues.filter(id => {
                       return this.filterData.columns[filter.column].options.findIndex(exp => String(exp.id) === String(id)) >= 0;
@@ -257,18 +302,18 @@
                   } else {
                     filter.selectedValues = parsedValues;
                   }
-                  if (this.filterData.columns[columnParam].options) {
-                    filter.filteredOptions = [...this.filterData.columns[columnParam].options];
+                  if (this.filterData.columns[columnName].options) {
+                    filter.filteredOptions = [...this.filterData.columns[columnName].options];
                   }
-                } catch (e) {
-                  console.error('Error parsing filter value from URL:', e);
+                } else if (valueParam) {
+                  filter.value = valueParam;
                 }
-              } else if (valueParam) {
-                filter.value = valueParam;
               }
             }
+            newFormatIndex++;
           }
         }
+
         this.filterData.filters = this.getActiveFilters(filters);
         this.filterData.showFilters = false;
         if (this.filterData.filters.length === 0) {
@@ -279,6 +324,17 @@
         this.syncChatbotVersionsField(this.filterData.filters);
       },
 
+      serializeCSVTildeValues(values) {
+        // Serialize values for tilde-separated format, quoting values containing ~
+        return values.map(v => {
+          const str = String(v);
+          if (str.includes('~')) {
+            return `"${str.replace(/"/g, '\\"')}"`;
+          }
+          return str;
+        }).join('~');
+      },
+
       updateUrlWithFilters() {
         let activeFilters = this.getActiveFilters(this.filterData.filters);
         const params = new URLSearchParams(window.location.search);
@@ -287,10 +343,15 @@
             params.delete(key);
           }
         });
-        activeFilters.forEach((filter, i) => {
-          params.set(`filter_${i}_column`, filter.column);
-          params.set(`filter_${i}_operator`, filter.operator);
 
+        // Remove old format new parameters
+        [...params.keys()].forEach(key => {
+          if (key.startsWith('f_') || key.startsWith('op_')) {
+            params.delete(key);
+          }
+        });
+
+        activeFilters.forEach((filter) => {
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
               let valuesToSerialize = filter.selectedValues;
@@ -300,11 +361,12 @@
                   return option ? option.id : label;
                 });
               }
-              params.set(`filter_${i}_value`, JSON.stringify(valuesToSerialize));
+              params.set(`f_${filter.column}`, this.serializeCSVTildeValues(valuesToSerialize));
             }
           } else {
-            params.set(`filter_${i}_value`, filter.value);
+            params.set(`f_${filter.column}`, filter.value);
           }
+          params.set(`op_${filter.column}`, filter.operator);
         });
 
         const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
@@ -316,10 +378,7 @@
 
         let filterParams = {};
         let activeFilters = this.getActiveFilters(this.filterData.filters);
-        activeFilters.forEach((filter, i) => {
-          filterParams[`filter_${i}_column`] = filter.column;
-          filterParams[`filter_${i}_operator`] = filter.operator;
-
+        activeFilters.forEach((filter) => {
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
               let valuesToSend = filter.selectedValues;
@@ -329,11 +388,12 @@
                   return option ? option.id : label;
                 });
               }
-              filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
+              filterParams[`f_${filter.column}`] = this.serializeCSVTildeValues(valuesToSend);
             }
           } else {
-            filterParams[`filter_${i}_value`] = filter.value;
+            filterParams[`f_${filter.column}`] = filter.value;
           }
+          filterParams[`op_${filter.column}`] = filter.operator;
         });
 
         this.syncChatbotVersionsField(activeFilters);
@@ -451,13 +511,14 @@
       setLabelFromURL() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        const matchedIndex = this.getDateRangeFilterIndex(params);
-        if (matchedIndex !== null) {
-          const filterValue = params.get(`filter_${matchedIndex}_value`);
-          const found = this.dateRangeOptions.find(opt => opt.value === filterValue);
+        const dateRangeColumn = '{{ df_date_range_column_name }}';
+
+        // Check new format
+        if (params.has(`f_${dateRangeColumn}`) && params.has(`op_${dateRangeColumn}`)) {
+          const filterValue = params.get(`f_${dateRangeColumn}`);
+          const found = this.dateRangeOptions.find(opt => opt.value === filterValue || opt.label === filterValue);
           this.selectedLabel = found?.label || '';
-        } else {
-          this.selectedLabel = '';
+          return;
         }
       },
 
