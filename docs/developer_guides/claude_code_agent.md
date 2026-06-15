@@ -1,25 +1,24 @@
 # Claude Code Agents
 
-GitHub Actions workflows using Claude Code for autonomous issue implementation, incremental task progress, and CI follow-up.
-
-These workflows use [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) to run Claude Code inside GitHub Actions. Each run gives Claude access to the repository, a shell, and the GitHub CLI. Claude autonomously reads code, writes changes, runs tests, and opens PRs based on its instructions.
+This project has GitHub Actions workflows that use Claude Code for [autonomous issue implementation](#1-implementing-a-single-issue), [incremental task progress](#2-working-through-a-multi-task-project), and [CI follow-up](#automatic-follow-up). Additionally, Claude Code is used to review PRs and [Dependabot PRs](#dependabot-pr-review).
 
 ## Use Cases
 
-- **Label an issue, get a PR** — apply the `claude` label to any GitHub issue and Claude will create a branch, write the code, and open a PR for review. [How to use](#1-implementing-a-single-issue)
-- **Tackle large projects one task at a time** — create a checklist issue and Claude implements one item per day, opening a PR for each so you can review before the next task begins. [How to use](#2-working-through-a-multi-task-project)
-- **Auto-repair Claude PRs** — after Claude opens a PR, CI results and reviewer comments are automatically checked, failures are fixed, and corrections are pushed (one round per PR). [How it works](#automatic-follow-up)
-- **Understand Dependabot updates before merging** — when GitHub Dependabot opens a dependency PR, Claude reads the changelogs, flags breaking changes, and posts a merge recommendation. [How it works](#dependabot-pr-review)
+| I want to... | Do this |
+|---|---|
+| Fix a bug or implement a well-defined feature | [Apply the `claude` label to the issue](#1-implementing-a-single-issue) |
+| Understand an issue before Claude starts coding | Comment `@claude draft a plan for this` on the issue |
+| Work through a large project one reviewable step at a time | [Create a checklist issue with the `claude` label](#2-working-through-a-multi-task-project) |
+| Ask a question, request a specific change, or point Claude at a review comment | [Comment `@claude ...` on the issue or PR](#3-asking-or-directing-claude-with-claude) |
+
+
+**Automatic behaviours** (no action needed):
+
+- **Auto-repair** — Claude fixes its own CI failures and addresses reviewer comments automatically, so PRs are in a clean state by the time you review them. [How it works](#automatic-follow-up)
+- **Dependabot review** — every Dependabot PR includes a Claude-written assessment: what changed, whether anything is breaking, and a clear merge recommendation, saving engineers time. [How it works](#dependabot-pr-review)
+- **PR Code Review** — every non-draft, non-fork, non-Dependabot PR automatically receives a Claude code review with findings posted as inline diff comments. [How it works](#pr-code-review)
 
 ## How to Use
-
-### Which workflow to use
-
-| Situation | What to do |
-|---|---|
-| 1) You have a single, well-scoped issue ready to implement | Apply the `claude` label to the issue |
-| 2) You have a larger project with multiple steps you want to review one at a time | Create a checklist issue with the `claude` label |
-| 3) You want Claude to answer a question, explain code, or fix something on an open PR | Mention `@claude` in a comment |
 
 ### 1) Implementing a single issue
 
@@ -27,7 +26,7 @@ Write the issue clearly — the more specific it is about expected behaviour and
 
 1. Open the GitHub issue
 2. Apply the `claude` label
-3. Claude creates a `claude/<issue-number>-<date>` branch, implements the work, and opens a PR with the `claude` label
+3. Claude creates a `claude/<issue-number>-<date>-<time>` branch (e.g. `claude/123-20240518-143022`), implements the work, and opens a PR with the `claude` label
 
 Review and merge the PR as normal. [Automatic follow-up](#automatic-follow-up) will address any CI failures or review comments on the PR.
 
@@ -51,6 +50,16 @@ Use this to ask Claude a question in context, request a specific change to an ex
 - A **PR review body** — to have Claude respond to your review feedback
 
 Claude will push changes to the branch or reply in a new comment.
+
+**Example prompts:**
+
+| Situation | What to comment |
+|---|---|
+| You want a plan before any code is written | `@claude draft a plan for this issue` |
+| Your PR is missing test coverage | `@claude write unit tests for the changes in this PR` |
+| A bot (e.g. Sentry, CodeClimate) left a review comment | `@claude address the review comment from <bot name>` |
+| You want to understand what a file or function does | `@claude explain how X works` |
+| CI is failing and you want Claude to investigate | `@claude the CI is failing — can you diagnose and fix it?` |
 
 ## Issue Format for multi-task projects
 
@@ -87,20 +96,22 @@ like, the better the result.
 
 Each task gets its own section with a checkbox and a context block. Claude uses the checkbox to track progress — keep it on its own line.
 
-## Automatic Follow-up
+## Automatic Workflows
 
-After Claude opens a PR, one round of fixes runs automatically when CI completes. This applies only to `claude/**` branches — it does not trigger on regular developer PRs.
+### Automatic Follow-up
+
+After Claude opens a PR, one round of fixes runs automatically when the **Lint and Test** workflow completes — whether it passed or failed. This applies only to `claude/**` branches — it does not trigger on regular developer PRs.
 
 What you'll see:
 
-- If CI fails, Claude fixes lint, type, test, and lock file issues and pushes a commit
-- If there are review comments, Claude addresses actionable ones
-- A summary comment is added to the PR describing what was changed
-- The `claude-followup-done` label is applied to prevent a second round
+- If CI failed, Claude fixes lint, type, test, and lock file issues and pushes a commit
+- If there are open review comments, Claude addresses actionable ones
+- A summary comment is added to the PR describing what was changed, or confirming no changes were needed
+- The `claude-followup-done` label is applied unconditionally to prevent a second round
 
 **One round only.** If CI still fails after the follow-up, address the remaining issues manually or trigger a new run via `@claude` in a PR comment.
 
-## Dependabot PR Review
+### Dependabot PR Review
 
 This workflow runs automatically on every Dependabot PR. It:
 
@@ -110,6 +121,12 @@ This workflow runs automatically on every Dependabot PR. It:
 4. Posts a review comment with a risk level (LOW/MEDIUM/HIGH) and a merge recommendation (APPROVE / REVIEW_NEEDED / HOLD)
 
 This workflow can also be triggered manually via **Actions > Claude Dependabot PR Review > Run workflow**, providing a PR number.
+
+### PR Code Review
+
+Every non-draft, non-fork, non-Dependabot PR triggers an automated Claude code review. Claude reads the PR diff and posts findings as **inline comments** directly on the changed lines.
+
+There is no manual trigger for this workflow. To get a fresh review, push a new commit.
 
 ## Maintaining These Workflows
 

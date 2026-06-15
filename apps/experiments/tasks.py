@@ -1,10 +1,10 @@
 import time
+from uuid import uuid4
 
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from django.core.files.base import ContentFile
 from django.utils import timezone
-from field_audit.models import AuditAction
 from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
@@ -52,7 +52,31 @@ def async_create_experiment_version(
         with current_team(experiment.team):
             experiment.create_new_version(version_description, make_default)
     finally:
-        Experiment.objects.filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
+        Experiment.release_version_operation_lock(experiment_id)
+
+
+def start_version_creation(experiment, version_description: str = "", make_default: bool = False) -> bool:
+    """Dispatch async version creation under the version-operation lock.
+
+    The lock is acquired before dispatch so a concurrent version operation is
+    rejected atomically. Returns False when another operation is already in flight.
+    """
+    task_id = str(uuid4())
+    if not experiment.acquire_version_operation_lock(task_id):
+        return False
+    try:
+        async_create_experiment_version.apply_async(
+            kwargs={
+                "experiment_id": experiment.id,
+                "version_description": version_description,
+                "make_default": make_default,
+            },
+            task_id=task_id,
+        )
+    except Exception:
+        Experiment.release_version_operation_lock(experiment.id)
+        raise
+    return True
 
 
 @shared_task(bind=True, base=TaskbadgerTask)

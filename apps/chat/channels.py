@@ -458,34 +458,19 @@ class ChannelBase(ABC):
             raise e
 
     def _handle_pre_conversation_requirements(self) -> str | None:
-        """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
-        pre-survey using the conversation thread. We use the session status and a rough state machine to achieve this.
+        """External channels lack a UI, so consent is collected via the conversation thread.
 
-        Here's a breakdown of the flow and the expected session status for each
-        Session started -> status will be SETUP
-        (Status==SETUP) First user message -> set status to PENDING
-
-        (Status==PENDING) User gave consent -> set status to ACTIVE if there isn't a survey
-        (Status==PENDING) User gave consent -> set status to PENDING_PRE_SURVEY if there is a survey
-
-        (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
+        Session started -> status SETUP
+        (SETUP) first user message -> status PENDING, ask for consent
+        (PENDING) user gave consent -> status ACTIVE, start conversation
         """
         if self.experiment_session.status == SessionStatus.SETUP:
             return self._chat_initiated()
         elif self.experiment_session.status == SessionStatus.PENDING:
             if self._user_gave_consent():
-                if not self.experiment.pre_survey:
-                    return self.start_conversation()
-                else:
-                    self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
-                    return self._ask_user_to_take_survey()
-            else:
-                return self._ask_user_for_consent()
-        elif self.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY:
-            if self._user_gave_consent():
                 return self.start_conversation()
             else:
-                return self._ask_user_to_take_survey()
+                return self._ask_user_for_consent()
         return None
 
     def start_conversation(self) -> str | None:
@@ -521,14 +506,6 @@ class ChannelBase(ABC):
         self._send_text_to_user_with_notification(bot_message)
         return bot_message
 
-    def _ask_user_to_take_survey(self):
-        pre_survey_link = self.experiment_session.get_pre_survey_link(self.experiment)
-        confirmation_text = self.experiment.pre_survey.confirmation_text
-        bot_message = confirmation_text.format(survey_link=pre_survey_link)
-        self._add_message_to_history(bot_message, ChatMessageType.AI)
-        self._send_text_to_user_with_notification(bot_message)
-        return bot_message
-
     def _should_handle_pre_conversation_requirements(self):
         """Checks to see if the user went through the pre-conversation formalities, such as giving consent and filling
         out the survey. Since we're using and updating the session's status during this flow, simply checking the
@@ -537,7 +514,6 @@ class ChannelBase(ABC):
         return self.experiment_session.status in [
             SessionStatus.SETUP,
             SessionStatus.PENDING,
-            SessionStatus.PENDING_PRE_SURVEY,
         ]
 
     def _user_gave_consent(self) -> bool:

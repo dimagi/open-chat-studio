@@ -17,7 +17,7 @@ from apps.channels.tasks import handle_commcare_connect_message
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ParticipantFactory
+from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 
 
 def _setup_participant(experiment) -> tuple:
@@ -138,6 +138,32 @@ class TestApiEndpoint:
         )
         assert response.status_code == 400
         assert response.json() == {"messages": [{"timestamp": ["This field may not be null."]}]}
+
+    @patch("apps.channels.views.tasks.handle_commcare_connect_message")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_duplicate_rows_route_to_oldest(self, handle_message_mock, client, experiment, caplog):
+        """If duplicate rows hold the same channel_id (issue #3620), route the message to the
+        oldest row instead of raising MultipleObjectsReturned."""
+        commcare_connect_channel_id, encryption_key, _, oldest = _setup_participant(experiment)
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        ParticipantData.objects.create(
+            team=experiment.team,
+            participant=oldest.participant,
+            experiment=other_experiment,
+            system_metadata=oldest.system_metadata,
+        )
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id)
+
+        response = client.post(
+            reverse("channels:new_connect_message"),
+            json.dumps(payload),
+            headers=self._get_request_headers(payload),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        assert handle_message_mock.delay.call_args.kwargs["participant_data_id"] == oldest.id
+        assert "Multiple ParticipantData rows" in caplog.text
 
     @pytest.mark.parametrize(
         ("missing_record", "expected_response"),

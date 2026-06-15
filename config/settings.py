@@ -125,6 +125,7 @@ PROJECT_APPS = [
     "apps.oauth",
     "apps.ocs_notifications",
     "apps.prelogin",
+    "apps.cost_tracking",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -618,6 +619,9 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.logging import ignore_logger
 
     ignore_logger("ocs.request")
+    # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
+    # so Django correctly rejects them with a 400. These are pure noise in Sentry.
+    ignore_logger("django.security.DisallowedHost")
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,

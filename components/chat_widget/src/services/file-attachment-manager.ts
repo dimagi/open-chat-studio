@@ -22,7 +22,8 @@ export interface UploadContext {
   sessionId: string;
   participantId: string;
   participantName?: string;
-  sessionToken?: string;
+  /** Auth headers (session token, CSRF, widget version) — see ChatSessionService.getUploadHeaders. */
+  headers?: Record<string, string>;
 }
 
 export interface UploadResult {
@@ -110,13 +111,9 @@ export class FileAttachmentManager {
     }
 
     try {
-      const headers: Record<string, string> = {};
-      if (context.sessionToken) {
-        headers['X-Session-Token'] = context.sessionToken;
-      }
       const response = await fetch(`${context.apiBaseUrl}/api/chat/${context.sessionId}/upload/`, {
         method: 'POST',
-        headers,
+        headers: context.headers ?? {},
         body: formData,
       });
 

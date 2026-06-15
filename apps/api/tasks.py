@@ -1,3 +1,4 @@
+import httpx
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from django.db.models import Subquery
@@ -10,6 +11,34 @@ from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
 
 logger = get_task_logger("ocs.api")
+
+
+class DuplicateConnectChannelError(Exception):
+    """The channel_id returned by Connect is already bound to another ParticipantData row."""
+
+
+def connect_channel_error_details(error: Exception, identifier: str) -> tuple[int, str]:
+    """Map a channel-creation failure to an HTTP status code and a user-safe detail message."""
+    if isinstance(error, DuplicateConnectChannelError):
+        return 409, (
+            "Failed to create channel: the CommCare Connect channel is already linked to "
+            "another chatbot for this participant"
+        )
+    if isinstance(error, httpx.HTTPStatusError):
+        status_code = error.response.status_code
+        logger.error(
+            "Failed to create CommCare Connect channel for participant %s: HTTP %s - %s",
+            identifier,
+            status_code,
+            error.response.text,
+        )
+        if status_code == 404:
+            return 404, "Failed to create channel: Participant not found in CommCare Connect"
+        if status_code >= 500:
+            return 503, "Failed to create channel: CommCare Connect service error"
+        return 400, f"Failed to create channel: {error.response.text}"
+    logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(error))
+    return 503, "Failed to create channel: Unable to connect to CommCare Connect service"
 
 
 @shared_task(
@@ -63,6 +92,9 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
             channel = channels[experiment.id]
             create_connect_channel_for_participant(channel, connect_client, connect_id, participant_datum)
             successful_ids.add(experiment.id)
+        except DuplicateConnectChannelError:
+            # Deterministic conflict, already logged — retrying will not resolve it.
+            continue
         except Exception as e:
             if self.request.retries == self.max_retries:
                 failed_ids = set(experiment_ids) - successful_ids
@@ -73,14 +105,46 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
 
 
 def create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data):
-    response = connect_client.create_channel(
-        connect_id=connect_id, channel_source=channel.extra_data["commcare_connect_bot_name"]
+    bot_name = channel.extra_data["commcare_connect_bot_name"]
+    response = connect_client.create_channel(connect_id=connect_id, channel_source=bot_name)
+    channel_id = response["channel_id"]
+
+    # Connect's create_channel is idempotent on (connect_user, channel_source), so a reused bot
+    # name returns a channel_id that may already be bound to another ParticipantData row. A
+    # channel_id can only route to one experiment, so never store it on a second row.
+    # See https://github.com/dimagi/open-chat-studio/issues/3620.
+    existing = (
+        ParticipantData.objects.filter(system_metadata__commcare_connect_channel_id=channel_id)
+        .exclude(pk=participant_data.pk)
+        .only("id", "experiment_id")
+        .first()
     )
+    if existing is not None:
+        logger.error(
+            "Connect returned channel_id %s for participant '%s' and experiment %s, but it is "
+            "already bound to ParticipantData %s (experiment %s). Not storing it; the bot name "
+            "'%s' was likely reused.",
+            channel_id,
+            connect_id,
+            participant_data.experiment_id,
+            existing.pk,
+            existing.experiment_id,
+            bot_name,
+        )
+        raise DuplicateConnectChannelError(
+            f"The CommCare Connect channel for bot name '{bot_name}' is already linked to another "
+            "chatbot for this participant"
+        )
+
     participant_data.system_metadata = {
-        "commcare_connect_channel_id": response["channel_id"],
+        "commcare_connect_channel_id": channel_id,
         "consent": response["consent"],
     }
     participant_data.save(update_fields=["system_metadata"])
+    # Generate the key eagerly so the device (via generate_key) and the outbound send path can
+    # never race to create different keys for the same channel.
+    if not participant_data.encryption_key:
+        participant_data.generate_encryption_key()
 
 
 @shared_task(ignore_result=True)

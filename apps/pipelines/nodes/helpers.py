@@ -49,3 +49,15 @@ def get_system_message(prompt_template: str, prompt_context: PromptTemplateConte
         return SystemMessage(content=system_message)
     except KeyError as e:
         raise PipelineNodeRunError(str(e)) from e
+
+
+def get_agent_middleware(node, system_message: SystemMessage) -> list:
+    """Returns the common agent middleware for nodes that build LLM agents:
+    history compression and provider prompt caching.
+    """
+    middleware = []
+    if history_middleware := node.build_history_middleware(system_message=system_message):
+        middleware.append(history_middleware)
+    if caching_middleware := node.get_llm_service().get_prompt_caching_middleware():
+        middleware.append(caching_middleware)
+    return middleware

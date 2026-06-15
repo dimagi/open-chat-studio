@@ -78,6 +78,8 @@ export interface TaskPollingHandle {
 export interface MessagePollingCallbacks {
   getSince: () => string | undefined;
   onMessages: (messages: ChatMessage[]) => void;
+  /** Called once when the server reports the session has ended; polling stops first. */
+  onSessionEnded?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -95,6 +97,7 @@ export class ChatSessionService {
   private readonly taskPollingMaxAttempts: number;
   private readonly messagePollingIntervalMs: number;
   private messagePollingTimer?: ReturnType<typeof setInterval>;
+  private loggedSunsetLevel?: 'warn' | 'error';
   private static readonly MAX_HISTORY_PAGES = 40;
 
   constructor(options: ChatSessionServiceOptions) {
@@ -109,7 +112,7 @@ export class ChatSessionService {
   }
 
   async startSession(requestBody: Record<string, unknown>): Promise<ChatStartSessionResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/start/`, {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/start/`, {
       method: 'POST',
       headers: this.getJsonHeaders(),
       body: JSON.stringify(requestBody),
@@ -123,7 +126,7 @@ export class ChatSessionService {
   }
 
   async sendMessage(sessionId: string, payload: Record<string, unknown>): Promise<ChatSendMessageResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/${sessionId}/message/`, {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/${sessionId}/message/`, {
       method: 'POST',
       headers: this.getJsonHeaders(),
       body: JSON.stringify(payload),
@@ -137,7 +140,7 @@ export class ChatSessionService {
   }
 
   async pollTaskOnce(sessionId: string, taskId: string): Promise<ChatTaskPollResponse> {
-    const response = await fetch(`${this.apiBaseUrl}/api/chat/${sessionId}/${taskId}/poll/`, {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/${sessionId}/${taskId}/poll/`, {
       headers: this.getCommonHeaders(),
     });
 
@@ -214,7 +217,7 @@ export class ChatSessionService {
       url.searchParams.set('since', since);
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await this.request(url.toString(), {
       headers: this.getCommonHeaders(),
     });
     if (!response.ok) {
@@ -258,6 +261,10 @@ export class ChatSessionService {
         if (data.messages.length > 0) {
           callbacks.onMessages(data.messages);
         }
+        if (data.session_status === 'ended') {
+          this.stopMessagePolling();
+          callbacks.onSessionEnded?.();
+        }
       } catch (error) {
         if (callbacks.onError) {
           callbacks.onError(error instanceof Error ? error : new Error('Failed to poll messages'));
@@ -288,6 +295,58 @@ export class ChatSessionService {
     this.sessionToken = token;
   }
 
+  private async request(input: string, init?: RequestInit): Promise<Response> {
+    const response = await fetch(input, init);
+    this.checkSunsetHeaders(response);
+    return response;
+  }
+
+  /**
+   * Log a deprecation warning (RFC 8594 `Deprecation`/`Sunset`/`Link` headers)
+   * when the server reports that this widget version is deprecated. Warns
+   * during the deprecation window and errors once the sunset date has passed.
+   * Logs at most once per level so polling does not flood the console.
+   */
+  private checkSunsetHeaders(response: Response): void {
+    const headers = response?.headers;
+    if (!headers || typeof headers.get !== 'function') {
+      return;
+    }
+    if (headers.get('Deprecation') !== 'true') {
+      return;
+    }
+
+    const sunsetAt = this.parseSunsetDate(headers.get('Sunset'));
+    const pastSunset = sunsetAt !== null && Date.now() >= sunsetAt.getTime();
+    const level: 'warn' | 'error' = pastSunset ? 'error' : 'warn';
+    if (this.loggedSunsetLevel === level) {
+      return;
+    }
+    this.loggedSunsetLevel = level;
+
+    const upgradeUrl = this.parseSuccessorUrl(headers.get('Link'));
+    const upgradeSuffix = upgradeUrl ? ` Upgrade: ${upgradeUrl}` : '';
+    const sunsetText = sunsetAt ? sunsetAt.toUTCString() : 'an upcoming date';
+    if (level === 'error') {
+      console.error(`[open-chat-studio-widget] Widget version ${this.widgetVersion} is past its sunset date ` + `(${sunsetText}) and may stop working.${upgradeSuffix}`);
+    } else {
+      console.warn(`[open-chat-studio-widget] Widget version ${this.widgetVersion} is deprecated and will stop ` + `working after ${sunsetText}.${upgradeSuffix}`);
+    }
+  }
+
+  private parseSunsetDate(sunset: string | null): Date | null {
+    if (!sunset) {
+      return null;
+    }
+    const parsed = new Date(sunset);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private parseSuccessorUrl(link: string | null): string | undefined {
+    const match = link?.match(/<([^>]+)>\s*;\s*rel="?successor-version"?/);
+    return match?.[1];
+  }
+
   private async raiseForStatus(response: Response, fallbackPrefix: string): Promise<never> {
     let message = `${fallbackPrefix}: ${response.statusText}`;
     let code: string | undefined;
@@ -306,15 +365,21 @@ export class ChatSessionService {
     throw new Error(message);
   }
 
-  private getJsonHeaders(): Record<string, string> {
+  /** Headers for multipart requests (no Content-Type — fetch sets the boundary). */
+  getUploadHeaders(): Record<string, string> {
     const headers = this.getCommonHeaders();
-    headers['Content-Type'] = 'application/json';
 
     const csrfToken = this.csrfTokenProvider(this.apiBaseUrl);
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
     }
 
+    return headers;
+  }
+
+  private getJsonHeaders(): Record<string, string> {
+    const headers = this.getUploadHeaders();
+    headers['Content-Type'] = 'application/json';
     return headers;
   }
 

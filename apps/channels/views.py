@@ -259,11 +259,8 @@ def new_connect_message(request: HttpRequest):
         return JsonResponse(serializer.errors, status=400)
 
     connect_channel_id = serializer.data["channel_id"]
-    try:
-        participant_data = ParticipantData.objects.get(
-            system_metadata__commcare_connect_channel_id=connect_channel_id,
-        )
-    except ParticipantData.DoesNotExist:
+    participant_data = ParticipantData.objects.for_connect_channel(connect_channel_id)
+    if participant_data is None:
         return JsonResponse({"detail": "No participant data found"}, status=404)
 
     channel = tasks.get_experiment_channel(

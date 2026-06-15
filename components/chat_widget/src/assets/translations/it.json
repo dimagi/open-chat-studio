@@ -12,6 +12,7 @@
   "status.uploading": "Caricamento",
   "status.sessionExpired": "La tua sessione di chat è scaduta. Verrà avviata una nuova chat: invia di nuovo il tuo messaggio.",
   "status.sessionError": "Questa sessione di chat non è più disponibile.",
+  "status.chatEnded": "Questa chat è terminata.",
   "modal.newChatTitle": "Avvia nuova chat",
   "modal.newChatBody": "Avviare una nuova chat cancellerà la conversazione attuale. Continuare?",
   "modal.cancel": "Annulla",

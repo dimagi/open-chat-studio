@@ -14,7 +14,6 @@ from .experiment import (  # noqa: F401
     download_file,
     end_experiment,
     experiment_complete,
-    experiment_pre_survey,
     experiment_review,
     experiment_session_message,
     experiment_session_message_embed,
