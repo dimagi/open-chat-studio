@@ -130,6 +130,7 @@ def get_session_json(session, expected_messages=None, expected_tags=None):
         "status": session.status,
         "platform": session.platform,
         "tags": expected_tags if expected_tags is not None else [],
+        "state": session.state,
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
