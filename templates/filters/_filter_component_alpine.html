@@ -276,16 +276,25 @@
 
         // Process new format filters
         let newFormatIndex = 0;
-        for (const columnName of Array.from(newFormatColumns).sort()) {
-          const opKey = `op_${columnName}`;
-          if (urlParams.has(`f_${columnName}`) && urlParams.has(opKey)) {
-            const valueParam = urlParams.get(`f_${columnName}`);
-            const operatorParam = urlParams.get(opKey);
+        const validNewFormatColumns = Array.from(newFormatColumns)
+          .filter(columnName =>
+            urlParams.has(`f_${columnName}`) &&
+            urlParams.has(`op_${columnName}`)
+          )
+          .sort();
 
-            const filterIndex = Object.keys(filters).length - Array.from(newFormatColumns).length + newFormatIndex;
-            if (filterIndex >= 0 && filterIndex < filters.length) {
-              const filter = filters[filterIndex];
-              filter.column = columnName;
+        validNewFormatColumns.forEach((columnName, newFormatIndex) => {
+          const valueParam = urlParams.get(`f_${columnName}`);
+          const operatorParam = urlParams.get(`op_${columnName}`);
+
+          const filterIndex =
+            Object.keys(filters).length -
+            validNewFormatColumns.length +
+            newFormatIndex;
+
+          if (filterIndex >= 0 && filterIndex < filters.length) {
+            const filter = filters[filterIndex];
+            filter.column = columnName;
 
               if (this.filterData.columns[columnName]) {
                 filter.availableOperators = this.filterData.columns[columnName].operators;
@@ -318,9 +327,8 @@
                 }
               }
             }
-            newFormatIndex++;
-          }
-        }
+          newFormatIndex++;
+        });
 
         this.filterData.filters = this.getActiveFilters(filters);
         this.filterData.showFilters = false;
