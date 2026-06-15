@@ -1,0 +1,23 @@
+{% comment %}
+Renders an info icon with the content shown on hover. This is mostly used in graph rendering but can
+also be used in other places.
+
+Using directly:
+
+  {% blocktranslate asvar info_text %}The info text.{% endblocktranslate %}
+  {% include "generic/info.html" with info_content=info_text %}
+
+{% endcomment %}
+
+<div class="dropdown dropdown-right dropdown-hover">
+  <div role="button" class="btn btn-circle btn-ghost btn-xs text-info">
+    <i class="text-xs fa-solid fa-circle-info"></i>
+  </div>
+  <div
+    tabindex="0"
+    class="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
+    <div tabindex="0" class="card-body font-medium text-wrap">
+      <p>{{ info_content|safe }}</p>
+    </div>
+  </div>
+</div>
