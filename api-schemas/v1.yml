@@ -1135,6 +1135,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/me/:
+    get:
+      operationId: me
+      description: Returns basic information about the authenticated user and the
+        team the token is scoped to.
+      summary: Current User
+      tags:
+      - Me
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
       operationId: new_api_message
@@ -1864,7 +1883,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/StatusCb5Enum'
+          $ref: '#/components/schemas/Status490Enum'
         platform:
           type: string
           nullable: true
@@ -1873,6 +1892,7 @@ components:
           type: array
           items:
             type: string
+        state: {}
       required:
       - created_at
       - experiment
@@ -1936,7 +1956,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/StatusCb5Enum'
+          $ref: '#/components/schemas/Status490Enum'
         platform:
           type: string
           nullable: true
@@ -1950,6 +1970,7 @@ components:
           type: array
           items:
             type: string
+        state: {}
       required:
       - created_at
       - experiment
@@ -2603,6 +2624,37 @@ components:
             type: string
           nullable: true
           description: MCP server tools enabled for the node.
+    Me:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+      required:
+      - id
+      - team
+      - username
     MediaCollection:
       type: object
       description: 'A media collection: its identity and files, with no embedding
@@ -3057,11 +3109,10 @@ components:
           type: string
           nullable: true
           description: Key within the data source whose value selects the route.
-    StatusCb5Enum:
+    Status490Enum:
       enum:
       - setup
       - pending
-      - pending-pre-survey
       - active
       - pending-review
       - complete
@@ -3070,7 +3121,6 @@ components:
       description: |-
         * `setup` - Setting Up
         * `pending` - Awaiting participant
-        * `pending-pre-survey` - Awaiting pre-survey
         * `active` - Active
         * `pending-review` - Awaiting final review.
         * `complete` - Complete

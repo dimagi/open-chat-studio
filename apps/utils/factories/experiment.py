@@ -64,7 +64,6 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.pipelines.PipelineFactory", team=factory.SelfAttribute("..team")
     )
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
-    pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
     public_id = factory.Faker("uuid4")
     synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)
     voice_provider = factory.SubFactory(VoiceProviderFactory)

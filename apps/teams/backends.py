@@ -113,6 +113,7 @@ CONTENT_TYPES = {
         "notificationevent",
         "eventuser",
     ],
+    "cost_tracking": ["pricingrule", "usagerecord"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

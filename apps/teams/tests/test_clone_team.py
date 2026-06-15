@@ -48,7 +48,7 @@ def source_team(django_db_blocker):
         # Content
         SourceMaterialFactory.create(team=team)
         consent_form = ConsentFormFactory.create(team=team)
-        survey = SurveyFactory.create(team=team)
+        SurveyFactory.create(team=team)
 
         # Pipeline
         pipeline = Pipeline.create_default(team, "Test Pipeline", llm_provider.id, llm_model)
@@ -59,7 +59,6 @@ def source_team(django_db_blocker):
             owner=owner,
             name="Test Experiment",
             consent_form=consent_form,
-            pre_survey=survey,
             voice_provider=voice_provider,
             trace_provider=trace_provider,
             pipeline=pipeline,

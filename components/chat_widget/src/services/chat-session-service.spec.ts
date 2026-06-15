@@ -25,6 +25,35 @@ function completeMessage(content: string) {
   };
 }
 
+describe('ChatSessionService.getUploadHeaders', () => {
+  it('includes the common headers and the CSRF token', () => {
+    const service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      embedKey: 'embed-1',
+      sessionToken: 'tok-123',
+      csrfTokenProvider: () => 'csrf-456',
+    });
+
+    expect(service.getUploadHeaders()).toEqual({
+      'x-ocs-widget-version': '1.0.0',
+      'X-Embed-Key': 'embed-1',
+      'X-Session-Token': 'tok-123',
+      'X-CSRFToken': 'csrf-456',
+    });
+  });
+
+  it('omits the CSRF header when no token is available', () => {
+    const service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      csrfTokenProvider: () => undefined,
+    });
+
+    expect(service.getUploadHeaders()).toEqual({ 'x-ocs-widget-version': '1.0.0' });
+  });
+});
+
 describe('ChatSessionService.pollTask', () => {
   let service: ChatSessionService;
 
@@ -241,6 +270,81 @@ describe('ChatSessionService.fetchAllMessages', () => {
   });
 });
 
+describe('ChatSessionService.startMessagePolling', () => {
+  let service: ChatSessionService;
+
+  beforeEach(() => {
+    service = new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      messagePollingIntervalMs: 10,
+    });
+  });
+
+  afterEach(() => {
+    service.stopMessagePolling();
+    jest.restoreAllMocks();
+  });
+
+  function pollResponse(messages: string[], sessionStatus: 'active' | 'ended' = 'active') {
+    return {
+      messages: messages.map(content => ({
+        created_at: new Date().toISOString(),
+        role: 'assistant' as const,
+        content,
+        attachments: [],
+      })),
+      has_more: false,
+      session_status: sessionStatus,
+    };
+  }
+
+  it('keeps polling while the session is active', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([]));
+    const onSessionEnded = jest.fn();
+
+    service.startMessagePolling('session-1', {
+      getSince: () => undefined,
+      onMessages: jest.fn(),
+      onSessionEnded,
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(onSessionEnded).not.toHaveBeenCalled();
+  });
+
+  it('delivers final messages, stops polling, and reports an ended session', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse(['goodbye'], 'ended'));
+    const onMessages = jest.fn();
+    const onSessionEnded = jest.fn();
+
+    service.startMessagePolling('session-1', {
+      getSince: () => undefined,
+      onMessages,
+      onSessionEnded,
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(onMessages).toHaveBeenCalledTimes(1);
+    expect(onMessages.mock.calls[0][0].map((m: { content: string }) => m.content)).toEqual(['goodbye']);
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when an ended session is reported without an onSessionEnded callback', async () => {
+    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([], 'ended'));
+
+    service.startMessagePolling('session-1', {
+      getSince: () => undefined,
+      onMessages: jest.fn(),
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ChatSessionService session tokens', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -323,5 +427,113 @@ describe('ChatSessionService session tokens', () => {
     } as unknown as Response);
 
     await expect(service.fetchMessages('s1')).rejects.toThrow('Failed to poll messages: Server Error');
+  });
+});
+
+describe('ChatSessionService deprecation headers', () => {
+  const DOCS_URL = 'https://docs.openchatstudio.com/chat_widget/';
+  let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function response(headers: Record<string, string>, body: unknown = { messages: [], has_more: false, session_status: 'active' }) {
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(headers),
+      json: () => Promise.resolve(body),
+    } as Response;
+  }
+
+  function makeService() {
+    return new ChatSessionService({ apiBaseUrl: 'https://example.com', widgetVersion: '0.5.0' });
+  }
+
+  const sunsetHeaders = (sunset: string) => ({
+    Deprecation: 'true',
+    Sunset: sunset,
+    Link: `<${DOCS_URL}>; rel="successor-version"`,
+  });
+
+  it('does not log when the response carries no deprecation header', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(response({}));
+
+    await service.fetchMessages('s1');
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('warns when deprecated and the sunset date is in the future', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT')));
+
+    await service.fetchMessages('s1');
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = warnSpy.mock.calls[0][0] as string;
+    expect(message).toContain('0.5.0');
+    expect(message).toContain('deprecated');
+    expect(message).toContain(DOCS_URL);
+  });
+
+  it('errors when the sunset date has already passed', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Sat, 01 Jan 2000 00:00:00 GMT')));
+
+    await service.fetchMessages('s1');
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const message = errorSpy.mock.calls[0][0] as string;
+    expect(message).toContain('0.5.0');
+    expect(message).toContain(DOCS_URL);
+  });
+
+  it('logs only once across repeated polls at the same level', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT')));
+
+    await service.fetchMessages('s1');
+    await service.fetchMessages('s1');
+    await service.fetchMessages('s1');
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('escalates from warning to error when the sunset date passes mid-session', async () => {
+    const service = makeService();
+    const sunsetMs = Date.parse('Wed, 01 Jan 2025 00:00:00 GMT');
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2025 00:00:00 GMT')));
+    const nowSpy = jest.spyOn(Date, 'now');
+
+    nowSpy.mockReturnValue(sunsetMs - 1000);
+    await service.fetchMessages('s1');
+
+    nowSpy.mockReturnValue(sunsetMs + 1000);
+    await service.fetchMessages('s1');
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('detects the headers on the session-start response too', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT'), { session_id: 's1', chatbot: {}, participant: {} }));
+
+    await service.startSession({ chatbot_id: 'c1' });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });

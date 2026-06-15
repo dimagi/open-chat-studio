@@ -1,13 +1,9 @@
-import logging
 from collections import defaultdict
 from collections.abc import Iterator
-from dataclasses import dataclass
 from functools import cached_property
-from typing import Self
 from uuid import uuid4
 
 import pydantic
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -15,47 +11,16 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.documents.models import Collection
-from apps.experiments.models import ExperimentSession, SourceMaterial, VersionFieldDisplayFormatters
+from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
+from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
-
-versioning_logger = logging.getLogger("ocs.versioning")
-
-
-@dataclass
-class ModelParamSpec:
-    """A helper class to hold the parameter name and model of those that are database records"""
-
-    param_name: str
-    model_cls: VersionsMixin
-
-    def get_object(self, id: int):
-        return self.model_cls.objects.get(id=id)
-
-
-def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
-    """
-    Handles parameters referencing versioned models with the following logic:
-    - If the referenced model has changes compared to its latest version, a new version is created, and the
-        parameter is updated to point to this new version.
-    - If the referenced model matches the latest version, the parameter is simply updated to point to the existing
-        latest version.
-    """
-
-    if param_instance_id := node_version.params.get(param_name):
-        if param_instance := param_cls.objects.filter(id=param_instance_id).first():
-            if not param_instance.has_versions or param_instance.compare_with_latest():
-                new_instance_version = param_instance.create_new_version()
-                node_version.params[param_name] = str(new_instance_version.id)
-            else:
-                node_version.params[param_name] = str(param_instance.latest_version.id)
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -380,19 +345,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
-        Create a new version of the node and if the node is an assistant node, create a new version of the assistant
-        and update the `assistant_id` in the node params to the new assistant version id.
+        Create a new version of the node. Params that reference versioned records (see
+        `apps.pipelines.versioning`) are versioned along with the node and updated to point at the new version.
 
         Args:
             pipeline: If provided, the new version will be assigned to this pipeline before saving,
                 avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: nodes.nodes→models
-            AssistantNode,
-            LLMResponseWithPrompt,
-        )
-
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -400,15 +359,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if new_version.type not in ("StartNode", "EndNode") and new_version.params.get("name") == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
-        if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
-            assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
-            if not assistant.is_a_version:
-                assistant_version = assistant.create_new_version()
-                # convert to string to be consistent with values from the UI
-                new_version.params["assistant_id"] = str(assistant_version.id)
-
-        if not is_copy and self.type == LLMResponseWithPrompt.__name__:
-            _set_versioned_param_value(new_version, "source_material_id", SourceMaterial)
+        if not is_copy:
+            for spec in get_versioned_param_specs(self.type):
+                spec.version_referenced_record(new_version.params)
 
         if pipeline is not None:
             new_version.pipeline = pipeline
@@ -443,42 +396,29 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self._archive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         node_name = self.params.get("name", self.type)
         if node_name == self.flow_id:
             node_name = self.type
 
+        specs_by_param = {spec.param_name: spec for spec in get_versioned_param_specs(self.type)}
         param_versions = []
         for name, value in self.params.items():
             display_formatter = None
-            match name:
-                case "tools":
-                    display_formatter = VersionFieldDisplayFormatters.format_tools
-                case "custom_actions":
-                    # This is appended to the param_versions list separately
-                    continue
-                case "name":
-                    value = node_name
-                case "assistant_id":
-                    name = "assistant"
-                    # Load the assistant, since it is being versioned
-                    if value:
-                        value = OpenAiAssistant.objects.filter(id=value).first()
-                case "collection_id":
-                    name = "media"
-                    if value:
-                        value = Collection.objects.filter(id=value).first()
-                case "collection_index_ids":
-                    name = "Collection Indexes"
-                    if value:
-                        # Convert list of IDs to list of Collection objects
-                        value = list(Collection.objects.filter(id__in=value))
-                case "source_material_id":
-                    name = "source_material"
-                    if value:
-                        value = SourceMaterial.objects.filter(id=value).first()
+            if spec := specs_by_param.get(name):
+                # Load the referenced record(s) for display
+                name = spec.display_name
+                value = spec.resolve_for_display(value)
+            else:
+                match name:
+                    case "tools":
+                        display_formatter = VersionFieldDisplayFormatters.format_tools
+                    case "custom_actions":
+                        # This is appended to the param_versions list separately
+                        continue
+                    case "name":
+                        value = node_name
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
@@ -507,42 +447,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         Archive related params that were also versioned along with this node
         """
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.pipelines.nodes import nodes  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        # AssistantNode versions its assistant here. LLMResponseWithPrompt's collection params
-        # (media + index) are handled in the is_a_version-guarded block below; source_material is
-        # versioned in create_new_version but archival of its versions is still a TODO.
-        model_param_specs = {
-            nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
-        }
-
-        for spec in model_param_specs.get(self.type, []):
-            if instance_id := self.params.get(spec.param_name):
-                try:
-                    obj = spec.get_object(instance_id)
-                    obj.archive()
-                except ObjectDoesNotExist:
-                    versioning_logger.exception(
-                        f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
-                    )
-
-        # ADR-0031: collections (single media + index list) are live shared resources. Only archive
-        # frozen per-bot versions (legacy data); never the live working collection.
-        if self.type == nodes.LLMResponseWithPrompt.__name__:
-            related_collection_ids = []
-            if media_collection_id := self.params.get("collection_id"):
-                related_collection_ids.append(media_collection_id)
-            related_collection_ids.extend(self.params.get("collection_index_ids") or [])
-            for related_collection_id in related_collection_ids:
-                try:
-                    collection = Collection.objects.get(id=related_collection_id)
-                    if collection.is_a_version:
-                        collection.archive()
-                except ObjectDoesNotExist:
-                    versioning_logger.exception(
-                        f"Failed to archive collection with id {related_collection_id}: not found"
-                    )
+        for spec in get_versioned_param_specs(self.type):
+            spec.archive_referenced_record(self.params)
 
 
 class PipelineEventInputs(models.TextChoices):

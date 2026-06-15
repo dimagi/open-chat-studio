@@ -1,40 +1,80 @@
 import pytest
-from django.test import RequestFactory
 from django.urls import reverse
 
 from apps.experiments.models import Survey
-from apps.experiments.views.survey import SurveyTableView
-from apps.utils.factories.experiment import ExperimentFactory, SurveyFactory
+from apps.utils.factories.experiment import SurveyFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.mark.django_db()
-class TestSurveyTableView:
-    def test_get_queryset(self, experiment):
-        assert experiment.pre_survey is not None
-        experiment.create_new_version()
-        assert Survey.objects.filter(team=experiment.team).count() == 2
+class TestCreateSurveyBlocked:
+    def test_get_redirects_to_home(self, client):
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        client.force_login(user)
+        url = reverse("experiments:survey_new", args=[team.slug])
+        response = client.get(url)
+        assert response.status_code == 302
+        assert response["Location"] == reverse("experiments:survey_home", args=[team.slug])
 
-        request = RequestFactory().get(reverse("experiments:survey_table", args=[experiment.team.slug]))
-        request.team = experiment.team
-        view = SurveyTableView()
-        view.request = request
-        assert list(view.get_queryset().all()) == [experiment.pre_survey]
+    def test_post_does_not_create_survey(self, client):
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        client.force_login(user)
+        url = reverse("experiments:survey_new", args=[team.slug])
+        count_before = Survey.objects.filter(team=team).count()
+        client.post(url, data={"name": "New Survey", "url": "https://example.com/survey"})
+        assert Survey.objects.filter(team=team).count() == count_before
 
 
 @pytest.mark.django_db()
-def test_delete(client):
-    team = TeamWithUsersFactory.create()
-    user = team.members.first()
-    survey = SurveyFactory.create(team=team)
-    experiment = ExperimentFactory.create(team=team, pre_survey=survey, post_survey=survey)
-    client.force_login(user)
-    url = reverse("experiments:survey_delete", args=[experiment.team.slug, survey.id])
-    response = client.delete(url)
-    assert response.status_code == 200
-    survey.refresh_from_db()
-    assert survey.is_archived is True
+class TestEditSurveyReadOnly:
+    def test_get_returns_200_with_disabled_fields(self, client):
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        survey = SurveyFactory.create(team=team)
+        client.force_login(user)
+        url = reverse("experiments:survey_edit", args=[team.slug, survey.id])
+        response = client.get(url)
+        assert response.status_code == 200
+        form = response.context["form"]
+        for field in form.fields.values():
+            assert field.disabled is True
 
-    experiment.refresh_from_db()
-    assert experiment.pre_survey is None
-    assert experiment.post_survey is None
+    def test_post_does_not_update_survey(self, client):
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        original_name = "Original Survey Name"
+        survey = SurveyFactory.create(team=team, name=original_name)
+        client.force_login(user)
+        url = reverse("experiments:survey_edit", args=[team.slug, survey.id])
+        response = client.post(url, data={"name": "Hacked Name", "url": "https://hacked.com"})
+        assert response.status_code == 302
+        survey.refresh_from_db()
+        assert survey.name == original_name
+
+
+@pytest.mark.django_db()
+class TestDeleteSurvey:
+    def test_delete_archives_survey(self, client):
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        survey = SurveyFactory.create(team=team)
+        client.force_login(user)
+        url = reverse("experiments:survey_delete", args=[team.slug, survey.id])
+        response = client.delete(url)
+        assert response.status_code == 200
+        survey.refresh_from_db()
+        assert survey.is_archived is True
+
+
+@pytest.mark.django_db()
+class TestSurveyHome:
+    def test_home_renders_with_deprecation_warning(self, client):
+        team = TeamWithUsersFactory.create()
+        user = team.members.first()
+        client.force_login(user)
+        url = reverse("experiments:survey_home", args=[team.slug])
+        response = client.get(url)
+        assert response.status_code == 200
+        assert b"2026-07-10" in response.content

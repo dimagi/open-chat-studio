@@ -1,0 +1,40 @@
+[
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-4o",
+    "rules": [
+      {"service_kind": "llm_input",         "unit_price": "0.00250"},
+      {"service_kind": "llm_output",        "unit_price": "0.01000"},
+      {"service_kind": "llm_cached_input",  "unit_price": "0.00125"}
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-4o-mini",
+    "rules": [
+      {"service_kind": "llm_input",         "unit_price": "0.00015"},
+      {"service_kind": "llm_output",        "unit_price": "0.00060"},
+      {"service_kind": "llm_cached_input",  "unit_price": "0.000075"}
+    ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-haiku-4-5-20251001",
+    "rules": [
+      {"service_kind": "llm_input",         "unit_price": "0.00100"},
+      {"service_kind": "llm_output",        "unit_price": "0.00500"},
+      {"service_kind": "llm_cached_input",  "unit_price": "0.000100"},
+      {"service_kind": "llm_cache_write",   "unit_price": "0.00125"}
+    ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-sonnet-4-6",
+    "rules": [
+      {"service_kind": "llm_input",         "unit_price": "0.00300"},
+      {"service_kind": "llm_output",        "unit_price": "0.01500"},
+      {"service_kind": "llm_cached_input",  "unit_price": "0.000300"},
+      {"service_kind": "llm_cache_write",   "unit_price": "0.00375"}
+    ]
+  }
+]
