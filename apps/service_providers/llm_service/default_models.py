@@ -306,7 +306,12 @@ def _update_llm_provider_models(LlmProviderModel):
             for custom_model in existing_custom_global[key]:
                 related_objects = get_related_objects(custom_model)
                 for obj in related_objects:
-                    field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
+                    fields = [f for f in obj._meta.fields if f.related_model == LlmProviderModel]
+                    if not fields:
+                        # Pipelines surfaced via the Node.llm_provider_model reverse FK have no
+                        # direct field to repoint here; their nodes are handled via params below.
+                        continue
+                    field = fields[0]
                     setattr(obj, field.attname, model.id)
                     obj.save(update_fields=[field.name])
 
@@ -339,7 +344,7 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
 def _update_pipeline_node_param(pipeline, node, param_name, param_value, commit=True):
     node.params[param_name] = param_value
     if commit:
-        node.save()
+        node.set_params(node.params)
 
     data = pipeline.data
     raw_node = [n for n in data["nodes"] if n["id"] == node.flow_id][0]

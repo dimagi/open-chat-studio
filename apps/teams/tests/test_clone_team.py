@@ -335,7 +335,9 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
     )
 
     target = Team.objects.get(slug="target_1")
-    target_pipeline = Pipeline.objects.filter(team=target).first()
+    # Check the working version specifically: its node params are remapped by _remap_node_params,
+    # and the FK mirror must be re-synced there (the published version is synced separately).
+    target_pipeline = Pipeline.objects.working_versions_queryset().filter(team=target).first()
     assert target_pipeline is not None
 
     # Get the target team's providers
@@ -346,18 +348,21 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
     source_llm_provider = LlmProvider.objects.filter(team=source_team).first()
     source_llm_model = LlmProviderModel.objects.filter(team=source_team).first()
 
-    # Check nodes have remapped params
+    # Check nodes have remapped params and FK mirror (both must point at the target team)
     for node in Node.objects.filter(pipeline=target_pipeline):
         params = node.params
         if "llm_provider_id" in params and params["llm_provider_id"]:
             # Should reference target team's provider, not source
             assert params["llm_provider_id"] == target_llm_provider.id
             assert params["llm_provider_id"] != source_llm_provider.id
+            # FK mirror must be remapped too, not left pointing at the source team
+            assert node.llm_provider_id == target_llm_provider.id
 
         if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
             # Should reference target team's model, not source
             assert params["llm_provider_model_id"] == target_llm_model.id
             assert params["llm_provider_model_id"] != source_llm_model.id
+            assert node.llm_provider_model_id == target_llm_model.id
 
 
 @pytest.mark.django_db()
