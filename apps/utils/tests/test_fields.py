@@ -16,6 +16,9 @@ def test_as_int_coerces_and_drops_malformed():
     # booleans are not valid ids, even though ``int(True)`` would otherwise coerce to 1
     assert as_int(True) is None
     assert as_int(False) is None
+    # floats are rejected rather than silently truncated (``int(1.9)`` would otherwise give 1)
+    assert as_int(1.9) is None
+    assert as_int(2.0) is None
 
 
 @pytest.mark.django_db()
