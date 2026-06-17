@@ -483,7 +483,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if update_fields:
             self.save(update_fields=update_fields)
 
-        index_ids = params.get("collection_index_ids") or []
+        raw_index_ids = params.get("collection_index_ids") or []
+        if not isinstance(raw_index_ids, list | tuple | set):
+            raw_index_ids = [raw_index_ids]
+        # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
+        # than blowing up the id__in query.
+        index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
     def archive(self):
