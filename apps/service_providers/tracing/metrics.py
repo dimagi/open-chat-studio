@@ -7,13 +7,15 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.callbacks import UsageMetadataCallbackHandler
+from langchain_core.messages.utils import count_tokens_approximately
 
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.cost_tracking.services.estimation import has_usage_metadata, response_text, tiktoken_count
 from apps.cost_tracking.services.recorder import UsageEvent
 
-# Providers we can tiktoken-estimate when usage_metadata is missing.
-# Non-family providers fall through to the UNKNOWN bucket instead.
+# Providers we can tiktoken-estimate (exact, OpenAI-specific encodings) when
+# usage_metadata is missing. Everything else falls back to the chars/4
+# heuristic in count_tokens_approximately — rougher but provider-agnostic.
 OPENAI_FAMILY = frozenset({"openai", "azure"})
 
 # Some LangChain integrations (e.g. OpenAI flex/priority tiers) prefix the
@@ -49,11 +51,12 @@ class MetricsCollector(UsageMetadataCallbackHandler):
     Cost tracking extension: holds per-call pending state keyed by `run_id`
     so `on_llm_end` can attribute each response to its originating
     (provider, model). EXACT usage routes to `_exact_usage`; missing usage
-    routes to `_fallback_usage` (tiktoken-estimated for OpenAI family, zero-
-    quantity for everything else). Both buckets are keyed by
-    (provider, model) so the same model name routed through two different
-    providers in one trace gets billed separately. `iter_cost_events()`
-    drains both into `UsageEvent`s.
+    routes to `_fallback_usage` with ESTIMATED confidence (tiktoken for
+    OPENAI_FAMILY, count_tokens_approximately for everything else) — only
+    falls back to UNKNOWN when prompts are also empty. Both buckets are
+    keyed by (provider, model) so the same model name routed through two
+    different providers in one trace gets billed separately.
+    `iter_cost_events()` drains both into `UsageEvent`s.
     """
 
     def __init__(self, start_time: float):
@@ -93,8 +96,9 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             self._pending_calls[run_id] = {
                 "model": model,
                 "provider": provider,
-                # Prompts retained only for the tiktoken estimate path.
-                "prompts": prompts if provider in OPENAI_FAMILY else None,
+                # Prompts feed the estimate path — tiktoken for OPENAI_FAMILY,
+                # count_tokens_approximately for everything else.
+                "prompts": prompts,
             }
 
     def on_llm_end(self, response, *, run_id: UUID | None = None, **kwargs: Any) -> None:
@@ -111,12 +115,12 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         if has_usage_metadata(response):
             self._exact_add(provider, model, _sum_response_usage(response))
             return
-        if provider in OPENAI_FAMILY and pending["prompts"]:
-            input_tokens = tiktoken_count(model, pending["prompts"])
-            output_tokens = tiktoken_count(model, response_text(response))
-            self._fallback_add((provider, model, Confidence.ESTIMATED), input_tokens, output_tokens)
-        else:
+        if not pending["prompts"]:
+            # No prompts AND no usage_metadata — true coverage gap.
             self._fallback_add((provider, model, Confidence.UNKNOWN), 0, 0)
+            return
+        input_tokens, output_tokens = _estimate_tokens(provider, model, pending["prompts"], response)
+        self._fallback_add((provider, model, Confidence.ESTIMATED), input_tokens, output_tokens)
 
     def _exact_add(self, provider: str, model: str, usage: dict[str, Any]) -> None:
         with self._counter_lock:
@@ -187,6 +191,18 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         return prompt, completion, total
 
 
+def _estimate_tokens(provider: str, model: str, prompts: list[str], response) -> tuple[int, int]:
+    """Estimate (input, output) tokens for a call without usage_metadata.
+
+    Uses tiktoken for OPENAI_FAMILY (accurate, OpenAI-specific encodings) and
+    falls back to count_tokens_approximately (chars/4 heuristic) for every
+    other provider so non-OpenAI calls get a rough number instead of zero.
+    """
+    if provider in OPENAI_FAMILY:
+        return tiktoken_count(model, prompts), tiktoken_count(model, response_text(response))
+    return count_tokens_approximately(prompts), count_tokens_approximately([response_text(response)])
+
+
 def _sum_response_usage(response) -> dict[str, Any]:
     """Sum `usage_metadata` across all generations on a chat response."""
     totals: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "input_token_details": {}}
@@ -243,6 +259,7 @@ def _unknown_event(model_name: str, provider: str, bucket: dict[str, int]) -> Us
 
 
 def _estimated_events(model_name: str, provider: str, bucket: dict[str, int]) -> Iterator[UsageEvent]:
+    estimator = "tiktoken" if provider in OPENAI_FAMILY else "approximate"
     for kind, qty in (
         (ServiceKind.LLM_INPUT, bucket["input_tokens"]),
         (ServiceKind.LLM_OUTPUT, bucket["output_tokens"]),
@@ -254,7 +271,7 @@ def _estimated_events(model_name: str, provider: str, bucket: dict[str, int]) ->
                 model_name=model_name,
                 quantity=qty,
                 confidence=Confidence.ESTIMATED,
-                extra={"estimator": "tiktoken"},
+                extra={"estimator": estimator},
             )
 
 

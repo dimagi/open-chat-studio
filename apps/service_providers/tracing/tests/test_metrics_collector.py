@@ -156,7 +156,7 @@ def _start_args(*, model: str, provider: str | None, prompts: list[str] | None =
     """kwargs shape that the real LangChain callback manager passes to on_llm_start."""
     meta = {"ocs_provider_type": provider} if provider else {}
     return {
-        "prompts": prompts or ["prompt"],
+        "prompts": ["prompt"] if prompts is None else prompts,
         "run_id": uuid4(),
         "invocation_params": {"model": model},
         "metadata": meta,
@@ -190,14 +190,16 @@ class TestProviderCapture:
         collector.on_llm_start({}, ["prompt"])
         assert collector._pending_calls == {}
 
-    def test_prompts_kept_only_for_openai_family(self):
+    def test_prompts_kept_for_all_providers(self):
+        """Both OPENAI_FAMILY and other providers retain prompts so the
+        estimate path can count tokens (tiktoken or approximate)."""
         collector = MetricsCollector(start_time=time.time())
         openai_args = _start_args(model="gpt-4o-mini", provider="openai", prompts=["hi"])
         anthropic_args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=["hi"])
         collector.on_llm_start({}, **openai_args)
         collector.on_llm_start({}, **anthropic_args)
         assert collector._pending_calls[openai_args["run_id"]]["prompts"] == ["hi"]
-        assert collector._pending_calls[anthropic_args["run_id"]]["prompts"] is None
+        assert collector._pending_calls[anthropic_args["run_id"]]["prompts"] == ["hi"]
 
 
 class TestOnLlmEndFallback:
@@ -229,9 +231,23 @@ class TestOnLlmEndFallback:
         assert bucket["output_tokens"] > 0  # tiktoken counted the response
         assert bucket["calls"] == 1
 
-    def test_non_openai_missing_usage_routes_to_unknown(self):
+    def test_non_openai_missing_usage_routes_to_estimated(self):
+        """Non-OPENAI providers with prompts use count_tokens_approximately
+        instead of bucketing to zero-quantity UNKNOWN."""
         collector = MetricsCollector(start_time=time.time())
-        args = _start_args(model="claude-haiku-4-5", provider="anthropic")
+        args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=["hello"])
+        collector.on_llm_start({}, **args)
+        collector.on_llm_end(_result_without_usage("a response"), run_id=args["run_id"])
+        bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.ESTIMATED)]
+        assert bucket["input_tokens"] > 0
+        assert bucket["output_tokens"] > 0
+        assert bucket["calls"] == 1
+
+    def test_empty_prompts_routes_to_unknown(self):
+        """UNKNOWN remains the bucket for the genuine no-data case: no
+        usage_metadata AND no prompts to estimate from."""
+        collector = MetricsCollector(start_time=time.time())
+        args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=[])
         collector.on_llm_start({}, **args)
         collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
         bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.UNKNOWN)]
@@ -240,10 +256,10 @@ class TestOnLlmEndFallback:
         assert bucket["calls"] == 1
 
     def test_unknown_calls_accumulate(self):
-        """Two failed calls to the same model should count as 2 in `missing_usage_calls`."""
+        """Two no-prompts calls to the same model count as 2 in `missing_usage_calls`."""
         collector = MetricsCollector(start_time=time.time())
         for _ in range(2):
-            args = _start_args(model="claude-haiku-4-5", provider="anthropic")
+            args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=[])
             collector.on_llm_start({}, **args)
             collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
         bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.UNKNOWN)]
@@ -296,20 +312,32 @@ class TestIterCostEvents:
         assert all(e.quantity > 0 for e in events)
 
     def test_unknown_path_yields_zero_quantity_row(self):
+        """UNKNOWN bucket (no prompts AND no usage_metadata) emits a single
+        zero-quantity row per (provider, model) so the digest can flag it."""
         collector = MetricsCollector(start_time=time.time())
-        args = _start_args(model="claude-haiku-4-5", provider="anthropic")
-        collector.on_llm_start({}, **args)
-        collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
-        collector.on_llm_start({}, **_start_args(model="claude-haiku-4-5", provider="anthropic"))
-        collector.on_llm_end(_result_without_usage(), run_id=uuid4())  # second failed call
+        for _ in range(2):
+            args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=[])
+            collector.on_llm_start({}, **args)
+            collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
 
         events = list(collector.iter_cost_events())
         unknown = [e for e in events if e.confidence is Confidence.UNKNOWN]
-        # One row per (model, provider) — calls aggregate into `missing_usage_calls`.
         assert len(unknown) == 1
-        # First call counted; second has no pending state (different run_id) and is dropped.
         assert unknown[0].quantity == 0
-        assert unknown[0].extra == {"missing_usage_calls": 1}
+        assert unknown[0].extra == {"missing_usage_calls": 2}
+
+    def test_non_openai_estimated_uses_approximate_marker(self):
+        """Non-OPENAI ESTIMATED events carry estimator=approximate so the
+        digest can distinguish tiktoken-accurate from heuristic counts."""
+        collector = MetricsCollector(start_time=time.time())
+        args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=["hello"])
+        collector.on_llm_start({}, **args)
+        collector.on_llm_end(_result_without_usage("a response"), run_id=args["run_id"])
+
+        events = list(collector.iter_cost_events())
+        assert all(e.confidence is Confidence.ESTIMATED for e in events)
+        assert all(e.extra == {"estimator": "approximate"} for e in events)
+        assert all(e.quantity > 0 for e in events)
 
     def test_exact_path_keys_by_provider_and_model(self):
         """Same model name through two providers yields one exact event per provider."""
