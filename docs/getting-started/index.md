@@ -1,7 +1,3 @@
----
-hide:
-  - navigation
----
 # Getting Started
 
 This section will help you set up your development environment and get started with Open Chat Studio.

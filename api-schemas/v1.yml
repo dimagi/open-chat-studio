@@ -1892,6 +1892,7 @@ components:
           type: array
           items:
             type: string
+        state: {}
       required:
       - created_at
       - experiment
@@ -1969,6 +1970,7 @@ components:
           type: array
           items:
             type: string
+        state: {}
       required:
       - created_at
       - experiment
