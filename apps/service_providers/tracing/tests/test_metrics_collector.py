@@ -2,6 +2,7 @@ import threading
 import time
 from uuid import uuid4
 
+import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
@@ -231,28 +232,25 @@ class TestOnLlmEndFallback:
         assert bucket["output_tokens"] > 0  # tiktoken counted the response
         assert bucket["calls"] == 1
 
-    def test_non_openai_missing_usage_routes_to_estimated(self):
-        """Non-OPENAI providers with prompts use count_tokens_approximately
-        instead of bucketing to zero-quantity UNKNOWN."""
+    @pytest.mark.parametrize(
+        ("prompts", "expected_confidence", "qty_positive"),
+        [
+            pytest.param(["hello"], Confidence.ESTIMATED, True, id="with-prompts→estimated"),
+            pytest.param([], Confidence.UNKNOWN, False, id="no-prompts→unknown"),
+        ],
+    )
+    def test_non_openai_fallback_routing(self, prompts, expected_confidence, qty_positive):
         collector = MetricsCollector(start_time=time.time())
-        args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=["hello"])
+        args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=prompts)
         collector.on_llm_start({}, **args)
         collector.on_llm_end(_result_without_usage("a response"), run_id=args["run_id"])
-        bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.ESTIMATED)]
-        assert bucket["input_tokens"] > 0
-        assert bucket["output_tokens"] > 0
-        assert bucket["calls"] == 1
-
-    def test_empty_prompts_routes_to_unknown(self):
-        """UNKNOWN remains the bucket for the genuine no-data case: no
-        usage_metadata AND no prompts to estimate from."""
-        collector = MetricsCollector(start_time=time.time())
-        args = _start_args(model="claude-haiku-4-5", provider="anthropic", prompts=[])
-        collector.on_llm_start({}, **args)
-        collector.on_llm_end(_result_without_usage(), run_id=args["run_id"])
-        bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", Confidence.UNKNOWN)]
-        assert bucket["input_tokens"] == 0
-        assert bucket["output_tokens"] == 0
+        bucket = collector._fallback_usage[("anthropic", "claude-haiku-4-5", expected_confidence)]
+        if qty_positive:
+            assert bucket["input_tokens"] > 0
+            assert bucket["output_tokens"] > 0
+        else:
+            assert bucket["input_tokens"] == 0
+            assert bucket["output_tokens"] == 0
         assert bucket["calls"] == 1
 
     def test_unknown_calls_accumulate(self):
@@ -363,47 +361,28 @@ class TestSplitBuckets:
         assert buckets[ServiceKind.LLM_CACHED_INPUT] == 0
         assert buckets[ServiceKind.LLM_CACHE_WRITE] == 0
 
-    def test_cache_read_subtracted_from_input(self):
+    @pytest.mark.parametrize(
+        ("detail_key", "detail_qty", "expected_bucket"),
+        [
+            pytest.param("cache_read", 30, ServiceKind.LLM_CACHED_INPUT, id="openai-cache-read"),
+            pytest.param("cache_creation", 40, ServiceKind.LLM_CACHE_WRITE, id="anthropic-cache-write"),
+            pytest.param("flex_cache_read", 30, ServiceKind.LLM_CACHED_INPUT, id="openai-flex-tier-alias"),
+        ],
+    )
+    def test_cache_subtype_subtracted_from_input(self, detail_key, detail_qty, expected_bucket):
+        """The cache sub-bucket is subtracted from headline input (avoiding
+        double-count) and lands in its own ServiceKind bucket."""
         buckets = dict(
             _split_buckets(
                 {
                     "input_tokens": 100,
                     "output_tokens": 50,
-                    "input_token_details": {"cache_read": 30},
+                    "input_token_details": {detail_key: detail_qty},
                 }
             )
         )
-        # Net non-cached input is 100 - 30 = 70; cache read is its own bucket.
-        assert buckets[ServiceKind.LLM_INPUT] == 70
-        assert buckets[ServiceKind.LLM_CACHED_INPUT] == 30
-
-    def test_anthropic_cache_creation_subtracted(self):
-        buckets = dict(
-            _split_buckets(
-                {
-                    "input_tokens": 100,
-                    "output_tokens": 50,
-                    "input_token_details": {"cache_creation": 40},
-                }
-            )
-        )
-        assert buckets[ServiceKind.LLM_INPUT] == 60
-        assert buckets[ServiceKind.LLM_CACHE_WRITE] == 40
-
-    def test_openai_flex_tier_alias(self):
-        """OpenAI's flex/priority service tiers prefix the cache_read key —
-        the alias list catches them so flex-tier calls aren't misclassified."""
-        buckets = dict(
-            _split_buckets(
-                {
-                    "input_tokens": 100,
-                    "output_tokens": 50,
-                    "input_token_details": {"flex_cache_read": 30},
-                }
-            )
-        )
-        assert buckets[ServiceKind.LLM_INPUT] == 70
-        assert buckets[ServiceKind.LLM_CACHED_INPUT] == 30
+        assert buckets[ServiceKind.LLM_INPUT] == 100 - detail_qty
+        assert buckets[expected_bucket] == detail_qty
 
     def test_negative_net_clamped_to_zero(self):
         """If a future integration over-reports sub-buckets, never produce a

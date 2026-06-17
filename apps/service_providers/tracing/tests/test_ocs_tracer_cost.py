@@ -1,5 +1,6 @@
 """Integration tests for the cost-tracking drain hooked into OCSTracer."""
 
+from contextlib import contextmanager
 from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
@@ -43,10 +44,14 @@ def _llm_result(input_tokens: int, output_tokens: int, model: str = "test-model"
     return LLMResult(generations=[[ChatGeneration(message=message, text="response")]], llm_output=None)
 
 
-def _enable_flag_for(team) -> Flag:
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
+@contextmanager
+def enable_team_flag(name: str, team):
+    flag, _ = Flag.objects.get_or_create(name=name)
     flag.teams.add(team)
-    return flag
+    try:
+        yield flag
+    finally:
+        flag.teams.remove(team)
 
 
 def _seed_rule(provider: str, model: str, kind: ServiceKind, unit_price: str) -> PricingRule:
@@ -127,18 +132,20 @@ class TestCostTrackingFlagGate:
             assert tracer.cost_tracking_enabled is False
 
     def test_enabled_when_flag_active_for_team(self, experiment):
-        _enable_flag_for(experiment.team)
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
-        with tracer.trace(trace_context=TraceContext(id=uuid4(), name="t"), session=session):
+        with (
+            enable_team_flag("flag_ai_cost_monitoring", experiment.team),
+            tracer.trace(trace_context=TraceContext(id=uuid4(), name="t"), session=session),
+        ):
             assert tracer.cost_tracking_enabled is True
 
     def test_reset_between_traces(self, experiment):
-        _enable_flag_for(experiment.team)
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
-        with tracer.trace(trace_context=TraceContext(id=uuid4(), name="t"), session=session):
-            pass
+        with enable_team_flag("flag_ai_cost_monitoring", experiment.team):
+            with tracer.trace(trace_context=TraceContext(id=uuid4(), name="t"), session=session):
+                pass
         # Outside the context, the per-trace state should be cleared.
         assert tracer.cost_tracking_enabled is False
         assert tracer.metrics_collector is None
@@ -149,7 +156,6 @@ class TestCostRecordingEndToEnd:
     """Full path: trace context -> LLM callbacks -> finalisation writes UsageRecord rows."""
 
     def test_writes_usage_records_when_flag_on(self, experiment):
-        _enable_flag_for(experiment.team)
         _seed_rule("openai", "test-model", ServiceKind.LLM_INPUT, "0.00015")
         _seed_rule("openai", "test-model", ServiceKind.LLM_OUTPUT, "0.00060")
 
@@ -158,7 +164,10 @@ class TestCostRecordingEndToEnd:
         ctx = TraceContext(id=uuid4(), name="t")
         run_id = uuid4()
 
-        with tracer.trace(trace_context=ctx, session=session):
+        with (
+            enable_team_flag("flag_ai_cost_monitoring", experiment.team),
+            tracer.trace(trace_context=ctx, session=session),
+        ):
             tracer.metrics_collector.on_llm_start(
                 {},
                 ["hello world"],
@@ -201,13 +210,12 @@ class TestCostRecordingEndToEnd:
     def test_trace_finalisation_continues_when_recorder_fails(self, experiment):
         """A cost-recording failure must not block trace_record.save() —
         outer try/except logs and continues."""
-        _enable_flag_for(experiment.team)
-
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
         ctx = TraceContext(id=uuid4(), name="t")
 
         with (
+            enable_team_flag("flag_ai_cost_monitoring", experiment.team),
             patch(
                 "apps.service_providers.tracing.ocs_tracer.OCSTracer._record_costs",
                 side_effect=RuntimeError("simulated failure"),
