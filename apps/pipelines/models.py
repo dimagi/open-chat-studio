@@ -427,7 +427,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         See ``_sync_resource_fk_fields``.
         """
         self.params = params
-        self.save()
+        if self.pk:
+            # Persist only params (not a full save of a possibly-stale instance) so concurrent
+            # writes to unrelated columns aren't clobbered. _sync_resource_fk_fields handles the
+            # derived FK columns.
+            self.save(update_fields=["params", "updated_at"])
+        else:
+            self.save()
         self._sync_resource_fk_fields()
 
     def update_from_params(self):
