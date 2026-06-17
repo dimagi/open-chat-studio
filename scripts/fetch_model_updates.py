@@ -84,6 +84,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -549,8 +550,6 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  pricing_entries:     {output['summary']['pricing_entries_generated']}")
 
     # Write GITHUB_OUTPUT when running in CI
-    import os
-
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
         new_count = output["summary"]["new_models"]
