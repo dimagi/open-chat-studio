@@ -1,8 +1,21 @@
-"""Custom Django model fields."""
+"""Custom Django model fields and field-value helpers."""
 
 import re
 
 from django.db import models
+
+
+def as_int(value) -> int | None:
+    """Convert a value to an int, returning None if it can't be (e.g. a malformed id from JSON).
+
+    Booleans are rejected: they're never valid ids, and ``int(True)`` would otherwise coerce to 1.
+    """
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class SanitizedJSONField(models.JSONField):

@@ -19,7 +19,7 @@ from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
-from apps.utils.fields import SanitizedJSONField
+from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.models import BaseModel
 
 
@@ -455,7 +455,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def _sync_resource_fk_fields(self):
         """Populate FK/M2M fields from the params JSON.
 
-        The FK columns are a derived mirror of the IDs in params (falsy/non-int values
+        The FK columns are a derived mirror of the IDs in params (non-int/boolean values
         map to null). We don't pre-check that a scalar id still exists: a resource can't
         be deleted while a working node references it — the delete guards check
         pipeline-node usage (see apps.utils.deletion.get_related_objects /
@@ -470,7 +470,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         params = self.params or {}
         update_fields = []
         for field_name in self.resource_fk_fields():
-            value = self._parse_pk(params.get(f"{field_name}_id"))
+            value = as_int(params.get(f"{field_name}_id"))
             if getattr(self, f"{field_name}_id") != value:
                 setattr(self, f"{field_name}_id", value)
                 update_fields.append(f"{field_name}_id")
@@ -479,16 +479,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         index_ids = params.get("collection_index_ids") or []
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
-
-    @staticmethod
-    def _parse_pk(raw):
-        """Parse a params value into an int PK, or None for falsy/non-int values."""
-        if not raw:
-            return None
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return None
 
     def archive(self):
         """
