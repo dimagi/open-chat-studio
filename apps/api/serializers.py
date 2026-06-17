@@ -148,6 +148,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             "platform",
             "messages",
             "tags",
+            "state",
         ]
 
     def __init__(self, *args, **kwargs):
