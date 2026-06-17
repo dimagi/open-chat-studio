@@ -131,7 +131,12 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 @pytest.mark.django_db()
 def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_users, authed_client):
     """Deleting an LLM provider referenced by a pipeline node succeeds (SET_NULL): the node's
-    llm_provider FK is nulled, while params (authoritative) is left untouched."""
+    llm_provider FK is nulled, while params (authoritative) is left untouched.
+
+    In practice this only happens for an archived pipeline: the delete guards block removing a
+    provider that a live (working) node still references, so the FK is only nulled once the
+    pipeline holding the node has been archived and the provider is then deleted.
+    """
     provider = LlmProviderFactory(team=team_with_users)
     node = NodeFactory.create(
         type="LLMResponseWithPrompt",
