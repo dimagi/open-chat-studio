@@ -310,12 +310,9 @@ MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
 MFA_RECOVERY_CODE_COUNT = 10
 MFA_TOTP_ISSUER = "Open Chat Studio"
 
-# User signup configuration. Defaults to "mandatory" so users must confirm ownership of their email
-# address before signing in. This keeps the email addresses OCS asserts (including via the OIDC
-# userinfo/id_token claims that downstream consumers federate against) trustworthy. Override with
-# "optional" (send confirmation emails but don't require them) or "none" (don't verify at all) only
-# for local development where email delivery isn't configured.
-ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="mandatory")
+# User signup configuration: change to "mandatory" to require users to confirm email before signing in.
+# or "optional" to send confirmation emails but not require them
+ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
 
 AUTHENTICATION_BACKENDS = (
     # check permissions exist (DEBUG only)
