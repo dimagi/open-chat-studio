@@ -64,6 +64,14 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        """Template method: subclasses implement `_chat_model`; this method
+        stamps provider identity on the result. Do NOT override this method
+        directly — override `_chat_model` instead, otherwise the provider
+        tag won't be applied and cost-tracking will misattribute usage.
+        """
+        return self._tag_chat_model(self._chat_model(llm_model, **kwargs))
+
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise NotImplementedError
 
     def _tag_chat_model(self, model: BaseChatModel) -> BaseChatModel:
@@ -180,7 +188,7 @@ class OpenAIGenericService(LlmService):
     # Generic OpenAI-compatible providers (e.g. Groq, Perplexity) do not support it.
     _use_responses_api: ClassVar[bool] = False
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         model_kwargs = self._get_model_kwargs(**kwargs)
@@ -200,7 +208,7 @@ class OpenAIGenericService(LlmService):
                     model.tiktoken_model_name = "gpt-3.5-turbo"
                 case _:
                     model.tiktoken_model_name = "gpt-4"
-        return self._tag_chat_model(model)
+        return model
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         if effort := kwargs.pop("effort", None):
@@ -357,17 +365,16 @@ class AzureLlmService(LlmService):
     openai_api_base: str
     openai_api_version: str
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import AzureChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        model = AzureChatOpenAI(
+        return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
             openai_api_key=self.openai_api_key,
             deployment_name=llm_model,
             **kwargs,
         )
-        return self._tag_chat_model(model)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
@@ -377,16 +384,15 @@ class AnthropicLlmService(LlmService):
     anthropic_api_key: str
     anthropic_api_base: str
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_anthropic import ChatAnthropic  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        model = ChatAnthropic(
+        return ChatAnthropic(
             anthropic_api_key=self.anthropic_api_key,
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             **self._get_model_kwargs(**kwargs),
         )
-        return self._tag_chat_model(model)
 
     def _get_model_kwargs(self, **kwargs) -> dict:
         budget_tokens = kwargs.pop("budget_tokens", 1024)
@@ -439,13 +445,12 @@ class DeepSeekLlmService(LlmService):
     deepseek_api_key: str
     deepseek_api_base: str
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        model = ChatOpenAI(
+        return ChatOpenAI(
             model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
         )
-        return self._tag_chat_model(model)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
@@ -454,11 +459,10 @@ class DeepSeekLlmService(LlmService):
 class GoogleLlmService(LlmService):
     google_api_key: str
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        model = ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
-        return self._tag_chat_model(model)
+        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
@@ -481,7 +485,7 @@ class GoogleLlmService(LlmService):
 class VoyageAILlmService(LlmService):
     voyage_api_key: str
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
@@ -496,17 +500,16 @@ class GoogleVertexAILlmService(LlmService):
     location: str = "global"
     api_transport: Literal["grpc", "rest"] = "grpc"
 
-    def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_vertexai import ChatVertexAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        model = ChatVertexAI(
+        return ChatVertexAI(
             model=llm_model,
             credentials=self.credentials,
             location=self.location,
             api_transport=self.api_transport,
             **kwargs,
         )
-        return self._tag_chat_model(model)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
