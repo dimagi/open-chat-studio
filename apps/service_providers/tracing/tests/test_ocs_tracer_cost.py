@@ -11,8 +11,10 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 
 from apps.cost_tracking.models import PricingRule, ServiceKind, UsageRecord
 from apps.service_providers.tracing.base import TraceContext
+from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.service_providers.tracing.ocs_tracer import OCSTracer
 from apps.teams.models import Flag
+from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -68,8 +70,6 @@ class TestRecordCostsShortCircuits:
     """
 
     def _collector_with_events(self):
-        from apps.service_providers.tracing.metrics import MetricsCollector  # noqa: PLC0415 - test scope
-
         collector = MetricsCollector(start_time=0.0)
         # Populate one EXACT bucket so iter_cost_events would yield without the guard.
         collector._exact_usage = {("openai", "gpt-4o-mini"): {"input_tokens": 10, "output_tokens": 5}}
@@ -104,8 +104,6 @@ class TestRecordCostsShortCircuits:
 
     def test_short_circuits_when_no_events(self, experiment):
         """A trace with no LLM calls (`iter_cost_events` yields nothing) doesn't call the recorder."""
-        from apps.service_providers.tracing.metrics import MetricsCollector  # noqa: PLC0415 - test scope
-
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.cost_tracking_enabled = True
         tracer.metrics_collector = MetricsCollector(start_time=0.0)
@@ -222,7 +220,5 @@ class TestCostRecordingEndToEnd:
         # though cost recording blew up inside _finalize_trace's try/except.
         # We check status (set to SUCCESS just before save()) rather than
         # duration, which can round to 0ms on fast machines.
-        from apps.trace.models import Trace, TraceStatus  # noqa: PLC0415 - test scope
-
         trace_row = Trace.objects.get(team_id=experiment.team_id, trace_id=ctx.id)
         assert trace_row.status == TraceStatus.SUCCESS
