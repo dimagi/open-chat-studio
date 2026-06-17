@@ -1,6 +1,7 @@
 from oauth2_provider.oauth2_validators import OAuth2Validator
 
 from apps.teams.utils import get_current_team, get_slug_for_team
+from apps.users.helpers import user_has_confirmed_email_address
 
 from .models import OAuth2Grant
 
@@ -18,7 +19,7 @@ class APIScopedValidator(OAuth2Validator):
     """
 
     oidc_claim_scope = OAuth2Validator.oidc_claim_scope
-    oidc_claim_scope.update({"is_active": "openid", "team": "openid"})
+    oidc_claim_scope.update({"is_active": "openid", "team": "openid", "email_verified": "openid"})
 
     def _create_authorization_code(self, request, code, expires=None):
         grant = super()._create_authorization_code(request, code, expires)
@@ -52,7 +53,15 @@ class APIScopedValidator(OAuth2Validator):
         return refresh_token
 
     def get_additional_claims(self, request):
-        claims = {"sub": request.user.email, "name": request.user.get_full_name(), "is_active": request.user.is_active}
+        # `sub` is the user's email, so we also assert whether that email has been verified. This lets
+        # downstream consumers that federate against OCS decide whether to trust the asserted email
+        # (e.g. for cross-provider account linking) instead of assuming it has been verified.
+        claims = {
+            "sub": request.user.email,
+            "name": request.user.get_full_name(),
+            "is_active": request.user.is_active,
+            "email_verified": user_has_confirmed_email_address(request.user, request.user.email),
+        }
         if team := getattr(request, "team", None):
             claims["team"] = team.slug
         else:

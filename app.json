@@ -11,8 +11,8 @@
   "scripts": {},
   "env": {
     "ACCOUNT_EMAIL_VERIFICATION": {
-      "description": "Require email verification for new accounts. Options are 'none', 'mandatory', or 'optional'",
-      "value": "none",
+      "description": "Require email verification for new accounts. Options are 'mandatory', 'optional', or 'none'. 'mandatory' is recommended so users must confirm ownership of their email before signing in.",
+      "value": "mandatory",
       "required": true
     },
     "DJANGO_SETTINGS_MODULE": "config.settings_production",
