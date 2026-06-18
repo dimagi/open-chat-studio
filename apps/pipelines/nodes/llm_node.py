@@ -103,10 +103,8 @@ def build_node_agent(
     context: NodeContext,
     session: ExperimentSession,
     tool_callbacks: ToolCallbacks,
-    prompt_context: PromptTemplateContext | None = None,
+    prompt_context: PromptTemplateContext,
 ):
-    if prompt_context is None:
-        prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 

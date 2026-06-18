@@ -27,7 +27,6 @@ class TestBuildNodeAgentPromptCaching:
 
         monkeypatch.setattr("apps.pipelines.nodes.llm_node.create_agent", fake_create_agent)
         monkeypatch.setattr("apps.pipelines.nodes.llm_node._get_configured_tools", lambda *args, **kwargs: [])
-        monkeypatch.setattr("apps.pipelines.nodes.llm_node._get_prompt_context", lambda *args, **kwargs: Mock())
         monkeypatch.setattr(
             "apps.pipelines.nodes.llm_node.get_system_message",
             lambda *args, **kwargs: SystemMessage(content="prompt"),
@@ -36,7 +35,7 @@ class TestBuildNodeAgentPromptCaching:
         node = Mock()
         node.get_llm_service.return_value = service
         node.build_history_middleware.return_value = None
-        build_node_agent(node, context=Mock(), session=Mock(), tool_callbacks=Mock())
+        build_node_agent(node, context=Mock(), session=Mock(), tool_callbacks=Mock(), prompt_context=Mock())
         return captured["middleware"]
 
     @pytest.mark.parametrize(
