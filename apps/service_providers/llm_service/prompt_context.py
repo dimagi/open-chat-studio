@@ -103,6 +103,14 @@ class PromptTemplateContext:
     def get_current_datetime(self):
         return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone())
 
+    def get_current_date(self):
+        """Day-precision, tz-aware date.
+
+        Used in place of the volatile second-precision datetime when rendering the cacheable
+        system prompt so the prompt prefix stays stable within a day. See issue #3625.
+        """
+        return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone(), include_time=False)
+
 
 class SafeAccessWrapper(dict):
     """Allow access to nested data structures without raising exceptions.

@@ -27,8 +27,12 @@ def timedelta_to_relative_delta(timedelta: timedelta):
     return relativedelta(seconds=timedelta.total_seconds())
 
 
-def pretty_date(date: datetime, as_timezone: str | None = None) -> str:
-    """Returns the date like this: 'Monday, 1 January 2024 08:00:00 UTC'"""
+def pretty_date(date: datetime, as_timezone: str | None = None, include_time: bool = True) -> str:
+    """Returns the date like this: 'Monday, 1 January 2024 08:00:00 UTC'.
+
+    Set ``include_time=False`` for a day-precision rendering ('Monday, 1 January 2024').
+    """
     as_timezone = as_timezone or get_current_timezone_name()
     date = date.astimezone(pytz.timezone(as_timezone))
-    return date.strftime("%A, %d %B %Y %H:%M:%S %Z")
+    fmt = "%A, %d %B %Y %H:%M:%S %Z" if include_time else "%A, %d %B %Y"
+    return date.strftime(fmt)
