@@ -12,6 +12,7 @@ from apps.service_providers.models import (
     VoiceProviderType,
 )
 from apps.service_providers.utils import ServiceProvider
+from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
     LlmProviderFactory,
@@ -125,6 +126,36 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 
     assert response.status_code == 302
     mock_sync.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_users, authed_client):
+    """Deleting an LLM provider referenced by a pipeline node succeeds (SET_NULL): the node's
+    llm_provider FK is nulled, while params (authoritative) is left untouched.
+
+    In practice this only happens for an archived pipeline: the delete guards block removing a
+    provider that a live (working) node still references, so the FK is only nulled once the
+    pipeline holding the node has been archived and the provider is then deleted.
+    """
+    provider = LlmProviderFactory(team=team_with_users)
+    node = NodeFactory.create(
+        type="LLMResponseWithPrompt",
+        params={"llm_provider_id": provider.id},
+        llm_provider=provider,
+    )
+
+    response = authed_client.delete(
+        reverse(
+            "service_providers:delete",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": ServiceProvider.llm.slug, "pk": provider.pk},
+        )
+    )
+
+    assert response.status_code == 200
+    assert not LlmProvider.objects.filter(pk=provider.pk).exists()
+    node.refresh_from_db()
+    assert node.llm_provider_id is None
+    assert node.params["llm_provider_id"] == provider.id  # params unchanged (authoritative)
 
 
 @pytest.mark.django_db()
