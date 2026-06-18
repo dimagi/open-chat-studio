@@ -9,10 +9,12 @@ from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 # Resolution embeds the inspect prefetch set, so every mode costs one resolution query plus the
-# fixed prefetch fan-out (pipeline__node_set, static_triggers, timeout_triggers). The count is
-# constant across modes: versioned reads join through ``working_version__public_id`` rather than
-# fetching the family first, so no mode pays an extra resolution round trip.
-EXPECTED_RESOLVE_QUERIES = 4
+# fixed prefetch fan-out: static_triggers, timeout_triggers, and the node set with each node's
+# resource relations (inspect_node_queryset adds the collection_indexes M2M and
+# custom_action_operations prefetches). The count is constant across modes: versioned reads join
+# through ``working_version__public_id`` rather than fetching the family first, so no mode pays an
+# extra resolution round trip.
+EXPECTED_RESOLVE_QUERIES = 6
 
 
 @pytest.mark.django_db()

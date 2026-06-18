@@ -9,7 +9,6 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import DjangoModelPermissionsWithView
-from apps.api.v2.inspect.resources import ResourceFetcher
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
@@ -83,8 +82,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             )
         except InspectVersionError as err:
             raise NotFound("Requested chatbot version was not found.") from err
-        fetcher = ResourceFetcher.for_experiment(target)
-        serializer = ChatbotInspectSerializer(target, context={"team": target.team, "fetcher": fetcher})
+        serializer = ChatbotInspectSerializer(target, context={"team": target.team})
         return Response(serializer.data)
 
 
