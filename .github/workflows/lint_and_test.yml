@@ -223,13 +223,20 @@ jobs:
             -c "ALTER SYSTEM SET full_page_writes = off;" \
             -c "ALTER SYSTEM SET checkpoint_completion_target = 0.9;" \
             -c "SELECT pg_reload_conf();"
-      - name: Set coverage flags
-        id: cov_flags
+          # Create extensions in template1 so test databases inherit them. This lets PR runs
+          # use --no-migrations (the extensions are normally created by a migration).
+          PGPASSWORD=postgres_password psql -h localhost -U postgres -d template1 \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - name: Set test flags
+        id: test_flags
         run: |
+          # On main, run with migrations (and coverage) so migrations stay exercised before deploy.
+          # On PRs, skip migrations for faster feedback.
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "flags=--cov --cov-report=xml" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=" >> "$GITHUB_OUTPUT"
+            echo "flags=--no-migrations" >> "$GITHUB_OUTPUT"
           fi
       - name: Run Tests
         env:
@@ -237,7 +244,7 @@ jobs:
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
           PYTHONWARNINGS: default
-        run: uv run pytest -n auto ${{ steps.cov_flags.outputs.flags }} --junitxml=junit.xml -o junit_family=legacy
+        run: uv run pytest -n auto ${{ steps.test_flags.outputs.flags }} --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload results to Codecov
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
