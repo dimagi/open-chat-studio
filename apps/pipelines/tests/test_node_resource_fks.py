@@ -292,6 +292,28 @@ def test_backfill_node_fks_command_is_idempotent():
 
 
 @pytest.mark.django_db()
+def test_team_scoped_run_does_not_block_other_teams():
+    """A --team run scopes its idempotency marker, so a later run for a different team still executes."""
+    provider = LlmProviderFactory.create()
+    pipeline_a = PipelineFactory.create()
+    pipeline_b = PipelineFactory.create()
+    node_a = NodeFactory.create(
+        type="LLMResponseWithPrompt", params={"llm_provider_id": provider.id}, pipeline=pipeline_a
+    )
+    node_b = NodeFactory.create(
+        type="LLMResponseWithPrompt", params={"llm_provider_id": provider.id}, pipeline=pipeline_b
+    )
+
+    call_command("backfill_node_fks", team=pipeline_a.team.slug, stdout=StringIO())
+    call_command("backfill_node_fks", team=pipeline_b.team.slug, stdout=StringIO())
+
+    node_a.refresh_from_db()
+    node_b.refresh_from_db()
+    assert node_a.llm_provider_id == provider.id
+    assert node_b.llm_provider_id == provider.id
+
+
+@pytest.mark.django_db()
 def test_backfill_nulls_dangling_scalar_fk():
     """A scalar FK ID in params that references a deleted resource is set to None, not written as-is."""
     node = NodeFactory.create(

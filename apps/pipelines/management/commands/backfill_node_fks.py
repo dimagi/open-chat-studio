@@ -29,6 +29,9 @@ class Command(IdempotentCommand):
                 self.team = Team.objects.get(slug=team_slug)
             except Team.DoesNotExist:
                 raise CommandError(f"Team '{team_slug}' does not exist.") from None
+            # Scope the idempotency marker per team so a targeted run doesn't mark the whole
+            # migration applied and turn a later full (or other-team) run into a no-op.
+            self.migration_name = f"{self.migration_name}__team_{self.team.id}"
         else:
             self.team = None
         super().handle(*args, **options)
@@ -79,6 +82,14 @@ class Command(IdempotentCommand):
         self.stdout.write(self.style.SUCCESS(f"Done. Processed: {processed}"))
         return processed
 
+    @staticmethod
+    def _resolve_fk_value(params, attr, valid_ids):
+        """Return the params id for attr, or None if it's missing, malformed, or dangling."""
+        value = as_int(params.get(attr))
+        if value is not None and value not in valid_ids:
+            return None
+        return value
+
     def _backfill_scalar_fks(self, nodes, fk_id_attrs, valid_fk_ids):
         """Mirror the scalar FK columns from params, bulk-updating only the nodes that changed.
 
@@ -89,9 +100,7 @@ class Command(IdempotentCommand):
             params = node.params or {}
             node_changed = False
             for attr in fk_id_attrs:
-                value = as_int(params.get(attr))
-                if value is not None and value not in valid_fk_ids[attr]:
-                    value = None
+                value = self._resolve_fk_value(params, attr, valid_fk_ids[attr])
                 if getattr(node, attr) != value:
                     setattr(node, attr, value)
                     node_changed = True
