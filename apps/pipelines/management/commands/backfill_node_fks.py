@@ -61,6 +61,7 @@ class Command(IdempotentCommand):
             # get_all() so bulk_update's queryset isn't filtered to is_archived=False — archived
             # node versions must be mirrored too (see perform_migration).
             Node.objects.get_all().bulk_update(changed, fk_id_attrs, batch_size=BATCH_SIZE)
+        self.stdout.write(f"    scalar FKs: {len(changed)}/{len(nodes)} nodes updated")
 
     def _backfill_collection_indexes(self, nodes):
         """Reconcile the collection_indexes M2M through table to mirror collection_index_ids in params.
@@ -107,3 +108,4 @@ class Command(IdempotentCommand):
             through.objects.bulk_create(to_create, batch_size=BATCH_SIZE, ignore_conflicts=True)
         if stale_row_ids:
             through.objects.filter(id__in=stale_row_ids).delete()
+        self.stdout.write(f"    collection indexes: {len(to_create)} created, {len(stale_row_ids)} deleted")
