@@ -268,7 +268,7 @@ def test_backfill_node_fks_command():
         node.collection_indexes.clear()
 
     out = StringIO()
-    call_command("backfill_node_fks", stdout=out)
+    call_command("backfill_node_fks", force=True, stdout=out)
 
     for node in nodes:
         node.refresh_from_db()
@@ -285,8 +285,8 @@ def test_backfill_node_fks_command_is_idempotent():
         type="LLMResponseWithPrompt",
         params={"llm_provider_id": provider.id},
     )
-    call_command("backfill_node_fks", stdout=StringIO())
-    call_command("backfill_node_fks", stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
     assert node.llm_provider_id == provider.id
 
@@ -298,7 +298,7 @@ def test_backfill_nulls_dangling_scalar_fk():
         type="LLMResponseWithPrompt",
         params={"llm_provider_id": 999999},
     )
-    call_command("backfill_node_fks", stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
     assert node.llm_provider_id is None
 
@@ -310,7 +310,7 @@ def test_backfill_skips_dangling_collection_index_id():
         type="LLMResponseWithPrompt",
         params={"collection_index_ids": [999999]},
     )
-    call_command("backfill_node_fks", stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
     assert node.collection_indexes.count() == 0
 
 
@@ -338,7 +338,7 @@ def test_backfill_links_all_resources_when_they_exist():
         params={**expected, "collection_index_ids": [index.id]},
     )
 
-    call_command("backfill_node_fks", stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
 
     for attr, resource_id in expected.items():
@@ -366,7 +366,7 @@ def test_backfill_keeps_scalar_fk_to_archived_resource():
             "assistant_id": assistant.id,
         },
     )
-    call_command("backfill_node_fks", stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
     assert node.collection_id == collection.id
     assert node.source_material_id == source_material.id
@@ -382,5 +382,5 @@ def test_backfill_drops_archived_collection_index():
         type="LLMResponseWithPrompt",
         params={"collection_index_ids": [valid_index.id, archived_index.id]},
     )
-    call_command("backfill_node_fks", stdout=StringIO())
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
     assert set(node.collection_indexes.values_list("id", flat=True)) == {valid_index.id}
