@@ -346,3 +346,41 @@ def test_backfill_links_all_resources_when_they_exist():
     # Every resource FK on the model is now populated — nothing left dangling.
     assert all(getattr(node, f"{name}_id") is not None for name in Node.resource_fk_fields())
     assert set(node.collection_indexes.values_list("id", flat=True)) == {index.id}
+
+
+@pytest.mark.django_db()
+def test_backfill_keeps_scalar_fk_to_archived_resource():
+    """Archiving is a soft-delete: the row still exists, so a scalar FK to it stays linked.
+
+    The versioned resource managers filter is_archived=False, but the FK is still satisfiable,
+    so the backfill must not treat an archived-but-existing reference as dangling.
+    """
+    collection = CollectionFactory.create(is_archived=True)
+    source_material = SourceMaterialFactory.create(is_archived=True)
+    assistant = OpenAiAssistantFactory.create(is_archived=True)
+    node = NodeFactory.create(
+        type="LLMResponseWithPrompt",
+        params={
+            "collection_id": collection.id,
+            "source_material_id": source_material.id,
+            "assistant_id": assistant.id,
+        },
+    )
+    call_command("backfill_node_fks", stdout=StringIO())
+    node.refresh_from_db()
+    assert node.collection_id == collection.id
+    assert node.source_material_id == source_material.id
+    assert node.assistant_id == assistant.id
+
+
+@pytest.mark.django_db()
+def test_backfill_drops_archived_collection_index():
+    """The collection_indexes M2M mirrors runtime Collection.objects, which excludes archived rows."""
+    valid_index = CollectionFactory.create(is_index=True)
+    archived_index = CollectionFactory.create(is_index=True, is_archived=True)
+    node = NodeFactory.create(
+        type="LLMResponseWithPrompt",
+        params={"collection_index_ids": [valid_index.id, archived_index.id]},
+    )
+    call_command("backfill_node_fks", stdout=StringIO())
+    assert set(node.collection_indexes.values_list("id", flat=True)) == {valid_index.id}
