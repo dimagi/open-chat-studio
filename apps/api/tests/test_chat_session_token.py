@@ -206,6 +206,19 @@ def test_old_widget_implicitly_opts_out(api_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_pre_header_widget_implicitly_opts_out(api_client, experiment):
+    """Widgets older than 0.5.1 send no version header; they are still pre-token widgets.
+
+    They identify themselves via session_data.source and must opt out, otherwise the
+    session would require a token the widget never sends.
+    """
+    response = start_session(api_client, experiment, {"session_data": {"source": "widget"}})
+    body = response.json()
+    assert body["session_token"] is None
+    assert ExperimentSession.objects.get(external_id=body["session_id"]).session_token_required is False
+
+
+@pytest.mark.django_db()
 def test_authenticated_start_then_poll_without_token(api_client, experiment, team_with_users):
     """Authenticated users rely on the auth bypass, not the returned token."""
     user = team_with_users.members.first()
