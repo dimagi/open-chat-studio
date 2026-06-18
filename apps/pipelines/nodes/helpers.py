@@ -50,12 +50,9 @@ def get_system_message(prompt_template: str, prompt_context: PromptTemplateConte
     Returns a populated SystemMessage based on the provided prompt template and context.
     """
     input_variables = {v for _, v, _, _ in Formatter().parse(prompt_template) if v is not None}
-    context = prompt_context.get_context(input_variables)
-    if "current_datetime" in context:
-        # Render the volatile second-precision datetime at day precision so the cached system
-        # prompt prefix stays stable within a day. The precise time is injected into the latest
-        # message turn instead (see apps.pipelines.nodes.llm_node). See issue #3625.
-        context["current_datetime"] = prompt_context.get_current_date()
+    # coarse_datetime keeps the volatile second-precision value out of the cacheable system prompt;
+    # the precise time is injected into the latest message turn instead (see llm_node). See #3625.
+    context = prompt_context.get_context(input_variables, coarse_datetime=True)
     try:
         system_message = prompt_template.format(**context)
         return SystemMessage(content=system_message)

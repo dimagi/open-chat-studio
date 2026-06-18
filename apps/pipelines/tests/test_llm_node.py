@@ -75,16 +75,16 @@ class TestCurrentDatetimeCachePreservation:
     def test_prompt_uses_current_datetime(self, prompt, expected):
         assert prompt_uses_current_datetime(prompt) is expected
 
-    def test_system_message_coarsens_current_datetime_to_date(self):
+    def test_system_message_requests_coarse_datetime(self):
         prompt_context = Mock()
-        prompt_context.get_context.return_value = {"current_datetime": "Monday, 16 June 2026 14:32:05 UTC"}
-        prompt_context.get_current_date.return_value = "Monday, 16 June 2026"
+        prompt_context.get_context.return_value = {"current_datetime": "Tuesday, 16 June 2026"}
 
         message = get_system_message("Today is {current_datetime}", prompt_context)
 
-        assert message.content == "Today is Monday, 16 June 2026"
-        assert "14:32:05" not in message.content
-        prompt_context.get_current_date.assert_called_once()
+        assert message.content == "Today is Tuesday, 16 June 2026"
+        # The context must render the coarse (day-precision) value, not the consumer fixing it up.
+        _, kwargs = prompt_context.get_context.call_args
+        assert kwargs["coarse_datetime"] is True
 
     def test_add_current_datetime_to_turn_injects_leading_block(self):
         node = Mock(prompt="Be useful {current_datetime}")
