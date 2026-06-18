@@ -488,11 +488,16 @@ def revert_chatbot_version(request, team_slug: str, experiment_id: int, version_
     if experiment.is_archived:
         raise PermissionDenied("Unable to revert an archived chatbot.")
 
-    if experiment.version_operation_in_progress:
-        messages.error(request, "A version operation is already in progress.")
-    else:
-        experiment.revert_to_version(version)
+    # Hold the version-operation lock for the whole revert so a concurrent publish/revert can't
+    # interleave with it. acquire_version_operation_lock claims it atomically (no TOCTOU gap).
+    if experiment.acquire_version_operation_lock(f"revert-{experiment.id}-{version_number}"):
+        try:
+            experiment.revert_to_version(version)
+        finally:
+            Experiment.release_version_operation_lock(experiment.id)
         messages.success(request, f"Reverted to v{version_number}.")
+    else:
+        messages.error(request, "A version operation is already in progress.")
 
     url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
     return HttpResponseRedirect(f"{url}#versions")

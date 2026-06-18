@@ -983,6 +983,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.save()
 
         if version.pipeline:
+            if not self.pipeline:
+                raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
             self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):

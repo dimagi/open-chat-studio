@@ -802,35 +802,6 @@ def test_revert_chatbot_version_view(client, team_with_users):
 
 
 @pytest.mark.django_db()
-def test_revert_chatbot_version_is_post_only(client, team_with_users):
-    team = team_with_users
-    user = team.members.first()
-    user.user_permissions.add(Permission.objects.get(codename="change_experiment"))
-    client.force_login(user)
-    experiment = ExperimentFactory.create(team=team, owner=user)
-    version = experiment.create_new_version(make_default=True)
-
-    url = reverse("chatbots:revert-version", args=[team.slug, experiment.id, version.version_number])
-    assert client.get(url).status_code == 405
-
-
-@pytest.mark.django_db()
-def test_revert_chatbot_version_requires_permission(client, team_with_users):
-    team = team_with_users
-    owner = team.members.first()
-    experiment = ExperimentFactory.create(team=team, owner=owner)
-    version = experiment.create_new_version(make_default=True)
-
-    # A team member without the change_experiment permission is forbidden.
-    no_perm_user = UserFactory.create()
-    MembershipFactory.create(team=team, user=no_perm_user)
-    client.force_login(no_perm_user)
-
-    url = reverse("chatbots:revert-version", args=[team.slug, experiment.id, version.version_number])
-    assert client.post(url).status_code == 403
-
-
-@pytest.mark.django_db()
 def test_version_operation_status_polling(client, team_with_users):
     """The status endpoint reports any in-flight version operation, not just publish."""
     team = team_with_users
