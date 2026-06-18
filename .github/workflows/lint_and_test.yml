@@ -233,7 +233,7 @@ jobs:
         run: |
           # On main, run with migrations (and coverage) so migrations stay exercised before deploy.
           # On PRs, skip migrations for faster feedback.
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
             echo "flags=--cov --cov-report=xml" >> "$GITHUB_OUTPUT"
           else
             echo "flags=--no-migrations" >> "$GITHUB_OUTPUT"
