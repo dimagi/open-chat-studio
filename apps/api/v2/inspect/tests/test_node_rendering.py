@@ -40,13 +40,12 @@ def test_llm_node_declares_all_keys_with_null_and_empty_when_unset():
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(("source", "value", "renamed"), [("max_results", 20, "max_indexed_collection_search_results")])
-def test_params_renamed(source, value, renamed):
-    """Test parameter renames"""
-    data = _render("LLMResponseWithPrompt", {"prompt": "hi", source: value})
+def test_params_renamed():
+    """``max_results`` is surfaced as ``max_indexed_collection_search_results``."""
+    data = _render("LLMResponseWithPrompt", {"prompt": "hi", "max_results": 20})
     params = data["params"]
-    assert source not in params
-    assert params[renamed] == 20
+    assert "max_results" not in params
+    assert params["max_indexed_collection_search_results"] == 20
 
 
 @pytest.mark.django_db()

@@ -1,9 +1,10 @@
 """Turn the ``?version=`` query parameter into the chatbot version to inspect.
 
 The chosen version comes back already loaded with the related objects the inspect serializers need,
-including each pipeline node's resource FK/M2M relations (via ``inspect_node_queryset``). Picking the
-version and preloading its relations happen in one query — each ``?version=`` mode filters the
-preloaded queryset directly — so no follow-up round trip is needed.
+including each pipeline node's resource FK/M2M relations (via ``inspect_node_queryset``). Version
+selection and relation preloading are resolved together in the initial queryset evaluation — each
+``?version=`` mode filters that preloaded queryset directly — so inspect rendering needs no
+additional per-node fetches.
 """
 
 from django.db.models import Prefetch

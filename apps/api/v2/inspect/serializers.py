@@ -460,15 +460,9 @@ class GraphSerializer(serializers.Serializer):
 class InspectNodeSerializer(serializers.ModelSerializer):
     """One pipeline node, with the resources it references inlined.
 
-    All resource keys are declared as fields so they appear in the OpenAPI schema, but a node only
-    renders the keys its type actually uses: a ``StartNode`` shows none, while an
+    A node only renders the resource keys its type uses: a ``StartNode`` shows none, while an
     ``LLMResponseWithPrompt`` shows its own — ``null`` for an unset single value, ``[]`` for an
-    unset list. Keys the node type doesn't declare are dropped entirely by ``to_representation``.
-
-    Simple references (``source_material``, ``assistant``, ``media_collection``,
-    ``indexed_collections``) are declarative nested fields mapped straight to the node's FK/M2M
-    relations. ``llm``/``voice`` stay method fields — they flatten two source objects into one and
-    render ``null`` when empty — as does ``custom_actions``, which groups operations by action.
+    unset list. Keys the node type doesn't declare are absent from the response.
     """
 
     # The resource keys ``to_representation`` drops for node types that don't declare them: they're
@@ -603,8 +597,7 @@ class InspectTriggerActionSerializer(_TeamContextMixin, serializers.ModelSeriali
     """The action an event trigger runs.
 
     The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline exists in the
-    team. Its ``pipeline_id`` lives in the action's JSON params (not an FK), so it's loaded with a
-    single team-scoped query, prefetched the same way as the chatbot's own pipeline.
+    team.
     """
 
     # ``pipeline`` is dropped by ``to_representation`` for non-pipeline_start actions, so the schema
