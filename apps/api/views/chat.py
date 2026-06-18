@@ -170,15 +170,19 @@ def chat_upload_file(request, session_id):
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 
-def _issue_or_opt_out_session_token(request, session, use_session_token):
+def _issue_or_opt_out_session_token(request, session, use_session_token, session_data):
     """Issue a session token, or opt the session out of token enforcement.
 
-    `use_session_token` is the request preference (True/False/None). When None, a
-    pre-token widget (identified by the x-ocs-widget-version header) opts out;
-    everything else defaults to enforced. Returns the token, or None when opted out.
+    `use_session_token` is the request preference (True/False/None). A token-aware
+    widget always sends it explicitly (True), so an unset field from widget traffic
+    means a pre-token widget — opt out. Widget traffic is identified by the
+    x-ocs-widget-version header (sent by 0.5.1+) or, for older widgets that send no
+    header, by `session_data.source`. Everything else (direct API consumers) defaults
+    to enforced. Returns the token, or None when opted out.
     """
     if use_session_token is None:
-        use_session_token = "x-ocs-widget-version" not in request.headers
+        is_widget = WIDGET_VERSION_HEADER in request.headers or session_data.get("source") == "widget"
+        use_session_token = not is_widget
     if use_session_token:
         return issue_session_token(session)
     session.session_token_required = False
@@ -350,7 +354,7 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
-    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"))
+    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"), session_data)
 
     # Prepare response data
     response_data = {
