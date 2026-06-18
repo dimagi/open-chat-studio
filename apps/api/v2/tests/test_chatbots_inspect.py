@@ -6,7 +6,6 @@ from django.urls import reverse
 from field_audit.models import AuditAction
 from rest_framework.test import APIClient
 
-from apps.api.v2.inspect.resources import ResourceFetcher
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import resolve_inspect_version
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -48,6 +47,18 @@ AUTH_SECRET = "auth-SECRET-xyz"
 CHANNEL_SECRET = "telegram-token-SECRET-xyz"
 
 
+def _make_node(**kwargs):
+    """Create a node and sync its resource FK mirror, mirroring production.
+
+    ``NodeFactory.create`` only writes ``params``; production runs ``update_from_params()`` after
+    every node write (via ``update_nodes_from_data``), which is what populates the FK/M2M columns and
+    ``custom_action_operations`` the inspect serializers read.
+    """
+    node = NodeFactory.create(**kwargs)
+    node.update_from_params()
+    return node
+
+
 @pytest.fixture(scope="module")
 def inspect_bot(django_db_setup, django_db_blocker):
     """Build the bot once per module. Module-scoped fixtures can't request the function-scoped ``db``
@@ -82,7 +93,7 @@ def _build_inspect_bot():
     action = CustomActionFactory.create(team=team, name="Session Completion", auth_provider=auth)
 
     pipeline = PipelineFactory.create(team=team)
-    NodeFactory.create(
+    _make_node(
         pipeline=pipeline,
         flow_id="router-1",
         type="RouterNode",
@@ -95,7 +106,7 @@ def _build_inspect_bot():
             "prompt": "Route the user",
         },
     )
-    NodeFactory.create(
+    _make_node(
         pipeline=pipeline,
         flow_id="answer-1",
         type="LLMResponseWithPrompt",
@@ -266,7 +277,7 @@ def test_acceptance_5_custom_action_wired(inspect_bot):
 
 @pytest.mark.django_db()
 def test_custom_action_unknown_operation_resolves_to_absent(inspect_bot):
-    NodeFactory.create(
+    _make_node(
         pipeline=inspect_bot.experiment.pipeline,
         flow_id="stale-1",
         type="LLMResponseWithPrompt",
@@ -319,41 +330,18 @@ def test_inspect_does_not_create_team_channels(inspect_bot):
 
 
 # ── Cross-team isolation ─────────────────────────────────────────────────────────────────────────
-@pytest.mark.django_db()
-def test_cross_team_resource_not_embedded(inspect_bot):
-    foreign_collection = CollectionFactory.create(team=TeamWithUsersFactory.create(), is_index=True)
-    NodeFactory.create(
-        pipeline=inspect_bot.experiment.pipeline,
-        flow_id="leaky-1",
-        type="LLMResponseWithPrompt",
-        label="Leaky",
-        params={"collection_index_ids": [foreign_collection.id]},
-    )
-    # A cross-team collection id resolves to absent rather than leaking another team's resource.
-    assert _node(_get(inspect_bot), "Leaky")["indexed_collections"] == []
-
-
-@pytest.mark.django_db()
-def test_cross_team_synthetic_voice_not_embedded(inspect_bot):
-    """A synthetic voice is only tied to a team through its voice provider, so a voice backed by
-    another team's provider must not resolve."""
-    foreign_voice = SyntheticVoiceFactory.create(
-        voice_provider=VoiceProviderFactory.create(team=TeamWithUsersFactory.create())
-    )
-    NodeFactory.create(
-        pipeline=inspect_bot.experiment.pipeline,
-        flow_id="leaky-voice-1",
-        type="LLMResponseWithPrompt",
-        label="LeakyVoice",
-        params={"synthetic_voice_id": str(foreign_voice.id)},
-    )
-    assert _node(_get(inspect_bot), "LeakyVoice")["voice"] is None
+# The inspect serializers now read the node's resource FK/M2M relations directly (a derived mirror of
+# params), rather than re-loading each id through a team-scoped fetcher. The read-time defense-in-depth
+# that nulled cross-team ids is therefore gone by design: team isolation is enforced where params are
+# written (a node's params must never hold another team's id), not at inspect read. The former
+# read-time cross-team tests were removed with the fetcher; see the follow-up ADR superseding the
+# read-time-scoping aspect of ADR-0028.
 
 
 @pytest.mark.django_db()
 def test_malformed_node_param_id_does_not_crash(inspect_bot):
     """A non-numeric id in a node's params resolves to nothing instead of crashing the response."""
-    NodeFactory.create(
+    _make_node(
         pipeline=inspect_bot.experiment.pipeline,
         flow_id="malformed-1",
         type="LLMResponseWithPrompt",
@@ -762,12 +750,12 @@ def test_full_response_body():
 # ── Embedded pipeline (pipeline_start) + context propagation (review issue #6) ──────────────────
 @pytest.mark.django_db()
 def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
-    """A pipeline_start trigger embeds a second pipeline whose node needs the fetcher to resolve a
-    resource — proving the fetcher reaches the embedded pipeline serializer."""
+    """A pipeline_start trigger embeds a second pipeline whose node references a resource — proving
+    the embedded pipeline serializer resolves the node's FK relations like the main pipeline does."""
     team = inspect_bot.experiment.team
     assistant = OpenAiAssistantFactory.create(team=team, name="Embedded Helper", assistant_id="asst_embed")
     embedded = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
-    NodeFactory.create(
+    _make_node(
         pipeline=embedded,
         flow_id="emb-1",
         type="AssistantNode",
@@ -801,7 +789,7 @@ def _adversarial_bot():
     assistant = OpenAiAssistantFactory.create(team=team)
 
     pipeline = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
-    NodeFactory.create(
+    _make_node(
         pipeline=pipeline,
         flow_id="n1",
         type="LLMResponseWithPrompt",
@@ -812,7 +800,7 @@ def _adversarial_bot():
             "source_material_id": str(source.id),
         },
     )
-    NodeFactory.create(
+    _make_node(
         pipeline=pipeline,
         flow_id="n2",
         type="RouterNode",
@@ -822,7 +810,7 @@ def _adversarial_bot():
     experiment = ExperimentFactory.create(team=team, pipeline=pipeline)
 
     embedded = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
-    NodeFactory.create(
+    _make_node(
         pipeline=embedded,
         flow_id="e1",
         type="AssistantNode",
@@ -839,10 +827,10 @@ def _adversarial_bot():
     return experiment
 
 
-# Empirically derived below (Step D). The SAME number must hold for every version mode, because
-# resolve_inspect_version resolves AND prefetches the target with a fixed prefetch set (issue #16)
-# and the fetcher batch-loads each kind once regardless of fan-out (issues #5/#12). Resolution costs
-# one query in every mode, so folding it into the measured block keeps the count constant.
+# Empirically derived. The SAME number must hold for every version mode, because resolve_inspect_version
+# resolves AND prefetches the target with a fixed prefetch set — including each node's resource FK/M2M
+# relations (inspect_node_queryset) — so node fan-out adds no queries. Resolution costs one query in
+# every mode, so folding it into the measured block keeps the count constant.
 EXPECTED_RENDER_QUERIES = 13
 
 
@@ -858,6 +846,5 @@ def test_inspect_render_query_count_constant_across_versions(version_param, djan
 
     with django_assert_num_queries(EXPECTED_RENDER_QUERIES):
         target = resolve_inspect_version(family.public_id, version_param, team=team)
-        fetcher = ResourceFetcher.for_experiment(target)
-        data = ChatbotInspectSerializer(target, context={"team": target.team, "fetcher": fetcher}).data
+        data = ChatbotInspectSerializer(target, context={"team": target.team}).data
         json.dumps(data)  # force lazy rendering of every nested serializer
