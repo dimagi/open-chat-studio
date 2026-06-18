@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Annotated, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.tools import BaseTool
 
@@ -14,7 +14,7 @@ from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
+from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
@@ -41,10 +41,12 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     user_input = context.input
     session = context.session
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, context, session, tool_callbacks)
+    prompt_context = _get_prompt_context(node, session, context)
+    agent = build_node_agent(node, context, session, tool_callbacks, prompt_context=prompt_context)
 
     attachments = list(context.attachments)
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
+    _add_current_datetime_to_turn(node, prompt_context, formatted_input)
 
     inputs = StateSchema(
         messages=[formatted_input],
@@ -97,9 +99,12 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
 
 
 def build_node_agent(
-    node: PipelineNode, context: NodeContext, session: ExperimentSession, tool_callbacks: ToolCallbacks
+    node: PipelineNode,
+    context: NodeContext,
+    session: ExperimentSession,
+    tool_callbacks: ToolCallbacks,
+    prompt_context: PromptTemplateContext,
 ):
-    prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
@@ -138,6 +143,28 @@ def _process_files(node: PipelineNode, cited_files: set[File], generated_files: 
         ChatMessageMetadataKeys.CITED_FILES: [file.id for file in cited_files],
         ChatMessageMetadataKeys.GENERATED_FILES: [file.id for file in generated_files],
     }
+
+
+def _add_current_datetime_to_turn(
+    node: PipelineNode, prompt_context: PromptTemplateContext, message: HumanMessage
+) -> None:
+    """Prepend the precise, tz-aware current datetime to the latest message turn.
+
+    Keeping the volatile value out of the cached system prompt prefix (see ``get_system_message``)
+    and on the newest, uncached turn instead lets prompt caching keep the large stable prefix warm
+    across turns. Only injected when the node's prompt opts into ``{current_datetime}``. See #3625.
+    """
+    if not prompt_uses_current_datetime(node.prompt):
+        return
+
+    datetime_block = {
+        "type": "text",
+        "text": f"<current_datetime>{prompt_context.get_current_datetime()}</current_datetime>",
+    }
+    if isinstance(message.content, list):
+        message.content.insert(0, datetime_block)
+    else:
+        message.content = [datetime_block, {"type": "text", "text": message.content}]
 
 
 def _get_prompt_context(node: PipelineNode, session: ExperimentSession, context: NodeContext):
