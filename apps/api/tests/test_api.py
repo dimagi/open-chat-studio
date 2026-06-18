@@ -352,7 +352,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     team = TeamWithUsersFactory.create()
     experiment1 = ExperimentFactory.create(team=team)
     ExperimentChannelFactory.create(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
-    ExperimentChannelFactory.create(
+    connect_channel = ExperimentChannelFactory.create(
         team=team,
         experiment=experiment1,
         platform=ChannelPlatform.COMMCARE_CONNECT,
@@ -425,7 +425,8 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
     assert request_data["connectid"] == "connectid_2"
-    assert request_data["channel_source"] == "bot1"
+    assert request_data["channel_source"] == str(connect_channel.external_id)
+    assert request_data["channel_name"] == "bot1"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", experiment_id=experiment1.id)
     assert data.system_metadata == {"commcare_connect_channel_id": created_connect_channel_id, "consent": True}
@@ -580,9 +581,14 @@ class TestCreateConnectChannelForParticipant:
         connect_id = uuid.uuid4().hex
         participant_data = _setup_participant_data(experiment, connect_id, system_metadata={})
         channel_id = str(uuid.uuid4())
+        connect_client = self._connect_client(channel_id)
 
-        create_connect_channel_for_participant(channel, self._connect_client(channel_id), connect_id, participant_data)
+        create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data)
 
+        # the stable external_id is the identity key on Connect; the bot name is display-only
+        connect_client.create_channel.assert_called_once_with(
+            connect_id=connect_id, channel_source=str(channel.external_id), channel_name="bot1"
+        )
         participant_data.refresh_from_db()
         assert participant_data.system_metadata == {"commcare_connect_channel_id": channel_id, "consent": True}
         assert participant_data.encryption_key
