@@ -350,6 +350,83 @@ def fetch_candidates(bearer: str, days: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Core pipeline helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_registered_providers(
+    model_id: str,
+    ocs_providers: list[str],
+    registered: dict[str, set[str]],
+) -> list[str]:
+    """Return providers for which *model_id* is already registered (or deleted)."""
+    return [p for p in ocs_providers if model_id in registered.get(p, set())]
+
+
+def _resolve_pricing_with_source(
+    model_id: str,
+    m: dict,
+    litellm_data: dict[str, Any],
+) -> tuple[dict[str, str] | None, str | None]:
+    """Try llm-stats first, then LiteLLM; return (pricing_dict, source_name)."""
+    if not m.get("details_error"):
+        pricing = resolve_pricing_from_llm_stats(m.get("details", {}))
+        if pricing:
+            return pricing, "llm_stats"
+    pricing = resolve_pricing_from_litellm(model_id, litellm_data)
+    return pricing, ("litellm" if pricing else None)
+
+
+def _build_model_entry(
+    m: dict,
+    ocs_providers: list[str],
+    registered_providers: list[str],
+    priced: set[tuple[str, str]],
+    pricing: dict[str, str] | None,
+    pricing_source: str | None,
+) -> tuple[dict, list[dict]]:
+    """Build a model entry dict and its pricing entries list.
+
+    Returns ``(entry, pricing_entries)`` where *pricing_entries* is non-empty
+    only when *pricing* is not None.
+    """
+    model_id = m["id"]
+    details = m.get("details", {})
+    already_priced = [p for p in ocs_providers if (p, model_id) in priced]
+
+    entry: dict = {
+        "id": model_id,
+        "org": m.get("organization", {}).get("id", ""),
+        "context_window": m.get("context_window"),
+        "ocs_providers": ocs_providers,
+        "already_registered_providers": registered_providers,
+        "already_priced_providers": already_priced,
+        "source_url": details.get("url") or f"https://llm-stats.com/models/{model_id}",
+        "sources": details.get("sources", {}),
+        "details_error": m.get("details_error"),
+    }
+
+    if not pricing:
+        entry["pricing"] = {
+            "has_pricing": False,
+            "source": None,
+            "reason": "No pricing data found in llm_stats or LiteLLM",
+        }
+        return entry, []
+
+    providers_needing_pricing = [p for p in ocs_providers if (p, model_id) not in priced]
+    p_entries = build_pricing_entries(model_id, providers_needing_pricing, pricing)
+    entry["pricing"] = {
+        "has_pricing": True,
+        "source": pricing_source,
+        "unit": "per_1k_tokens",
+        "rates": pricing,
+        "llm_pricing_entries": p_entries,
+    }
+    return entry, p_entries
+
+
+# ---------------------------------------------------------------------------
 # Core pipeline
 # ---------------------------------------------------------------------------
 
@@ -370,78 +447,22 @@ def process_candidates(
         model_id = m["id"]
         org = m.get("organization", {}).get("id", "")
         ocs_providers = ORG_TO_OCS_PROVIDERS.get(org, [])
-        context_window = m.get("context_window")
-        details = m.get("details", {})
+        registered_providers = _get_registered_providers(model_id, ocs_providers, registered)
 
-        # ---- Dedup: skip if already in DEFAULT_LLM_PROVIDER_MODELS for
-        # every mapped provider (and DELETED_MODELS).
-        registered_providers = [
-            p for p in ocs_providers if model_id in registered.get(p, set())
-        ]
         if registered_providers and len(registered_providers) == len(ocs_providers):
             already_registered.append(
-                {
-                    "id": model_id,
-                    "org": org,
-                    "registered_providers": registered_providers,
-                }
+                {"id": model_id, "org": org, "registered_providers": registered_providers}
             )
             continue
 
-        # ---- Pricing resolution
-        pricing: dict[str, str] | None = None
-        pricing_source: str | None = None
+        pricing, pricing_source = _resolve_pricing_with_source(model_id, m, litellm_data)
+        entry, p_entries = _build_model_entry(
+            m, ocs_providers, registered_providers, priced, pricing, pricing_source
+        )
+        all_pricing_entries.extend(p_entries)
+        new_models.append(entry)
 
-        if not m.get("details_error"):
-            pricing = resolve_pricing_from_llm_stats(details)
-            if pricing:
-                pricing_source = "llm_stats"
-
-        if pricing is None:
-            pricing = resolve_pricing_from_litellm(model_id, litellm_data)
-            if pricing:
-                pricing_source = "litellm"
-
-        # ---- Providers that still need pricing entries
-        providers_needing_pricing = [
-            p for p in ocs_providers if (p, model_id) not in priced
-        ]
-        already_priced_providers = [
-            p for p in ocs_providers if (p, model_id) in priced
-        ]
-
-        model_entry: dict = {
-            "id": model_id,
-            "org": org,
-            "context_window": context_window,
-            "ocs_providers": ocs_providers,
-            "already_registered_providers": registered_providers,
-            "already_priced_providers": already_priced_providers,
-            "source_url": (
-                details.get("url") or f"https://llm-stats.com/models/{model_id}"
-            ),
-            "sources": details.get("sources", {}),
-            "details_error": m.get("details_error"),
-        }
-
-        if pricing:
-            pricing_entries = build_pricing_entries(
-                model_id, providers_needing_pricing, pricing
-            )
-            model_entry["pricing"] = {
-                "has_pricing": True,
-                "source": pricing_source,
-                "unit": "per_1k_tokens",
-                "rates": pricing,
-                "llm_pricing_entries": pricing_entries,
-            }
-            all_pricing_entries.extend(pricing_entries)
-        else:
-            model_entry["pricing"] = {
-                "has_pricing": False,
-                "source": None,
-                "reason": "No pricing data found in llm_stats or LiteLLM",
-            }
+        if not pricing:
             unpriced.append(
                 {
                     "id": model_id,
@@ -450,8 +471,6 @@ def process_candidates(
                     "reason": "No pricing data found in llm_stats or LiteLLM",
                 }
             )
-
-        new_models.append(model_entry)
 
     return {
         "new_models": new_models,
