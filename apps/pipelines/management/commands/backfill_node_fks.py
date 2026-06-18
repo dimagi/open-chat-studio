@@ -1,11 +1,8 @@
 import logging
 from collections import defaultdict
 
-from django.core.management import CommandError
-
 from apps.data_migrations.management.commands.base import IdempotentCommand
 from apps.pipelines.models import Node
-from apps.teams.models import Team
 from apps.utils.fields import as_int
 
 logger = logging.getLogger(__name__)
@@ -17,30 +14,6 @@ class Command(IdempotentCommand):
     help = "Backfill resource FK fields on Node from params JSON."
     migration_name = "backfill_node_resource_fks_2026_06_17"
     atomic = False  # batches are independent; let each commit on its own
-
-    def add_arguments(self, parser):
-        super().add_arguments(parser)
-        parser.add_argument("--team", help="Slug of the team to backfill (default: all teams)", required=False)
-
-    def handle(self, *args, **options):
-        team_slug = options.get("team")
-        if team_slug:
-            try:
-                self.team = Team.objects.get(slug=team_slug)
-            except Team.DoesNotExist:
-                raise CommandError(f"Team '{team_slug}' does not exist.") from None
-            # Scope the idempotency marker per team so a targeted run doesn't mark the whole
-            # migration applied and turn a later full (or other-team) run into a no-op.
-            self.migration_name = f"{self.migration_name}__team_{self.team.id}"
-        else:
-            self.team = None
-        super().handle(*args, **options)
-
-    def _base_qs(self):
-        qs = Node.objects.get_all()
-        if self.team:
-            qs = qs.filter(pipeline__team=self.team)
-        return qs
 
     def _load_valid_fk_ids(self, fk_fields):
         """Pre-fetch all valid IDs for each resource FK to guard against dangling references."""
@@ -56,15 +29,14 @@ class Command(IdempotentCommand):
         # get_all() bypasses the default manager's is_archived=False filter so the mirror is
         # backfilled on every node — working versions, published versions, and soft-deleted
         # (archived) versions alike. Archived versions still hold references that the mirror must reflect.
-        node_ids = list(self._base_qs().values_list("id", flat=True))
+        node_ids = list(Node.objects.get_all().values_list("id", flat=True))
         total = len(node_ids)
 
-        scope = f"team '{self.team.slug}'" if self.team else "all teams"
         if dry_run:
-            self.stdout.write(f"Would backfill FK fields for {total} nodes ({scope})")
+            self.stdout.write(f"Would backfill FK fields for {total} nodes")
             return
 
-        self.stdout.write(f"Backfilling FK fields for {total} nodes ({scope})...")
+        self.stdout.write(f"Backfilling FK fields for {total} nodes...")
 
         fk_fields = Node.resource_fk_fields()
         fk_id_attrs = [f"{name}_id" for name in fk_fields]
@@ -73,7 +45,7 @@ class Command(IdempotentCommand):
 
         for start in range(0, total, BATCH_SIZE):
             chunk_ids = node_ids[start : start + BATCH_SIZE]
-            nodes = list(self._base_qs().filter(id__in=chunk_ids).only("id", "params", *fk_id_attrs))
+            nodes = list(Node.objects.get_all().filter(id__in=chunk_ids).only("id", "params", *fk_id_attrs))
             self._backfill_scalar_fks(nodes, fk_id_attrs, valid_fk_ids)
             self._backfill_collection_indexes(nodes, valid_fk_ids["collection_id"])
             processed += len(nodes)
