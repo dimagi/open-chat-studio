@@ -19,7 +19,6 @@ from apps.api.v2.inspect.nodes import (
     ResourceKind,
     node_class_for,
 )
-from apps.api.v2.utils import as_int
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
@@ -27,6 +26,7 @@ from apps.events.models import EventActionType
 from apps.experiments.models import SourceMaterial, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
+from apps.utils.fields import as_int
 
 
 def iter_resource_refs(node_type: str, params: dict):

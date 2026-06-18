@@ -371,6 +371,7 @@ class TestPipeline:
         """Test simple invoke with a pipeline that has an LLM node"""
         provider = LlmProviderFactory.create()
         provider_model = LlmProviderModelFactory.create()
+        source_material = SourceMaterialFactory.create()
         llm = FakeLlmEcho()
         service = build_fake_llm_service(None, llm)
         get_llm_service.return_value = service
@@ -378,7 +379,7 @@ class TestPipeline:
         llm_node = llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
-            source_material_id=1,
+            source_material_id=str(source_material.id),
             prompt="Help the user. User data: {participant_data}. Source material: {source_material}",
             history_type="global",
         )
@@ -393,7 +394,7 @@ class TestPipeline:
         bot.process_input(user_input)
         expected_call_messages = [
             [
-                ("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "),
+                ("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: material"),
                 ("human", [{"text": user_input, "type": "text"}]),
             ],
         ]
