@@ -8,6 +8,8 @@ from apps.pipelines.versioning import (
     ParamVersioning,
     VersionedParamSpec,
 )
+from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.experiment import SourceMaterialFactory
 
 ALL_SPECS = [
     pytest.param(node_type, spec, id=f"{node_type}.{spec.param_name}")
@@ -32,6 +34,33 @@ def test_registry_node_types_and_params_exist(node_type, spec):
 def test_registry_models_are_versioned(node_type, spec):
     model_cls = spec.model_cls
     assert issubclass(model_cls, VersionsMixin), f"{spec.model_label} does not support versioning"
+
+
+@pytest.mark.django_db()
+def test_revert_referenced_record_maps_version_id_to_working_id():
+    """revert_referenced_record is the inverse of version_referenced_record: a param holding a
+    versioned record id is rewritten back to the working version's id."""
+    source_material = SourceMaterialFactory.create()
+    version = source_material.create_new_version()
+    spec = _NODE_PARAM_SPECS["LLMResponseWithPrompt"][0]
+    assert spec.param_name == "source_material_id"
+
+    params = {"source_material_id": str(version.id)}
+    spec.revert_referenced_record(params)
+    assert params["source_material_id"] == str(source_material.id)
+
+
+@pytest.mark.django_db()
+def test_revert_referenced_record_leaves_live_reference_verbatim():
+    """LIVE_REFERENCE params were never rewritten on publish, so revert must leave them as-is."""
+    collection = CollectionFactory.create()
+    specs = {spec.param_name: spec for spec in _NODE_PARAM_SPECS["LLMResponseWithPrompt"]}
+    spec = specs["collection_id"]
+    assert spec.versioning == ParamVersioning.LIVE_REFERENCE
+
+    params = {"collection_id": str(collection.id)}
+    spec.revert_referenced_record(params)
+    assert params["collection_id"] == str(collection.id)
 
 
 def test_versioning_multi_id_params_is_unsupported():

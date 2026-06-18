@@ -17,6 +17,11 @@ urlpatterns = [
         views.chatbot_version_details,
         name="version-details",
     ),
+    path(
+        "<int:experiment_id>/versions/revert/<int:version_number>/",
+        views.revert_chatbot_version,
+        name="revert-version",
+    ),
     path("<int:experiment_id>/events/", include("apps.events.urls")),
     path(
         "<int:experiment_id>/versions/status",

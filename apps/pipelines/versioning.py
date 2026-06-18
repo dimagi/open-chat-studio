@@ -86,6 +86,23 @@ class VersionedParamSpec:
                     else:
                         params[self.param_name] = str(instance.latest_version.id)
 
+    def revert_referenced_record(self, params: dict) -> None:
+        """Inverse of ``version_referenced_record``: rewrite the param from a versioned
+        record id back to the id of its working version.
+
+        Used by revert, which reconstructs the working pipeline from a version's data.
+        ``LIVE_REFERENCE`` params keep their id verbatim (publish never rewrote them)."""
+        if self.versioning == ParamVersioning.LIVE_REFERENCE:
+            return
+
+        instance_id = params.get(self.param_name)
+        if not instance_id:
+            return
+
+        instance = self.model_cls.objects.filter(id=instance_id).first()
+        if instance:
+            params[self.param_name] = str(instance.get_working_version_id())
+
     def archive_referenced_record(self, params: dict) -> None:
         """Archive the record(s) referenced by the param according to the spec's
         archiving strategy."""

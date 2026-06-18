@@ -1,3 +1,4 @@
+import copy
 from collections import defaultdict
 from collections.abc import Iterator
 from functools import cached_property
@@ -246,6 +247,31 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             )
 
         return pipeline_version
+
+    @transaction.atomic()
+    def revert_to_version(self, version: "Pipeline") -> None:
+        """Reset this working pipeline to the state of ``version``.
+
+        The version's flow data (node params sourced from its node rows, which hold the versioned
+        references created at publish) is copied onto the working pipeline, with each node's params
+        that reference versioned records remapped from the versioned id back to the working id (the
+        inverse of the rewriting done during publish, see ``apps.pipelines.versioning``). Nodes are
+        then rebuilt from the data via ``update_nodes_from_data``.
+
+        ``flow_data`` is used rather than the stored ``data`` field because the latter is the
+        snapshot the builder saved before publish and so holds working-era references, whereas the
+        node rows hold the versioned references this revert needs to invert.
+        """
+        data = copy.deepcopy(version.flow_data)
+        for node in data.get("nodes", []):
+            node_data = node.get("data", {})
+            params = node_data.get("params", {})
+            for spec in get_versioned_param_specs(node_data.get("type")):
+                spec.revert_referenced_record(params)
+
+        self.data = data
+        self.save(update_fields=["data"])
+        self.update_nodes_from_data()
 
     @transaction.atomic()
     def archive(self) -> bool:

@@ -474,6 +474,30 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         return f"{url}#versions"
 
 
+@require_POST
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def revert_chatbot_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """Revert the working chatbot to the content (fields + pipeline) of a previous version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    if experiment.is_archived:
+        raise PermissionDenied("Unable to revert an archived chatbot.")
+
+    if experiment.version_operation_in_progress:
+        messages.error(request, "A version operation is already in progress.")
+    else:
+        experiment.revert_to_version(version)
+        messages.success(request, f"Reverted to v{version_number}.")
+
+    url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
+    return HttpResponseRedirect(f"{url}#versions")
+
+
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
     model = Experiment
     table_class = ExperimentVersionsTable
