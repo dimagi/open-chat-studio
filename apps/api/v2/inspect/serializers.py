@@ -5,22 +5,24 @@ so adding a field to a model never exposes it here by accident. Encrypted provid
 blobs, signed file-download URLs, and channel ``extra_data`` are all left out.
 
 A provider and its model are combined into one object (``llm`` / ``voice`` / ``embedding``) by the
-``Flattened*`` serializers (ADR-0025). They render the objects the fetcher already loaded, so a
-resource used in several places is simply repeated wherever it's referenced.
+``Flattened*`` serializers (ADR-0025). They render the resources reached through each node's FK/M2M
+relations (preloaded by ``inspect_node_queryset``), so a resource used in several places is simply
+repeated wherever it's referenced.
 """
 
 import dataclasses
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from django.db.models import Prefetch
 from drf_spectacular.extensions import OpenApiSerializerExtension
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 
 from apps.api.v2.inspect.channels import get_channels
 from apps.api.v2.inspect.nodes import (
-    RESOURCE_PARAM_FIELDS,
     graph_digest,
+    inspect_node_queryset,
     node_render_order,
 )
 from apps.api.v2.inspect.param_serializers import node_params_schema
@@ -34,6 +36,7 @@ from apps.events.models import EventAction, EventActionType, StaticTrigger, Time
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.models import Node, Pipeline
+from apps.utils.fields import as_int
 
 if TYPE_CHECKING:
     from apps.custom_actions.schema_utils import APIOperationDetails
@@ -91,7 +94,8 @@ class ProviderSerializer(serializers.Serializer):
 
 # Sentinel returned by a conditional get_* when a serializer declares a field that doesn't apply to
 # this instance; ``to_representation`` drops these so the key is omitted entirely. Distinct from
-# None, which renders as null. Shared by ChannelSerializer and InspectNodeSerializer below.
+# None, which renders as null. Used by ChannelSerializer (InspectNodeSerializer drops its own
+# conditional keys via has_parameter instead).
 _ABSENT = object()
 
 
@@ -370,21 +374,21 @@ class CustomActionSerializer(serializers.Serializer):
 
 
 # ── Context helper ───────────────────────────────────────────────────────────────────────────────
-class _FetcherContextMixin:
-    """Gives a serializer access to the ``ResourceFetcher`` in its context.
+class _TeamContextMixin:
+    """Gives a serializer access to the request ``team`` in its context.
 
-    A missing fetcher means an inspect serializer is being used outside the inspect view — a
-    programming error — so we raise instead of silently returning empty data.
+    A missing team means an inspect serializer is being used outside the inspect view — a
+    programming error — so we raise instead of silently mis-scoping.
     """
 
     @property
-    def _fetcher(self):
+    def _team(self):
         try:
-            return self.context["fetcher"]
+            return self.context["team"]
         except KeyError:
             raise RuntimeError(
-                f"{type(self).__name__} requires a 'fetcher' in serializer context. Render inspect "
-                "serializers via the inspect view (or pass context={'fetcher': ...})."
+                f"{type(self).__name__} requires a 'team' in serializer context. Render inspect "
+                "serializers via the inspect view (or pass context={'team': ...})."
             ) from None
 
 
@@ -453,13 +457,18 @@ class GraphSerializer(serializers.Serializer):
 
 
 # ── Node (ADR-0025) ──────────────────────────────────────────────────────────────────────────────
-class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
+class InspectNodeSerializer(serializers.ModelSerializer):
     """One pipeline node, with the resources it references inlined.
 
     All resource keys are declared as fields so they appear in the OpenAPI schema, but a node only
     renders the keys its type actually uses: a ``StartNode`` shows none, while an
     ``LLMResponseWithPrompt`` shows its own — ``null`` for an unset single value, ``[]`` for an
-    unset list. Keys the node type doesn't declare are dropped entirely.
+    unset list. Keys the node type doesn't declare are dropped entirely by ``to_representation``.
+
+    Simple references (``source_material``, ``assistant``, ``media_collection``,
+    ``indexed_collections``) are declarative nested fields mapped straight to the node's FK/M2M
+    relations. ``llm``/``voice`` stay method fields — they flatten two source objects into one and
+    render ``null`` when empty — as does ``custom_actions``, which groups operations by action.
     """
 
     # The resource keys ``to_representation`` drops for node types that don't declare them: they're
@@ -474,6 +483,16 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
         "media_collection",
         "indexed_collections",
     )
+    _CONDITIONAL_KEY_PARAMS = {
+        "llm": ("llm_provider_id", "llm_provider_model_id"),
+        "voice": ("synthetic_voice_id",),
+        "source_material": ("source_material_id",),
+        "assistant": ("assistant_id",),
+        "custom_actions": ("custom_actions",),
+        "media_collection": ("collection_id",),
+        "indexed_collections": ("collection_index_ids",),
+    }
+    _RESOURCE_PARAM_KEYS = frozenset(param for params in _CONDITIONAL_KEY_PARAMS.values() for param in params)
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
@@ -483,16 +502,16 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
     )
     llm = serializers.SerializerMethodField()
     voice = serializers.SerializerMethodField()
-    source_material = serializers.SerializerMethodField()
-    assistant = serializers.SerializerMethodField()
     custom_actions = serializers.SerializerMethodField()
-    media_collection = serializers.SerializerMethodField()
-    indexed_collections = serializers.SerializerMethodField()
+    source_material = SourceMaterialSerializer(allow_null=True, read_only=True)
+    assistant = AssistantSerializer(allow_null=True, read_only=True)
+    media_collection = MediaCollectionSerializer(source="collection", allow_null=True, read_only=True)
+    indexed_collections = IndexedCollectionSerializer(source="collection_indexes", many=True, read_only=True)
 
     class Meta:
         model = Node
         # Explicit so the rendered shape is readable at a glance. These resource keys are render
-        # concepts owned here; their backing param fields live in RESOURCE_PARAM_FIELDS.
+        # concepts owned here; they map to the node's FK/M2M relations (see _CONDITIONAL_KEY_PARAMS).
         fields = [
             "node_id",
             "type",
@@ -508,16 +527,19 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
         ]
 
     def to_representation(self, instance):
-        # Each resource get_* yields _ABSENT when this node type doesn't declare its backing field(s);
-        # drop those so the key is omitted (vs. None -> declared-but-unset null, decision #5).
+        # A node only renders the resource keys whose backing param its type declares; drop the rest
+        # entirely (vs. None -> declared-but-unset null).
         data = super().to_representation(instance)
-        return {key: value for key, value in data.items() if value is not _ABSENT}
+        for key, params in self._CONDITIONAL_KEY_PARAMS.items():
+            if key in data and not any(instance.has_parameter(param) for param in params):
+                del data[key]
+        return data
 
     @extend_schema_field(node_params_schema())
     def get_params(self, node) -> dict:
         # Resource ids are surfaced under their own keys, never echoed in params (and "name" is the
-        # node label, exposed separately) — strip every known resource field, declared or not.
-        params = {k: v for k, v in (node.params or {}).items() if k not in RESOURCE_PARAM_FIELDS and k != "name"}
+        # node label, exposed separately).
+        params = {k: v for k, v in (node.params or {}).items() if k not in self._RESOURCE_PARAM_KEYS and k != "name"}
         # ``max_results`` only bounds index search, so surface it under a clearer name.
         if "max_results" in params:
             params["max_indexed_collection_search_results"] = params.pop("max_results")
@@ -525,65 +547,28 @@ class InspectNodeSerializer(_FetcherContextMixin, serializers.ModelSerializer):
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):
-        if not (node.has_parameter("llm_provider_id") or node.has_parameter("llm_provider_model_id")):
-            return _ABSENT
-        pair = ProviderModelPair.from_parts(
-            self._fetcher.llm_provider(node.params.get("llm_provider_id")),
-            self._fetcher.llm_provider_model(node.params.get("llm_provider_model_id")),
-        )
+        pair = ProviderModelPair.from_parts(node.llm_provider, node.llm_provider_model)
         return FlattenedLlmSerializer(pair).data if pair is not None else None
 
     @extend_schema_field(FlattenedVoiceSerializer(allow_null=True))
     def get_voice(self, node):
-        if not node.has_parameter("synthetic_voice_id"):
-            return _ABSENT
-        voice = self._fetcher.synthetic_voice(node.params.get("synthetic_voice_id"))
+        voice = node.synthetic_voice
         if voice is None:
             return None
         return FlattenedVoiceSerializer(VoicePair(voice.voice_provider, voice)).data
 
-    @extend_schema_field(SourceMaterialSerializer(allow_null=True))
-    def get_source_material(self, node):
-        if not node.has_parameter("source_material_id"):
-            return _ABSENT
-        material = self._fetcher.source_material(node.params.get("source_material_id"))
-        return SourceMaterialSerializer(material).data if material is not None else None
-
-    @extend_schema_field(AssistantSerializer(allow_null=True))
-    def get_assistant(self, node):
-        if not node.has_parameter("assistant_id"):
-            return _ABSENT
-        assistant = self._fetcher.assistant(node.params.get("assistant_id"))
-        return AssistantSerializer(assistant).data if assistant is not None else None
-
     @extend_schema_field(CustomActionSerializer(many=True))
     def get_custom_actions(self, node):
-        if not node.has_parameter("custom_actions"):
-            return _ABSENT
+        # The CustomAction objects come from the prefetched relation; params is parsed only to keep
+        # the selected operation_ids in their saved order (resolved_operations drops any no longer in
+        # the action's schema).
+        actions_by_id = {op.custom_action_id: op.custom_action for op in node.custom_action_operations.all()}
         selections = []
         for action_id, operation_ids in parse_custom_actions(node.params.get("custom_actions")):
-            action = self._fetcher.custom_action(action_id)
+            action = actions_by_id.get(action_id)
             if action is not None:
                 selections.append(CustomActionSelection(action, operation_ids))
         return CustomActionSerializer(selections, many=True).data
-
-    @extend_schema_field(MediaCollectionSerializer(allow_null=True))
-    def get_media_collection(self, node):
-        if not node.has_parameter("collection_id"):
-            return _ABSENT
-        collection = self._fetcher.collection(node.params.get("collection_id"))
-        return MediaCollectionSerializer(collection).data if collection is not None else None
-
-    @extend_schema_field(IndexedCollectionSerializer(many=True))
-    def get_indexed_collections(self, node):
-        if not node.has_parameter("collection_index_ids"):
-            return _ABSENT
-        collections = [
-            collection
-            for raw_id in (node.params.get("collection_index_ids") or [])
-            if (collection := self._fetcher.collection(raw_id)) is not None
-        ]
-        return IndexedCollectionSerializer(collections, many=True).data
 
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────────────────────────
@@ -614,11 +599,12 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
 
 # ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────
-class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSerializer):
+class InspectTriggerActionSerializer(_TeamContextMixin, serializers.ModelSerializer):
     """The action an event trigger runs.
 
-    The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline could be found in
-    the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
+    The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline exists in the
+    team. Its ``pipeline_id`` lives in the action's JSON params (not an FK), so it's loaded with a
+    single team-scoped query, prefetched the same way as the chatbot's own pipeline.
     """
 
     # ``pipeline`` is dropped by ``to_representation`` for non-pipeline_start actions, so the schema
@@ -652,7 +638,14 @@ class InspectTriggerActionSerializer(_FetcherContextMixin, serializers.ModelSeri
     def get_pipeline(self, action):
         if action.action_type != EventActionType.PIPELINE_START:
             return None
-        pipeline = self._fetcher.embedded_pipeline((action.params or {}).get("pipeline_id"))
+        pipeline_id = as_int((action.params or {}).get("pipeline_id"))
+        if pipeline_id is None:
+            return None
+        pipeline = (
+            Pipeline.objects.filter(team=self._team, id=pipeline_id)
+            .prefetch_related(Prefetch("node_set", queryset=inspect_node_queryset()))
+            .first()
+        )
         if pipeline is None:
             return None
         return InspectPipelineSerializer(pipeline, context=self.context).data
@@ -732,7 +725,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     trace_provider = ProviderSerializer(allow_null=True)
     voice = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
-    pipeline = serializers.SerializerMethodField()
+    pipeline = InspectPipelineSerializer(allow_null=True, read_only=True)
     events = InspectEventsSerializer(source="*")
 
     class Meta:
@@ -763,12 +756,6 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     @extend_schema_field(ChannelSerializer(many=True))
     def get_channels(self, experiment) -> list:
         return ChannelSerializer(get_channels(experiment), many=True).data
-
-    @extend_schema_field(InspectPipelineSerializer(allow_null=True))
-    def get_pipeline(self, experiment):
-        if experiment.pipeline_id is None:
-            return None
-        return InspectPipelineSerializer(experiment.pipeline, context=self.context).data
 
 
 # ── Schema extensions ──────────────────────────────────────────────────────────────────────────

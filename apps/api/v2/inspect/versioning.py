@@ -1,13 +1,14 @@
 """Turn the ``?version=`` query parameter into the chatbot version to inspect.
 
-The chosen version comes back already loaded with the related objects the inspect serializers and
-``ResourceFetcher`` need. Picking the version and preloading its relations happen in one query —
-each ``?version=`` mode filters the preloaded queryset directly — so no follow-up round trip is
-needed.
+The chosen version comes back already loaded with the related objects the inspect serializers need,
+including each pipeline node's resource FK/M2M relations (via ``inspect_node_queryset``). Picking the
+version and preloading its relations happen in one query — each ``?version=`` mode filters the
+preloaded queryset directly — so no follow-up round trip is needed.
 """
 
 from django.db.models import Prefetch
 
+from apps.api.v2.inspect.nodes import inspect_node_queryset
 from apps.events.models import StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
 
@@ -26,7 +27,7 @@ def _inspect_target_queryset():
         "synthetic_voice__voice_provider",
         "pipeline",
     ).prefetch_related(
-        "pipeline__node_set",
+        Prefetch("pipeline__node_set", queryset=inspect_node_queryset()),
         Prefetch("static_triggers", queryset=StaticTrigger.objects.select_related("action")),
         Prefetch("timeout_triggers", queryset=TimeoutTrigger.objects.select_related("action")),
     )
