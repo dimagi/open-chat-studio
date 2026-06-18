@@ -39,6 +39,8 @@ IS_TESTING = "pytest" in sys.modules
 USE_DEBUG_TOOLBAR = env.bool("USE_DEBUG_TOOLBAR", default=DEBUG)
 if IS_TESTING:
     USE_DEBUG_TOOLBAR = False
+    # Use a fast (insecure) hasher in tests; the default PBKDF2 hasher is deliberately slow.
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -570,10 +572,9 @@ CACHES = {
 }
 
 if IS_TESTING:
-    # Isolate the cache per pytest-xdist worker. Workers get separate databases
-    # but share one Redis, so without this, cached DB-backed objects (e.g. waffle
-    # flags) leak between workers and cause flaky failures.
-    CACHES["default"]["KEY_PREFIX"] = os.environ.get("PYTEST_XDIST_WORKER", "test")
+    # Use an in-process cache for tests: faster than Redis (no network round-trips) and
+    # naturally isolated per pytest-xdist worker, since each worker is a separate process.
+    CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"

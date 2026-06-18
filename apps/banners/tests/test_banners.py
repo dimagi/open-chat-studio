@@ -83,7 +83,7 @@ class BannerServiceTests(TestCase):
             feature_flag=cls.test_flag,
         )
 
-        cls.site2 = Site.objects.create(id=2, domain="example.com", name="example")
+        cls.site2 = Site.objects.create(id=2, domain="second-site.example.com", name="example")
         cls.site1_banner = Banner.objects.create(
             title="Site Banner",
             message="Site banner",
