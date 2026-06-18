@@ -528,10 +528,14 @@ class TestPipelineRevert:
         # Params point at the working records, not the versioned ones from the snapshot.
         assert working_asst.params["assistant_id"] == str(assistant.id)
         assert working_llm.params["source_material_id"] == str(source_material.id)
+        # The mirrored resource FK columns are re-synced to the working records too.
+        assert working_asst.assistant_id == assistant.id
+        assert working_llm.source_material_id == source_material.id
 
         # The version's nodes are untouched by the revert.
         version_asst.refresh_from_db()
         assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
+        assert version_asst.assistant_id == assistant.latest_version.id
 
 
 @pytest.mark.django_db()

@@ -260,14 +260,19 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         ``flow_data`` is used rather than the stored ``data`` field because the latter is the
         snapshot the builder saved before publish and so holds working-era references, whereas the
-        node rows hold the versioned references this revert needs to invert.
+        node rows hold the versioned references this revert needs to invert. The versioned record
+        for each param is read from the version node's resource FK column.
         """
+        version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
         data = copy.deepcopy(version.flow_data)
         for node in data.get("nodes", []):
             node_data = node.get("data", {})
             params = node_data.get("params", {})
+            version_node = version_nodes_by_flow_id.get(node.get("id"))
+            if version_node is None:
+                continue
             for spec in get_versioned_param_specs(node_data.get("type")):
-                spec.revert_referenced_record(params)
+                spec.revert_referenced_record(version_node, params)
 
         self.data = data
         self.save(update_fields=["data"])
