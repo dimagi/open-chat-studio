@@ -125,12 +125,14 @@ _NOISY_DETAIL_FIELDS = {"scores", "top_scores", "providers"}
 
 
 def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
+    """Fetch *url* and decode the response body as JSON."""
     req = urllib.request.Request(url, headers=headers or {})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.load(resp)
 
 
 def _api_get(url: str, bearer: str) -> Any:
+    """GET *url* with a Bearer-token auth header and return decoded JSON."""
     return _get_json(
         url,
         headers={
@@ -158,8 +160,9 @@ def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
     registered: dict[str, set[str]] = {}
     current_provider: str | None = None
     in_deleted_models = False
+    lines = src.splitlines()
 
-    for line in src.splitlines():
+    for i, line in enumerate(lines):
         # Detect DELETED_MODELS assignment
         if re.search(r"\bDELETED_MODELS\b\s*=", line):
             in_deleted_models = True
@@ -167,8 +170,11 @@ def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
             continue
 
         if in_deleted_models:
-            # Lines like:  ("azure", "gpt-4"),
-            m = re.match(r'\s+\("([a-z_]+)",\s+"([^"]+)"\)', line)
+            # Match both 2-tuples ("provider", "model") and
+            # 3-tuples ("provider", "model", "replacement") by dropping the
+            # trailing \) requirement so the comma-separated 3rd element
+            # doesn't prevent a match.
+            m = re.match(r'\s+\("([a-z_]+)",\s+"([^"]+)"', line)
             if m:
                 provider, model = m.group(1), m.group(2)
                 registered.setdefault(provider, set()).add(model)
@@ -189,11 +195,19 @@ def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
             current_provider = None
             continue
 
-        # Detect Model("name", ...) entry
+        # Detect Model("name", ...) entry — handles both single-line:
+        #   Model("gpt-4o", 128000)
+        # and multi-line forms where the name is on the following line:
+        #   Model(
+        #       "claude-sonnet-4-20250514",
         if current_provider:
             m = re.match(r'\s+Model\("([^"]+)"', line)
             if m:
                 registered[current_provider].add(m.group(1))
+            elif re.match(r'\s+Model\(\s*$', line) and i + 1 < len(lines):
+                name_m = re.match(r'\s+"([^"]+)"', lines[i + 1])
+                if name_m:
+                    registered[current_provider].add(name_m.group(1))
 
     return registered
 
@@ -359,7 +373,7 @@ def _get_registered_providers(
     ocs_providers: list[str],
     registered: dict[str, set[str]],
 ) -> list[str]:
-    """Return providers for which *model_id* is already registered (or deleted)."""
+    """Return the subset of *ocs_providers* for which *model_id* is already registered (or deleted)."""
     return [p for p in ocs_providers if model_id in registered.get(p, set())]
 
 
@@ -368,7 +382,11 @@ def _resolve_pricing_with_source(
     m: dict,
     litellm_data: dict[str, Any],
 ) -> tuple[dict[str, str] | None, str | None]:
-    """Try llm-stats first, then LiteLLM; return (pricing_dict, source_name)."""
+    """Resolve per-1K-token pricing for *model_id*, trying llm-stats then LiteLLM.
+
+    Returns ``(pricing_dict, source_name)`` where *source_name* is ``"llm_stats"``,
+    ``"litellm"``, or *None* when no pricing data is available.
+    """
     if not m.get("details_error"):
         pricing = resolve_pricing_from_llm_stats(m.get("details", {}))
         if pricing:
@@ -485,7 +503,8 @@ def process_candidates(
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> None:
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build and return the CLI argument parser."""
     parser = argparse.ArgumentParser(
         description="Fetch new LLM model candidates and resolve pricing for OCS.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -517,8 +536,30 @@ def main(argv: list[str] | None = None) -> None:
         metavar="FILE",
         help="Path for the output JSON (default: candidate_models.json).",
     )
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _write_github_output(new_models: list[dict]) -> None:
+    """Append CI gate variables to ``$GITHUB_OUTPUT`` when running in CI.
+
+    Writes ``has_models``, ``model_count``, and ``model_ids`` so that the
+    calling workflow can gate the update-models job on whether new candidates
+    were found.
+    """
+    gh_out = os.environ.get("GITHUB_OUTPUT")
+    if not gh_out:
+        return
+    new_count = len(new_models)
+    with open(gh_out, "a") as f:
+        f.write(f"has_models={'true' if new_count else 'false'}\n")
+        f.write(f"model_count={new_count}\n")
+        model_ids = ",".join(m["id"] for m in new_models)
+        f.write(f"model_ids={model_ids}\n")
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point: fetch model candidates, resolve pricing, and write JSON output."""
+    args = _build_arg_parser().parse_args(argv)
     repo_root = args.repo_root.resolve()
 
     print(f"[fetch-model-updates] repo_root={repo_root}")
@@ -568,15 +609,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  unpriced:            {output['summary']['unpriced']}")
     print(f"  pricing_entries:     {output['summary']['pricing_entries_generated']}")
 
-    # Write GITHUB_OUTPUT when running in CI
-    gh_out = os.environ.get("GITHUB_OUTPUT")
-    if gh_out:
-        new_count = output["summary"]["new_models"]
-        with open(gh_out, "a") as f:
-            f.write(f"has_models={'true' if new_count else 'false'}\n")
-            f.write(f"model_count={new_count}\n")
-            model_ids = ",".join(m["id"] for m in result["new_models"])
-            f.write(f"model_ids={model_ids}\n")
+    _write_github_output(result["new_models"])
 
 
 if __name__ == "__main__":
