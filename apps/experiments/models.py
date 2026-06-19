@@ -982,10 +982,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.consent_form = version.consent_form.get_working_version() if version.consent_form else None
         self.save()
 
-        if version.pipeline:
-            if not self.pipeline:
-                raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
-            self.pipeline.revert_to_version(version.pipeline)
+        self._revert_pipeline_to_version(version)
+
+    def _revert_pipeline_to_version(self, version: Experiment) -> None:
+        """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
+        if not version.pipeline:
+            return
+        if not self.pipeline:
+            raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
+        self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]

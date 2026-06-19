@@ -252,25 +252,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def revert_to_version(self, version: "Pipeline") -> None:
         """Reset this working pipeline to the state of ``version``.
 
-        The version's flow data (node params sourced from its node rows, which hold the versioned
-        references created at publish) is copied onto the working pipeline, with each node's params
-        that reference versioned records remapped from the versioned id back to the working id (the
-        inverse of the rewriting done during publish, see ``apps.pipelines.versioning``). Nodes are
-        then rebuilt from the data via ``update_nodes_from_data``.
-
-        ``flow_data`` is used rather than the stored ``data`` field because the latter is the
-        snapshot the builder saved before publish and so holds working-era references, whereas the
-        node rows hold the versioned references this revert needs to invert. The versioned record
-        for each param is read from the version node's resource FK column.
+        Builds the working pipeline's flow data from ``version.flow_data`` (which carries each
+        node's params straight from the version's node rows), remaps params that reference
+        versioned records back to their working id — the inverse of the rewriting done during
+        publish, see ``apps.pipelines.versioning`` — and rebuilds the nodes via
+        ``update_nodes_from_data``. The versioned record for each param is read from the version
+        node's resource FK column.
         """
+        # flow_data's nodes are built from the same node_set, so every flow_id resolves here.
         version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
         data = copy.deepcopy(version.flow_data)
         for node in data.get("nodes", []):
             node_data = node.get("data", {})
             params = node_data.get("params", {})
-            version_node = version_nodes_by_flow_id.get(node.get("id"))
-            if version_node is None:
-                continue
+            version_node = version_nodes_by_flow_id[node["id"]]
             for spec in get_versioned_param_specs(node_data.get("type")):
                 spec.revert_referenced_record(version_node, params)
 
