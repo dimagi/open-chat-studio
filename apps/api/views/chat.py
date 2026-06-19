@@ -29,7 +29,12 @@ from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
-from apps.channels.widget_versions import WIDGET_VERSION_HEADER, widget_sunset_headers
+from apps.channels.widget_versions import (
+    WIDGET_VERSION_HEADER,
+    is_widget_request,
+    mark_widget_request,
+    widget_sunset_headers,
+)
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
@@ -181,8 +186,7 @@ def _issue_or_opt_out_session_token(request, session, use_session_token, session
     to enforced. Returns the token, or None when opted out.
     """
     if use_session_token is None:
-        is_widget = WIDGET_VERSION_HEADER in request.headers or session_data.get("source") == "widget"
-        use_session_token = not is_widget
+        use_session_token = not is_widget_request(request, session_data)
     if use_session_token:
         return issue_session_token(session)
     session.session_token_required = False
@@ -269,6 +273,11 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
+
+    # Pre-0.5.1 widgets send no version header; flag them (via session_data.source)
+    # so deprecated old widgets still receive RFC 8594 sunset headers.
+    if is_widget_request(request, session_data):
+        mark_widget_request(request)
 
     # Security check: Only authenticated users can specify version numbers
     if version_number is not None and not request.user.is_authenticated:
