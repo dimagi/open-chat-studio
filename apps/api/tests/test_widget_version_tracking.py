@@ -60,12 +60,22 @@ def test_start_session_records_widget_version(api_client, widget_channel):
 
 @pytest.mark.django_db()
 def test_start_session_without_header_records_placeholder(api_client, widget_channel):
-    # An authenticated widget that sends no version header is a pre-0.5.1 widget;
-    # record the placeholder so the deprecation badge/notifications still fire.
-    response = _start_session(api_client, widget_channel)
+    # A pre-0.5.1 widget sends no version header but declares source=widget; record the
+    # placeholder so the deprecation badge/notifications still fire.
+    response = _start_session(api_client, widget_channel, session_data={"source": "widget"})
     assert response.status_code == 201
     widget_channel.refresh_from_db()
     assert widget_channel.widget_version == UNKNOWN_WIDGET_VERSION
+
+
+@pytest.mark.django_db()
+def test_start_session_non_widget_embed_key_records_nothing(api_client, widget_channel):
+    # An embed-key caller that is not a widget (no version header, no source=widget)
+    # must not be tagged with a placeholder version.
+    response = _start_session(api_client, widget_channel)
+    assert response.status_code == 201
+    widget_channel.refresh_from_db()
+    assert widget_channel.widget_version is None
 
 
 @pytest.mark.django_db()

@@ -194,6 +194,23 @@ def _issue_or_opt_out_session_token(request, session, use_session_token, session
     return None
 
 
+def _resolve_experiment_channel(request, team, session_data):
+    """Return the ExperimentChannel for this request.
+
+    Embed-key auth resolves to the widget's own channel; for widget traffic we also
+    record the reported version (or a placeholder for pre-0.5.1 widgets that send no
+    header). Recording is gated on `is_widget_request` so a non-widget caller using an
+    embed key isn't tagged with a placeholder version. Everything else (direct API
+    consumers) falls back to the team API channel.
+    """
+    if not isinstance(request.auth, ExperimentChannel):
+        return ExperimentChannel.objects.get_team_api_channel(team)
+    channel = request.auth
+    if is_widget_request(request, session_data):
+        channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
+    return channel
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -306,13 +323,7 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    # Check if authenticated via DRF EmbeddedWidgetAuthentication
-    if isinstance(request.auth, ExperimentChannel):
-        experiment_channel = request.auth
-        experiment_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
-    else:
-        # legacy flow
-        experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
+    experiment_channel = _resolve_experiment_channel(request, team, session_data)
 
     if request.user.is_authenticated:
         user = request.user
