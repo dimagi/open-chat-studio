@@ -105,6 +105,21 @@ class TeamChangeForm(forms.ModelForm):
         }
 
 
+class TeamPublicKeyForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ("public_key",)
+        labels = {
+            "public_key": _("Public Key"),
+        }
+        help_texts = {
+            "public_key": _("Public key used to seal data exported from this team."),
+        }
+        widgets = {
+            "public_key": forms.Textarea(attrs={"rows": 4}),
+        }
+
+
 class NotifyRecipientsForm(forms.Form):
     NOTIFICATION_CHOICES = [
         ("self", "Send email notification to myself"),

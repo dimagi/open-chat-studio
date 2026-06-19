@@ -11,7 +11,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
-from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm
+from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm, TeamPublicKeyForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async
@@ -56,6 +56,7 @@ def manage_team(request, team_slug):
             "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
             "related_assistants": get_related_assistants(team),
             "notify_recipients_form": NotifyRecipientsForm,
+            "public_key_form": TeamPublicKeyForm(instance=team),
         },
     )
 
@@ -138,6 +139,18 @@ def send_invitation_view(request, team_slug):
             ),
         },
     )
+
+
+@require_POST
+@permission_required("teams.change_team", raise_exception=True)
+def set_public_key(request, team_slug):
+    form = TeamPublicKeyForm(request.POST, instance=request.team)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _("Public key saved!"))
+    else:
+        messages.error(request, _("Could not save the public key."))
+    return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
 
 
 @require_POST
