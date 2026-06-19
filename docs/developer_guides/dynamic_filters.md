@@ -30,13 +30,34 @@ The frontend is built using [Alpine.js](https://alpinejs.dev/) and HTMX. It dyna
 ## Linking query parameters to ORM operations
 
 ### Query Parameters
-Filter values are passed through URL query parameters using a structured naming convention:
 
-- **`filter_{i}_column`** - Specifies which column to filter on (matches the `query_param` of a `ColumnFilter`)
-- **`filter_{i}_operator`** - Defines the filter operation (e.g., equals, contains, before, after)
-- **`filter_{i}_value`** - Contains the actual filter value
+Filter values are passed through URL query parameters using a modern format that optimizes URL length and readability:
 
-The `{i}` represents the filter index (0 to `MAX_FILTER_PARAMS-1`), allowing multiple filters to be applied simultaneously (e.g., `filter_0_column`, `filter_1_column`, etc.).
+#### New Format (Recommended)
+- **`f_{column_name}`** - Contains the filter value(s)
+- **`op_{column_name}`** - Defines the filter operation (e.g., equals, contains, before, after)
+
+**Examples:**
+- Single value: `?f_status=active&op_status=equals`
+- Multiple values (separated by `~`): `?f_tags=tag1~tag2&op_tags=any%20of`
+- Values containing `~` are quoted: `?f_tags=tag1~"tag~2"~tag3&op_tags=any%20of`
+
+#### Old Format (Deprecated)
+- **`filter_{i}_column`** - Specifies which column to filter on
+- **`filter_{i}_operator`** - Defines the filter operation
+- **`filter_{i}_value`** - Contains the actual filter value (JSON encoded for lists)
+
+**Examples:**
+- `?filter_0_column=status&filter_0_operator=equals&filter_0_value=active`
+- `?filter_0_column=tags&filter_0_operator=any%20of&filter_0_value=%5B%22tag1%22%2C%22tag2%22%5D`
+
+The `{i}` represents the filter index (0 to `MAX_FILTER_PARAMS-1`), allowing multiple filters to be applied simultaneously.
+
+#### Value Encoding for Multiple Values
+
+For operators that accept multiple values (`any of`, `all of`, `excludes`), values are separated by `~`:
+- Simple values: `tag1~tag2~tag3`
+- Values with special characters: `tag1~"tag~2"~tag3` (quoted using CSV formatting)
 
 ### FilterParams and ColumnFilterData
 The `FilterParams` class extracts filter parameters from request query parameters and organizes them into `ColumnFilterData` objects. Each `ColumnFilterData` contains the column name, operator, and value for a single filter.

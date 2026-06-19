@@ -1,4 +1,6 @@
+import csv
 import json
+from io import StringIO
 from typing import Self
 from urllib.parse import urlencode, urlparse
 
@@ -18,14 +20,28 @@ class ColumnFilterData(BaseModel):
 
     @model_validator(mode="after")
     def _normalize_list_value(self) -> Self:
-        """Wrap bare strings in a JSON array for operators that expect lists."""
+        """Wrap bare strings or tilde-separated values in a JSON array for operators that expect lists."""
         if self.operator in _LIST_OPERATORS:
-            try:
-                parsed = json.loads(self.value)
-                if not isinstance(parsed, list):
+            if isinstance(self.value, str):
+                try:
+                    parsed = json.loads(self.value)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = None
+
+                if isinstance(parsed, list):
+                    self.value = json.dumps(parsed)
+                elif "~" in self.value:
+                    # Use CSV reader to handle special characters in values
+                    reader = csv.reader(StringIO(self.value), delimiter="~")
+                    try:
+                        row = next(reader)
+                        self.value = json.dumps(row)
+                    except StopIteration:
+                        self.value = json.dumps([self.value])
+                else:
                     self.value = json.dumps([self.value])
-            except (json.JSONDecodeError, TypeError):
-                self.value = json.dumps([self.value])
+            else:
+                self.value = json.dumps([str(self.value)])
         return self
 
     def __bool__(self):
@@ -39,13 +55,19 @@ class FilterParams:
         self.filters: dict[str, ColumnFilterData] = {}
 
         if query_params:
-            for i in range(settings.MAX_FILTER_PARAMS):
-                filter_column = query_params.get(f"filter_{i}_column")
-                filter_operator = query_params.get(f"filter_{i}_operator")
-                filter_value = query_params.get(f"filter_{i}_value")
+            # Process new format filters (f_* and op_* parameters)
+            filter_keys = [k for k in query_params if k.startswith("f_")]
+
+            for key in filter_keys[: settings.MAX_FILTER_PARAMS]:
+                filter_column = key[2:]
+                filter_operator = query_params.get(f"op_{filter_column}")
+                filter_value = query_params.get(key)
+
                 if filter_column and filter_operator and filter_value:
                     self.filters[filter_column] = ColumnFilterData(
-                        column=filter_column, operator=filter_operator, value=filter_value
+                        column=filter_column,
+                        operator=filter_operator,
+                        value=filter_value,
                     )
 
         if column_filters:
@@ -55,7 +77,7 @@ class FilterParams:
     @classmethod
     def from_request(cls, request) -> Self:
         query_params = request.GET
-        if not any(key.startswith("filter_") for key in query_params):
+        if not any(key.startswith(("filter_", "f_")) for key in query_params):
             return cls.from_request_header(request, "HX-Current-URL")
         return cls(query_params)
 
@@ -71,12 +93,20 @@ class FilterParams:
 
     def to_query(self) -> str:
         query_data = {}
-        for i, filter_data in enumerate(self.filters.values()):
-            query_data.update(
-                {
-                    f"filter_{i}_column": filter_data.column,
-                    f"filter_{i}_operator": filter_data.operator,
-                    f"filter_{i}_value": filter_data.value,
-                }
-            )
+        for filter_data in self.filters.values():
+            query_value = filter_data.value
+            if filter_data.operator in _LIST_OPERATORS:
+                try:
+                    parsed = json.loads(query_value)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    # Use CSV writer to handle special characters in values
+                    output = StringIO()
+                    writer = csv.writer(output, delimiter="~")
+                    writer.writerow(str(item) for item in parsed)
+                    query_value = output.getvalue().rstrip("\r\n")
+
+            query_data[f"f_{filter_data.column}"] = query_value
+            query_data[f"op_{filter_data.column}"] = filter_data.operator
         return urlencode(query_data)
