@@ -38,7 +38,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.events.versioning import sync_triggers
+from apps.events.versioning import TriggerSyncMode, sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -954,8 +954,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
 
-        sync_triggers(self, new_version, is_copy=is_copy)
+        # Version the pipeline before the triggers so a trigger referencing this experiment's own
+        # pipeline pins to the version just created here rather than spawning a redundant one.
         self._copy_pipeline_to_new_version(new_version, is_copy)
+        sync_triggers(self, new_version, mode=TriggerSyncMode.COPY if is_copy else TriggerSyncMode.PUBLISH)
 
         return new_version
 
@@ -983,6 +985,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.save()
 
         self._revert_pipeline_to_version(version)
+        sync_triggers(version, self, mode=TriggerSyncMode.REVERT)
 
     def _revert_pipeline_to_version(self, version: Experiment) -> None:
         """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
