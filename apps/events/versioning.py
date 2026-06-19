@@ -4,6 +4,7 @@ This module must not import ``apps.events.models`` at module level: it is import
 by ``apps.experiments.models``, which ``apps.events.models`` itself imports.
 """
 
+import copy
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -115,12 +116,18 @@ def sync_triggers(source: "Experiment", target: "Experiment", mode: TriggerSyncM
 
 
 def _remap_action_params(action: "EventAction", mode: TriggerSyncMode) -> None:
+    if mode is TriggerSyncMode.COPY:
+        return  # copies keep params verbatim; nothing to rewrite or persist
     specs = get_event_action_param_specs(action.action_type)
     if not specs:
         return
+    original = copy.deepcopy(action.params)
     for spec in specs:
         if mode is TriggerSyncMode.PUBLISH:
             spec.pin_to_version(action.params)
         elif mode is TriggerSyncMode.REVERT:
             spec.revert_to_working(action.params)
-    action.save(update_fields=["params"])
+    # Only persist when a reference actually moved, so an unchanged param never triggers an
+    # EventAction.save side effect (e.g. schedule recalculation).
+    if action.params != original:
+        action.save(update_fields=["params"])
