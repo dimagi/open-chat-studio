@@ -959,6 +959,39 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         return new_version
 
+    @transaction.atomic()
+    def revert_to_version(self, version: Experiment) -> None:
+        """Revert this working experiment to the content of ``version``.
+
+        Versioned content fields are copied from the version onto the working row and the working
+        pipeline is reset to the version's pipeline (see ``Pipeline.revert_to_version``). The
+        operation is non-destructive: no version rows are modified and ``is_default_version`` is
+        left untouched.
+        """
+        if not self.is_working_version:
+            raise ValueError("Can only revert the working version of an experiment")
+        if version.get_working_version_id() != self.id:
+            raise ValueError("Can only revert to a version of this experiment")
+
+        # `pipeline` and `consent_form` are versioned content but need special handling: the working
+        # pipeline is reset in place rather than re-pointed, and the consent form is remapped to its
+        # working version rather than the version's frozen copy.
+        for field in self.VERSIONED_CONTENT_FIELDS - {"pipeline", "consent_form"}:
+            setattr(self, field, getattr(version, field))
+
+        self.consent_form = version.consent_form.get_working_version() if version.consent_form else None
+        self.save()
+
+        self._revert_pipeline_to_version(version)
+
+    def _revert_pipeline_to_version(self, version: Experiment) -> None:
+        """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
+        if not version.pipeline:
+            return
+        if not self.pipeline:
+            raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
+        self.pipeline.revert_to_version(version.pipeline)
+
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
 
