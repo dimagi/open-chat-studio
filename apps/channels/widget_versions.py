@@ -20,6 +20,11 @@ LATEST_VERSION = "0.9.1"
 # header, so a missing/unparseable version is treated as older than everything.
 MAX_VERSION_LENGTH = 32
 
+# Recorded for widgets that authenticate but report no x-ocs-widget-version header
+# (pre-0.5.1, e.g. 0.4.x). The deprecation helpers treat it as older than every
+# release, and it matches the label teams already see for unreported versions.
+UNKNOWN_WIDGET_VERSION = "unknown"
+
 
 def widget_docs_url() -> str:
     """The published chat widget docs URL, from settings."""
