@@ -148,6 +148,39 @@ def _api_get(url: str, bearer: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _parse_deleted_models_line(
+    line: str,
+    registered: dict[str, set[str]],
+) -> bool:
+    """Parse one line inside the DELETED_MODELS block.
+
+    Handles both 2-tuples ("provider", "model") and 3-tuples
+    ("provider", "model", "replacement").  Adds any matched pair to
+    *registered* and returns True when the closing ``]`` is encountered
+    (signalling the block has ended), False otherwise.
+    """
+    m = re.match(r'\s+\("([a-z_]+)",\s+"([^"]+)"', line)
+    if m:
+        registered.setdefault(m.group(1), set()).add(m.group(2))
+    return bool(re.match(r"^\s*\]", line))
+
+
+def _parse_model_name(line: str, next_line: str | None) -> str | None:
+    """Extract a model name from a ``Model(...)`` line.
+
+    Handles both single-line (``Model("name", ...)``) and multi-line forms
+    where the name appears on the following line.
+    """
+    m = re.match(r'\s+Model\("([^"]+)"', line)
+    if m:
+        return m.group(1)
+    if re.match(r'\s+Model\(\s*$', line) and next_line is not None:
+        name_m = re.match(r'\s+"([^"]+)"', next_line)
+        if name_m:
+            return name_m.group(1)
+    return None
+
+
 def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
     """Parse ``default_models.py`` and return ``{provider: {model_name, ...}}``.
 
@@ -155,59 +188,37 @@ def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
     model is treated as *known* and flagged for review rather than silently
     re-added as a brand-new model.
     """
-    src = (repo_root / DEFAULT_MODELS_REL_PATH).read_text()
-
+    lines = (repo_root / DEFAULT_MODELS_REL_PATH).read_text().splitlines()
     registered: dict[str, set[str]] = {}
     current_provider: str | None = None
     in_deleted_models = False
-    lines = src.splitlines()
 
     for i, line in enumerate(lines):
-        # Detect DELETED_MODELS assignment
         if re.search(r"\bDELETED_MODELS\b\s*=", line):
             in_deleted_models = True
             current_provider = None
             continue
 
         if in_deleted_models:
-            # Match both 2-tuples ("provider", "model") and
-            # 3-tuples ("provider", "model", "replacement") by dropping the
-            # trailing \) requirement so the comma-separated 3rd element
-            # doesn't prevent a match.
-            m = re.match(r'\s+\("([a-z_]+)",\s+"([^"]+)"', line)
-            if m:
-                provider, model = m.group(1), m.group(2)
-                registered.setdefault(provider, set()).add(model)
-            # End of the list
-            if re.match(r"^\s*\]", line):
+            if _parse_deleted_models_line(line, registered):
                 in_deleted_models = False
             continue
 
-        # Detect top-level provider key:  "openai": [
-        m = re.match(r'\s+"([a-z_]+)":\s+\[', line)
-        if m:
-            current_provider = m.group(1)
+        provider_m = re.match(r'\s+"([a-z_]+)":\s+\[', line)
+        if provider_m:
+            current_provider = provider_m.group(1)
             registered.setdefault(current_provider, set())
             continue
 
-        # Detect end of a provider list
         if current_provider and re.match(r"\s+\],", line):
             current_provider = None
             continue
 
-        # Detect Model("name", ...) entry — handles both single-line:
-        #   Model("gpt-4o", 128000)
-        # and multi-line forms where the name is on the following line:
-        #   Model(
-        #       "claude-sonnet-4-20250514",
         if current_provider:
-            m = re.match(r'\s+Model\("([^"]+)"', line)
-            if m:
-                registered[current_provider].add(m.group(1))
-            elif re.match(r'\s+Model\(\s*$', line) and i + 1 < len(lines):
-                name_m = re.match(r'\s+"([^"]+)"', lines[i + 1])
-                if name_m:
-                    registered[current_provider].add(name_m.group(1))
+            next_line = lines[i + 1] if i + 1 < len(lines) else None
+            name = _parse_model_name(line, next_line)
+            if name:
+                registered[current_provider].add(name)
 
     return registered
 
@@ -327,40 +338,45 @@ def build_pricing_entries(
 # ---------------------------------------------------------------------------
 
 
-def fetch_candidates(bearer: str, days: int) -> list[dict]:
-    """Fetch and enrich candidate models from the zeroeval Stats API."""
-    updates_url = (
-        f"https://api.zeroeval.com/stats/v1/updates?days={days}&limit=30"
-    )
-    updates = _api_get(updates_url, bearer)
-
-    matched = [
+def _filter_matched_models(updates: dict) -> list[dict]:
+    """Return models from *updates* that belong to a tracked OCS organisation."""
+    return [
         m
         for m in updates.get("models", [])
         if m.get("organization", {}).get("id") in ORG_TO_OCS_PROVIDERS
         and m.get("model_type") == "llm"
     ]
 
-    enriched: list[dict] = []
-    for m in matched:
-        model_id = m["id"]
-        try:
-            details = _api_get(
-                f"https://api.zeroeval.com/stats/v1/models/{model_id}", bearer
-            )
-            for field in _NOISY_DETAIL_FIELDS:
-                details.pop(field, None)
-            m["details"] = details
-            # Prefer context_window from the detail endpoint when present.
-            if details.get("context_window") and not m.get("context_window"):
-                m["context_window"] = details["context_window"]
-        except urllib.error.HTTPError as e:
-            m["details_error"] = f"HTTP {e.code}: {e.reason}"
-        except Exception as e:  # noqa: BLE001
-            m["details_error"] = str(e)
-        enriched.append(m)
 
-    return enriched
+def _enrich_model(model: dict, bearer: str) -> dict:
+    """Fetch the detail payload for *model* from the zeroeval Stats API.
+
+    Mutates *model* in-place by adding ``details`` (or ``details_error`` on
+    failure) and promoting ``context_window`` from the detail payload when the
+    top-level entry lacks it.  Returns the mutated dict.
+    """
+    model_id = model["id"]
+    try:
+        details = _api_get(
+            f"https://api.zeroeval.com/stats/v1/models/{model_id}", bearer
+        )
+        for field in _NOISY_DETAIL_FIELDS:
+            details.pop(field, None)
+        model["details"] = details
+        if details.get("context_window") and not model.get("context_window"):
+            model["context_window"] = details["context_window"]
+    except urllib.error.HTTPError as e:
+        model["details_error"] = f"HTTP {e.code}: {e.reason}"
+    except Exception as e:  # noqa: BLE001
+        model["details_error"] = str(e)
+    return model
+
+
+def fetch_candidates(bearer: str, days: int) -> list[dict]:
+    """Fetch and enrich candidate models from the zeroeval Stats API."""
+    updates_url = f"https://api.zeroeval.com/stats/v1/updates?days={days}&limit=30"
+    updates = _api_get(updates_url, bearer)
+    return [_enrich_model(m, bearer) for m in _filter_matched_models(updates)]
 
 
 # ---------------------------------------------------------------------------
