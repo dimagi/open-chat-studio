@@ -140,7 +140,7 @@ nav:
       - Notifications: developer_guides/code_systems/notifications.md
     - Testing:
       - Integration Testing: developer_guides/testing/integration_testing.md
-      - developer_guides/testing/twilio_testing.md
+      - Testing Twilio Integration Locally: developer_guides/testing/twilio_testing.md
       - Help Agent Evals: developer_guides/testing/help_agent_evals.md
   - Self-Hosting:
     - Overview: hosting/index.md
