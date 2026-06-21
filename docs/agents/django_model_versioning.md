@@ -4,4 +4,4 @@ This project includes a custom data versioning system to allow users to version 
 
 The main entry point for this is `apps.experiments.Experiment.create_new_version`.
 
-See the [developer docs](../developer_guides/versioning.md)
+See the [developer docs](../developer_guides/code_systems/versioning.md)
