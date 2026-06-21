@@ -27,9 +27,9 @@ def test_non_gz_uploads_use_default_detection():
 
 @override_settings(
     AWS_S3_ENDPOINT_URL="http://minio:9000",
-    AWS_S3_ACCESS_KEY_ID="test-key",
-    AWS_S3_SECRET_ACCESS_KEY="test-secret",
-    AWS_S3_REGION_NAME="us-east-1",
+    AWS_ACCESS_KEY_ID="test-key",
+    AWS_SECRET_ACCESS_KEY="test-secret",
+    AWS_S3_REGION="us-east-1",
 )
 def test_private_storage_presigned_url_uses_endpoint():
     """S3-compatible endpoints (MinIO, R2, etc.) flow into private presigned URLs."""

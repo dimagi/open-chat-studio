@@ -381,11 +381,21 @@ AWS_S3_ADDRESSING_STYLE = env("AWS_S3_ADDRESSING_STYLE", default=None)  # "path"
 AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default=None)  # public media URL base (host or host/bucket)
 
 USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
-if USE_S3_STORAGE:
-    # Some S3-compatible providers ignore region, but boto3 v4 signing requires one.
-    if AWS_S3_ENDPOINT_URL and not AWS_S3_REGION:
-        AWS_S3_REGION = "us-east-1"
 
+# Some S3-compatible providers ignore region, but boto3 v4 signing requires one. This applies
+# to the WhatsApp/Twilio audio client too, so it must run even when USE_S3_STORAGE is False.
+if AWS_S3_ENDPOINT_URL and not AWS_S3_REGION:
+    AWS_S3_REGION = "us-east-1"
+
+
+def _public_media_url(custom_domain: str, bucket_name: str, location: str) -> str:
+    """Build the public MEDIA_URL. With a custom domain the caller controls the URL prefix
+    (works for path-style host/bucket and virtual-host bucket.host); otherwise default to AWS S3."""
+    base = custom_domain or f"{bucket_name}.s3.amazonaws.com"
+    return f"https://{base}/{location}/"
+
+
+if USE_S3_STORAGE:
     # match names in django-storages
     AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
     AWS_S3_REGION_NAME = AWS_S3_REGION
@@ -402,11 +412,7 @@ if USE_S3_STORAGE:
     # public storge for media files e.g. user profile pictures
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
-    if AWS_S3_CUSTOM_DOMAIN:
-        # Caller controls the public URL (works for path-style host/bucket and virtual-host bucket.host).
-        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
-    else:
-        MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+    MEDIA_URL = _public_media_url(AWS_S3_CUSTOM_DOMAIN, AWS_PUBLIC_STORAGE_BUCKET_NAME, PUBLIC_MEDIA_LOCATION)
     STORAGES["public"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
