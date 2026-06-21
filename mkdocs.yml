@@ -119,12 +119,12 @@ nav:
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
+      - AI-Assisted Development: developer_guides/ai_development.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
-      - Deployment: developer_guides/deployment.md
-      - AI-Assisted Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
+      - Deployment: developer_guides/deployment.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
       - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
