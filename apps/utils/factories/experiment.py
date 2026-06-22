@@ -108,6 +108,16 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Test Participant {n}")
 
 
+class ParticipantDataFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = models.ParticipantData
+
+    team = factory.SubFactory(TeamFactory)
+    experiment = factory.SubFactory(ExperimentFactory, team=factory.SelfAttribute("..team"))
+    participant = factory.SubFactory(ParticipantFactory, team=factory.SelfAttribute("..team"))
+    data = factory.LazyFunction(dict)
+
+
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ExperimentSession
