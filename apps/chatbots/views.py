@@ -484,10 +484,7 @@ def chatbot_revert_confirm(request, team_slug: str, experiment_id: int, version_
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    # The unreleased-changes check compares the working state against the *latest* version, which
-    # mutates the same cached version_details (and nested pipeline/node details) the diff renders
-    # from. Run it on a separately-loaded instance so it can't overwrite the diff's changed flags.
-    has_unreleased_changes = Experiment.objects.get(id=experiment.id).compare_with_latest()
+    has_unreleased_changes = experiment.compare_with_latest()
 
     version_details = experiment.version_details
     version_details.compare(version.version_details)

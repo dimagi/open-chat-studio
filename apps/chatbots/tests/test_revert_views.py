@@ -94,9 +94,10 @@ def test_revert_confirm_no_changes_when_working_matches_version(client, team_wit
 def test_revert_confirm_diff_preserved_when_working_matches_latest(client, team_with_users):
     """The unreleased-changes check must not overwrite the working-vs-target diff.
 
-    Regression: the check compares the working state against the *latest* version. When that ran
-    against the same cached version_details the diff renders from, it re-marked pipeline node fields
-    as unchanged (they match the latest version), hiding real differences against the target.
+    Regression: the check compares the working state against the *latest* version. If it shares a
+    VersionDetails instance with the diff (working vs target), its in-place comparison re-marks
+    pipeline node fields as unchanged (they match the latest version), hiding real differences
+    against the target.
     """
     team = team_with_users
     user = team.members.first()
